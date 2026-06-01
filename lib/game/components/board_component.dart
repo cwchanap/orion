@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import '../assets/game_path_tiles.dart';
 import '../assets/game_sprite_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/board_layout.dart';
@@ -12,6 +13,7 @@ class BoardComponent extends PositionComponent {
     this.selectedCell,
     this.spriteSheet,
     this.terrainImage,
+    this.pathTiles,
     super.position,
     super.priority,
   }) : super(
@@ -24,6 +26,7 @@ class BoardComponent extends PositionComponent {
   final double cellSize;
   final GameSpriteSheet? spriteSheet;
   final Image? terrainImage;
+  final GamePathTiles? pathTiles;
   GridPosition? selectedCell;
 
   final Paint _backgroundPaint = Paint()..color = const Color(0xFF17202A);
@@ -82,8 +85,15 @@ class BoardComponent extends PositionComponent {
       );
     }
 
+    final pathTiles = this.pathTiles;
     for (final pathCell in BoardLayout.pathCells) {
-      canvas.drawRect(cellRect(pathCell).deflate(1), _pathPaint);
+      final rect = cellRect(pathCell).deflate(1);
+      if (pathTiles == null) {
+        canvas.drawRect(rect, _pathPaint);
+      } else {
+        final tile = GamePathTiles.tileForCell(pathCell, BoardLayout.pathCells);
+        pathTiles.sprite(tile).renderRect(canvas, rect);
+      }
     }
 
     final activeSelection = selectedCell;

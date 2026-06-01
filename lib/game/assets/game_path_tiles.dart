@@ -85,9 +85,12 @@ class GamePathTiles {
     final hasWest = pathSet.contains(
       GridPosition(position.column - 1, position.row),
     );
-    final neighborCount = [hasNorth, hasEast, hasSouth, hasWest]
-        .where((hasNeighbor) => hasNeighbor)
-        .length;
+    final neighborCount = [
+      hasNorth,
+      hasEast,
+      hasSouth,
+      hasWest,
+    ].where((hasNeighbor) => hasNeighbor).length;
 
     if (neighborCount == 1) {
       return position == pathCells.first
