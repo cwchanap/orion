@@ -4,7 +4,13 @@ enum GamePhase { build, wave, won, lost }
 
 enum TowerType { laser, rocket, cryo }
 
-enum PlacementFailure { offBoard, pathBlocked, occupied, insufficientGold }
+enum PlacementFailure {
+  invalidPhase,
+  offBoard,
+  pathBlocked,
+  occupied,
+  insufficientGold,
+}
 
 class GridPosition {
   const GridPosition(this.column, this.row);
