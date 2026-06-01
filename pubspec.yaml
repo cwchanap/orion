@@ -61,6 +61,7 @@ flutter:
   assets:
     - assets/images/orion_sprite_sheet.png
     - assets/images/orion_terrain_background.png
+    - assets/images/orion_path_tiles.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:
