@@ -11,6 +11,7 @@ class BoardComponent extends PositionComponent {
     required this.cellSize,
     this.selectedCell,
     this.spriteSheet,
+    this.terrainImage,
     super.position,
     super.priority,
   }) : super(
@@ -22,6 +23,7 @@ class BoardComponent extends PositionComponent {
 
   final double cellSize;
   final GameSpriteSheet? spriteSheet;
+  final Image? terrainImage;
   GridPosition? selectedCell;
 
   final Paint _backgroundPaint = Paint()..color = const Color(0xFF17202A);
@@ -63,7 +65,22 @@ class BoardComponent extends PositionComponent {
   void render(Canvas canvas) {
     super.render(canvas);
 
-    canvas.drawRect(Offset.zero & size.toSize(), _backgroundPaint);
+    final terrainImage = this.terrainImage;
+    if (terrainImage == null) {
+      canvas.drawRect(Offset.zero & size.toSize(), _backgroundPaint);
+    } else {
+      canvas.drawImageRect(
+        terrainImage,
+        Rect.fromLTWH(
+          0,
+          0,
+          terrainImage.width.toDouble(),
+          terrainImage.height.toDouble(),
+        ),
+        Offset.zero & size.toSize(),
+        Paint(),
+      );
+    }
 
     for (final pathCell in BoardLayout.pathCells) {
       canvas.drawRect(cellRect(pathCell).deflate(1), _pathPaint);

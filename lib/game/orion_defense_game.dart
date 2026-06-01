@@ -5,6 +5,7 @@ import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
 import 'assets/game_sprite_sheet.dart';
+import 'assets/game_terrain.dart';
 import 'components/board_component.dart';
 import 'components/enemy_component.dart';
 import 'components/projectile_component.dart';
@@ -31,6 +32,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   int _nextEnemyId = 1;
 
   GameSpriteSheet? _spriteSheet;
+  Image? _terrainImage;
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
 
@@ -39,6 +41,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    _terrainImage = await images.load(GameTerrain.fileName);
     _spriteSheet = await GameSpriteSheet.load(images);
     _layoutBoard(size);
     _publishSnapshot();
@@ -193,6 +196,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       cellSize: _cellSize,
       selectedCell: _selectedTower?.position ?? _selectedCell,
       spriteSheet: _spriteSheet,
+      terrainImage: _terrainImage,
       position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
       priority: 0,
     );
