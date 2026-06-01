@@ -60,12 +60,7 @@ void main() {
 
       expect(
         GameSpriteSheet.spriteForEnemy(
-          const EnemyStats(
-            health: 30,
-            speed: 72,
-            baseDamage: 1,
-            goldReward: 8,
-          ),
+          const EnemyStats(health: 30, speed: 72, baseDamage: 1, goldReward: 8),
         ),
         GameSprite.basicDroneEnemy,
       );

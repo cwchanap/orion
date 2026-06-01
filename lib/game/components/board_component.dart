@@ -2,6 +2,7 @@ import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import '../assets/game_sprite_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/board_layout.dart';
 
@@ -9,6 +10,7 @@ class BoardComponent extends PositionComponent {
   BoardComponent({
     required this.cellSize,
     this.selectedCell,
+    this.spriteSheet,
     super.position,
     super.priority,
   }) : super(
@@ -19,6 +21,7 @@ class BoardComponent extends PositionComponent {
        );
 
   final double cellSize;
+  final GameSpriteSheet? spriteSheet;
   GridPosition? selectedCell;
 
   final Paint _backgroundPaint = Paint()..color = const Color(0xFF17202A);
@@ -81,12 +84,14 @@ class BoardComponent extends PositionComponent {
       BoardLayout.pathCells.first,
       _spawnPaint,
       innerRadiusFactor: 0.22,
+      sprite: GameSprite.spawnGate,
     );
     _renderMarker(
       canvas,
       BoardLayout.pathCells.last,
       _basePaint,
       innerRadiusFactor: 0.3,
+      sprite: GameSprite.baseReactor,
     );
 
     _renderGrid(canvas);
@@ -112,7 +117,15 @@ class BoardComponent extends PositionComponent {
     GridPosition position,
     Paint paint, {
     required double innerRadiusFactor,
+    required GameSprite sprite,
   }) {
+    final spriteSheet = this.spriteSheet;
+    if (spriteSheet != null) {
+      final rect = cellRect(position).deflate(cellSize * 0.12);
+      spriteSheet.sprite(sprite).renderRect(canvas, rect);
+      return;
+    }
+
     final center = cellCenter(position);
     canvas.drawCircle(center, cellSize * 0.38, paint);
     canvas.drawCircle(center, cellSize * innerRadiusFactor, _backgroundPaint);

@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import '../assets/game_sprite_sheet.dart';
 import '../models/game_models.dart';
 import 'enemy_component.dart';
 
@@ -14,6 +15,7 @@ class ProjectileComponent extends CircleComponent {
     required this.target,
     required Vector2 startPosition,
     required this.enemiesProvider,
+    this.spriteSheet,
     double radius = 5,
     super.priority,
   }) : super(
@@ -26,6 +28,25 @@ class ProjectileComponent extends CircleComponent {
   final TowerStats stats;
   final EnemyComponent target;
   final EnemiesProvider enemiesProvider;
+  final GameSpriteSheet? spriteSheet;
+
+  @override
+  void render(Canvas canvas) {
+    final spriteSheet = this.spriteSheet;
+    if (spriteSheet == null) {
+      super.render(canvas);
+      return;
+    }
+
+    spriteSheet
+        .sprite(GameSpriteSheet.spriteForProjectile(stats.type))
+        .render(
+          canvas,
+          position: Vector2(radius, radius),
+          size: Vector2.all(radius * 3),
+          anchor: Anchor.center,
+        );
+  }
 
   @override
   void update(double dt) {

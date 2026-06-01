@@ -4,6 +4,7 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
+import 'assets/game_sprite_sheet.dart';
 import 'components/board_component.dart';
 import 'components/enemy_component.dart';
 import 'components/projectile_component.dart';
@@ -29,6 +30,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   int _spawnedCount = 0;
   int _nextEnemyId = 1;
 
+  GameSpriteSheet? _spriteSheet;
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
 
@@ -37,6 +39,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
+    _spriteSheet = await GameSpriteSheet.load(images);
     _layoutBoard(size);
     _publishSnapshot();
   }
@@ -189,6 +192,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     _board = BoardComponent(
       cellSize: _cellSize,
       selectedCell: _selectedTower?.position ?? _selectedCell,
+      spriteSheet: _spriteSheet,
       position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
       priority: 0,
     );
@@ -207,6 +211,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       radius: _towerRadius,
       acquireTarget: _selectTargetForTower,
       launchProjectile: _launchProjectile,
+      spriteSheet: _spriteSheet,
       priority: 10,
     );
     _towerComponents[tower.id] = component;
@@ -235,6 +240,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
         target: target,
         startPosition: tower.position,
         enemiesProvider: () => _activeEnemyComponents.values,
+        spriteSheet: _spriteSheet,
         priority: 30,
       ),
     );
@@ -259,6 +265,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       enemyId: _nextEnemyId,
       stats: wave.enemyStats,
       waypoints: _pathWaypoints(),
+      spriteSheet: _spriteSheet,
       onKilled: _handleEnemyKilled,
       onReachedBase: _handleEnemyReachedBase,
       priority: 20,

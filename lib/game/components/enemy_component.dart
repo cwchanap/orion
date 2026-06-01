@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import '../assets/game_sprite_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/tower_targeting.dart';
 
@@ -16,6 +17,7 @@ class EnemyComponent extends CircleComponent {
     required List<Vector2> waypoints,
     required this.onKilled,
     required this.onReachedBase,
+    this.spriteSheet,
     double radius = 11,
     super.priority,
   }) : waypoints = List.unmodifiable(waypoints.map((point) => point.clone())),
@@ -36,6 +38,7 @@ class EnemyComponent extends CircleComponent {
   final List<Vector2> waypoints;
   final EnemyKilledCallback onKilled;
   final EnemyReachedBaseCallback onReachedBase;
+  final GameSpriteSheet? spriteSheet;
 
   double health;
   bool _isResolved = false;
@@ -80,6 +83,24 @@ class EnemyComponent extends CircleComponent {
 
     _slowMultiplier = math.min(_slowMultiplier, multiplier);
     _slowRemaining = math.max(_slowRemaining, duration);
+  }
+
+  @override
+  void render(Canvas canvas) {
+    final spriteSheet = this.spriteSheet;
+    if (spriteSheet == null) {
+      super.render(canvas);
+      return;
+    }
+
+    spriteSheet
+        .sprite(GameSpriteSheet.spriteForEnemy(stats))
+        .render(
+          canvas,
+          position: Vector2(radius, radius),
+          size: Vector2.all(radius * 2.4),
+          anchor: Anchor.center,
+        );
   }
 
   @override
