@@ -106,10 +106,11 @@ class EnemyComponent extends CircleComponent {
       final target = waypoints[_targetWaypointIndex];
       final toTarget = target - position;
       final distanceToTarget = toTarget.length;
+      final segmentLength = _currentSegmentLength;
 
       if (distanceToTarget <= distanceRemaining) {
         position.setFrom(target);
-        _completedDistance += distanceToTarget;
+        _completedDistance += segmentLength;
         _segmentProgress = 1;
         _targetWaypointIndex += 1;
         distanceRemaining -= distanceToTarget;

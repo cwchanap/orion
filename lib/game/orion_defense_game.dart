@@ -144,19 +144,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   }
 
   void restart() {
-    for (final enemy in _activeEnemyComponents.values.toList()) {
-      enemy.removeFromParent();
-    }
-    for (final tower in _towerComponents.values.toList()) {
-      tower.removeFromParent();
-    }
-    for (final projectile
-        in children.whereType<ProjectileComponent>().toList()) {
-      projectile.removeFromParent();
-    }
-
-    _activeEnemyComponents.clear();
-    _towerComponents.clear();
+    _clearCombatComponents(removeTowers: true);
     _spawnTimer = 0;
     _spawnedCount = 0;
     _nextEnemyId = 1;
@@ -289,6 +277,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   void _handleEnemyReachedBase(EnemyComponent enemy) {
     _activeEnemyComponents.remove(enemy.enemyId);
     _session.damageBase(enemy.stats.baseDamage);
+    if (_session.phase == GamePhase.lost) {
+      _clearCombatComponents(removeTowers: false);
+      _spawnTimer = 0;
+      _spawnedCount = 0;
+      _layoutBoard(size);
+    }
     _publishSnapshot();
   }
 
@@ -310,6 +304,23 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
 
   void _removeInactiveEnemyReferences() {
     _activeEnemyComponents.removeWhere((_, enemy) => enemy.isResolved);
+  }
+
+  void _clearCombatComponents({required bool removeTowers}) {
+    for (final enemy in _activeEnemyComponents.values.toList()) {
+      enemy.removeFromParent();
+    }
+    for (final projectile
+        in children.whereType<ProjectileComponent>().toList()) {
+      projectile.removeFromParent();
+    }
+    if (removeTowers) {
+      for (final tower in _towerComponents.values.toList()) {
+        tower.removeFromParent();
+      }
+      _towerComponents.clear();
+    }
+    _activeEnemyComponents.clear();
   }
 
   Vector2 _cellCenter(GridPosition position) {
