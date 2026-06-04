@@ -15,6 +15,43 @@ void main() {
       expect(result.shieldDamage, 20);
     });
 
+    test(
+      'shield multiplier can fully deplete shield without health damage',
+      () {
+        final result = CombatEffects.resolveDamage(
+          const DamageInput(
+            health: 100,
+            maxHealth: 100,
+            shield: 20,
+            damage: 10,
+            shieldDamageMultiplier: 2,
+          ),
+        );
+
+        expect(result.health, 100);
+        expect(result.shield, 0);
+        expect(result.healthDamage, 0);
+        expect(result.shieldDamage, 20);
+      },
+    );
+
+    test('nonpositive shield multiplier still lets shield absorb first', () {
+      final result = CombatEffects.resolveDamage(
+        const DamageInput(
+          health: 100,
+          maxHealth: 100,
+          shield: 30,
+          damage: 20,
+          shieldDamageMultiplier: 0,
+        ),
+      );
+
+      expect(result.health, 100);
+      expect(result.shield, 10);
+      expect(result.healthDamage, 0);
+      expect(result.shieldDamage, 20);
+    });
+
     test('overflow shield damage reaches health through armor', () {
       final result = CombatEffects.resolveDamage(
         const DamageInput(
@@ -59,6 +96,40 @@ void main() {
       expect(shredded.healthDamage, 28);
       expect(shredded.health, 72);
     });
+
+    test('armor damage multiplier does not boost unarmored targets', () {
+      final result = CombatEffects.resolveDamage(
+        const DamageInput(
+          health: 100,
+          maxHealth: 100,
+          shield: 0,
+          damage: 20,
+          armorDamageMultiplier: 2,
+        ),
+      );
+
+      expect(result.health, 80);
+      expect(result.healthDamage, 20);
+    });
+
+    test(
+      'armor damage multiplier boosts damage when effective armor is present',
+      () {
+        final result = CombatEffects.resolveDamage(
+          const DamageInput(
+            health: 100,
+            maxHealth: 100,
+            shield: 0,
+            damage: 40,
+            armorReduction: 0.25,
+            armorDamageMultiplier: 2,
+          ),
+        );
+
+        expect(result.health, 40);
+        expect(result.healthDamage, 60);
+      },
+    );
 
     test('bypass-armor damage applies full health damage', () {
       final result = CombatEffects.resolveDamage(

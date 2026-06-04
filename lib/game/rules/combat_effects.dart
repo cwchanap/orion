@@ -58,20 +58,22 @@ class CombatEffects {
     var shieldDamage = 0.0;
 
     if (startingShield > 0 && remainingDamage > 0) {
-      final shieldMultiplier = math.max(0, input.shieldDamageMultiplier);
-      if (shieldMultiplier > 0) {
-        final effectiveShieldDamage = math
-            .min(startingShield, remainingDamage * shieldMultiplier)
-            .toDouble();
-        shieldDamage = effectiveShieldDamage;
-        remainingDamage -= effectiveShieldDamage / shieldMultiplier;
-      }
+      final shieldMultiplier = input.shieldDamageMultiplier > 0
+          ? input.shieldDamageMultiplier
+          : 1.0;
+      final effectiveShieldDamage = math
+          .min(startingShield, remainingDamage * shieldMultiplier)
+          .toDouble();
+      shieldDamage = effectiveShieldDamage;
+      remainingDamage -= effectiveShieldDamage / shieldMultiplier;
     }
 
     final effectiveArmor = input.bypassArmor
         ? 0.0
         : (input.armorReduction - input.armorShred).clamp(0, 0.75).toDouble();
-    final armorMultiplier = math.max(0, input.armorDamageMultiplier);
+    final armorMultiplier = effectiveArmor > 0
+        ? math.max(0, input.armorDamageMultiplier)
+        : 1.0;
     final potentialHealthDamage =
         remainingDamage * (1 - effectiveArmor) * armorMultiplier;
     final healthDamage = math.min(startingHealth, potentialHealthDamage);
