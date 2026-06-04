@@ -235,6 +235,26 @@ class CombatEffects {
     return math.min(requested, maxActive - math.max(0, active));
   }
 
+  static double damageForChainJump({
+    required double baseDamage,
+    required double chainFalloff,
+    required int jumpIndex,
+  }) {
+    if (jumpIndex <= 0) {
+      return baseDamage;
+    }
+
+    return (baseDamage * math.pow(chainFalloff, jumpIndex)).toDouble();
+  }
+
+  static double damageAgainstSlowState({
+    required double baseDamage,
+    required double slowedDamageMultiplier,
+    required bool isSlowed,
+  }) {
+    return isSlowed ? baseDamage * slowedDamageMultiplier : baseDamage;
+  }
+
   static double _distanceSquared(TargetCandidate from, TargetCandidate to) {
     final dx = to.x - from.x;
     final dy = to.y - from.y;

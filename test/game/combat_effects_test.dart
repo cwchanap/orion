@@ -293,4 +293,46 @@ void main() {
       );
     });
   });
+
+  group('CombatEffects.damageForChainJump', () {
+    test('chain damage falls off by jump index', () {
+      expect(
+        CombatEffects.damageForChainJump(
+          baseDamage: 100,
+          chainFalloff: 0.75,
+          jumpIndex: 0,
+        ),
+        100,
+      );
+      expect(
+        CombatEffects.damageForChainJump(
+          baseDamage: 100,
+          chainFalloff: 0.75,
+          jumpIndex: 2,
+        ),
+        closeTo(56.25, 0.001),
+      );
+    });
+  });
+
+  group('CombatEffects.damageAgainstSlowState', () {
+    test('slowed damage multiplier only applies to slowed enemies', () {
+      expect(
+        CombatEffects.damageAgainstSlowState(
+          baseDamage: 10,
+          slowedDamageMultiplier: 1.6,
+          isSlowed: true,
+        ),
+        16,
+      );
+      expect(
+        CombatEffects.damageAgainstSlowState(
+          baseDamage: 10,
+          slowedDamageMultiplier: 1.6,
+          isSlowed: false,
+        ),
+        10,
+      );
+    });
+  });
 }

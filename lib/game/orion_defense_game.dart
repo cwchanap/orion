@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flame/events.dart';
@@ -9,11 +10,14 @@ import 'assets/game_sprite_sheet.dart';
 import 'assets/game_tower_variety_sheet.dart';
 import 'assets/game_terrain.dart';
 import 'components/board_component.dart';
+import 'components/drone_component.dart';
 import 'components/enemy_component.dart';
+import 'components/gravity_field_component.dart';
 import 'components/projectile_component.dart';
 import 'components/tower_component.dart';
 import 'models/game_models.dart';
 import 'rules/board_layout.dart';
+import 'rules/combat_effects.dart';
 import 'rules/game_session.dart';
 import 'rules/tower_targeting.dart';
 
@@ -41,6 +45,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   Image? _terrainImage;
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
+  final Map<int, int> _activeDronesByTower = {};
 
   GameSnapshot get snapshot => stateNotifier.value;
 
@@ -252,6 +257,23 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   }
 
   void _launchProjectile(TowerComponent tower, EnemyComponent target) {
+    if (tower.stats.fieldRadius > 0 && tower.stats.fieldDuration > 0) {
+      add(
+        GravityFieldComponent(
+          stats: tower.stats,
+          center: target.position,
+          enemiesProvider: () => _activeEnemyComponents.values,
+          priority: 25,
+        ),
+      );
+      return;
+    }
+
+    if (tower.stats.droneCount > 0) {
+      _launchDrones(tower);
+      return;
+    }
+
     add(
       ProjectileComponent(
         stats: tower.stats,
@@ -263,6 +285,56 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
         priority: 30,
       ),
     );
+  }
+
+  void _launchDrones(TowerComponent tower) {
+    final active = _activeDronesByTower[tower.placedTower.id] ?? 0;
+    final allowed = CombatEffects.allowedDroneLaunches(
+      requested: tower.stats.droneCount,
+      active: active,
+      maxActive: tower.stats.maxActiveDrones,
+    );
+    if (allowed <= 0) {
+      return;
+    }
+
+    _activeDronesByTower[tower.placedTower.id] = active + allowed;
+    for (var index = 0; index < allowed; index += 1) {
+      add(
+        DroneComponent(
+          ownerTowerId: tower.placedTower.id,
+          stats: tower.stats,
+          startPosition: tower.position,
+          acquireTarget: _selectNearestEnemyForDrone,
+          onExpired: _handleDroneExpired,
+          priority: 35,
+        ),
+      );
+    }
+  }
+
+  EnemyComponent? _selectNearestEnemyForDrone(Vector2 position) {
+    EnemyComponent? selected;
+    var selectedDistance = double.infinity;
+
+    for (final enemy in _activeEnemyComponents.values) {
+      if (!enemy.isAlive) {
+        continue;
+      }
+
+      final distance = enemy.position.distanceTo(position);
+      if (distance < selectedDistance) {
+        selected = enemy;
+        selectedDistance = distance;
+      }
+    }
+
+    return selected;
+  }
+
+  void _handleDroneExpired(DroneComponent drone) {
+    final current = _activeDronesByTower[drone.ownerTowerId] ?? 0;
+    _activeDronesByTower[drone.ownerTowerId] = math.max(0, current - 1);
   }
 
   void _spawnWaveEnemies(double dt) {
@@ -357,6 +429,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
         in children.whereType<ProjectileComponent>().toList()) {
       projectile.removeFromParent();
     }
+    for (final drone in children.whereType<DroneComponent>().toList()) {
+      drone.removeFromParent();
+    }
+    for (final field in children.whereType<GravityFieldComponent>().toList()) {
+      field.removeFromParent();
+    }
     if (removeTowers) {
       for (final tower in _towerComponents.values.toList()) {
         tower.removeFromParent();
@@ -364,6 +442,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       _towerComponents.clear();
     }
     _activeEnemyComponents.clear();
+    _activeDronesByTower.clear();
   }
 
   Vector2 _cellCenter(GridPosition position) {

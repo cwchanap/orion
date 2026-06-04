@@ -6,6 +6,8 @@ import 'package:flame/components.dart';
 import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
+import '../rules/combat_effects.dart';
+import '../rules/tower_targeting.dart';
 import 'enemy_component.dart';
 
 typedef EnemiesProvider = Iterable<EnemyComponent> Function();
@@ -20,7 +22,8 @@ class ProjectileComponent extends CircleComponent {
     this.towerVarietySheet,
     double radius = 5,
     super.priority,
-  }) : super(
+  }) : _origin = startPosition.clone(),
+       super(
          radius: radius,
          anchor: Anchor.center,
          position: startPosition.clone(),
@@ -32,6 +35,7 @@ class ProjectileComponent extends CircleComponent {
   final EnemiesProvider enemiesProvider;
   final GameSpriteSheet? spriteSheet;
   final GameTowerVarietySheet? towerVarietySheet;
+  final Vector2 _origin;
 
   @override
   void render(Canvas canvas) {
@@ -93,6 +97,27 @@ class ProjectileComponent extends CircleComponent {
       return;
     }
 
+    if (stats.chainCount > 0) {
+      _resolveChainHit();
+      return;
+    }
+
+    if (stats.pierceCount > 0) {
+      _resolvePierceHit();
+      return;
+    }
+
+    if (stats.corrosionDuration > 0) {
+      _resolveCorrosionHit();
+      return;
+    }
+
+    if (stats.fieldRadius > 0 && stats.fieldDuration > 0) {
+      target.applyDamage(stats.damage);
+      _applySlowIfNeeded(target);
+      return;
+    }
+
     if (stats.splashRadius > 0) {
       final impactPosition = target.position.clone();
       final splashCandidates = List<EnemyComponent>.from(enemiesProvider());
@@ -109,11 +134,121 @@ class ProjectileComponent extends CircleComponent {
           _applySlowIfNeeded(enemy);
         }
       }
+
+      if (stats.clusterBurstCount > 0) {
+        _resolveClusterBursts(impactPosition);
+      }
       return;
     }
 
-    target.applyDamage(stats.damage);
+    final damage = CombatEffects.damageAgainstSlowState(
+      baseDamage: stats.damage,
+      slowedDamageMultiplier: stats.slowedDamageMultiplier,
+      isSlowed: target.isSlowed,
+    );
+    target.applyDamage(damage);
     _applySlowIfNeeded(target);
+
+    if (stats.prismSplitDamageMultiplier > 0 && stats.prismSplitRange > 0) {
+      _resolvePrismSplit();
+    }
+  }
+
+  void _resolveChainHit() {
+    final enemies = List<EnemyComponent>.from(enemiesProvider());
+    final candidates = enemies
+        .where((enemy) => enemy.isAlive)
+        .map((enemy) => enemy.targetCandidate)
+        .toList(growable: false);
+    final chain = CombatEffects.selectChainTargets(
+      firstTarget: target.targetCandidate,
+      candidates: candidates,
+      chainCount: stats.chainCount,
+      chainRange: stats.chainRange,
+    );
+    final enemyById = {for (final enemy in enemies) enemy.enemyId: enemy};
+
+    for (final (index, candidate) in chain.indexed) {
+      final enemy = enemyById[candidate.id];
+      if (enemy == null || !enemy.isAlive) {
+        continue;
+      }
+
+      enemy.applyDamage(
+        CombatEffects.damageForChainJump(
+          baseDamage: stats.damage,
+          chainFalloff: stats.chainFalloff,
+          jumpIndex: index,
+        ),
+        shieldDamageMultiplier: stats.shieldDamageMultiplier,
+      );
+    }
+  }
+
+  void _resolvePierceHit() {
+    final enemies = List<EnemyComponent>.from(enemiesProvider());
+    final candidates = enemies
+        .where((enemy) => enemy.isAlive)
+        .map((enemy) => enemy.targetCandidate)
+        .toList(growable: false);
+    final pierced = CombatEffects.selectPierceTargets(
+      tower: TargetPoint(x: _origin.x, y: _origin.y),
+      primaryTarget: target.targetCandidate,
+      candidates: candidates,
+      pierceCount: stats.pierceCount,
+      pierceWidth: stats.pierceWidth,
+    );
+    final enemyById = {for (final enemy in enemies) enemy.enemyId: enemy};
+
+    for (final candidate in pierced) {
+      enemyById[candidate.id]?.applyDamage(
+        stats.damage,
+        armorDamageMultiplier: stats.armorDamageMultiplier,
+      );
+    }
+  }
+
+  void _resolveCorrosionHit() {
+    target.applyDamage(stats.damage);
+    target.applyCorrosion(
+      damagePerSecond: stats.corrosionDamagePerSecond,
+      duration: stats.corrosionDuration,
+      armorShred: stats.armorShred,
+    );
+  }
+
+  void _resolvePrismSplit() {
+    EnemyComponent? selected;
+    var selectedDistance = double.infinity;
+
+    for (final enemy in enemiesProvider()) {
+      if (identical(enemy, target) || !enemy.isAlive) {
+        continue;
+      }
+
+      final distance = enemy.position.distanceTo(target.position);
+      if (distance <= stats.prismSplitRange && distance < selectedDistance) {
+        selected = enemy;
+        selectedDistance = distance;
+      }
+    }
+
+    selected?.applyDamage(stats.damage * stats.prismSplitDamageMultiplier);
+  }
+
+  void _resolveClusterBursts(Vector2 impactPosition) {
+    for (var burst = 0; burst < stats.clusterBurstCount; burst += 1) {
+      for (final enemy in enemiesProvider()) {
+        if (!enemy.isAlive) {
+          continue;
+        }
+
+        if (enemy.position.distanceTo(impactPosition) <=
+            stats.clusterBurstRadius) {
+          enemy.applyDamage(stats.damage * stats.clusterBurstDamageMultiplier);
+        }
+      }
+    }
   }
 
   void _applySlowIfNeeded(EnemyComponent enemy) {
