@@ -163,12 +163,28 @@ class EnemyComponent extends CircleComponent {
       return;
     }
 
-    _tickStatuses(dt);
+    final movementSlowMultiplier = isSlowed ? _slowMultiplier : 1.0;
+    final wasCorrodedAtTickStart = isCorroded;
+    _tickCorrosionAndRegen(dt, wasCorrodedAtTickStart: wasCorrodedAtTickStart);
     if (!isAlive) {
       return;
     }
 
-    var distanceRemaining = stats.speed * _slowMultiplier * dt;
+    _moveAlongPath(dt, movementSlowMultiplier);
+    _tickSlow(dt);
+  }
+
+  double get _currentSegmentLength {
+    if (_targetWaypointIndex >= waypoints.length) {
+      return 0;
+    }
+    final segmentStart = waypoints[_targetWaypointIndex - 1];
+    final segmentEnd = waypoints[_targetWaypointIndex];
+    return segmentStart.distanceTo(segmentEnd);
+  }
+
+  void _moveAlongPath(double dt, double slowMultiplier) {
+    var distanceRemaining = stats.speed * slowMultiplier * dt;
     while (distanceRemaining > 0 && isAlive) {
       if (_targetWaypointIndex >= waypoints.length) {
         _resolve(onReachedBase);
@@ -203,16 +219,10 @@ class EnemyComponent extends CircleComponent {
     }
   }
 
-  double get _currentSegmentLength {
-    if (_targetWaypointIndex >= waypoints.length) {
-      return 0;
-    }
-    final segmentStart = waypoints[_targetWaypointIndex - 1];
-    final segmentEnd = waypoints[_targetWaypointIndex];
-    return segmentStart.distanceTo(segmentEnd);
-  }
-
-  void _tickStatuses(double dt) {
+  void _tickCorrosionAndRegen(
+    double dt, {
+    required bool wasCorrodedAtTickStart,
+  }) {
     if (_corrosionRemaining > 0) {
       final tick = math.min(math.max(0, dt), _corrosionRemaining);
       _corrosionRemaining = math.max(0, _corrosionRemaining - tick);
@@ -232,9 +242,11 @@ class EnemyComponent extends CircleComponent {
       maxHealth: maxHealth,
       regenPerSecond: stats.regenPerSecond,
       dt: dt,
-      isCorroded: isCorroded,
+      isCorroded: wasCorrodedAtTickStart,
     );
+  }
 
+  void _tickSlow(double dt) {
     if (_slowRemaining > 0) {
       _slowRemaining = math.max(0, _slowRemaining - dt);
       if (_slowRemaining == 0) {
