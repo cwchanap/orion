@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/main.dart';
 
 void main() {
@@ -11,5 +13,25 @@ void main() {
     expect(find.text('Base 20'), findsOneWidget);
     expect(find.text('Wave 1/8'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
+  });
+
+  test('snapshot exposes the current tower unlocks', () {
+    final session = GameSession.initial();
+
+    expect(session.snapshot().unlockedTowerTypes, [
+      TowerType.laser,
+      TowerType.rocket,
+      TowerType.cryo,
+    ]);
+
+    expect(session.startWave(), isTrue);
+    session.finishActiveWave();
+
+    expect(session.snapshot().unlockedTowerTypes, [
+      TowerType.laser,
+      TowerType.rocket,
+      TowerType.cryo,
+      TowerType.railgun,
+    ]);
   });
 }

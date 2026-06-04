@@ -45,6 +45,7 @@ class GameSession {
       gold: _gold,
       baseHealth: _baseHealth,
       waveNumber: (_waveIndex + 1).clamp(1, GameBalance.waves.length).toInt(),
+      unlockedTowerTypes: unlockedTowerTypes,
       selectedCell: selectedCell,
       selectedTower: selectedTower,
       feedback: feedback,

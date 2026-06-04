@@ -299,6 +299,7 @@ class GameSnapshot {
     required this.gold,
     required this.baseHealth,
     required this.waveNumber,
+    required this.unlockedTowerTypes,
     required this.selectedCell,
     required this.selectedTower,
     required this.feedback,
@@ -308,6 +309,7 @@ class GameSnapshot {
   final int gold;
   final int baseHealth;
   final int waveNumber;
+  final List<TowerType> unlockedTowerTypes;
   final GridPosition? selectedCell;
   final PlacedTower? selectedTower;
   final String? feedback;

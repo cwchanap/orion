@@ -187,6 +187,7 @@ class _BottomControls extends StatelessWidget {
         game: game,
         phase: snapshot.phase,
         gold: snapshot.gold,
+        unlockedTowerTypes: snapshot.unlockedTowerTypes,
       );
     }
 
@@ -208,14 +209,20 @@ class _TowerPicker extends StatelessWidget {
     required this.game,
     required this.phase,
     required this.gold,
+    required this.unlockedTowerTypes,
   });
 
   final OrionDefenseGame game;
   final GamePhase phase;
   final int gold;
+  final List<TowerType> unlockedTowerTypes;
 
   @override
   Widget build(BuildContext context) {
+    final unlockedTypes = TowerType.values
+        .where((type) => unlockedTowerTypes.contains(type))
+        .toList(growable: false);
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -226,30 +233,15 @@ class _TowerPicker extends StatelessWidget {
           spacing: 8,
           runSpacing: 8,
           children: [
-            _TowerButton(
-              label: 'Laser',
-              icon: Icons.bolt,
-              stats: GameBalance.towerStats(TowerType.laser, level: 1),
-              phase: phase,
-              gold: gold,
-              onPressed: () => game.placeTower(TowerType.laser),
-            ),
-            _TowerButton(
-              label: 'Rocket',
-              icon: Icons.rocket_launch,
-              stats: GameBalance.towerStats(TowerType.rocket, level: 1),
-              phase: phase,
-              gold: gold,
-              onPressed: () => game.placeTower(TowerType.rocket),
-            ),
-            _TowerButton(
-              label: 'Cryo',
-              icon: Icons.ac_unit,
-              stats: GameBalance.towerStats(TowerType.cryo, level: 1),
-              phase: phase,
-              gold: gold,
-              onPressed: () => game.placeTower(TowerType.cryo),
-            ),
+            for (final type in unlockedTypes)
+              _TowerButton(
+                label: _towerLabel(type),
+                icon: _towerIcon(type),
+                stats: GameBalance.towerStats(type, level: 1),
+                phase: phase,
+                gold: gold,
+                onPressed: () => game.placeTower(type),
+              ),
           ],
         ),
       ],
@@ -303,10 +295,11 @@ class _UpgradePanel extends StatelessWidget {
     final towerName = _towerLabel(tower.type);
     final canUpgrade =
         snapshot.phase == GamePhase.build &&
-        stats.canUpgrade &&
+        tower.canUpgrade &&
         snapshot.gold >= stats.upgradeCost;
 
     return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
           child: Column(
@@ -318,18 +311,85 @@ class _UpgradePanel extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleMedium,
               ),
               const SizedBox(height: 4),
-              Text('Level ${tower.level}'),
+              Text(
+                tower.specialization == null
+                    ? 'Level ${tower.level}'
+                    : 'Level ${tower.level} • ${tower.specialization!.label}',
+              ),
             ],
           ),
         ),
-        FilledButton.icon(
-          onPressed: canUpgrade ? game.upgradeSelectedTower : null,
-          icon: const Icon(Icons.upgrade),
-          label: Text(
-            stats.canUpgrade ? 'Upgrade ${stats.upgradeCost}' : 'Max',
+        const SizedBox(width: 12),
+        Flexible(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: _UpgradeActions(
+              game: game,
+              snapshot: snapshot,
+              tower: tower,
+              stats: stats,
+              canUpgrade: canUpgrade,
+            ),
           ),
         ),
       ],
+    );
+  }
+}
+
+class _UpgradeActions extends StatelessWidget {
+  const _UpgradeActions({
+    required this.game,
+    required this.snapshot,
+    required this.tower,
+    required this.stats,
+    required this.canUpgrade,
+  });
+
+  final OrionDefenseGame game;
+  final GameSnapshot snapshot;
+  final PlacedTower tower;
+  final TowerStats stats;
+  final bool canUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    if (tower.canUpgrade) {
+      return FilledButton.icon(
+        onPressed: canUpgrade ? game.upgradeSelectedTower : null,
+        icon: const Icon(Icons.upgrade),
+        label: Text('Upgrade ${stats.upgradeCost}'),
+      );
+    }
+
+    if (tower.canSpecialize) {
+      return Wrap(
+        alignment: WrapAlignment.end,
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (final specialization in GameBalance.specializationsFor(
+            tower.type,
+          ))
+            FilledButton.tonalIcon(
+              onPressed:
+                  snapshot.phase == GamePhase.build &&
+                      snapshot.gold >= stats.specializationCost
+                  ? () => game.specializeSelectedTower(specialization)
+                  : null,
+              icon: const Icon(Icons.call_split),
+              label: Text(
+                '${specialization.label} ${stats.specializationCost}',
+              ),
+            ),
+        ],
+      );
+    }
+
+    return FilledButton.icon(
+      onPressed: null,
+      icon: const Icon(Icons.check),
+      label: const Text('Max'),
     );
   }
 }
@@ -405,5 +465,18 @@ String _towerLabel(TowerType type) {
     TowerType.nanite => 'Nanite',
     TowerType.gravityWell => 'Gravity Well',
     TowerType.droneBay => 'Drone Bay',
+  };
+}
+
+IconData _towerIcon(TowerType type) {
+  return switch (type) {
+    TowerType.laser => Icons.bolt,
+    TowerType.rocket => Icons.rocket_launch,
+    TowerType.cryo => Icons.ac_unit,
+    TowerType.railgun => Icons.linear_scale,
+    TowerType.ionChain => Icons.electrical_services,
+    TowerType.nanite => Icons.bubble_chart,
+    TowerType.gravityWell => Icons.blur_circular,
+    TowerType.droneBay => Icons.hub,
   };
 }

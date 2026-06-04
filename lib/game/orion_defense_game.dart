@@ -150,6 +150,27 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     _publishSnapshot();
   }
 
+  void specializeSelectedTower(TowerSpecialization specialization) {
+    final tower = _selectedTower;
+    if (tower == null) {
+      _publishSnapshot(feedback: 'Select a tower first.');
+      return;
+    }
+
+    if (!_session.specializeTower(tower.id, specialization)) {
+      _publishSnapshot(feedback: _specializationMessage(tower, specialization));
+      return;
+    }
+
+    final specializedTower = _session.towerAt(tower.position);
+    final component = _towerComponents[tower.id];
+    if (specializedTower != null && component != null) {
+      component.updateTower(specializedTower);
+      _selectedTower = specializedTower;
+    }
+    _publishSnapshot();
+  }
+
   void startWave() {
     if (!_session.startWave()) {
       _publishSnapshot(feedback: 'Wave cannot start right now.');
@@ -492,6 +513,24 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       return 'Choose a specialization or use a maxed tower.';
     }
     return 'Not enough gold to upgrade that tower.';
+  }
+
+  String _specializationMessage(
+    PlacedTower tower,
+    TowerSpecialization specialization,
+  ) {
+    if (_session.phase != GamePhase.build) {
+      return 'Specialize towers between waves.';
+    }
+    if (specialization.type != tower.type) {
+      return 'That specialization belongs to another tower.';
+    }
+    if (!tower.canSpecialize) {
+      return tower.isMaxLevel
+          ? 'That tower is already specialized.'
+          : 'Upgrade this tower before specializing.';
+    }
+    return 'Not enough gold to specialize that tower.';
   }
 
   double get _towerRadius => (_cellSize * 0.28).clamp(8, 18).toDouble();
