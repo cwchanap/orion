@@ -294,16 +294,16 @@ class PlacedTower {
 }
 
 class GameSnapshot {
-  const GameSnapshot({
+  GameSnapshot({
     required this.phase,
     required this.gold,
     required this.baseHealth,
     required this.waveNumber,
-    required this.unlockedTowerTypes,
+    required List<TowerType> unlockedTowerTypes,
     required this.selectedCell,
     required this.selectedTower,
     required this.feedback,
-  });
+  }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes);
 
   final GamePhase phase;
   final int gold;

@@ -34,4 +34,18 @@ void main() {
       TowerType.railgun,
     ]);
   });
+
+  test('snapshot tower unlocks cannot be mutated after capture', () {
+    final snapshot = GameSession.initial().snapshot();
+
+    expect(
+      () => snapshot.unlockedTowerTypes[0] = TowerType.droneBay,
+      throwsUnsupportedError,
+    );
+    expect(snapshot.unlockedTowerTypes, [
+      TowerType.laser,
+      TowerType.rocket,
+      TowerType.cryo,
+    ]);
+  });
 }

@@ -298,39 +298,69 @@ class _UpgradePanel extends StatelessWidget {
         tower.canUpgrade &&
         snapshot.gold >= stats.upgradeCost;
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final actions = _UpgradeActions(
+          game: game,
+          snapshot: snapshot,
+          tower: tower,
+          stats: stats,
+          canUpgrade: canUpgrade,
+          alignment: constraints.maxWidth < 440
+              ? WrapAlignment.start
+              : WrapAlignment.end,
+        );
+
+        if (constraints.maxWidth < 440) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '$towerName Tower',
-                style: Theme.of(context).textTheme.titleMedium,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                tower.specialization == null
-                    ? 'Level ${tower.level}'
-                    : 'Level ${tower.level} • ${tower.specialization!.label}',
-              ),
+              _TowerSummary(tower: tower, towerName: towerName),
+              const SizedBox(height: 10),
+              Align(alignment: Alignment.centerLeft, child: actions),
             ],
-          ),
-        ),
-        const SizedBox(width: 12),
-        Flexible(
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: _UpgradeActions(
-              game: game,
-              snapshot: snapshot,
-              tower: tower,
-              stats: stats,
-              canUpgrade: canUpgrade,
+          );
+        }
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Expanded(
+              child: _TowerSummary(tower: tower, towerName: towerName),
             ),
-          ),
+            const SizedBox(width: 12),
+            Flexible(
+              child: Align(alignment: Alignment.centerRight, child: actions),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _TowerSummary extends StatelessWidget {
+  const _TowerSummary({required this.tower, required this.towerName});
+
+  final PlacedTower tower;
+  final String towerName;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$towerName Tower',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          tower.specialization == null
+              ? 'Level ${tower.level}'
+              : 'Level ${tower.level} • ${tower.specialization!.label}',
         ),
       ],
     );
@@ -344,6 +374,7 @@ class _UpgradeActions extends StatelessWidget {
     required this.tower,
     required this.stats,
     required this.canUpgrade,
+    required this.alignment,
   });
 
   final OrionDefenseGame game;
@@ -351,6 +382,7 @@ class _UpgradeActions extends StatelessWidget {
   final PlacedTower tower;
   final TowerStats stats;
   final bool canUpgrade;
+  final WrapAlignment alignment;
 
   @override
   Widget build(BuildContext context) {
@@ -364,7 +396,7 @@ class _UpgradeActions extends StatelessWidget {
 
     if (tower.canSpecialize) {
       return Wrap(
-        alignment: WrapAlignment.end,
+        alignment: alignment,
         spacing: 8,
         runSpacing: 8,
         children: [
