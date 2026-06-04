@@ -295,7 +295,11 @@ class _UpgradePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tower = snapshot.selectedTower!;
-    final stats = GameBalance.towerStats(tower.type, level: tower.level);
+    final stats = GameBalance.towerStats(
+      tower.type,
+      level: tower.level,
+      specialization: tower.specialization,
+    );
     final towerName = _towerLabel(tower.type);
     final canUpgrade =
         snapshot.phase == GamePhase.build &&

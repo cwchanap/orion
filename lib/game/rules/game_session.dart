@@ -16,14 +16,24 @@ class GameSession {
   int get gold => _gold;
   int get baseHealth => _baseHealth;
   int get waveIndex => _waveIndex;
+  int get clearedWaveCount => _waveIndex;
   GamePhase get phase => _phase;
   List<PlacedTower> get towers => List.unmodifiable(_towersByPosition.values);
+  List<TowerType> get unlockedTowerTypes {
+    final nextWaveNumber = _waveIndex + 1;
+    return TowerType.values
+        .where((type) => GameBalance.towerUnlockWave(type) <= nextWaveNumber)
+        .toList(growable: false);
+  }
+
   WaveDefinition? get activeWave {
     if (_waveIndex >= GameBalance.waves.length) {
       return null;
     }
     return GameBalance.waves[_waveIndex];
   }
+
+  bool isTowerUnlocked(TowerType type) => unlockedTowerTypes.contains(type);
 
   GameSnapshot snapshot({
     GridPosition? selectedCell,
@@ -53,6 +63,9 @@ class GameSession {
     }
     if (_towersByPosition.containsKey(position)) {
       return const PlacementResult.denied(PlacementFailure.occupied);
+    }
+    if (!isTowerUnlocked(type)) {
+      return const PlacementResult.denied(PlacementFailure.lockedTower);
     }
     final cost = GameBalance.towerStats(type, level: 1).cost;
     if (_gold < cost) {
@@ -89,7 +102,7 @@ class GameSession {
     }
 
     final tower = entry.value;
-    if (tower.level >= 2) {
+    if (!tower.canUpgrade) {
       return false;
     }
 
@@ -100,6 +113,31 @@ class GameSession {
 
     _gold -= stats.upgradeCost;
     _towersByPosition[entry.key] = tower.upgraded();
+    return true;
+  }
+
+  bool specializeTower(int towerId, TowerSpecialization specialization) {
+    if (_phase != GamePhase.build) {
+      return false;
+    }
+
+    final entry = _findTowerEntry(towerId);
+    if (entry == null) {
+      return false;
+    }
+
+    final tower = entry.value;
+    if (!tower.canSpecialize || specialization.type != tower.type) {
+      return false;
+    }
+
+    final stats = GameBalance.towerStats(tower.type, level: 2);
+    if (_gold < stats.specializationCost) {
+      return false;
+    }
+
+    _gold -= stats.specializationCost;
+    _towersByPosition[entry.key] = tower.specialized(specialization);
     return true;
   }
 
@@ -116,10 +154,15 @@ class GameSession {
       return;
     }
 
+    final completedWave = activeWave;
     _waveIndex += 1;
-    _phase = _waveIndex >= GameBalance.waves.length
-        ? GamePhase.won
-        : GamePhase.build;
+    if (_waveIndex >= GameBalance.waves.length) {
+      _phase = GamePhase.won;
+      return;
+    }
+
+    _gold += completedWave?.clearBonus ?? 0;
+    _phase = GamePhase.build;
   }
 
   void rewardKill(int goldReward) {

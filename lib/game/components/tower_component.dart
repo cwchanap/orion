@@ -20,7 +20,11 @@ class TowerComponent extends CircleComponent {
     double radius = 15,
     super.priority,
   }) : placedTower = tower,
-       stats = GameBalance.towerStats(tower.type, level: tower.level),
+       stats = GameBalance.towerStats(
+         tower.type,
+         level: tower.level,
+         specialization: tower.specialization,
+       ),
        super(
          radius: radius,
          anchor: Anchor.center,
@@ -43,7 +47,11 @@ class TowerComponent extends CircleComponent {
 
   void updateTower(PlacedTower tower) {
     placedTower = tower;
-    stats = GameBalance.towerStats(tower.type, level: tower.level);
+    stats = GameBalance.towerStats(
+      tower.type,
+      level: tower.level,
+      specialization: tower.specialization,
+    );
     paint.color = _towerColor(tower.type);
   }
 

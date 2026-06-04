@@ -381,8 +381,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     if (_session.phase != GamePhase.build) {
       return 'Upgrade towers between waves.';
     }
-    if (!GameBalance.towerStats(tower.type, level: tower.level).canUpgrade) {
-      return 'That tower is already upgraded.';
+    if (!tower.canUpgrade) {
+      return 'Choose a specialization or use a maxed tower.';
     }
     return 'Not enough gold to upgrade that tower.';
   }

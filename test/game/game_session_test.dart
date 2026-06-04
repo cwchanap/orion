@@ -14,6 +14,18 @@ void main() {
       expect(session.towers, isEmpty);
     });
 
+    test('starts with only the baseline towers unlocked', () {
+      final session = GameSession.initial();
+
+      expect(session.unlockedTowerTypes, [
+        TowerType.laser,
+        TowerType.rocket,
+        TowerType.cryo,
+      ]);
+      expect(session.isTowerUnlocked(TowerType.railgun), isFalse);
+      expect(session.isTowerUnlocked(TowerType.droneBay), isFalse);
+    });
+
     test('validates invalid placements without spending gold', () {
       final session = GameSession.initial();
 
@@ -68,6 +80,20 @@ void main() {
       expect(session.towers, isEmpty);
     });
 
+    test('denies locked tower placement without spending gold', () {
+      final session = GameSession.initial(gold: 500);
+
+      final result = session.placeTower(
+        const GridPosition(0, 0),
+        TowerType.droneBay,
+      );
+
+      expect(result.isAllowed, isFalse);
+      expect(result.failure, PlacementFailure.lockedTower);
+      expect(session.gold, 500);
+      expect(session.towers, isEmpty);
+    });
+
     test('denies placement during an active wave without spending gold', () {
       final session = GameSession.initial();
       expect(session.startWave(), isTrue);
@@ -103,7 +129,7 @@ void main() {
 
       expect(wonResult.isAllowed, isFalse);
       expect(wonResult.failure, PlacementFailure.invalidPhase);
-      expect(wonSession.gold, GameBalance.startingGold);
+      expect(wonSession.gold, 150 + 30 + 40 + 50 + 65 + 80 + 95 + 115);
       expect(wonSession.towers, isEmpty);
 
       final lostSession = GameSession.initial(baseHealth: 1);
@@ -119,6 +145,18 @@ void main() {
       expect(lostResult.failure, PlacementFailure.invalidPhase);
       expect(lostSession.gold, GameBalance.startingGold);
       expect(lostSession.towers, isEmpty);
+    });
+
+    test('unlocks towers after cleared waves and applies clear bonuses', () {
+      final session = GameSession.initial();
+
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+
+      expect(session.phase, GamePhase.build);
+      expect(session.gold, 180);
+      expect(session.isTowerUnlocked(TowerType.railgun), isTrue);
+      expect(session.isTowerUnlocked(TowerType.ionChain), isFalse);
     });
 
     test('upgrades a tower once and spends gold', () {
@@ -161,7 +199,7 @@ void main() {
 
         expect(wonSession.upgradeTower(wonTower.id), isFalse);
         expect(wonSession.towers.single.level, 1);
-        expect(wonSession.gold, 130);
+        expect(wonSession.gold, 130 + 30 + 40 + 50 + 65 + 80 + 95 + 115);
 
         final lostSession = GameSession.initial(gold: 200, baseHealth: 1);
         lostSession.placeTower(const GridPosition(0, 0), TowerType.cryo);
@@ -183,6 +221,80 @@ void main() {
       expect(session.upgradeTower(tower.id), isFalse);
       expect(session.towers.single.level, 1);
       expect(session.gold, 30);
+    });
+
+    test('specializes a level two tower once and spends gold', () {
+      final session = GameSession.initial(gold: 500);
+      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final tower = session.towers.single;
+      expect(session.upgradeTower(tower.id), isTrue);
+
+      final specialized = session.specializeTower(
+        tower.id,
+        TowerSpecialization.prismLaser,
+      );
+
+      expect(specialized, isTrue);
+      expect(session.towers.single.level, 3);
+      expect(
+        session.towers.single.specialization,
+        TowerSpecialization.prismLaser,
+      );
+      expect(session.gold, 260);
+      expect(
+        session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
+        isFalse,
+      );
+      expect(session.gold, 260);
+    });
+
+    test('rejects specialization in invalid states without spending gold', () {
+      final levelOneSession = GameSession.initial(gold: 500);
+      levelOneSession.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final levelOneTower = levelOneSession.towers.single;
+
+      expect(
+        levelOneSession.specializeTower(
+          levelOneTower.id,
+          TowerSpecialization.prismLaser,
+        ),
+        isFalse,
+      );
+      expect(levelOneSession.towers.single.level, 1);
+      expect(levelOneSession.gold, 450);
+
+      final wrongTowerSession = GameSession.initial(gold: 500);
+      wrongTowerSession.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final wrongTower = wrongTowerSession.towers.single;
+      expect(wrongTowerSession.upgradeTower(wrongTower.id), isTrue);
+
+      expect(
+        wrongTowerSession.specializeTower(
+          wrongTower.id,
+          TowerSpecialization.siegeRocket,
+        ),
+        isFalse,
+      );
+      expect(wrongTowerSession.towers.single.level, 2);
+      expect(wrongTowerSession.towers.single.specialization, isNull);
+      expect(wrongTowerSession.gold, 380);
+
+      final activeWaveSession = GameSession.initial(gold: 500);
+      activeWaveSession.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final activeWaveTower = activeWaveSession.towers.single;
+      expect(activeWaveSession.upgradeTower(activeWaveTower.id), isTrue);
+      expect(activeWaveSession.startWave(), isTrue);
+
+      expect(
+        activeWaveSession.specializeTower(
+          activeWaveTower.id,
+          TowerSpecialization.prismLaser,
+        ),
+        isFalse,
+      );
+      expect(activeWaveSession.towers.single.level, 2);
+      expect(activeWaveSession.towers.single.specialization, isNull);
+      expect(activeWaveSession.gold, 380);
     });
 
     test('starts waves only from build phase', () {
@@ -241,7 +353,7 @@ void main() {
       }
 
       wonSession.rewardKill(8);
-      expect(wonSession.gold, GameBalance.startingGold);
+      expect(wonSession.gold, 150 + 30 + 40 + 50 + 65 + 80 + 95 + 115);
     });
 
     test('damageBase mutates health only during wave for positive damage', () {
@@ -308,6 +420,25 @@ void main() {
       expect(session.towers, isEmpty);
     });
 
+    test('restart resets unlock progress and specialized towers', () {
+      final session = GameSession.initial();
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+      expect(session.isTowerUnlocked(TowerType.railgun), isTrue);
+      session.placeTower(const GridPosition(0, 0), TowerType.railgun);
+
+      session.restart();
+
+      expect(session.waveIndex, 0);
+      expect(session.gold, GameBalance.startingGold);
+      expect(session.unlockedTowerTypes, [
+        TowerType.laser,
+        TowerType.rocket,
+        TowerType.cryo,
+      ]);
+      expect(session.towers, isEmpty);
+    });
+
     test('restart resets tower IDs', () {
       final session = GameSession.initial();
       session.placeTower(const GridPosition(0, 0), TowerType.laser);
@@ -318,6 +449,18 @@ void main() {
       session.placeTower(const GridPosition(0, 0), TowerType.laser);
 
       expect(session.towers.single.id, 1);
+    });
+
+    test('final wave win does not add a clear bonus', () {
+      final session = GameSession.initial();
+
+      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+        expect(session.startWave(), isTrue);
+        session.finishActiveWave();
+      }
+
+      expect(session.phase, GamePhase.won);
+      expect(session.gold, 150 + 30 + 40 + 50 + 65 + 80 + 95 + 115);
     });
   });
 }
