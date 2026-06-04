@@ -78,6 +78,15 @@ class GameSpriteSheet {
       TowerType.laser => GameSprite.laserTower,
       TowerType.rocket => GameSprite.rocketTower,
       TowerType.cryo => GameSprite.cryoTower,
+      TowerType.railgun ||
+      TowerType.ionChain ||
+      TowerType.nanite ||
+      TowerType.gravityWell ||
+      TowerType.droneBay => throw ArgumentError.value(
+        type,
+        'type',
+        'Use GameTowerVarietySheet',
+      ),
     };
   }
 
@@ -86,6 +95,15 @@ class GameSpriteSheet {
       TowerType.laser => GameSprite.laserBolt,
       TowerType.rocket => GameSprite.rocketProjectile,
       TowerType.cryo => GameSprite.cryoProjectile,
+      TowerType.railgun ||
+      TowerType.ionChain ||
+      TowerType.nanite ||
+      TowerType.gravityWell ||
+      TowerType.droneBay => throw ArgumentError.value(
+        type,
+        'type',
+        'Use GameTowerVarietySheet',
+      ),
     };
   }
 

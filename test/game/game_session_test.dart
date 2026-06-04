@@ -8,8 +8,8 @@ void main() {
       final session = GameSession.initial();
 
       expect(session.phase, GamePhase.build);
-      expect(session.gold, 120);
-      expect(session.baseHealth, 20);
+      expect(session.gold, GameBalance.startingGold);
+      expect(session.baseHealth, GameBalance.initialBaseHealth);
       expect(session.waveIndex, 0);
       expect(session.towers, isEmpty);
     });
@@ -37,7 +37,7 @@ void main() {
             .failure,
         PlacementFailure.occupied,
       );
-      expect(session.gold, 70);
+      expect(session.gold, GameBalance.startingGold - 50);
     });
 
     test('places towers and spends gold', () {
@@ -49,7 +49,7 @@ void main() {
       );
 
       expect(result.isAllowed, isTrue);
-      expect(session.gold, 40);
+      expect(session.gold, GameBalance.startingGold - 80);
       expect(session.towers.single.type, TowerType.rocket);
       expect(session.towers.single.level, 1);
     });
@@ -85,13 +85,13 @@ void main() {
       expect(validation.failure, PlacementFailure.invalidPhase);
       expect(result.isAllowed, isFalse);
       expect(result.failure, PlacementFailure.invalidPhase);
-      expect(session.gold, 120);
+      expect(session.gold, GameBalance.startingGold);
       expect(session.towers, isEmpty);
     });
 
     test('denies placement after terminal states without spending gold', () {
       final wonSession = GameSession.initial();
-      for (var wave = 0; wave < 5; wave += 1) {
+      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
       }
@@ -103,7 +103,7 @@ void main() {
 
       expect(wonResult.isAllowed, isFalse);
       expect(wonResult.failure, PlacementFailure.invalidPhase);
-      expect(wonSession.gold, 120);
+      expect(wonSession.gold, GameBalance.startingGold);
       expect(wonSession.towers, isEmpty);
 
       final lostSession = GameSession.initial(baseHealth: 1);
@@ -117,7 +117,7 @@ void main() {
 
       expect(lostResult.isAllowed, isFalse);
       expect(lostResult.failure, PlacementFailure.invalidPhase);
-      expect(lostSession.gold, 120);
+      expect(lostSession.gold, GameBalance.startingGold);
       expect(lostSession.towers, isEmpty);
     });
 
@@ -154,7 +154,7 @@ void main() {
         final wonSession = GameSession.initial(gold: 200);
         wonSession.placeTower(const GridPosition(0, 0), TowerType.cryo);
         final wonTower = wonSession.towers.single;
-        for (var wave = 0; wave < 5; wave += 1) {
+        for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
           expect(wonSession.startWave(), isTrue);
           wonSession.finishActiveWave();
         }
@@ -193,22 +193,22 @@ void main() {
       expect(session.startWave(), isFalse);
     });
 
-    test('progresses through five waves and wins after the final clear', () {
+    test('progresses through all waves and wins after the final clear', () {
       final session = GameSession.initial();
 
-      for (var wave = 0; wave < 5; wave += 1) {
+      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
       }
 
       expect(session.phase, GamePhase.won);
-      expect(session.waveIndex, 5);
+      expect(session.waveIndex, GameBalance.waves.length);
     });
 
     test('startWave remains false after won', () {
       final session = GameSession.initial();
 
-      for (var wave = 0; wave < 5; wave += 1) {
+      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
       }
@@ -221,40 +221,40 @@ void main() {
       final session = GameSession.initial();
 
       session.rewardKill(8);
-      expect(session.gold, 120);
+      expect(session.gold, GameBalance.startingGold);
 
       expect(session.startWave(), isTrue);
       session.rewardKill(8);
       session.rewardKill(0);
       session.rewardKill(-4);
-      expect(session.gold, 128);
+      expect(session.gold, GameBalance.startingGold + 8);
 
       session.damageBase(20);
       expect(session.phase, GamePhase.lost);
       session.rewardKill(8);
-      expect(session.gold, 128);
+      expect(session.gold, GameBalance.startingGold + 8);
 
       final wonSession = GameSession.initial();
-      for (var wave = 0; wave < 5; wave += 1) {
+      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
       }
 
       wonSession.rewardKill(8);
-      expect(wonSession.gold, 120);
+      expect(wonSession.gold, GameBalance.startingGold);
     });
 
     test('damageBase mutates health only during wave for positive damage', () {
       final session = GameSession.initial();
 
       session.damageBase(5);
-      expect(session.baseHealth, 20);
+      expect(session.baseHealth, GameBalance.initialBaseHealth);
 
       expect(session.startWave(), isTrue);
       session.damageBase(5);
       session.damageBase(0);
       session.damageBase(-4);
-      expect(session.baseHealth, 15);
+      expect(session.baseHealth, GameBalance.initialBaseHealth - 5);
 
       session.damageBase(20);
       expect(session.baseHealth, 0);
@@ -263,13 +263,13 @@ void main() {
       expect(session.baseHealth, 0);
 
       final wonSession = GameSession.initial();
-      for (var wave = 0; wave < 5; wave += 1) {
+      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
       }
 
       wonSession.damageBase(5);
-      expect(wonSession.baseHealth, 20);
+      expect(wonSession.baseHealth, GameBalance.initialBaseHealth);
     });
 
     test('loses when base health reaches zero and clamps health', () {
@@ -302,8 +302,8 @@ void main() {
       session.restart();
 
       expect(session.phase, GamePhase.build);
-      expect(session.gold, 120);
-      expect(session.baseHealth, 20);
+      expect(session.gold, GameBalance.startingGold);
+      expect(session.baseHealth, GameBalance.initialBaseHealth);
       expect(session.waveIndex, 0);
       expect(session.towers, isEmpty);
     });

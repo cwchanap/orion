@@ -7,9 +7,9 @@ void main() {
     await tester.pump();
 
     expect(find.text('Orion'), findsOneWidget);
-    expect(find.text('Gold 120'), findsOneWidget);
+    expect(find.text('Gold 150'), findsOneWidget);
     expect(find.text('Base 20'), findsOneWidget);
-    expect(find.text('Wave 1/5'), findsOneWidget);
+    expect(find.text('Wave 1/8'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
   });
 }

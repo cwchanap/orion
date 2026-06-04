@@ -87,6 +87,11 @@ class TowerComponent extends CircleComponent {
       TowerType.laser => const Color(0xFF2FBF71),
       TowerType.rocket => const Color(0xFFE07A2D),
       TowerType.cryo => const Color(0xFF4AA8D8),
+      TowerType.railgun => const Color(0xFFC9D6E8),
+      TowerType.ionChain => const Color(0xFFB476FF),
+      TowerType.nanite => const Color(0xFF67D46E),
+      TowerType.gravityWell => const Color(0xFF6E7BFF),
+      TowerType.droneBay => const Color(0xFFFFD166),
     };
   }
 }

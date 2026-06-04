@@ -396,5 +396,10 @@ String _towerLabel(TowerType type) {
     TowerType.laser => 'Laser',
     TowerType.rocket => 'Rocket',
     TowerType.cryo => 'Cryo',
+    TowerType.railgun => 'Railgun',
+    TowerType.ionChain => 'Ion Chain',
+    TowerType.nanite => 'Nanite',
+    TowerType.gravityWell => 'Gravity Well',
+    TowerType.droneBay => 'Drone Bay',
   };
 }

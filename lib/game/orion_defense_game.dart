@@ -372,6 +372,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       PlacementFailure.pathBlocked => 'Cannot build on the enemy path.',
       PlacementFailure.occupied => 'That cell already has a tower.',
       PlacementFailure.insufficientGold => 'Not enough gold for that tower.',
+      PlacementFailure.lockedTower => 'That tower unlocks after a later wave.',
       null => 'Cannot place a tower there.',
     };
   }

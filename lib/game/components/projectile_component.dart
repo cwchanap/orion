@@ -111,6 +111,11 @@ class ProjectileComponent extends CircleComponent {
       TowerType.laser => const Color(0xFFB7F7D4),
       TowerType.rocket => const Color(0xFFFFB84D),
       TowerType.cryo => const Color(0xFF8AD8FF),
+      TowerType.railgun => const Color(0xFFE8F1FF),
+      TowerType.ionChain => const Color(0xFFD7B2FF),
+      TowerType.nanite => const Color(0xFF9EF59A),
+      TowerType.gravityWell => const Color(0xFFA9B0FF),
+      TowerType.droneBay => const Color(0xFFFFE08A),
     };
   }
 }
