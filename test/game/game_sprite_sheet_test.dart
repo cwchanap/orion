@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
+import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
 
 void main() {
@@ -74,6 +75,66 @@ void main() {
           ),
         ),
         GameSprite.heavyDroneEnemy,
+      );
+    });
+  });
+
+  group('GameTowerVarietySheet', () {
+    test('maps the 4x4 tower variety sheet cells in stable order', () {
+      expect(GameTowerVarietySheet.columns, 4);
+      expect(GameTowerVarietySheet.rows, 4);
+      expect(GameTowerVarietySheet.fileName, 'orion_tower_variety_sheet.png');
+      expect(
+        GameTowerVarietySheet.assetPath,
+        'assets/images/orion_tower_variety_sheet.png',
+      );
+
+      final railgunRect = GameTowerVarietySheet.sourceRectFor(
+        GameTowerVarietySprite.railgunTower,
+        imageWidth: 1024,
+        imageHeight: 1024,
+      );
+      expect(railgunRect.left, 0);
+      expect(railgunRect.top, 0);
+      expect(railgunRect.width, 256);
+      expect(railgunRect.height, 256);
+
+      final finalRect = GameTowerVarietySheet.sourceRectFor(
+        GameTowerVarietySprite.prismSplit,
+        imageWidth: 1024,
+        imageHeight: 1024,
+      );
+      expect(finalRect.left, 768);
+      expect(finalRect.top, 768);
+      expect(finalRect.width, 256);
+      expect(finalRect.height, 256);
+    });
+
+    test('selects tower variety sprites for new gameplay object types', () {
+      expect(
+        GameTowerVarietySheet.spriteForTower(TowerType.railgun),
+        GameTowerVarietySprite.railgunTower,
+      );
+      expect(
+        GameTowerVarietySheet.spriteForTower(TowerType.ionChain),
+        GameTowerVarietySprite.ionChainTower,
+      );
+      expect(
+        GameTowerVarietySheet.spriteForTower(TowerType.nanite),
+        GameTowerVarietySprite.naniteTower,
+      );
+      expect(
+        GameTowerVarietySheet.spriteForTower(TowerType.gravityWell),
+        GameTowerVarietySprite.gravityWellTower,
+      );
+      expect(
+        GameTowerVarietySheet.spriteForTower(TowerType.droneBay),
+        GameTowerVarietySprite.droneBayTower,
+      );
+
+      expect(
+        GameTowerVarietySheet.spriteForProjectile(TowerType.railgun),
+        GameTowerVarietySprite.railSlug,
       );
     });
   });

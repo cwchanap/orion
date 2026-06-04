@@ -60,6 +60,7 @@ flutter:
 
   assets:
     - assets/images/orion_sprite_sheet.png
+    - assets/images/orion_tower_variety_sheet.png
     - assets/images/orion_terrain_background.png
     - assets/images/orion_path_tiles.png
 

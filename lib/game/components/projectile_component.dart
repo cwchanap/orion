@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 
 import '../assets/game_sprite_sheet.dart';
+import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
 import 'enemy_component.dart';
 
@@ -16,6 +17,7 @@ class ProjectileComponent extends CircleComponent {
     required Vector2 startPosition,
     required this.enemiesProvider,
     this.spriteSheet,
+    this.towerVarietySheet,
     double radius = 5,
     super.priority,
   }) : super(
@@ -29,23 +31,40 @@ class ProjectileComponent extends CircleComponent {
   final EnemyComponent target;
   final EnemiesProvider enemiesProvider;
   final GameSpriteSheet? spriteSheet;
+  final GameTowerVarietySheet? towerVarietySheet;
 
   @override
   void render(Canvas canvas) {
-    final spriteSheet = this.spriteSheet;
-    if (spriteSheet == null) {
+    final sprite = _projectileSprite();
+    if (sprite == null) {
       super.render(canvas);
       return;
     }
 
-    spriteSheet
-        .sprite(GameSpriteSheet.spriteForProjectile(stats.type))
-        .render(
-          canvas,
-          position: Vector2(radius, radius),
-          size: Vector2.all(radius * 3),
-          anchor: Anchor.center,
-        );
+    sprite.render(
+      canvas,
+      position: Vector2(radius, radius),
+      size: Vector2.all(radius * 3),
+      anchor: Anchor.center,
+    );
+  }
+
+  Sprite? _projectileSprite() {
+    if (GameTowerVarietySheet.hasTowerSprite(stats.type)) {
+      final towerVarietySheet = this.towerVarietySheet;
+      if (towerVarietySheet == null) {
+        return null;
+      }
+      return towerVarietySheet.sprite(
+        GameTowerVarietySheet.spriteForProjectile(stats.type),
+      );
+    }
+
+    final spriteSheet = this.spriteSheet;
+    if (spriteSheet == null) {
+      return null;
+    }
+    return spriteSheet.sprite(GameSpriteSheet.spriteForProjectile(stats.type));
   }
 
   @override
