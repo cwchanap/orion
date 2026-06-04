@@ -297,6 +297,21 @@ void main() {
       expect(activeWaveSession.gold, 380);
     });
 
+    test('insufficient specialization gold preserves tower level and gold', () {
+      final session = GameSession.initial(gold: 239);
+      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final tower = session.towers.single;
+      expect(session.upgradeTower(tower.id), isTrue);
+
+      expect(
+        session.specializeTower(tower.id, TowerSpecialization.prismLaser),
+        isFalse,
+      );
+      expect(session.towers.single.level, 2);
+      expect(session.towers.single.specialization, isNull);
+      expect(session.gold, 119);
+    });
+
     test('starts waves only from build phase', () {
       final session = GameSession.initial();
 
@@ -421,11 +436,21 @@ void main() {
     });
 
     test('restart resets unlock progress and specialized towers', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(gold: 500);
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
       expect(session.isTowerUnlocked(TowerType.railgun), isTrue);
       session.placeTower(const GridPosition(0, 0), TowerType.railgun);
+      final tower = session.towers.single;
+      expect(session.upgradeTower(tower.id), isTrue);
+      expect(
+        session.specializeTower(tower.id, TowerSpecialization.magneticRailgun),
+        isTrue,
+      );
+      expect(
+        session.towers.single.specialization,
+        TowerSpecialization.magneticRailgun,
+      );
 
       session.restart();
 
