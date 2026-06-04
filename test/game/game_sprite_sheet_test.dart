@@ -58,6 +58,14 @@ void main() {
         GameSpriteSheet.spriteForProjectile(TowerType.cryo),
         GameSprite.cryoProjectile,
       );
+      expect(
+        () => GameSpriteSheet.spriteForTower(TowerType.railgun),
+        throwsArgumentError,
+      );
+      expect(
+        () => GameSpriteSheet.spriteForProjectile(TowerType.railgun),
+        throwsArgumentError,
+      );
 
       expect(
         GameSpriteSheet.spriteForEnemy(
@@ -151,6 +159,14 @@ void main() {
       expect(
         GameTowerVarietySheet.spriteForProjectile(TowerType.droneBay),
         GameTowerVarietySprite.drone,
+      );
+      expect(
+        () => GameTowerVarietySheet.spriteForTower(TowerType.laser),
+        throwsArgumentError,
+      );
+      expect(
+        () => GameTowerVarietySheet.spriteForProjectile(TowerType.laser),
+        throwsArgumentError,
       );
     });
   });
