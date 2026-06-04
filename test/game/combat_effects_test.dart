@@ -271,6 +271,32 @@ void main() {
         expect(targets.map((target) => target.id), [2, 1, 3]);
       },
     );
+
+    test('always includes the primary target within the pierce cap', () {
+      const tower = TargetPoint(x: 0, y: 0);
+      const primaryTarget = TargetCandidate(
+        id: 1,
+        x: 12,
+        y: 0,
+        pathProgress: 0.9,
+        isAlive: true,
+      );
+      const candidates = [
+        TargetCandidate(id: 2, x: 4, y: 0, pathProgress: 0.7, isAlive: true),
+        TargetCandidate(id: 3, x: 8, y: 0, pathProgress: 0.6, isAlive: true),
+        primaryTarget,
+      ];
+
+      final targets = CombatEffects.selectPierceTargets(
+        tower: tower,
+        primaryTarget: primaryTarget,
+        candidates: candidates,
+        pierceCount: 2,
+        pierceWidth: 2,
+      );
+
+      expect(targets.map((target) => target.id), [2, 1]);
+    });
   });
 
   group('CombatEffects.allowedDroneLaunches', () {
@@ -288,6 +314,29 @@ void main() {
           requested: 2,
           active: 5,
           maxActive: 5,
+        ),
+        0,
+      );
+    });
+
+    test('session drone cap limits launches across towers', () {
+      expect(
+        CombatEffects.allowedDroneLaunches(
+          requested: 4,
+          active: 0,
+          maxActive: 4,
+          sessionActive: 7,
+          maxSessionActive: 8,
+        ),
+        1,
+      );
+      expect(
+        CombatEffects.allowedDroneLaunches(
+          requested: 4,
+          active: 0,
+          maxActive: 4,
+          sessionActive: 8,
+          maxSessionActive: 8,
         ),
         0,
       );

@@ -314,6 +314,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       requested: tower.stats.droneCount,
       active: active,
       maxActive: tower.stats.maxActiveDrones,
+      sessionActive: _activeDroneCount,
+      maxSessionActive: _maxActiveDronesInSession,
     );
     if (allowed <= 0) {
       return;
@@ -332,6 +334,17 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
         ),
       );
     }
+  }
+
+  int get _activeDroneCount =>
+      _activeDronesByTower.values.fold(0, (total, active) => total + active);
+
+  int get _maxActiveDronesInSession {
+    var maxActive = 0;
+    for (final tower in _towerComponents.values) {
+      maxActive = math.max(maxActive, tower.stats.maxActiveDrones);
+    }
+    return maxActive;
   }
 
   EnemyComponent? _selectNearestEnemyForDrone(Vector2 position) {

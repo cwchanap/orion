@@ -194,7 +194,7 @@ class CombatEffects {
     }
 
     final lineLength = math.sqrt(lineLengthSquared);
-    final hits = <_PierceHit>[];
+    final hitsById = <int, _PierceHit>{};
 
     for (final candidate in candidates) {
       if (!candidate.isAlive) {
@@ -215,24 +215,59 @@ class CombatEffects {
         continue;
       }
 
-      hits.add(_PierceHit(candidate: candidate, projection: projection));
+      hitsById[candidate.id] = _PierceHit(
+        candidate: candidate,
+        projection: projection,
+      );
     }
 
+    final primaryHit =
+        hitsById[primaryTarget.id] ??
+        _PierceHit(candidate: primaryTarget, projection: lineLength);
+    hitsById[primaryTarget.id] = primaryHit;
+
+    final hits = hitsById.values.toList(growable: false);
     hits.sort((a, b) => a.projection.compareTo(b.projection));
 
-    return [for (final hit in hits.take(pierceCount)) hit.candidate];
+    final selected = hits.take(pierceCount).toList();
+    if (!selected.any((hit) => hit.candidate.id == primaryTarget.id)) {
+      selected[selected.length - 1] = primaryHit;
+      selected.sort((a, b) => a.projection.compareTo(b.projection));
+    }
+
+    return [for (final hit in selected) hit.candidate];
   }
 
   static int allowedDroneLaunches({
     required int requested,
     required int active,
     required int maxActive,
+    int sessionActive = 0,
+    int maxSessionActive = 0,
   }) {
     if (requested <= 0 || maxActive <= 0 || active >= maxActive) {
       return 0;
     }
 
-    return math.min(requested, maxActive - math.max(0, active));
+    final towerRemaining = maxActive - (active < 0 ? 0 : active);
+    var allowed = requested;
+    if (towerRemaining < allowed) {
+      allowed = towerRemaining;
+    }
+    if (maxSessionActive <= 0) {
+      return allowed;
+    }
+
+    final sessionRemaining =
+        maxSessionActive - (sessionActive < 0 ? 0 : sessionActive);
+    if (sessionRemaining <= 0) {
+      return 0;
+    }
+
+    if (sessionRemaining < allowed) {
+      allowed = sessionRemaining;
+    }
+    return allowed;
   }
 
   static double damageForChainJump({
