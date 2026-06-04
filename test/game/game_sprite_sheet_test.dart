@@ -136,6 +136,22 @@ void main() {
         GameTowerVarietySheet.spriteForProjectile(TowerType.railgun),
         GameTowerVarietySprite.railSlug,
       );
+      expect(
+        GameTowerVarietySheet.spriteForProjectile(TowerType.ionChain),
+        GameTowerVarietySprite.ionArc,
+      );
+      expect(
+        GameTowerVarietySheet.spriteForProjectile(TowerType.nanite),
+        GameTowerVarietySprite.naniteCloud,
+      );
+      expect(
+        GameTowerVarietySheet.spriteForProjectile(TowerType.gravityWell),
+        GameTowerVarietySprite.gravityField,
+      );
+      expect(
+        GameTowerVarietySheet.spriteForProjectile(TowerType.droneBay),
+        GameTowerVarietySprite.drone,
+      );
     });
   });
 }
