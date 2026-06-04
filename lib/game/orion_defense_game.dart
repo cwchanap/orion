@@ -30,6 +30,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   Offset _boardOrigin = Offset.zero;
   double _spawnTimer = 0;
   int _spawnedCount = 0;
+  int _activeGroupIndex = 0;
+  int _spawnedInGroup = 0;
   int _nextEnemyId = 1;
 
   GamePathTiles? _pathTiles;
@@ -148,6 +150,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
 
     _spawnTimer = 0;
     _spawnedCount = 0;
+    _activeGroupIndex = 0;
+    _spawnedInGroup = 0;
     _clearSelection();
     _publishSnapshot();
   }
@@ -156,6 +160,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     _clearCombatComponents(removeTowers: true);
     _spawnTimer = 0;
     _spawnedCount = 0;
+    _activeGroupIndex = 0;
+    _spawnedInGroup = 0;
     _nextEnemyId = 1;
     _clearSelection();
     _session.restart();
@@ -262,16 +268,29 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
 
     _spawnTimer -= dt;
     while (_spawnTimer <= 0 && _spawnedCount < wave.enemyCount) {
-      _spawnEnemy(wave);
+      final group = wave.groups[_activeGroupIndex];
+      _spawnEnemy(group.enemyStats);
       _spawnedCount += 1;
-      _spawnTimer += wave.spawnInterval;
+      _spawnedInGroup += 1;
+
+      if (_spawnedInGroup >= group.enemyCount) {
+        _activeGroupIndex += 1;
+        _spawnedInGroup = 0;
+        if (_activeGroupIndex >= wave.groups.length) {
+          _spawnTimer = 0;
+          return;
+        }
+        _spawnTimer += wave.groups[_activeGroupIndex].initialDelay;
+      } else {
+        _spawnTimer += group.spawnInterval;
+      }
     }
   }
 
-  void _spawnEnemy(WaveDefinition wave) {
+  void _spawnEnemy(EnemyStats stats) {
     final enemy = EnemyComponent(
       enemyId: _nextEnemyId,
-      stats: wave.enemyStats,
+      stats: stats,
       waypoints: _pathWaypoints(),
       spriteSheet: _spriteSheet,
       onKilled: _handleEnemyKilled,
@@ -296,6 +315,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       _clearCombatComponents(removeTowers: false);
       _spawnTimer = 0;
       _spawnedCount = 0;
+      _activeGroupIndex = 0;
+      _spawnedInGroup = 0;
       _layoutBoard(size);
     }
     _publishSnapshot();
@@ -313,6 +334,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     _session.finishActiveWave();
     _spawnTimer = 0;
     _spawnedCount = 0;
+    _activeGroupIndex = 0;
+    _spawnedInGroup = 0;
     _layoutBoard(size);
     _publishSnapshot();
   }
