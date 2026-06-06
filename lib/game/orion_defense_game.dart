@@ -9,6 +9,8 @@ import 'assets/game_path_tiles.dart';
 import 'assets/game_sprite_sheet.dart';
 import 'assets/game_tower_variety_sheet.dart';
 import 'assets/game_terrain.dart';
+import 'campaign/orion_campaign.dart';
+import 'campaign/stage_definition.dart';
 import 'components/board_component.dart';
 import 'components/drone_component.dart';
 import 'components/enemy_component.dart';
@@ -22,7 +24,17 @@ import 'rules/game_session.dart';
 import 'rules/tower_targeting.dart';
 
 class OrionDefenseGame extends FlameGame with TapCallbacks {
-  final GameSession _session = GameSession.initial();
+  OrionDefenseGame({
+    StageDefinition? stage,
+    this.onStageWon,
+    this.onReturnToMap,
+  }) : stage = stage ?? OrionCampaign.stageOne,
+       _session = GameSession.initial(stage: stage ?? OrionCampaign.stageOne);
+
+  final StageDefinition stage;
+  final ValueChanged<StageDefinition>? onStageWon;
+  final VoidCallback? onReturnToMap;
+  final GameSession _session;
 
   late final ValueNotifier<GameSnapshot> stateNotifier = ValueNotifier(
     _session.snapshot(),
@@ -198,6 +210,14 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     _publishSnapshot();
   }
 
+  void returnToMap() {
+    if (_session.phase == GamePhase.wave) {
+      _publishSnapshot(feedback: 'Finish the active wave before returning.');
+      return;
+    }
+    onReturnToMap?.call();
+  }
+
   @override
   void update(double dt) {
     super.update(dt);
@@ -232,6 +252,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     _board?.removeFromParent();
     _board = BoardComponent(
       cellSize: _cellSize,
+      pathCells: stage.pathCells,
       selectedCell: _selectedTower?.position ?? _selectedCell,
       spriteSheet: _spriteSheet,
       terrainImage: _terrainImage,
@@ -443,12 +464,16 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     }
 
     _session.finishActiveWave();
+    final didWin = _session.phase == GamePhase.won;
     _spawnTimer = 0;
     _spawnedCount = 0;
     _activeGroupIndex = 0;
     _spawnedInGroup = 0;
     _layoutBoard(size);
     _publishSnapshot();
+    if (didWin) {
+      onStageWon?.call(stage);
+    }
   }
 
   void _removeInactiveEnemyReferences() {
@@ -489,7 +514,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   }
 
   List<Vector2> _pathWaypoints() {
-    return BoardLayout.pathCells.map(_cellCenter).toList(growable: false);
+    return stage.pathCells.map(_cellCenter).toList(growable: false);
   }
 
   void _clearSelection() {

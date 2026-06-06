@@ -10,6 +10,7 @@ import '../rules/board_layout.dart';
 class BoardComponent extends PositionComponent {
   BoardComponent({
     required this.cellSize,
+    required this.pathCells,
     this.selectedCell,
     this.spriteSheet,
     this.terrainImage,
@@ -24,6 +25,7 @@ class BoardComponent extends PositionComponent {
        );
 
   final double cellSize;
+  final List<GridPosition> pathCells;
   final GameSpriteSheet? spriteSheet;
   final Image? terrainImage;
   final GamePathTiles? pathTiles;
@@ -86,19 +88,20 @@ class BoardComponent extends PositionComponent {
     }
 
     final pathTiles = this.pathTiles;
-    for (final pathCell in BoardLayout.pathCells) {
+    for (final pathCell in pathCells) {
       final rect = cellRect(pathCell).deflate(1);
       if (pathTiles == null) {
         canvas.drawRect(rect, _pathPaint);
       } else {
-        final tile = GamePathTiles.tileForCell(pathCell, BoardLayout.pathCells);
+        final tile = GamePathTiles.tileForCell(pathCell, pathCells);
         pathTiles.sprite(tile).renderRect(canvas, rect);
       }
     }
 
     final activeSelection = selectedCell;
     if (activeSelection != null) {
-      final paint = BoardLayout.isBuildableCell(activeSelection)
+      final paint =
+          BoardLayout.isBuildableCell(activeSelection, pathCells: pathCells)
           ? _buildableSelectionPaint
           : _blockedSelectionPaint;
       final rect = cellRect(activeSelection).deflate(2);
@@ -108,14 +111,14 @@ class BoardComponent extends PositionComponent {
 
     _renderMarker(
       canvas,
-      BoardLayout.pathCells.first,
+      pathCells.first,
       _spawnPaint,
       innerRadiusFactor: 0.22,
       sprite: GameSprite.spawnGate,
     );
     _renderMarker(
       canvas,
-      BoardLayout.pathCells.last,
+      pathCells.last,
       _basePaint,
       innerRadiusFactor: 0.3,
       sprite: GameSprite.baseReactor,
