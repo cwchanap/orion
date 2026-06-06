@@ -20,7 +20,16 @@ void main() {
       expect(OrionCampaign.stageById('salvage-rift').unlockDependencies, [
         'nebula-relay',
       ]);
+      expect(OrionCampaign.stageById('asteroid-foundry').unlockDependencies, [
+        'nebula-relay',
+      ]);
+      expect(OrionCampaign.stageById('aurora-gate').unlockDependencies, [
+        'asteroid-foundry',
+      ]);
       expect(OrionCampaign.stageById('void-bastion').unlockDependencies, [
+        'aurora-gate',
+      ]);
+      expect(OrionCampaign.stageById('singularity-core').unlockDependencies, [
         'aurora-gate',
       ]);
     });
