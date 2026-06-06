@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_path_tiles.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/board_layout.dart';
 
@@ -67,6 +68,52 @@ void main() {
         GamePathTiles.tileForCell(const GridPosition(7, 10), pathCells),
         GamePathTile.endCap,
       );
+    });
+
+    test('uses route order when stage path cells touch out of sequence', () {
+      final pathCells = OrionCampaign.stageById('aurora-gate').pathCells;
+
+      expect(
+        GamePathTiles.tileForCell(const GridPosition(5, 10), pathCells),
+        isA<GamePathTile>(),
+      );
+    });
+
+    test(
+      'ignores adjacent path cells that are not ordered route neighbors',
+      () {
+        const pathCells = [
+          GridPosition(1, 1),
+          GridPosition(2, 1),
+          GridPosition(2, 2),
+          GridPosition(1, 2),
+          GridPosition(0, 2),
+          GridPosition(0, 1),
+          GridPosition(0, 0),
+          GridPosition(1, 0),
+        ];
+
+        expect(
+          GamePathTiles.tileForCell(const GridPosition(1, 1), pathCells),
+          GamePathTile.startCap,
+        );
+        expect(
+          GamePathTiles.tileForCell(const GridPosition(1, 0), pathCells),
+          GamePathTile.endCap,
+        );
+      },
+    );
+
+    test('selects a tile for every shipped campaign path cell', () {
+      for (final stage in OrionCampaign.stages) {
+        for (final pathCell in stage.pathCells) {
+          expect(
+            () => GamePathTiles.tileForCell(pathCell, stage.pathCells),
+            returnsNormally,
+            reason: '${stage.id} path cell $pathCell should map to a tile',
+          );
+        }
+      }
     });
   });
 }

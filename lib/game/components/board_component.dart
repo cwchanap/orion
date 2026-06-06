@@ -17,7 +17,8 @@ class BoardComponent extends PositionComponent {
     this.pathTiles,
     super.position,
     super.priority,
-  }) : super(
+  }) : assert(pathCells.isNotEmpty, 'BoardComponent requires path cells.'),
+       super(
          size: Vector2(
            BoardLayout.columns * cellSize,
            BoardLayout.rows * cellSize,

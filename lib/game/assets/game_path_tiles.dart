@@ -72,31 +72,39 @@ class GamePathTiles {
     GridPosition position,
     Iterable<GridPosition> pathCells,
   ) {
-    final pathSet = pathCells.toSet();
-    final hasNorth = pathSet.contains(
+    final orderedPath = pathCells.toList(growable: false);
+    final index = orderedPath.indexOf(position);
+    if (index == -1) {
+      throw StateError('Path cell $position is not in the ordered path');
+    }
+
+    final neighbors = [
+      if (index > 0) orderedPath[index - 1],
+      if (index < orderedPath.length - 1) orderedPath[index + 1],
+    ];
+
+    if (neighbors.length == 1) {
+      if (index == 0) {
+        return GamePathTile.startCap;
+      }
+      if (index == orderedPath.length - 1) {
+        return GamePathTile.endCap;
+      }
+    }
+
+    final hasNorth = neighbors.contains(
       GridPosition(position.column, position.row - 1),
     );
-    final hasEast = pathSet.contains(
+    final hasEast = neighbors.contains(
       GridPosition(position.column + 1, position.row),
     );
-    final hasSouth = pathSet.contains(
+    final hasSouth = neighbors.contains(
       GridPosition(position.column, position.row + 1),
     );
-    final hasWest = pathSet.contains(
+    final hasWest = neighbors.contains(
       GridPosition(position.column - 1, position.row),
     );
-    final neighborCount = [
-      hasNorth,
-      hasEast,
-      hasSouth,
-      hasWest,
-    ].where((hasNeighbor) => hasNeighbor).length;
 
-    if (neighborCount == 1) {
-      return position == pathCells.first
-          ? GamePathTile.startCap
-          : GamePathTile.endCap;
-    }
     if (hasEast && hasWest) {
       return GamePathTile.horizontal;
     }
@@ -117,7 +125,7 @@ class GamePathTiles {
     }
 
     throw StateError(
-      'Path cell $position does not map to a supported path tile',
+      'Path cell $position does not map to a supported ordered path tile',
     );
   }
 }
