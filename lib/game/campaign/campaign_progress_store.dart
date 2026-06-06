@@ -53,9 +53,14 @@ class SharedPreferencesCampaignProgressStore implements CampaignProgressStore {
   SharedPreferencesCampaignProgressStore({
     required SharedPreferences preferences,
     required Iterable<StageDefinition> knownStages,
-    this.key = 'orion.campaign.progress',
-  }) : _preferences = preferences,
-       _knownStages = List.unmodifiable(knownStages);
+    String key = 'orion.campaign.progress',
+  }) : this._(preferences, knownStages: knownStages, key: key);
+
+  SharedPreferencesCampaignProgressStore._(
+    this._preferences, {
+    required Iterable<StageDefinition> knownStages,
+    required this.key,
+  }) : _knownStages = List.unmodifiable(knownStages);
 
   final SharedPreferences _preferences;
   final List<StageDefinition> _knownStages;
@@ -63,20 +68,33 @@ class SharedPreferencesCampaignProgressStore implements CampaignProgressStore {
 
   @override
   Future<CampaignProgress> load() async {
-    return CampaignProgressCodec.decode(
-      _preferences.getString(key),
-      knownStages: _knownStages,
-    );
+    final String? source;
+    try {
+      source = _preferences.getString(key);
+    } on TypeError {
+      return CampaignProgress();
+    }
+
+    return CampaignProgressCodec.decode(source, knownStages: _knownStages);
   }
 
   @override
   Future<void> save(CampaignProgress progress) async {
-    await _preferences.setString(key, CampaignProgressCodec.encode(progress));
+    final persisted = await _preferences.setString(
+      key,
+      CampaignProgressCodec.encode(progress),
+    );
+    if (!persisted) {
+      throw StateError('Failed to save campaign progress.');
+    }
   }
 
   @override
   Future<void> reset() async {
-    await _preferences.remove(key);
+    final persisted = await _preferences.remove(key);
+    if (!persisted) {
+      throw StateError('Failed to reset campaign progress.');
+    }
   }
 }
 
