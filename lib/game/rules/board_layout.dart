@@ -41,12 +41,18 @@ class BoardLayout {
         position.row < rows;
   }
 
-  static bool isPathCell(GridPosition position) {
-    return pathCells.contains(position);
+  static bool isPathCell(
+    GridPosition position, {
+    List<GridPosition>? pathCells,
+  }) {
+    return (pathCells ?? BoardLayout.pathCells).contains(position);
   }
 
-  static bool isBuildableCell(GridPosition position) {
-    return isInBounds(position) && !isPathCell(position);
+  static bool isBuildableCell(
+    GridPosition position, {
+    List<GridPosition>? pathCells,
+  }) {
+    return isInBounds(position) && !isPathCell(position, pathCells: pathCells);
   }
 
   static Offset cellCenter(

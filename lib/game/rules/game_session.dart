@@ -1,11 +1,15 @@
+import '../campaign/orion_campaign.dart';
+import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 import 'board_layout.dart';
 
 class GameSession {
-  GameSession.initial({int? gold, int? baseHealth})
-    : _gold = gold ?? GameBalance.startingGold,
+  GameSession.initial({StageDefinition? stage, int? gold, int? baseHealth})
+    : stage = stage ?? OrionCampaign.stageOne,
+      _gold = gold ?? GameBalance.startingGold,
       _baseHealth = baseHealth ?? GameBalance.initialBaseHealth;
 
+  final StageDefinition stage;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
   int _nextTowerId = 1;
   int _gold;
@@ -27,10 +31,10 @@ class GameSession {
   }
 
   WaveDefinition? get activeWave {
-    if (_waveIndex >= GameBalance.waves.length) {
+    if (_waveIndex >= stage.waves.length) {
       return null;
     }
-    return GameBalance.waves[_waveIndex];
+    return stage.waves[_waveIndex];
   }
 
   bool isTowerUnlocked(TowerType type) => unlockedTowerTypes.contains(type);
@@ -44,7 +48,10 @@ class GameSession {
       phase: _phase,
       gold: _gold,
       baseHealth: _baseHealth,
-      waveNumber: (_waveIndex + 1).clamp(1, GameBalance.waves.length).toInt(),
+      waveNumber: (_waveIndex + 1).clamp(1, stage.waves.length).toInt(),
+      waveTotal: stage.waves.length,
+      stageName: stage.name,
+      stageLabel: stage.mapLabel,
       unlockedTowerTypes: unlockedTowerTypes,
       selectedCell: selectedCell,
       selectedTower: selectedTower,
@@ -59,7 +66,7 @@ class GameSession {
     if (!BoardLayout.isInBounds(position)) {
       return const PlacementResult.denied(PlacementFailure.offBoard);
     }
-    if (BoardLayout.isPathCell(position)) {
+    if (BoardLayout.isPathCell(position, pathCells: stage.pathCells)) {
       return const PlacementResult.denied(PlacementFailure.pathBlocked);
     }
     if (_towersByPosition.containsKey(position)) {
@@ -143,7 +150,7 @@ class GameSession {
   }
 
   bool startWave() {
-    if (_phase != GamePhase.build || _waveIndex >= GameBalance.waves.length) {
+    if (_phase != GamePhase.build || _waveIndex >= stage.waves.length) {
       return false;
     }
     _phase = GamePhase.wave;
@@ -157,7 +164,7 @@ class GameSession {
 
     final completedWave = activeWave;
     _waveIndex += 1;
-    if (_waveIndex >= GameBalance.waves.length) {
+    if (_waveIndex >= stage.waves.length) {
       _phase = GamePhase.won;
       return;
     }

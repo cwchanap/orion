@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/game_session.dart';
 
@@ -117,7 +118,7 @@ void main() {
 
     test('denies placement after terminal states without spending gold', () {
       final wonSession = GameSession.initial();
-      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+      for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
       }
@@ -192,7 +193,7 @@ void main() {
         final wonSession = GameSession.initial(gold: 200);
         wonSession.placeTower(const GridPosition(0, 0), TowerType.cryo);
         final wonTower = wonSession.towers.single;
-        for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+        for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
           expect(wonSession.startWave(), isTrue);
           wonSession.finishActiveWave();
         }
@@ -323,19 +324,19 @@ void main() {
     test('progresses through all waves and wins after the final clear', () {
       final session = GameSession.initial();
 
-      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+      for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
       }
 
       expect(session.phase, GamePhase.won);
-      expect(session.waveIndex, GameBalance.waves.length);
+      expect(session.waveIndex, session.stage.waves.length);
     });
 
     test('startWave remains false after won', () {
       final session = GameSession.initial();
 
-      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+      for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
       }
@@ -362,7 +363,7 @@ void main() {
       expect(session.gold, GameBalance.startingGold + 8);
 
       final wonSession = GameSession.initial();
-      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+      for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
       }
@@ -390,7 +391,7 @@ void main() {
       expect(session.baseHealth, 0);
 
       final wonSession = GameSession.initial();
-      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+      for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
       }
@@ -479,13 +480,74 @@ void main() {
     test('final wave win does not add a clear bonus', () {
       final session = GameSession.initial();
 
-      for (var wave = 0; wave < GameBalance.waves.length; wave += 1) {
+      for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
       }
 
       expect(session.phase, GamePhase.won);
       expect(session.gold, 150 + 30 + 40 + 50 + 65 + 80 + 95 + 115);
+    });
+
+    test('uses selected stage waves for mission progress', () {
+      final stage = StageDefinition(
+        id: 'test-stage',
+        name: 'Test Stage',
+        mapLabel: 'Test',
+        description: 'Test stage',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: GameBalance.waves.take(2).toList(growable: false),
+        unlockDependencies: const [],
+        isMainPath: true,
+        mainPathOrder: 1,
+        mapColumn: 0,
+        mapRow: 0,
+      );
+      final session = GameSession.initial(stage: stage);
+
+      expect(session.stage, stage);
+      expect(session.snapshot().stageName, 'Test Stage');
+      expect(session.snapshot().stageLabel, 'Test');
+      expect(session.snapshot().waveTotal, 2);
+
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+      expect(session.phase, GamePhase.build);
+
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+      expect(session.phase, GamePhase.won);
+      expect(session.waveIndex, 2);
+    });
+
+    test('uses selected stage path for placement blocking', () {
+      final stage = StageDefinition(
+        id: 'path-stage',
+        name: 'Path Stage',
+        mapLabel: 'Path',
+        description: 'Test stage',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: GameBalance.waves,
+        unlockDependencies: const [],
+        isMainPath: true,
+        mainPathOrder: 1,
+        mapColumn: 0,
+        mapRow: 0,
+      );
+      final session = GameSession.initial(stage: stage);
+
+      expect(
+        session
+            .validatePlacement(const GridPosition(0, 0), TowerType.laser)
+            .failure,
+        PlacementFailure.pathBlocked,
+      );
+      expect(
+        session
+            .validatePlacement(const GridPosition(0, 1), TowerType.laser)
+            .isAllowed,
+        isTrue,
+      );
     });
   });
 }
