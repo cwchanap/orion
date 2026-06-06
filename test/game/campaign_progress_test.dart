@@ -67,6 +67,27 @@ void main() {
       );
     });
 
+    test('incomplete main path returns false', () {
+      final progress = CampaignProgress(
+        clearedStageIds: {'stage-1', 'stage-2', 'stage-3', 'stage-4'},
+      );
+
+      expect(progress.isCampaignComplete(stages), isFalse);
+    });
+
+    test('empty stage collection returns false', () {
+      final progress = CampaignProgress();
+
+      expect(progress.isCampaignComplete(const <StageDefinition>[]), isFalse);
+    });
+
+    test('side-only stage collection returns false even when cleared', () {
+      final sideStage = _stage(id: 'side-only', isMainPath: false);
+      final progress = CampaignProgress(clearedStageIds: {'side-only'});
+
+      expect(progress.isCampaignComplete([sideStage]), isFalse);
+    });
+
     test('markCleared returns normalized immutable progress', () {
       final progress = CampaignProgress(clearedStageIds: {'stage-1'});
 

@@ -31,9 +31,10 @@ class CampaignProgress {
   }
 
   bool isCampaignComplete(Iterable<StageDefinition> stages) {
-    return stages
-        .where((stage) => stage.isMainPath)
-        .every((stage) => isCleared(stage.id));
+    final mainPathStages = stages.where((stage) => stage.isMainPath).toList();
+
+    return mainPathStages.isNotEmpty &&
+        mainPathStages.every((stage) => isCleared(stage.id));
   }
 
   CampaignProgress withoutUnknownStages(Iterable<StageDefinition> stages) {
