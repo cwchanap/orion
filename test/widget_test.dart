@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/world_map_view.dart';
@@ -107,6 +110,153 @@ void main() {
     expect(find.text('Could not load campaign progress.'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
+  });
+
+  testWidgets(
+    'stage clear save failure keeps prior progress and shows feedback',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: CampaignProgress(clearedStageIds: {'outpost-alpha'}),
+        saveError: StateError('save failed'),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      game!.onStageWon?.call(OrionCampaign.stageById('nebula-relay'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+      expect(store.progress.clearedStageIds, {'outpost-alpha'});
+    },
+  );
+
+  testWidgets('serializes sibling stage clear saves without losing progress', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: CampaignProgress(
+        clearedStageIds: {'outpost-alpha', 'nebula-relay'},
+      ),
+      delaySaves: true,
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    game!.onStageWon?.call(OrionCampaign.stageById('salvage-rift'));
+    game!.onStageWon?.call(OrionCampaign.stageById('asteroid-foundry'));
+
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    if (store.saveCompletions.length > 1) {
+      store.saveCompletions[1].complete();
+      await tester.pump();
+      store.saveCompletions[0].complete();
+    } else {
+      store.saveCompletions[0].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+    }
+    await tester.pumpAndSettle();
+
+    expect(store.progress.clearedStageIds, {
+      'outpost-alpha',
+      'nebula-relay',
+      'salvage-rift',
+      'asteroid-foundry',
+    });
+  });
+
+  testWidgets('failed reset does not let pending clear save reset progress', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: CampaignProgress(
+        clearedStageIds: {'outpost-alpha', 'nebula-relay'},
+      ),
+      delaySaves: true,
+      resetResults: [StateError('reset failed'), null],
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    game!.onStageWon?.call(OrionCampaign.stageById('salvage-rift'));
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+    game!.returnToMap();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reset Campaign'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(store.resetCalls, 1);
+    expect(store.progress.clearedStageIds, {
+      'outpost-alpha',
+      'nebula-relay',
+      'salvage-rift',
+    });
+  });
+
+  testWidgets('reset reports failure when no progress store is available', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStoreLoader: () async => throw StateError('no store'),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reset Campaign'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+    expect(find.text('Campaign reset.'), findsNothing);
   });
 
   test('snapshot exposes the current tower unlocks', () {
@@ -238,11 +388,33 @@ void main() {
   });
 }
 
+Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
+  for (var attempt = 0; attempt < 20; attempt += 1) {
+    if (condition()) {
+      return;
+    }
+    await tester.pump();
+  }
+
+  fail('Condition was not met before pump limit.');
+}
+
 class _TestCampaignProgressStore implements CampaignProgressStore {
-  _TestCampaignProgressStore({this.loadError});
+  _TestCampaignProgressStore({
+    this.loadError,
+    this.saveError,
+    this.delaySaves = false,
+    this.resetResults = const [],
+    CampaignProgress? progress,
+  }) : progress = progress ?? CampaignProgress();
 
   final Object? loadError;
-  CampaignProgress progress = CampaignProgress();
+  final Object? saveError;
+  final bool delaySaves;
+  final List<Object?> resetResults;
+  final List<Completer<void>> saveCompletions = [];
+  CampaignProgress progress;
+  int resetCalls = 0;
 
   @override
   Future<CampaignProgress> load() async {
@@ -255,11 +427,31 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
 
   @override
   Future<void> save(CampaignProgress progress) async {
+    if (delaySaves) {
+      final completer = Completer<void>();
+      saveCompletions.add(completer);
+      await completer.future;
+    }
+
+    final error = saveError;
+    if (error != null) {
+      throw error;
+    }
+
     this.progress = progress;
   }
 
   @override
   Future<void> reset() async {
+    final result = resetCalls < resetResults.length
+        ? resetResults[resetCalls]
+        : null;
+    resetCalls += 1;
+
+    if (result != null) {
+      throw result;
+    }
+
     progress = CampaignProgress();
   }
 }

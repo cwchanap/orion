@@ -11,9 +11,16 @@ import '../orion_defense_game.dart';
 import 'world_map_view.dart';
 
 class OrionGamePage extends StatefulWidget {
-  const OrionGamePage({super.key, this.progressStore});
+  const OrionGamePage({
+    super.key,
+    this.progressStore,
+    this.progressStoreLoader,
+    this.onGameCreated,
+  });
 
   final CampaignProgressStore? progressStore;
+  final Future<CampaignProgressStore> Function()? progressStoreLoader;
+  final ValueChanged<OrionDefenseGame>? onGameCreated;
 
   @override
   State<OrionGamePage> createState() => _OrionGamePageState();
@@ -27,7 +34,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   String? _mapFeedback;
   bool _isLoading = true;
   int _progressGeneration = 0;
-  int _clearSaveToken = 0;
+  Future<void> _clearSaveQueue = Future<void>.value();
 
   @override
   void initState() {
@@ -40,11 +47,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     try {
       if (store == null) {
-        final preferences = await SharedPreferences.getInstance();
-        store = SharedPreferencesCampaignProgressStore(
-          preferences: preferences,
-          knownStages: OrionCampaign.stages,
-        );
+        final loader = widget.progressStoreLoader;
+        if (loader != null) {
+          store = await loader();
+        } else {
+          final preferences = await SharedPreferences.getInstance();
+          store = SharedPreferencesCampaignProgressStore(
+            preferences: preferences,
+            knownStages: OrionCampaign.stages,
+          );
+        }
       }
 
       final progress = await store.load();
@@ -130,14 +142,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    final game = OrionDefenseGame(
+      stage: stage,
+      onStageWon: _markStageCleared,
+      onReturnToMap: _returnToMap,
+    );
+    widget.onGameCreated?.call(game);
+
     setState(() {
       _activeStage = stage;
       _mapFeedback = null;
-      _game = OrionDefenseGame(
-        stage: stage,
-        onStageWon: _markStageCleared,
-        onReturnToMap: _returnToMap,
-      );
+      _game = game;
     });
   }
 
@@ -148,22 +163,33 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   Future<void> _markStageCleared(StageDefinition stage) async {
+    final saveGeneration = _progressGeneration;
+    final saveTask = _clearSaveQueue.then(
+      (_) => _saveStageClear(stage, saveGeneration),
+    );
+    _clearSaveQueue = saveTask.catchError((_) {});
+    await saveTask;
+  }
+
+  Future<void> _saveStageClear(
+    StageDefinition stage,
+    int saveGeneration,
+  ) async {
     final store = _store;
     if (store == null) {
       _showCampaignPersistenceFailure();
       return;
     }
 
-    final progress = _progress.markCleared(stage.id);
-    final saveGeneration = _progressGeneration;
-    final saveToken = ++_clearSaveToken;
+    if (saveGeneration != _progressGeneration) {
+      return;
+    }
 
+    final progress = _progress.markCleared(stage.id);
     try {
       await store.save(progress);
     } catch (_) {
-      if (!mounted ||
-          saveGeneration != _progressGeneration ||
-          saveToken != _clearSaveToken) {
+      if (!mounted || saveGeneration != _progressGeneration) {
         return;
       }
 
@@ -177,10 +203,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     if (saveGeneration != _progressGeneration) {
       await _resetStoreAfterStaleClearSave(store);
-      return;
-    }
-
-    if (saveToken != _clearSaveToken) {
       return;
     }
 
@@ -222,13 +244,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     final store = _store;
-    final resetGeneration = ++_progressGeneration;
-    _clearSaveToken++;
+    if (store == null) {
+      setState(() {
+        _mapFeedback = 'Could not reset campaign progress.';
+      });
+      return;
+    }
 
     try {
-      await store?.reset();
+      await store.reset();
     } catch (_) {
-      if (!mounted || resetGeneration != _progressGeneration) {
+      if (!mounted) {
         return;
       }
 
@@ -238,9 +264,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    if (!mounted || resetGeneration != _progressGeneration) {
+    if (!mounted) {
       return;
     }
+
+    _progressGeneration++;
 
     setState(() {
       _progress = CampaignProgress();
@@ -256,7 +284,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
     try {
       await store.reset();
     } catch (_) {
-      // A newer reset already owns the UI state; ignore cleanup failure here.
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _mapFeedback = 'Could not reset campaign progress.';
+      });
     }
   }
 
