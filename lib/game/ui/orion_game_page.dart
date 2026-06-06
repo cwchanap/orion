@@ -245,6 +245,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     final store = _store;
     if (store == null) {
+      if (!mounted) {
+        return;
+      }
+
       setState(() {
         _mapFeedback = 'Could not reset campaign progress.';
       });
