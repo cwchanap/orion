@@ -1,0 +1,105 @@
+import 'dart:convert';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'campaign_progress.dart';
+import 'stage_definition.dart';
+
+abstract class CampaignProgressStore {
+  Future<CampaignProgress> load();
+  Future<void> save(CampaignProgress progress);
+  Future<void> reset();
+}
+
+class CampaignProgressCodec {
+  const CampaignProgressCodec._();
+
+  static String encode(CampaignProgress progress) {
+    final ids = progress.clearedStageIds.toList()..sort();
+    return jsonEncode({'version': 1, 'clearedStageIds': ids});
+  }
+
+  static CampaignProgress decode(
+    String? source, {
+    required Iterable<StageDefinition> knownStages,
+  }) {
+    if (source == null || source.isEmpty) {
+      return CampaignProgress();
+    }
+
+    try {
+      final decoded = jsonDecode(source);
+      if (decoded is! Map<String, Object?> || decoded['version'] != 1) {
+        return CampaignProgress();
+      }
+
+      final rawIds = decoded['clearedStageIds'];
+      if (rawIds is! List) {
+        return CampaignProgress();
+      }
+
+      final knownIds = knownStages.map((stage) => stage.id).toSet();
+      final ids = rawIds.whereType<String>().where(knownIds.contains).toSet();
+      return CampaignProgress(clearedStageIds: ids);
+    } on FormatException {
+      return CampaignProgress();
+    } on TypeError {
+      return CampaignProgress();
+    }
+  }
+}
+
+class SharedPreferencesCampaignProgressStore implements CampaignProgressStore {
+  SharedPreferencesCampaignProgressStore({
+    required SharedPreferences preferences,
+    required Iterable<StageDefinition> knownStages,
+    this.key = 'orion.campaign.progress',
+  }) : _preferences = preferences,
+       _knownStages = List.unmodifiable(knownStages);
+
+  final SharedPreferences _preferences;
+  final List<StageDefinition> _knownStages;
+  final String key;
+
+  @override
+  Future<CampaignProgress> load() async {
+    return CampaignProgressCodec.decode(
+      _preferences.getString(key),
+      knownStages: _knownStages,
+    );
+  }
+
+  @override
+  Future<void> save(CampaignProgress progress) async {
+    await _preferences.setString(key, CampaignProgressCodec.encode(progress));
+  }
+
+  @override
+  Future<void> reset() async {
+    await _preferences.remove(key);
+  }
+}
+
+class InMemoryCampaignProgressStore implements CampaignProgressStore {
+  InMemoryCampaignProgressStore({
+    required Iterable<StageDefinition> knownStages,
+  }) : _knownStages = List.unmodifiable(knownStages);
+
+  final List<StageDefinition> _knownStages;
+  String? _source;
+
+  @override
+  Future<CampaignProgress> load() async {
+    return CampaignProgressCodec.decode(_source, knownStages: _knownStages);
+  }
+
+  @override
+  Future<void> save(CampaignProgress progress) async {
+    _source = CampaignProgressCodec.encode(progress);
+  }
+
+  @override
+  Future<void> reset() async {
+    _source = null;
+  }
+}
