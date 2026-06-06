@@ -116,30 +116,68 @@ class OrionCampaign {
   }
 
   static StageDefinition stageById(String id) {
-    return stages.firstWhere((stage) => stage.id == id);
+    try {
+      return stages.firstWhere((stage) => stage.id == id);
+    } on StateError {
+      throw ArgumentError.value(id, 'id', 'Unknown stage id');
+    }
   }
 
   static List<String> validate() {
+    return validateStages(stages);
+  }
+
+  static List<String> validateStages(Iterable<StageDefinition> definitions) {
+    final stageList = definitions.toList(growable: false);
+    final mainStageList = stageList
+        .where((stage) => stage.isMainPath)
+        .toList(growable: false);
+    final sideStageList = stageList
+        .where((stage) => !stage.isMainPath)
+        .toList(growable: false);
     final errors = <String>[];
     final ids = <String>{};
 
-    for (final stage in stages) {
+    for (final stage in stageList) {
       if (!ids.add(stage.id)) {
         errors.add('Duplicate stage id: ${stage.id}');
       }
     }
 
-    if (stages.length != 7) {
+    if (stageList.length != 7) {
       errors.add('Campaign must contain exactly 7 stages.');
     }
-    if (mainStages.length != 5) {
+    if (mainStageList.length != 5) {
       errors.add('Campaign must contain exactly 5 main stages.');
     }
-    if (sideStages.length != 2) {
+    if (sideStageList.length != 2) {
       errors.add('Campaign must contain exactly 2 side stages.');
     }
 
-    for (final stage in stages) {
+    final mainPathOrders = <int>[];
+    final seenMainPathOrders = <int>{};
+    for (final stage in mainStageList) {
+      final order = stage.mainPathOrder;
+      if (order == null) {
+        errors.add('${stage.id} main stage must have an order.');
+        continue;
+      }
+      mainPathOrders.add(order);
+      if (!seenMainPathOrders.add(order)) {
+        errors.add('Duplicate main path order: $order.');
+      }
+    }
+    for (final stage in sideStageList) {
+      if (stage.mainPathOrder != null) {
+        errors.add('${stage.id} side stage must not have an order.');
+      }
+    }
+    final sortedMainPathOrders = mainPathOrders.toList(growable: false)..sort();
+    if (!_listEquals(sortedMainPathOrders, const [1, 2, 3, 4, 5])) {
+      errors.add('Main path orders must be exactly [1, 2, 3, 4, 5].');
+    }
+
+    for (final stage in stageList) {
       for (final dependency in stage.unlockDependencies) {
         if (!ids.contains(dependency)) {
           errors.add('${stage.id} depends on unknown stage $dependency.');
@@ -166,6 +204,18 @@ class OrionCampaign {
 
     return List.unmodifiable(errors);
   }
+}
+
+bool _listEquals(List<int> left, List<int> right) {
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) {
+      return false;
+    }
+  }
+  return true;
 }
 
 const _nebulaRelayPath = [
@@ -389,7 +439,7 @@ List<WaveDefinition> _waves(List<WaveGroup> singleGroups) {
   return List.unmodifiable([
     for (var index = 0; index < singleGroups.length; index += 1)
       WaveDefinition(
-        groups: [singleGroups[index]],
+        groups: List.unmodifiable([singleGroups[index]]),
         clearBonus: clearBonuses[index],
       ),
   ]);
