@@ -38,6 +38,7 @@ void main() {
   test('snapshot exposes stage identity and wave total', () {
     final snapshot = GameSession.initial().snapshot();
 
+    expect(snapshot.stageId, 'outpost-alpha');
     expect(snapshot.stageName, 'Outpost Alpha');
     expect(snapshot.stageLabel, 'Alpha');
     expect(snapshot.waveTotal, 8);

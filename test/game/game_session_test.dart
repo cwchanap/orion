@@ -506,6 +506,7 @@ void main() {
       final session = GameSession.initial(stage: stage);
 
       expect(session.stage, stage);
+      expect(session.snapshot().stageId, 'test-stage');
       expect(session.snapshot().stageName, 'Test Stage');
       expect(session.snapshot().stageLabel, 'Test');
       expect(session.snapshot().waveTotal, 2);
@@ -547,6 +548,31 @@ void main() {
             .validatePlacement(const GridPosition(0, 1), TowerType.laser)
             .isAllowed,
         isTrue,
+      );
+    });
+
+    test('rejects selected stages without waves', () {
+      final stage = StageDefinition(
+        id: 'empty-stage',
+        name: 'Empty Stage',
+        mapLabel: 'Empty',
+        description: 'Invalid stage',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [],
+        unlockDependencies: const [],
+        isMainPath: true,
+        mainPathOrder: 1,
+        mapColumn: 0,
+        mapRow: 0,
+      );
+
+      expect(
+        () => GameSession.initial(stage: stage),
+        throwsA(
+          isA<ArgumentError>()
+              .having((error) => error.invalidValue, 'invalidValue', stage.id)
+              .having((error) => error.name, 'name', 'stage'),
+        ),
       );
     });
   });

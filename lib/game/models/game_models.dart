@@ -300,6 +300,7 @@ class GameSnapshot {
     required this.baseHealth,
     required this.waveNumber,
     required this.waveTotal,
+    required this.stageId,
     required this.stageName,
     required this.stageLabel,
     required List<TowerType> unlockedTowerTypes,
@@ -313,6 +314,7 @@ class GameSnapshot {
   final int baseHealth;
   final int waveNumber;
   final int waveTotal;
+  final String stageId;
   final String stageName;
   final String stageLabel;
   final List<TowerType> unlockedTowerTypes;

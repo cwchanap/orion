@@ -7,7 +7,15 @@ class GameSession {
   GameSession.initial({StageDefinition? stage, int? gold, int? baseHealth})
     : stage = stage ?? OrionCampaign.stageOne,
       _gold = gold ?? GameBalance.startingGold,
-      _baseHealth = baseHealth ?? GameBalance.initialBaseHealth;
+      _baseHealth = baseHealth ?? GameBalance.initialBaseHealth {
+    if (this.stage.waves.isEmpty) {
+      throw ArgumentError.value(
+        this.stage.id,
+        'stage',
+        'Stage must define at least one wave',
+      );
+    }
+  }
 
   final StageDefinition stage;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
@@ -50,6 +58,7 @@ class GameSession {
       baseHealth: _baseHealth,
       waveNumber: (_waveIndex + 1).clamp(1, stage.waves.length).toInt(),
       waveTotal: stage.waves.length,
+      stageId: stage.id,
       stageName: stage.name,
       stageLabel: stage.mapLabel,
       unlockedTowerTypes: unlockedTowerTypes,
