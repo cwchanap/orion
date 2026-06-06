@@ -16,7 +16,7 @@ void main() {
     ];
 
     test('unlocks stage one by default and derives locked stages', () {
-      const progress = CampaignProgress();
+      final progress = CampaignProgress();
 
       expect(progress.isCleared('stage-1'), isFalse);
       expect(progress.isUnlocked(stages[0]), isTrue);
@@ -26,7 +26,7 @@ void main() {
     });
 
     test('unlocks main path and side stages from cleared milestones', () {
-      const progress = CampaignProgress(
+      final progress = CampaignProgress(
         clearedStageIds: {'stage-1', 'stage-2', 'stage-3', 'stage-4'},
       );
 
@@ -37,7 +37,7 @@ void main() {
     });
 
     test('completes campaign when all main stages are cleared', () {
-      const withoutSideStages = CampaignProgress(
+      final withoutSideStages = CampaignProgress(
         clearedStageIds: {
           'stage-1',
           'stage-2',
@@ -50,8 +50,25 @@ void main() {
       expect(withoutSideStages.isCampaignComplete(stages), isTrue);
     });
 
+    test('completes campaign from a non-list iterable of main stages', () {
+      final progress = CampaignProgress(
+        clearedStageIds: {
+          'stage-1',
+          'stage-2',
+          'stage-3',
+          'stage-4',
+          'stage-5',
+        },
+      );
+
+      expect(
+        progress.isCampaignComplete(stages.where((stage) => stage.isMainPath)),
+        isTrue,
+      );
+    });
+
     test('markCleared returns normalized immutable progress', () {
-      const progress = CampaignProgress(clearedStageIds: {'stage-1'});
+      final progress = CampaignProgress(clearedStageIds: {'stage-1'});
 
       final updated = progress.markCleared('stage-2');
 
@@ -61,6 +78,46 @@ void main() {
         () => updated.clearedStageIds.add('stage-3'),
         throwsUnsupportedError,
       );
+    });
+
+    test('withoutUnknownStages filters unknown ids', () {
+      final progress = CampaignProgress(
+        clearedStageIds: {'stage-1', 'side-a', 'unknown-stage'},
+      );
+
+      final filtered = progress.withoutUnknownStages(stages.take(2));
+
+      expect(filtered.clearedStageIds, {'stage-1'});
+      expect(progress.clearedStageIds, {'stage-1', 'side-a', 'unknown-stage'});
+      expect(
+        () => filtered.clearedStageIds.add('stage-2'),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('constructor defensively copies mutable input', () {
+      final clearedStageIds = {'stage-1'};
+      final progress = CampaignProgress(clearedStageIds: clearedStageIds);
+
+      clearedStageIds.add('stage-2');
+
+      expect(progress.clearedStageIds, {'stage-1'});
+      expect(progress.isCleared('stage-2'), isFalse);
+      expect(
+        () => progress.clearedStageIds.add('stage-3'),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('cleared stage with unmet dependencies is not unlocked', () {
+      final dependentStage = _stage(
+        id: 'dependent-stage',
+        dependencies: ['missing-stage'],
+      );
+      final progress = CampaignProgress(clearedStageIds: {'dependent-stage'});
+
+      expect(progress.isUnlocked(dependentStage), isFalse);
+      expect(progress.statusFor(dependentStage), StageProgressStatus.cleared);
     });
   });
 }

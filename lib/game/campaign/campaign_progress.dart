@@ -3,20 +3,19 @@ import 'package:orion/game/campaign/stage_definition.dart';
 enum StageProgressStatus { locked, unlocked, cleared }
 
 class CampaignProgress {
-  const factory CampaignProgress({Set<String> clearedStageIds}) =
-      CampaignProgress._;
+  CampaignProgress({Set<String> clearedStageIds = const <String>{}})
+    : _clearedStageIds = Set.unmodifiable(clearedStageIds);
 
-  const CampaignProgress._({this.clearedStageIds = const <String>{}});
+  final Set<String> _clearedStageIds;
 
-  final Set<String> clearedStageIds;
+  Set<String> get clearedStageIds => _clearedStageIds;
 
   bool isCleared(String stageId) {
-    return clearedStageIds.contains(stageId);
+    return _clearedStageIds.contains(stageId);
   }
 
   bool isUnlocked(StageDefinition stage) {
-    return isCleared(stage.id) ||
-        stage.unlockDependencies.every(clearedStageIds.contains);
+    return stage.unlockDependencies.every(_clearedStageIds.contains);
   }
 
   StageProgressStatus statusFor(StageDefinition stage) {
@@ -31,15 +30,21 @@ class CampaignProgress {
     return StageProgressStatus.locked;
   }
 
-  bool isCampaignComplete(List<StageDefinition> stages) {
+  bool isCampaignComplete(Iterable<StageDefinition> stages) {
     return stages
         .where((stage) => stage.isMainPath)
         .every((stage) => isCleared(stage.id));
   }
 
-  CampaignProgress markCleared(String stageId) {
-    return CampaignProgress._(
-      clearedStageIds: Set.unmodifiable({...clearedStageIds, stageId}),
+  CampaignProgress withoutUnknownStages(Iterable<StageDefinition> stages) {
+    final knownStageIds = stages.map((stage) => stage.id).toSet();
+
+    return CampaignProgress(
+      clearedStageIds: _clearedStageIds.where(knownStageIds.contains).toSet(),
     );
+  }
+
+  CampaignProgress markCleared(String stageId) {
+    return CampaignProgress(clearedStageIds: {..._clearedStageIds, stageId});
   }
 }
