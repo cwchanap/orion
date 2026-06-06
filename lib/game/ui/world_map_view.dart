@@ -10,6 +10,7 @@ class WorldMapView extends StatelessWidget {
     required this.progress,
     required this.feedback,
     required this.onStageSelected,
+    this.onLockedStageSelected,
     required this.onResetCampaign,
   });
 
@@ -17,6 +18,7 @@ class WorldMapView extends StatelessWidget {
   final CampaignProgress progress;
   final String? feedback;
   final ValueChanged<StageDefinition> onStageSelected;
+  final ValueChanged<StageDefinition>? onLockedStageSelected;
   final VoidCallback onResetCampaign;
 
   @override
@@ -84,6 +86,7 @@ class WorldMapView extends StatelessWidget {
                 stages: stages,
                 progress: progress,
                 onStageSelected: onStageSelected,
+                onLockedStageSelected: onLockedStageSelected,
               ),
             ),
           ],
@@ -98,11 +101,13 @@ class _StageMap extends StatelessWidget {
     required this.stages,
     required this.progress,
     required this.onStageSelected,
+    required this.onLockedStageSelected,
   });
 
   final List<StageDefinition> stages;
   final CampaignProgress progress;
   final ValueChanged<StageDefinition> onStageSelected;
+  final ValueChanged<StageDefinition>? onLockedStageSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -158,6 +163,7 @@ class _StageMap extends StatelessWidget {
                       stage: stage,
                       status: progress.statusFor(stage),
                       onStageSelected: onStageSelected,
+                      onLockedStageSelected: onLockedStageSelected,
                     ),
                   ),
               ],
@@ -174,11 +180,13 @@ class _StageNode extends StatelessWidget {
     required this.stage,
     required this.status,
     required this.onStageSelected,
+    required this.onLockedStageSelected,
   });
 
   final StageDefinition stage;
   final StageProgressStatus status;
   final ValueChanged<StageDefinition> onStageSelected;
+  final ValueChanged<StageDefinition>? onLockedStageSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -194,7 +202,9 @@ class _StageNode extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: isLocked ? null : () => onStageSelected(stage),
+        onTap: isLocked
+            ? () => onLockedStageSelected?.call(stage)
+            : () => onStageSelected(stage),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           child: Column(

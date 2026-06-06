@@ -1,8 +1,14 @@
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../campaign/campaign_progress.dart';
+import '../campaign/campaign_progress_store.dart';
+import '../campaign/orion_campaign.dart';
+import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
+import 'world_map_view.dart';
 
 class OrionGamePage extends StatefulWidget {
   const OrionGamePage({super.key});
@@ -12,24 +18,66 @@ class OrionGamePage extends StatefulWidget {
 }
 
 class _OrionGamePageState extends State<OrionGamePage> {
-  late final OrionDefenseGame _game;
+  OrionDefenseGame? _game;
+  CampaignProgress _progress = CampaignProgress();
+  CampaignProgressStore? _store;
+  StageDefinition? _activeStage;
+  String? _mapFeedback;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _game = OrionDefenseGame();
+    _loadProgress();
+  }
+
+  Future<void> _loadProgress() async {
+    final preferences = await SharedPreferences.getInstance();
+    final store = SharedPreferencesCampaignProgressStore(
+      preferences: preferences,
+      knownStages: OrionCampaign.stages,
+    );
+    final progress = await store.load();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _store = store;
+      _progress = progress;
+      _isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
+
+    final game = _game;
+    if (_activeStage == null || game == null) {
+      return Scaffold(
+        body: WorldMapView(
+          stages: OrionCampaign.stages,
+          progress: _progress,
+          feedback: _mapFeedback,
+          onStageSelected: _startStage,
+          onLockedStageSelected: _showLockedStageFeedback,
+          onResetCampaign: _confirmResetCampaign,
+        ),
+      );
+    }
+
     return Scaffold(
       body: SafeArea(
         child: ValueListenableBuilder<GameSnapshot>(
-          valueListenable: _game.stateNotifier,
+          valueListenable: game.stateNotifier,
           builder: (context, snapshot, _) {
             return Stack(
               children: [
-                Positioned.fill(child: GameWidget(game: _game)),
+                Positioned.fill(child: GameWidget(game: game)),
                 Positioned(
                   left: 12,
                   top: 12,
@@ -40,11 +88,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   left: 12,
                   right: 12,
                   bottom: 12,
-                  child: _BottomControls(game: _game, snapshot: snapshot),
+                  child: _BottomControls(game: game, snapshot: snapshot),
                 ),
                 if (snapshot.isEnded)
                   Positioned.fill(
-                    child: _EndStatePanel(game: _game, snapshot: snapshot),
+                    child: _EndStatePanel(game: game, snapshot: snapshot),
                   ),
               ],
             );
@@ -52,6 +100,85 @@ class _OrionGamePageState extends State<OrionGamePage> {
         ),
       ),
     );
+  }
+
+  void _startStage(StageDefinition stage) {
+    if (!_progress.isUnlocked(stage)) {
+      _showLockedStageFeedback(stage);
+      return;
+    }
+
+    setState(() {
+      _activeStage = stage;
+      _mapFeedback = null;
+      _game = OrionDefenseGame(
+        stage: stage,
+        onStageWon: _markStageCleared,
+        onReturnToMap: _returnToMap,
+      );
+    });
+  }
+
+  void _showLockedStageFeedback(StageDefinition stage) {
+    setState(() {
+      _mapFeedback = '${stage.name} is locked.';
+    });
+  }
+
+  Future<void> _markStageCleared(StageDefinition stage) async {
+    final progress = _progress.markCleared(stage.id);
+
+    setState(() {
+      _progress = progress;
+    });
+
+    await _store?.save(progress);
+  }
+
+  void _returnToMap() {
+    setState(() {
+      _activeStage = null;
+      _game = null;
+    });
+  }
+
+  Future<void> _confirmResetCampaign() async {
+    final shouldReset = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Reset Campaign'),
+          content: const Text('Clear all campaign progress?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Reset'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (shouldReset != true) {
+      return;
+    }
+
+    await _store?.reset();
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      _progress = CampaignProgress();
+      _activeStage = null;
+      _game = null;
+      _mapFeedback = 'Campaign reset.';
+    });
   }
 }
 
@@ -80,7 +207,7 @@ class _Hud extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    'Orion',
+                    snapshot.stageName,
                     style: theme.textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -97,8 +224,7 @@ class _Hud extends StatelessWidget {
                 _StatusChip(label: 'Base ${snapshot.baseHealth}'),
                 _StatusChip(label: 'Gold ${snapshot.gold}'),
                 _StatusChip(
-                  label:
-                      'Wave ${snapshot.waveNumber}/${GameBalance.waves.length}',
+                  label: 'Wave ${snapshot.waveNumber}/${snapshot.waveTotal}',
                 ),
               ],
             ),
@@ -191,14 +317,23 @@ class _BottomControls extends StatelessWidget {
       );
     }
 
-    return SizedBox(
+    return Row(
       key: const ValueKey('start-wave'),
-      width: double.infinity,
-      child: FilledButton.icon(
-        onPressed: snapshot.canStartWave ? game.startWave : null,
-        icon: const Icon(Icons.play_arrow),
-        label: const Text('Start Wave'),
-      ),
+      children: [
+        IconButton.filledTonal(
+          tooltip: 'World Map',
+          onPressed: snapshot.phase == GamePhase.wave ? null : game.returnToMap,
+          icon: const Icon(Icons.map),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: FilledButton.icon(
+            onPressed: snapshot.canStartWave ? game.startWave : null,
+            icon: const Icon(Icons.play_arrow),
+            label: const Text('Start Wave'),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -464,10 +599,22 @@ class _EndStatePanel extends StatelessWidget {
                   style: theme.textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 16),
-                FilledButton.icon(
-                  onPressed: game.restart,
-                  icon: const Icon(Icons.restart_alt),
-                  label: const Text('Restart'),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    FilledButton.icon(
+                      onPressed: game.restart,
+                      icon: const Icon(Icons.restart_alt),
+                      label: const Text('Restart'),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: game.returnToMap,
+                      icon: const Icon(Icons.map),
+                      label: const Text('World Map'),
+                    ),
+                  ],
                 ),
               ],
             ),
