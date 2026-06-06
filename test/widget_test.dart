@@ -84,6 +84,7 @@ void main() {
     expect(find.text('Relay'), findsOneWidget);
     expect(find.text('Core'), findsOneWidget);
     expect(find.text('Cleared'), findsWidgets);
+    expect(find.text('Open'), findsWidgets);
     expect(find.text('Locked'), findsWidgets);
   });
 
