@@ -141,6 +141,51 @@ void main() {
       expect(progress.statusFor(dependentStage), StageProgressStatus.cleared);
     });
   });
+
+  group('StageDefinition', () {
+    test('defensively copies mutable input lists', () {
+      final pathCells = [const GridPosition(0, 0), const GridPosition(1, 0)];
+      final waves = GameBalance.waves.toList();
+      final dependencies = ['stage-1'];
+
+      final stage = StageDefinition(
+        id: 'stage-2',
+        name: 'stage-2',
+        mapLabel: 'stage-2',
+        description: 'stage-2',
+        pathCells: pathCells,
+        waves: waves,
+        unlockDependencies: dependencies,
+        mapColumn: 2,
+        mapRow: 1,
+      );
+
+      pathCells.add(const GridPosition(2, 0));
+      waves.removeLast();
+      dependencies.add('stage-unknown');
+
+      expect(stage.pathCells, const [GridPosition(0, 0), GridPosition(1, 0)]);
+      expect(stage.waves, GameBalance.waves);
+      expect(stage.unlockDependencies, ['stage-1']);
+    });
+
+    test('list fields are not externally mutable', () {
+      final stage = _stage(id: 'stage-1', dependencies: ['intro']);
+
+      expect(
+        () => stage.pathCells.add(const GridPosition(2, 0)),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => stage.waves.add(GameBalance.waves.first),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => stage.unlockDependencies.add('stage-2'),
+        throwsUnsupportedError,
+      );
+    });
+  });
 }
 
 StageDefinition _stage({

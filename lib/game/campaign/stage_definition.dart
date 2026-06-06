@@ -1,19 +1,21 @@
 import 'package:orion/game/models/game_models.dart';
 
 class StageDefinition {
-  const StageDefinition({
+  StageDefinition({
     required this.id,
     required this.name,
     required this.mapLabel,
     required this.description,
-    required this.pathCells,
-    required this.waves,
-    this.unlockDependencies = const [],
+    required List<GridPosition> pathCells,
+    required List<WaveDefinition> waves,
+    List<String> unlockDependencies = const [],
     this.isMainPath = true,
     this.mainPathOrder,
     required this.mapColumn,
     required this.mapRow,
-  });
+  }) : pathCells = List.unmodifiable(pathCells),
+       waves = List.unmodifiable(waves),
+       unlockDependencies = List.unmodifiable(unlockDependencies);
 
   final String id;
   final String name;
