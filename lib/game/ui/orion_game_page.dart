@@ -11,7 +11,9 @@ import '../orion_defense_game.dart';
 import 'world_map_view.dart';
 
 class OrionGamePage extends StatefulWidget {
-  const OrionGamePage({super.key});
+  const OrionGamePage({super.key, this.progressStore});
+
+  final CampaignProgressStore? progressStore;
 
   @override
   State<OrionGamePage> createState() => _OrionGamePageState();
@@ -24,6 +26,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
   StageDefinition? _activeStage;
   String? _mapFeedback;
   bool _isLoading = true;
+  int _progressGeneration = 0;
+  int _clearSaveToken = 0;
 
   @override
   void initState() {
@@ -32,22 +36,40 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   Future<void> _loadProgress() async {
-    final preferences = await SharedPreferences.getInstance();
-    final store = SharedPreferencesCampaignProgressStore(
-      preferences: preferences,
-      knownStages: OrionCampaign.stages,
-    );
-    final progress = await store.load();
+    CampaignProgressStore? store = widget.progressStore;
 
-    if (!mounted) {
-      return;
+    try {
+      if (store == null) {
+        final preferences = await SharedPreferences.getInstance();
+        store = SharedPreferencesCampaignProgressStore(
+          preferences: preferences,
+          knownStages: OrionCampaign.stages,
+        );
+      }
+
+      final progress = await store.load();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _store = store;
+        _progress = progress;
+        _isLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _store = store;
+        _progress = CampaignProgress();
+        _mapFeedback = 'Could not load campaign progress.';
+        _isLoading = false;
+      });
     }
-
-    setState(() {
-      _store = store;
-      _progress = progress;
-      _isLoading = false;
-    });
   }
 
   @override
@@ -126,13 +148,45 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   Future<void> _markStageCleared(StageDefinition stage) async {
+    final store = _store;
+    if (store == null) {
+      _showCampaignPersistenceFailure();
+      return;
+    }
+
     final progress = _progress.markCleared(stage.id);
+    final saveGeneration = _progressGeneration;
+    final saveToken = ++_clearSaveToken;
+
+    try {
+      await store.save(progress);
+    } catch (_) {
+      if (!mounted ||
+          saveGeneration != _progressGeneration ||
+          saveToken != _clearSaveToken) {
+        return;
+      }
+
+      _showCampaignPersistenceFailure();
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    if (saveGeneration != _progressGeneration) {
+      await _resetStoreAfterStaleClearSave(store);
+      return;
+    }
+
+    if (saveToken != _clearSaveToken) {
+      return;
+    }
 
     setState(() {
       _progress = progress;
     });
-
-    await _store?.save(progress);
   }
 
   void _returnToMap() {
@@ -167,9 +221,24 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    await _store?.reset();
+    final store = _store;
+    final resetGeneration = ++_progressGeneration;
+    _clearSaveToken++;
 
-    if (!mounted) {
+    try {
+      await store?.reset();
+    } catch (_) {
+      if (!mounted || resetGeneration != _progressGeneration) {
+        return;
+      }
+
+      setState(() {
+        _mapFeedback = 'Could not reset campaign progress.';
+      });
+      return;
+    }
+
+    if (!mounted || resetGeneration != _progressGeneration) {
       return;
     }
 
@@ -179,6 +248,43 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _game = null;
       _mapFeedback = 'Campaign reset.';
     });
+  }
+
+  Future<void> _resetStoreAfterStaleClearSave(
+    CampaignProgressStore store,
+  ) async {
+    try {
+      await store.reset();
+    } catch (_) {
+      // A newer reset already owns the UI state; ignore cleanup failure here.
+    }
+  }
+
+  void _showCampaignPersistenceFailure() {
+    const message = 'Could not save campaign progress.';
+    final game = _game;
+
+    setState(() {
+      _mapFeedback = message;
+    });
+
+    if (_activeStage != null && game != null) {
+      final snapshot = game.stateNotifier.value;
+      game.stateNotifier.value = GameSnapshot(
+        phase: snapshot.phase,
+        gold: snapshot.gold,
+        baseHealth: snapshot.baseHealth,
+        waveNumber: snapshot.waveNumber,
+        waveTotal: snapshot.waveTotal,
+        stageId: snapshot.stageId,
+        stageName: snapshot.stageName,
+        stageLabel: snapshot.stageLabel,
+        unlockedTowerTypes: snapshot.unlockedTowerTypes,
+        selectedCell: snapshot.selectedCell,
+        selectedTower: snapshot.selectedTower,
+        feedback: message,
+      );
+    }
   }
 }
 

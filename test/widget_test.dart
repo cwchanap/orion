@@ -5,6 +5,7 @@ import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/game_session.dart';
+import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:orion/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -85,6 +86,26 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Core'), findsOneWidget);
     expect(find.text('Locked'), findsWidgets);
+    expect(find.text('Start Wave'), findsNothing);
+  });
+
+  testWidgets('falls back to empty world map when progress load fails', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: _TestCampaignProgressStore(
+            loadError: StateError('no'),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('Could not load campaign progress.'), findsOneWidget);
+    expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
   });
 
@@ -187,4 +208,58 @@ void main() {
     expect(selected, ['outpost-alpha']);
     expect(locked, ['singularity-core']);
   });
+
+  testWidgets('locked stage node is disabled without locked callback', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WorldMapView(
+            stages: OrionCampaign.stages,
+            progress: CampaignProgress(),
+            feedback: null,
+            onStageSelected: (_) {},
+            onResetCampaign: () {},
+          ),
+        ),
+      ),
+    );
+
+    final coreInkWell = tester.widget<InkWell>(
+      find.ancestor(of: find.text('Core'), matching: find.byType(InkWell)),
+    );
+    final alphaInkWell = tester.widget<InkWell>(
+      find.ancestor(of: find.text('Alpha'), matching: find.byType(InkWell)),
+    );
+
+    expect(coreInkWell.onTap, isNull);
+    expect(alphaInkWell.onTap, isNotNull);
+  });
+}
+
+class _TestCampaignProgressStore implements CampaignProgressStore {
+  _TestCampaignProgressStore({this.loadError});
+
+  final Object? loadError;
+  CampaignProgress progress = CampaignProgress();
+
+  @override
+  Future<CampaignProgress> load() async {
+    final error = loadError;
+    if (error != null) {
+      throw error;
+    }
+    return progress;
+  }
+
+  @override
+  Future<void> save(CampaignProgress progress) async {
+    this.progress = progress;
+  }
+
+  @override
+  Future<void> reset() async {
+    progress = CampaignProgress();
+  }
 }

@@ -202,9 +202,7 @@ class _StageNode extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: isLocked
-            ? () => onLockedStageSelected?.call(stage)
-            : () => onStageSelected(stage),
+        onTap: _onTap(isLocked),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
           child: Column(
@@ -233,6 +231,15 @@ class _StageNode extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  VoidCallback? _onTap(bool isLocked) {
+    if (isLocked) {
+      final callback = onLockedStageSelected;
+      return callback == null ? null : () => callback(stage);
+    }
+
+    return () => onStageSelected(stage);
   }
 }
 
