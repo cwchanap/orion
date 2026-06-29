@@ -264,6 +264,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _autoStartEnabled = !_autoStartEnabled;
     if (!_autoStartEnabled) {
       _autoStartCountdownRemaining = null;
+    } else {
+      _startAutoStartCountdownIfNeeded();
     }
     _publishSnapshot();
   }
@@ -486,7 +488,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _startAutoStartCountdownIfNeeded() {
-    if (_autoStartEnabled && _session.phase == GamePhase.build) {
+    if (_autoStartEnabled &&
+        _autoStartCountdownRemaining == null &&
+        _session.phase == GamePhase.build &&
+        _session.activeWave != null) {
       _autoStartCountdownRemaining = autoStartCountdownSeconds;
     }
   }

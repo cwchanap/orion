@@ -149,6 +149,25 @@ void main() {
       },
     );
 
+    test('auto-start toggled on after a cleared wave starts countdown', () {
+      final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+      game.startWave();
+      game.onGameResize(Vector2(800, 1200));
+      game.update(0);
+
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.waveNumber, 2);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+
+      game.toggleAutoStart();
+
+      expect(game.snapshot.autoStartEnabled, isTrue);
+      expect(game.snapshot.autoStartCountdownRemaining, 3);
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.waveNumber, 2);
+    });
+
     test('auto-start countdown can be canceled by turning auto-start off', () {
       final game = OrionDefenseGame(stage: _emptyWaveStage());
 
@@ -222,6 +241,60 @@ void main() {
       expect(game.snapshot.phase, GamePhase.wave);
       expect(game.snapshot.isPaused, isTrue);
       expect(game.children.whereType<ProjectileComponent>(), isEmpty);
+    });
+
+    test('paused wave freezes enemy movement and spawn timer', () {
+      final game = OrionDefenseGame(stage: _twoEnemyDelayedSpawnStage());
+
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      final position = enemy.position.clone();
+      final pathProgress = enemy.pathProgress;
+
+      game.togglePause();
+      game.update(10);
+      game.processLifecycleEvents();
+
+      expect(game.children.whereType<EnemyComponent>(), hasLength(1));
+      expect(enemy.position, position);
+      expect(enemy.pathProgress, pathProgress);
+      expect(game.snapshot.phase, GamePhase.wave);
+      expect(game.snapshot.isPaused, isTrue);
+    });
+
+    test('3x speed accelerates real enemy progress compared with 1x', () {
+      final oneXGame = OrionDefenseGame(stage: _singleEnemyStage());
+      final threeXGame = OrionDefenseGame(stage: _singleEnemyStage());
+
+      oneXGame.setSpeedMultiplier(1);
+      threeXGame.setSpeedMultiplier(3);
+      oneXGame.onGameResize(Vector2(800, 1200));
+      threeXGame.onGameResize(Vector2(800, 1200));
+      oneXGame.startWave();
+      threeXGame.startWave();
+      oneXGame.update(0.01);
+      threeXGame.update(0.01);
+      oneXGame.processLifecycleEvents();
+      threeXGame.processLifecycleEvents();
+
+      oneXGame.update(0.5);
+      threeXGame.update(0.5);
+
+      final oneXProgress = oneXGame.children
+          .whereType<EnemyComponent>()
+          .single
+          .pathProgress;
+      final threeXProgress = threeXGame.children
+          .whereType<EnemyComponent>()
+          .single
+          .pathProgress;
+
+      expect(threeXProgress, greaterThan(oneXProgress));
+      expect(threeXProgress, closeTo(oneXProgress * 3, 0.001));
     });
 
     test('restart resets pacing state', () {
@@ -313,6 +386,38 @@ StageDefinition _singleEnemyStage() {
         groups: [
           WaveGroup(
             enemyCount: 1,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 1,
+              baseDamage: 1,
+              goldReward: 0,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _twoEnemyDelayedSpawnStage() {
+  return StageDefinition(
+    id: 'two-enemy-delayed-spawn-stage',
+    name: 'Two Enemy Delayed Spawn Stage',
+    mapLabel: 'Delayed',
+    description: 'Stage with delayed second enemy for pause timing tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 2,
+            spawnInterval: 5,
             enemyStats: EnemyStats(
               health: 100,
               speed: 1,
