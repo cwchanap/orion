@@ -307,6 +307,10 @@ class GameSnapshot {
     required this.selectedCell,
     required this.selectedTower,
     required this.feedback,
+    required this.isPaused,
+    required this.speedMultiplier,
+    required this.autoStartEnabled,
+    required this.autoStartCountdownRemaining,
   }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes);
 
   final GamePhase phase;
@@ -321,6 +325,10 @@ class GameSnapshot {
   final GridPosition? selectedCell;
   final PlacedTower? selectedTower;
   final String? feedback;
+  final bool isPaused;
+  final double speedMultiplier;
+  final bool autoStartEnabled;
+  final double? autoStartCountdownRemaining;
 
   bool get canStartWave => phase == GamePhase.build;
   bool get isEnded => phase == GamePhase.won || phase == GamePhase.lost;

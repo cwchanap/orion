@@ -321,6 +321,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
         selectedCell: snapshot.selectedCell,
         selectedTower: snapshot.selectedTower,
         feedback: message,
+        isPaused: snapshot.isPaused,
+        speedMultiplier: snapshot.speedMultiplier,
+        autoStartEnabled: snapshot.autoStartEnabled,
+        autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
       );
     }
   }

@@ -27,6 +27,29 @@ void main() {
       expect(session.isTowerUnlocked(TowerType.droneBay), isFalse);
     });
 
+    test('snapshot exposes default mission pacing state', () {
+      final snapshot = GameSession.initial().snapshot();
+
+      expect(snapshot.isPaused, isFalse);
+      expect(snapshot.speedMultiplier, 1);
+      expect(snapshot.autoStartEnabled, isFalse);
+      expect(snapshot.autoStartCountdownRemaining, isNull);
+    });
+
+    test('snapshot can carry mission pacing state from the game layer', () {
+      final snapshot = GameSession.initial().snapshot(
+        isPaused: true,
+        speedMultiplier: 2,
+        autoStartEnabled: true,
+        autoStartCountdownRemaining: 1.5,
+      );
+
+      expect(snapshot.isPaused, isTrue);
+      expect(snapshot.speedMultiplier, 2);
+      expect(snapshot.autoStartEnabled, isTrue);
+      expect(snapshot.autoStartCountdownRemaining, 1.5);
+    });
+
     test('validates invalid placements without spending gold', () {
       final session = GameSession.initial();
 

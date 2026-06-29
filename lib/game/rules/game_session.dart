@@ -51,6 +51,10 @@ class GameSession {
     GridPosition? selectedCell,
     PlacedTower? selectedTower,
     String? feedback,
+    bool isPaused = false,
+    double speedMultiplier = 1,
+    bool autoStartEnabled = false,
+    double? autoStartCountdownRemaining,
   }) {
     return GameSnapshot(
       phase: _phase,
@@ -65,6 +69,10 @@ class GameSession {
       selectedCell: selectedCell,
       selectedTower: selectedTower,
       feedback: feedback,
+      isPaused: isPaused,
+      speedMultiplier: speedMultiplier,
+      autoStartEnabled: autoStartEnabled,
+      autoStartCountdownRemaining: autoStartCountdownRemaining,
     );
   }
 
