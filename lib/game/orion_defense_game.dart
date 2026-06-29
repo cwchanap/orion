@@ -208,24 +208,20 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       return;
     }
 
-    _spawnTimer = 0;
-    _spawnedCount = 0;
-    _activeGroupIndex = 0;
-    _spawnedInGroup = 0;
+    _autoStartCountdownRemaining = null;
+    _resetWaveSpawnState();
     _clearSelection();
     _publishSnapshot();
   }
 
   void restart() {
     _clearCombatComponents(removeTowers: true);
-    _spawnTimer = 0;
-    _spawnedCount = 0;
-    _activeGroupIndex = 0;
-    _spawnedInGroup = 0;
+    _resetWaveSpawnState();
     _nextEnemyId = 1;
     _clearSelection();
     _session.restart();
-    _layoutBoard(size);
+    _resetPacing();
+    _layoutBoardIfReady();
     _publishSnapshot();
   }
 
@@ -277,11 +273,22 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     super.update(dt);
     _removeInactiveEnemyReferences();
 
+    if (_isPaused) {
+      return;
+    }
+
+    final scaledDt = dt * _speedMultiplier;
+    if (scaledDt > 0 && _tickAutoStartCountdown(scaledDt)) {
+      return;
+    }
+
     if (_session.phase != GamePhase.wave) {
       return;
     }
 
-    _spawnWaveEnemies(dt);
+    if (scaledDt > 0) {
+      _spawnWaveEnemies(scaledDt);
+    }
     _removeInactiveEnemyReferences();
     _finishWaveIfComplete();
   }
@@ -446,6 +453,42 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _activeDronesByTower[drone.ownerTowerId] = math.max(0, current - 1);
   }
 
+  void _resetWaveSpawnState() {
+    _spawnTimer = 0;
+    _spawnedCount = 0;
+    _activeGroupIndex = 0;
+    _spawnedInGroup = 0;
+  }
+
+  bool _tickAutoStartCountdown(double dt) {
+    final remaining = _autoStartCountdownRemaining;
+    if (remaining == null) {
+      return false;
+    }
+    if (_session.phase != GamePhase.build) {
+      _autoStartCountdownRemaining = null;
+      _publishSnapshot();
+      return false;
+    }
+
+    final nextRemaining = remaining - dt;
+    if (nextRemaining > 0) {
+      _autoStartCountdownRemaining = nextRemaining;
+      _publishSnapshot();
+      return false;
+    }
+
+    _autoStartCountdownRemaining = null;
+    startWave();
+    return true;
+  }
+
+  void _startAutoStartCountdownIfNeeded() {
+    if (_autoStartEnabled && _session.phase == GamePhase.build) {
+      _autoStartCountdownRemaining = autoStartCountdownSeconds;
+    }
+  }
+
   void _spawnWaveEnemies(double dt) {
     final wave = _session.activeWave;
     if (wave == null || _spawnedCount >= wave.enemyCount) {
@@ -499,11 +542,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _session.damageBase(enemy.stats.baseDamage);
     if (_session.phase == GamePhase.lost) {
       _clearCombatComponents(removeTowers: false);
-      _spawnTimer = 0;
-      _spawnedCount = 0;
-      _activeGroupIndex = 0;
-      _spawnedInGroup = 0;
-      _layoutBoard(size);
+      _resetWaveSpawnState();
+      _resetPacing();
+      _layoutBoardIfReady();
     }
     _publishSnapshot();
   }
@@ -519,11 +560,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
     _session.finishActiveWave();
     final didWin = _session.phase == GamePhase.won;
-    _spawnTimer = 0;
-    _spawnedCount = 0;
-    _activeGroupIndex = 0;
-    _spawnedInGroup = 0;
-    _layoutBoard(size);
+    _resetWaveSpawnState();
+    if (didWin) {
+      _resetPacing();
+    } else {
+      _startAutoStartCountdownIfNeeded();
+    }
+    _layoutBoardIfReady();
     _publishSnapshot();
     if (didWin) {
       onStageWon?.call(stage);
@@ -575,6 +618,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _selectedCell = null;
     _selectedTower = null;
     _board?.selectedCell = null;
+  }
+
+  void _layoutBoardIfReady() {
+    if (hasLayout) {
+      _layoutBoard(size);
+    }
   }
 
   void _applyTimeScale() {

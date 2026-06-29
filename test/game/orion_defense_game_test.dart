@@ -126,5 +126,126 @@ void main() {
       expect(wonStages, [stage]);
       expect(game.snapshot.phase, GamePhase.won);
     });
+
+    test(
+      'wave clear starts auto-start countdown when another wave remains',
+      () {
+        final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+        game.toggleAutoStart();
+        game.startWave();
+        game.onGameResize(Vector2(800, 1200));
+        game.update(0);
+
+        expect(game.snapshot.phase, GamePhase.build);
+        expect(game.snapshot.waveNumber, 2);
+        expect(game.snapshot.autoStartEnabled, isTrue);
+        expect(game.snapshot.autoStartCountdownRemaining, 3);
+      },
+    );
+
+    test('auto-start countdown can be canceled by turning auto-start off', () {
+      final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+      game.toggleAutoStart();
+      game.startWave();
+      game.onGameResize(Vector2(800, 1200));
+      game.update(0);
+      game.toggleAutoStart();
+
+      expect(game.snapshot.autoStartEnabled, isFalse);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      expect(game.snapshot.phase, GamePhase.build);
+    });
+
+    test(
+      'auto-start countdown starts next wave after scaled unpaused time',
+      () {
+        final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+        game.toggleAutoStart();
+        game.setSpeedMultiplier(3);
+        game.startWave();
+        game.onGameResize(Vector2(800, 1200));
+        game.update(0);
+
+        game.update(1);
+
+        expect(game.snapshot.phase, GamePhase.wave);
+        expect(game.snapshot.waveNumber, 2);
+        expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      },
+    );
+
+    test('paused auto-start countdown does not advance', () {
+      final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+      game.toggleAutoStart();
+      game.startWave();
+      game.onGameResize(Vector2(800, 1200));
+      game.update(0);
+      game.togglePause();
+
+      game.update(10);
+
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.isPaused, isTrue);
+      expect(game.snapshot.autoStartCountdownRemaining, 3);
+    });
+
+    test('restart resets pacing state', () {
+      final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+      game.toggleAutoStart();
+      game.setSpeedMultiplier(3);
+      game.startWave();
+      game.togglePause();
+
+      game.restart();
+
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.isPaused, isFalse);
+      expect(game.snapshot.speedMultiplier, 1);
+      expect(game.snapshot.autoStartEnabled, isFalse);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      expect(game.timeScale, 1);
+    });
+
+    test('won state resets pacing state', () {
+      final game = OrionDefenseGame(stage: _emptyWaveStage(waveCount: 1));
+
+      game.toggleAutoStart();
+      game.setSpeedMultiplier(3);
+      game.startWave();
+      game.onGameResize(Vector2(800, 1200));
+      game.update(0);
+
+      expect(game.snapshot.phase, GamePhase.won);
+      expect(game.snapshot.isPaused, isFalse);
+      expect(game.snapshot.speedMultiplier, 1);
+      expect(game.snapshot.autoStartEnabled, isFalse);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      expect(game.timeScale, 1);
+    });
   });
+}
+
+StageDefinition _emptyWaveStage({int waveCount = 2}) {
+  return StageDefinition(
+    id: 'empty-wave-stage',
+    name: 'Empty Wave Stage',
+    mapLabel: 'Empty',
+    description: 'Stage with empty waves for timing tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: List<WaveDefinition>.generate(
+      waveCount,
+      (_) => const WaveDefinition(groups: [], clearBonus: 0),
+      growable: false,
+    ),
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
 }
