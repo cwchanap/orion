@@ -465,22 +465,86 @@ class _BottomControls extends StatelessWidget {
       );
     }
 
-    return Row(
+    return Column(
       key: const ValueKey('start-wave'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _PacingControls(game: game, snapshot: snapshot),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            IconButton.filledTonal(
+              tooltip: 'World Map',
+              onPressed: snapshot.phase == GamePhase.wave
+                  ? null
+                  : game.returnToMap,
+              icon: const Icon(Icons.map),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: snapshot.canStartWave ? game.startWave : null,
+                icon: const Icon(Icons.play_arrow),
+                label: Text(
+                  snapshot.autoStartCountdownRemaining == null
+                      ? 'Start Wave'
+                      : 'Start Now',
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _PacingControls extends StatelessWidget {
+  const _PacingControls({required this.game, required this.snapshot});
+
+  final OrionDefenseGame game;
+  final GameSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final canUsePacing = !snapshot.isEnded;
+    final canTogglePause =
+        canUsePacing &&
+        (snapshot.phase == GamePhase.wave ||
+            snapshot.autoStartCountdownRemaining != null ||
+            snapshot.isPaused);
+    final countdown = snapshot.autoStartCountdownRemaining;
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         IconButton.filledTonal(
-          tooltip: 'World Map',
-          onPressed: snapshot.phase == GamePhase.wave ? null : game.returnToMap,
-          icon: const Icon(Icons.map),
+          tooltip: snapshot.isPaused ? 'Resume' : 'Pause',
+          onPressed: canTogglePause ? game.togglePause : null,
+          icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
         ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: FilledButton.icon(
-            onPressed: snapshot.canStartWave ? game.startWave : null,
-            icon: const Icon(Icons.play_arrow),
-            label: const Text('Start Wave'),
-          ),
+        SegmentedButton<double>(
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment<double>(value: 1.0, label: Text('1x')),
+            ButtonSegment<double>(value: 2.0, label: Text('2x')),
+            ButtonSegment<double>(value: 3.0, label: Text('3x')),
+          ],
+          selected: {snapshot.speedMultiplier},
+          onSelectionChanged: canUsePacing
+              ? (selection) => game.setSpeedMultiplier(selection.single)
+              : null,
         ),
+        FilterChip(
+          tooltip: 'Auto-start waves',
+          label: const Text('Auto'),
+          selected: snapshot.autoStartEnabled,
+          onSelected: canUsePacing ? (_) => game.toggleAutoStart() : null,
+        ),
+        if (countdown != null) _StatusChip(label: 'Next ${countdown.ceil()}s'),
       ],
     );
   }

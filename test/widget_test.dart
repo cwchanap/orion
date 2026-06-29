@@ -41,6 +41,25 @@ void main() {
     expect(find.text('Start Wave'), findsOneWidget);
   });
 
+  testWidgets('mission screen exposes pause speed and auto-start controls', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+
+    await tester.pumpWidget(const OrionApp());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.text('1x'), findsOneWidget);
+    expect(find.text('2x'), findsOneWidget);
+    expect(find.text('3x'), findsOneWidget);
+    expect(find.byTooltip('Auto-start waves'), findsOneWidget);
+    expect(find.text('Start Wave'), findsOneWidget);
+  });
+
   testWidgets('locked stage tap shows feedback and stays on map', (
     tester,
   ) async {
