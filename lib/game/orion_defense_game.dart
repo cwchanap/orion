@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
@@ -23,13 +24,15 @@ import 'rules/combat_effects.dart';
 import 'rules/game_session.dart';
 import 'rules/tower_targeting.dart';
 
-class OrionDefenseGame extends FlameGame with TapCallbacks {
+class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
     this.onStageWon,
     this.onReturnToMap,
   }) : stage = stage ?? OrionCampaign.stageOne,
-       _session = GameSession.initial(stage: stage ?? OrionCampaign.stageOne);
+       _session = GameSession.initial(stage: stage ?? OrionCampaign.stageOne) {
+    _resetPacing();
+  }
 
   final StageDefinition stage;
   final ValueChanged<StageDefinition>? onStageWon;
@@ -50,6 +53,18 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   int _activeGroupIndex = 0;
   int _spawnedInGroup = 0;
   int _nextEnemyId = 1;
+  static const double defaultSpeedMultiplier = 1;
+  static final Set<double> supportedSpeedMultipliers = Set.unmodifiable({
+    1.0,
+    2.0,
+    3.0,
+  });
+  static const double autoStartCountdownSeconds = 3;
+
+  bool _isPaused = false;
+  double _speedMultiplier = defaultSpeedMultiplier;
+  bool _autoStartEnabled = false;
+  double? _autoStartCountdownRemaining;
 
   GamePathTiles? _pathTiles;
   GameSpriteSheet? _spriteSheet;
@@ -60,6 +75,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
   final Map<int, int> _activeDronesByTower = {};
 
   GameSnapshot get snapshot => stateNotifier.value;
+  bool get isPaused => _isPaused;
+  double get speedMultiplier => _speedMultiplier;
+  bool get autoStartEnabled => _autoStartEnabled;
+  double? get autoStartCountdownRemaining => _autoStartCountdownRemaining;
 
   @override
   Future<void> onLoad() async {
@@ -216,6 +235,41 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
       return;
     }
     onReturnToMap?.call();
+  }
+
+  void togglePause() {
+    if (_session.phase == GamePhase.won || _session.phase == GamePhase.lost) {
+      return;
+    }
+
+    _isPaused = !_isPaused;
+    _applyTimeScale();
+    _publishSnapshot();
+  }
+
+  void setSpeedMultiplier(double multiplier) {
+    if (_session.phase == GamePhase.won || _session.phase == GamePhase.lost) {
+      return;
+    }
+    if (!supportedSpeedMultipliers.contains(multiplier)) {
+      return;
+    }
+
+    _speedMultiplier = multiplier;
+    _applyTimeScale();
+    _publishSnapshot();
+  }
+
+  void toggleAutoStart() {
+    if (_session.phase == GamePhase.won || _session.phase == GamePhase.lost) {
+      return;
+    }
+
+    _autoStartEnabled = !_autoStartEnabled;
+    if (!_autoStartEnabled) {
+      _autoStartCountdownRemaining = null;
+    }
+    _publishSnapshot();
   }
 
   @override
@@ -523,11 +577,27 @@ class OrionDefenseGame extends FlameGame with TapCallbacks {
     _board?.selectedCell = null;
   }
 
+  void _applyTimeScale() {
+    timeScale = _isPaused ? 0 : _speedMultiplier;
+  }
+
+  void _resetPacing() {
+    _isPaused = false;
+    _speedMultiplier = defaultSpeedMultiplier;
+    _autoStartEnabled = false;
+    _autoStartCountdownRemaining = null;
+    _applyTimeScale();
+  }
+
   void _publishSnapshot({String? feedback}) {
     stateNotifier.value = _session.snapshot(
       selectedCell: _selectedCell,
       selectedTower: _selectedTower,
       feedback: feedback,
+      isPaused: _isPaused,
+      speedMultiplier: _speedMultiplier,
+      autoStartEnabled: _autoStartEnabled,
+      autoStartCountdownRemaining: _autoStartCountdownRemaining,
     );
   }
 

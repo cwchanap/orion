@@ -23,6 +23,62 @@ void main() {
       expect(game.snapshot.waveTotal, 8);
     });
 
+    test('defaults to unpaused 1x pacing with auto-start disabled', () {
+      final game = OrionDefenseGame();
+
+      expect(game.snapshot.isPaused, isFalse);
+      expect(game.snapshot.speedMultiplier, 1);
+      expect(game.snapshot.autoStartEnabled, isFalse);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      expect(game.timeScale, 1);
+    });
+
+    test('sets supported speed multipliers and ignores unsupported values', () {
+      final game = OrionDefenseGame();
+
+      game.setSpeedMultiplier(2);
+      expect(game.snapshot.speedMultiplier, 2);
+      expect(game.timeScale, 2);
+
+      game.setSpeedMultiplier(3);
+      expect(game.snapshot.speedMultiplier, 3);
+      expect(game.timeScale, 3);
+
+      game.setSpeedMultiplier(4);
+      expect(game.snapshot.speedMultiplier, 3);
+      expect(game.timeScale, 3);
+    });
+
+    test('pause freezes time scale and resume restores selected speed', () {
+      final game = OrionDefenseGame();
+
+      game.setSpeedMultiplier(3);
+      game.startWave();
+      game.togglePause();
+
+      expect(game.snapshot.isPaused, isTrue);
+      expect(game.timeScale, 0);
+
+      game.togglePause();
+
+      expect(game.snapshot.isPaused, isFalse);
+      expect(game.timeScale, 3);
+    });
+
+    test(
+      'toggleAutoStart updates snapshot and clears countdown when disabled',
+      () {
+        final game = OrionDefenseGame();
+
+        game.toggleAutoStart();
+        expect(game.snapshot.autoStartEnabled, isTrue);
+
+        game.toggleAutoStart();
+        expect(game.snapshot.autoStartEnabled, isFalse);
+        expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      },
+    );
+
     test('returnToMap fires callback during build phase', () {
       var callCount = 0;
       final game = OrionDefenseGame(onReturnToMap: () => callCount += 1);
