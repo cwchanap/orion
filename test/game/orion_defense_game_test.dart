@@ -4,6 +4,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/projectile_component.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
@@ -257,6 +258,26 @@ void main() {
       expect(game.snapshot.autoStartCountdownRemaining, isNull);
       expect(game.timeScale, 1);
     });
+
+    test('lost state resets pacing state', () {
+      final game = OrionDefenseGame(stage: _lethalSingleEnemyStage());
+
+      game.toggleAutoStart();
+      game.setSpeedMultiplier(3);
+      game.startWave();
+      game.onGameResize(Vector2(800, 1200));
+      game.update(0.01);
+      final enemy = game.children.whereType<EnemyComponent>().single;
+
+      enemy.update(1);
+
+      expect(game.snapshot.phase, GamePhase.lost);
+      expect(game.snapshot.isPaused, isFalse);
+      expect(game.snapshot.speedMultiplier, 1);
+      expect(game.snapshot.autoStartEnabled, isFalse);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      expect(game.timeScale, 1);
+    });
   });
 }
 
@@ -296,6 +317,37 @@ StageDefinition _singleEnemyStage() {
               health: 100,
               speed: 1,
               baseDamage: 1,
+              goldReward: 0,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _lethalSingleEnemyStage() {
+  return StageDefinition(
+    id: 'lethal-single-enemy-stage',
+    name: 'Lethal Single Enemy Stage',
+    mapLabel: 'Lethal',
+    description: 'Stage with one lethal enemy for loss reset tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 1,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 1000,
+              baseDamage: GameBalance.initialBaseHealth,
               goldReward: 0,
             ),
           ),
