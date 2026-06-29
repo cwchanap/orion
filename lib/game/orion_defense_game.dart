@@ -491,6 +491,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (_autoStartEnabled &&
         _autoStartCountdownRemaining == null &&
         _session.phase == GamePhase.build &&
+        _session.clearedWaveCount > 0 &&
         _session.activeWave != null) {
       _autoStartCountdownRemaining = autoStartCountdownSeconds;
     }

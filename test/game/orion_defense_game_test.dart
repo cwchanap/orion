@@ -84,6 +84,18 @@ void main() {
       },
     );
 
+    test('auto-start enabled before first wave does not start countdown', () {
+      final game = OrionDefenseGame();
+
+      game.toggleAutoStart();
+      game.update(OrionDefenseGame.autoStartCountdownSeconds + 1);
+
+      expect(game.snapshot.autoStartEnabled, isTrue);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.waveNumber, 1);
+    });
+
     test('returnToMap fires callback during build phase', () {
       var callCount = 0;
       final game = OrionDefenseGame(onReturnToMap: () => callCount += 1);
