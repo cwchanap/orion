@@ -270,12 +270,14 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   @override
   void update(double dt) {
-    super.update(dt);
-    _removeInactiveEnemyReferences();
-
     if (_isPaused) {
+      processLifecycleEvents();
+      _removeInactiveEnemyReferences();
       return;
     }
+
+    super.update(dt);
+    _removeInactiveEnemyReferences();
 
     final scaledDt = dt * _speedMultiplier;
     if (scaledDt > 0 && _tickAutoStartCountdown(scaledDt)) {

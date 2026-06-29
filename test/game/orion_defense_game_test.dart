@@ -1,9 +1,13 @@
 import 'package:flame/components.dart';
+import 'package:flame/events.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/components/projectile_component.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
+import 'package:orion/game/rules/board_layout.dart';
 
 void main() {
   group('OrionDefenseGame', () {
@@ -193,6 +197,32 @@ void main() {
       expect(game.snapshot.autoStartCountdownRemaining, 3);
     });
 
+    test('paused active-wave update does not run combat components', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+
+      expect(game.children.whereType<ProjectileComponent>(), isEmpty);
+      game.togglePause();
+
+      expect(() {
+        game.update(1);
+        game.update(1);
+        game.update(1);
+        game.processLifecycleEvents();
+      }, returnsNormally);
+
+      expect(game.snapshot.phase, GamePhase.wave);
+      expect(game.snapshot.isPaused, isTrue);
+      expect(game.children.whereType<ProjectileComponent>(), isEmpty);
+    });
+
     test('restart resets pacing state', () {
       final game = OrionDefenseGame(stage: _emptyWaveStage());
 
@@ -248,4 +278,44 @@ StageDefinition _emptyWaveStage({int waveCount = 2}) {
     mapColumn: 0,
     mapRow: 0,
   );
+}
+
+StageDefinition _singleEnemyStage() {
+  return StageDefinition(
+    id: 'single-enemy-stage',
+    name: 'Single Enemy Stage',
+    mapLabel: 'Single',
+    description: 'Stage with one enemy for pause timing tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 1,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 1,
+              baseDamage: 1,
+              goldReward: 0,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+void _tapCell(OrionDefenseGame game, GridPosition position) {
+  final center = BoardLayout.cellCenter(
+    position,
+    cellSize: 100,
+    boardOrigin: Offset.zero,
+  );
+  game.onTapDown(TapDownEvent(1, game, TapDownDetails(globalPosition: center)));
 }
