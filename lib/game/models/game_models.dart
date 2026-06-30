@@ -240,6 +240,38 @@ class WaveDefinition {
   double get spawnInterval => groups.first.spawnInterval;
 }
 
+class WavePreviewGroup {
+  WavePreviewGroup({
+    required this.enemyCount,
+    required this.label,
+    required Set<EnemyTrait> traits,
+  }) : traits = Set.unmodifiable(traits);
+
+  final int enemyCount;
+  final String label;
+  final Set<EnemyTrait> traits;
+}
+
+class WavePreview {
+  WavePreview({
+    required this.waveNumber,
+    required this.waveTotal,
+    required List<WavePreviewGroup> groups,
+    required Set<EnemyTrait> traits,
+    required this.clearBonus,
+    required List<TowerType> recommendedTowerTypes,
+  }) : groups = List.unmodifiable(groups),
+       traits = Set.unmodifiable(traits),
+       recommendedTowerTypes = List.unmodifiable(recommendedTowerTypes);
+
+  final int waveNumber;
+  final int waveTotal;
+  final List<WavePreviewGroup> groups;
+  final Set<EnemyTrait> traits;
+  final int clearBonus;
+  final List<TowerType> recommendedTowerTypes;
+}
+
 class PlacedTower {
   const PlacedTower({
     required this.id,
@@ -572,6 +604,149 @@ class GameBalance {
       EnemyArchetype.heavyDrone => _heavyDrone,
       EnemyArchetype.armoredHeavyDrone => _armoredHeavyDrone,
       EnemyArchetype.regenHeavyDrone => _regenHeavyDrone,
+    };
+  }
+
+  static WavePreview wavePreview({
+    required WaveDefinition wave,
+    required int waveNumber,
+    required int waveTotal,
+    required List<TowerType> unlockedTowerTypes,
+  }) {
+    final groups = [
+      for (final group in wave.groups)
+        WavePreviewGroup(
+          enemyCount: group.enemyCount,
+          label: _enemyLabelForStats(group.enemyStats),
+          traits: _orderedTraitsForStats(group.enemyStats),
+        ),
+    ];
+    final traits = _orderedTraitsForWave(wave);
+
+    return WavePreview(
+      waveNumber: waveNumber,
+      waveTotal: waveTotal,
+      groups: groups,
+      traits: traits,
+      clearBonus: wave.clearBonus,
+      recommendedTowerTypes: _recommendedTowerTypes(wave, unlockedTowerTypes),
+    );
+  }
+
+  static Set<EnemyTrait> _orderedTraitsForWave(WaveDefinition wave) {
+    final traits = <EnemyTrait>{};
+    for (final trait in EnemyTrait.values) {
+      final isPresent = wave.groups.any(
+        (group) => group.enemyStats.hasTrait(trait),
+      );
+      if (isPresent) {
+        traits.add(trait);
+      }
+    }
+    return traits;
+  }
+
+  static Set<EnemyTrait> _orderedTraitsForStats(EnemyStats stats) {
+    final traits = <EnemyTrait>{};
+    for (final trait in EnemyTrait.values) {
+      if (stats.hasTrait(trait)) {
+        traits.add(trait);
+      }
+    }
+    return traits;
+  }
+
+  static String _enemyLabelForStats(EnemyStats stats) {
+    if (identical(stats, _basicDrone)) {
+      return 'Drones';
+    }
+    if (identical(stats, _basicEliteDrone)) {
+      return 'Elite Drones';
+    }
+    if (identical(stats, _armoredDrone)) {
+      return 'Armored Drones';
+    }
+    if (identical(stats, _shieldedDrone)) {
+      return 'Shielded Drones';
+    }
+    if (identical(stats, _swarmDrone)) {
+      return 'Swarm Drones';
+    }
+    if (identical(stats, _regenDrone)) {
+      return 'Regen Drones';
+    }
+    if (identical(stats, _heavyDrone)) {
+      return 'Heavy Drones';
+    }
+    if (identical(stats, _armoredHeavyDrone)) {
+      return 'Armored Heavy Drones';
+    }
+    if (identical(stats, _regenHeavyDrone)) {
+      return 'Regen Heavy Drones';
+    }
+
+    final adjectives = [
+      for (final trait in EnemyTrait.values)
+        if (stats.hasTrait(trait)) _traitAdjective(trait),
+    ];
+    if (adjectives.isEmpty) {
+      return 'Drones';
+    }
+    return '${adjectives.join(' ')} Drones';
+  }
+
+  static String _traitAdjective(EnemyTrait trait) {
+    return switch (trait) {
+      EnemyTrait.armored => 'Armored',
+      EnemyTrait.shielded => 'Shielded',
+      EnemyTrait.swarm => 'Swarm',
+      EnemyTrait.regen => 'Regen',
+      EnemyTrait.heavy => 'Heavy',
+    };
+  }
+
+  static List<TowerType> _recommendedTowerTypes(
+    WaveDefinition wave,
+    List<TowerType> unlockedTowerTypes,
+  ) {
+    final recommendations = <TowerType>[];
+    for (final group in wave.groups) {
+      for (final trait in EnemyTrait.values) {
+        if (!group.enemyStats.hasTrait(trait)) {
+          continue;
+        }
+        for (final towerType in _counterTowersForTrait(trait)) {
+          if (!unlockedTowerTypes.contains(towerType)) {
+            continue;
+          }
+          if (recommendations.contains(towerType)) {
+            continue;
+          }
+          recommendations.add(towerType);
+          if (recommendations.length == 3) {
+            return List.unmodifiable(recommendations);
+          }
+        }
+      }
+    }
+    return List.unmodifiable(recommendations);
+  }
+
+  static List<TowerType> _counterTowersForTrait(EnemyTrait trait) {
+    return switch (trait) {
+      EnemyTrait.shielded => const [TowerType.ionChain],
+      EnemyTrait.armored ||
+      EnemyTrait.heavy => const [TowerType.rocket, TowerType.railgun],
+      EnemyTrait.swarm => const [
+        TowerType.rocket,
+        TowerType.cryo,
+        TowerType.gravityWell,
+      ],
+      EnemyTrait.regen => const [
+        TowerType.laser,
+        TowerType.ionChain,
+        TowerType.nanite,
+      ],
     };
   }
 

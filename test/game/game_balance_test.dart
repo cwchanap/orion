@@ -783,6 +783,155 @@ void main() {
       );
     });
 
+    test('builds a preview for a multi-group baseline wave', () {
+      final preview = GameBalance.wavePreview(
+        wave: GameBalance.waves[4],
+        waveNumber: 5,
+        waveTotal: 8,
+        unlockedTowerTypes: const [
+          TowerType.laser,
+          TowerType.rocket,
+          TowerType.cryo,
+          TowerType.railgun,
+          TowerType.ionChain,
+          TowerType.nanite,
+          TowerType.gravityWell,
+        ],
+      );
+
+      expect(preview.waveNumber, 5);
+      expect(preview.waveTotal, 8);
+      expect(preview.clearBonus, 80);
+      expect(
+        preview.groups.map((group) => '${group.enemyCount} ${group.label}'),
+        ['20 Swarm Drones', '4 Heavy Drones'],
+      );
+      expect(preview.traits.toList(), [EnemyTrait.swarm, EnemyTrait.heavy]);
+      expect(preview.recommendedTowerTypes, [
+        TowerType.rocket,
+        TowerType.cryo,
+        TowerType.gravityWell,
+      ]);
+    });
+
+    test('filters wave preview recommendations to unlocked towers', () {
+      final preview = GameBalance.wavePreview(
+        wave: GameBalance.waves[4],
+        waveNumber: 5,
+        waveTotal: 8,
+        unlockedTowerTypes: const [TowerType.laser, TowerType.rocket],
+      );
+
+      expect(preview.recommendedTowerTypes, [TowerType.rocket]);
+    });
+
+    test('labels every approved enemy archetype in wave previews', () {
+      const expectedLabels = {
+        EnemyArchetype.basicDrone: 'Drones',
+        EnemyArchetype.basicEliteDrone: 'Elite Drones',
+        EnemyArchetype.armoredDrone: 'Armored Drones',
+        EnemyArchetype.shieldedDrone: 'Shielded Drones',
+        EnemyArchetype.swarmDrone: 'Swarm Drones',
+        EnemyArchetype.regenDrone: 'Regen Drones',
+        EnemyArchetype.heavyDrone: 'Heavy Drones',
+        EnemyArchetype.armoredHeavyDrone: 'Armored Heavy Drones',
+        EnemyArchetype.regenHeavyDrone: 'Regen Heavy Drones',
+      };
+
+      for (final entry in expectedLabels.entries) {
+        final preview = GameBalance.wavePreview(
+          wave: WaveDefinition(
+            groups: [
+              WaveGroup(
+                enemyCount: 1,
+                enemyStats: GameBalance.enemyArchetype(entry.key),
+              ),
+            ],
+            clearBonus: 0,
+          ),
+          waveNumber: 1,
+          waveTotal: 1,
+          unlockedTowerTypes: const [],
+        );
+
+        expect(preview.groups.single.label, entry.value);
+      }
+    });
+
+    test('uses trait fallback labels for custom enemy stats', () {
+      final preview = GameBalance.wavePreview(
+        wave: const WaveDefinition(
+          groups: [
+            WaveGroup(
+              enemyCount: 3,
+              enemyStats: EnemyStats(
+                health: 111,
+                speed: 42,
+                baseDamage: 2,
+                goldReward: 9,
+                traits: {EnemyTrait.shielded, EnemyTrait.armored},
+                shieldHealth: 10,
+                armorReduction: 0.1,
+              ),
+            ),
+          ],
+          clearBonus: 12,
+        ),
+        waveNumber: 1,
+        waveTotal: 1,
+        unlockedTowerTypes: const [],
+      );
+
+      expect(preview.groups.single.label, 'Armored Shielded Drones');
+      expect(preview.groups.single.traits.toList(), [
+        EnemyTrait.armored,
+        EnemyTrait.shielded,
+      ]);
+      expect(preview.traits.toList(), [
+        EnemyTrait.armored,
+        EnemyTrait.shielded,
+      ]);
+      expect(preview.recommendedTowerTypes, isEmpty);
+    });
+
+    test('builds an empty wave preview without filler text data', () {
+      final preview = GameBalance.wavePreview(
+        wave: const WaveDefinition(groups: [], clearBonus: 0),
+        waveNumber: 1,
+        waveTotal: 1,
+        unlockedTowerTypes: const [TowerType.laser],
+      );
+
+      expect(preview.groups, isEmpty);
+      expect(preview.traits, isEmpty);
+      expect(preview.clearBonus, 0);
+      expect(preview.recommendedTowerTypes, isEmpty);
+    });
+
+    test('wave preview collections cannot be mutated', () {
+      final preview = GameBalance.wavePreview(
+        wave: GameBalance.waves.first,
+        waveNumber: 1,
+        waveTotal: 8,
+        unlockedTowerTypes: const [TowerType.laser],
+      );
+
+      expect(
+        () => preview.groups.add(
+          WavePreviewGroup(enemyCount: 1, label: 'Drones', traits: const {}),
+        ),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => preview.traits.add(EnemyTrait.heavy),
+        throwsUnsupportedError,
+      );
+      expect(
+        () => preview.recommendedTowerTypes.add(TowerType.rocket),
+        throwsUnsupportedError,
+      );
+    });
+
     test('keeps wave compatibility getters backed by the first group', () {
       final wave = GameBalance.waves[1];
       final firstGroup = wave.groups.first;
