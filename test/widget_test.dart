@@ -38,6 +38,9 @@ void main() {
     expect(find.text('Gold 150'), findsOneWidget);
     expect(find.text('Base 20'), findsOneWidget);
     expect(find.text('Wave 1/8'), findsOneWidget);
+    expect(find.text('Next Wave 1/8'), findsOneWidget);
+    expect(find.text('8 Drones'), findsOneWidget);
+    expect(find.text('Clear bonus 30'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
   });
 
@@ -59,6 +62,40 @@ void main() {
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
   });
+
+  testWidgets(
+    'next wave panel stays visible while planning and hides in wave',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(onGameCreated: (created) => game = created),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Next Wave 1/8'), findsOneWidget);
+      expect(find.text('8 Drones'), findsOneWidget);
+
+      await tester.tapAt(const Offset(225, 275));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Build Tower'), findsOneWidget);
+      expect(find.text('Next Wave 1/8'), findsOneWidget);
+      expect(find.text('8 Drones'), findsOneWidget);
+
+      game!.startWave();
+      await tester.pump();
+
+      expect(find.text('Next Wave 1/8'), findsNothing);
+      expect(find.text('8 Drones'), findsNothing);
+    },
+  );
 
   testWidgets('locked stage tap shows feedback and stays on map', (
     tester,

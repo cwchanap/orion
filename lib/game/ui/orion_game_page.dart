@@ -1,3 +1,4 @@
+import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -111,12 +112,24 @@ class _OrionGamePageState extends State<OrionGamePage> {
           builder: (context, snapshot, _) {
             return Stack(
               children: [
-                Positioned.fill(child: GameWidget(game: game)),
+                Positioned.fill(child: _GameSurface(game: game)),
                 Positioned(
                   left: 12,
                   top: 12,
                   right: 12,
-                  child: _Hud(snapshot: snapshot),
+                  child: IgnorePointer(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Hud(snapshot: snapshot),
+                        if (snapshot.nextWavePreview != null) ...[
+                          const SizedBox(height: 8),
+                          _NextWavePanel(preview: snapshot.nextWavePreview!),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
                 Positioned(
                   left: 12,
@@ -331,6 +344,33 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 }
 
+class _GameSurface extends StatelessWidget {
+  const _GameSurface({required this.game});
+
+  final OrionDefenseGame game;
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (event) {
+        game.onTapDown(
+          TapDownEvent(
+            event.pointer,
+            game,
+            TapDownDetails(
+              globalPosition: event.position,
+              localPosition: event.localPosition,
+              kind: event.kind,
+            ),
+          ),
+        );
+      },
+      child: IgnorePointer(child: GameWidget(game: game)),
+    );
+  }
+}
+
 class _Hud extends StatelessWidget {
   const _Hud({required this.snapshot});
 
@@ -384,6 +424,74 @@ class _Hud extends StatelessWidget {
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.secondary,
                 ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NextWavePanel extends StatelessWidget {
+  const _NextWavePanel({required this.preview});
+
+  final WavePreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final recommendations = preview.recommendedTowerTypes
+        .map(_towerLabel)
+        .join(', ');
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surface.withValues(alpha: 0.9),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Next Wave ${preview.waveNumber}/${preview.waveTotal}',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (preview.groups.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final group in preview.groups)
+                    _StatusChip(label: '${group.enemyCount} ${group.label}'),
+                ],
+              ),
+            ],
+            if (preview.traits.isNotEmpty || preview.clearBonus > 0) ...[
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final trait in preview.traits)
+                    _StatusChip(label: _enemyTraitLabel(trait)),
+                  if (preview.clearBonus > 0)
+                    _StatusChip(label: 'Clear bonus ${preview.clearBonus}'),
+                ],
+              ),
+            ],
+            if (recommendations.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Recommended: $recommendations',
+                style: theme.textTheme.bodyMedium,
               ),
             ],
           ],
@@ -857,6 +965,16 @@ String _towerLabel(TowerType type) {
     TowerType.nanite => 'Nanite',
     TowerType.gravityWell => 'Gravity Well',
     TowerType.droneBay => 'Drone Bay',
+  };
+}
+
+String _enemyTraitLabel(EnemyTrait trait) {
+  return switch (trait) {
+    EnemyTrait.armored => 'Armored',
+    EnemyTrait.shielded => 'Shielded',
+    EnemyTrait.swarm => 'Swarm',
+    EnemyTrait.regen => 'Regen',
+    EnemyTrait.heavy => 'Heavy',
   };
 }
 
