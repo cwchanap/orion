@@ -82,6 +82,18 @@ void main() {
 
       expect(find.text('Next Wave 1/8'), findsOneWidget);
       expect(find.text('8 Drones'), findsOneWidget);
+      expect(
+        _activeIgnorePointerAncestorsOf(find.text('Next Wave 1/8')),
+        findsOneWidget,
+      );
+      expect(
+        _activeIgnorePointerAncestorsOf(find.text('8 Drones')),
+        findsOneWidget,
+      );
+      expect(
+        _activeIgnorePointerAncestorsOf(find.text('Start Wave')),
+        findsNothing,
+      );
 
       final createdGame = game!;
       createdGame.onTapDown(
@@ -461,6 +473,16 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
   }
 
   fail('Condition was not met before pump limit.');
+}
+
+Finder _activeIgnorePointerAncestorsOf(Finder finder) {
+  return find.ancestor(
+    of: finder,
+    matching: find.byWidgetPredicate(
+      (widget) => widget is IgnorePointer && widget.ignoring,
+      description: 'active IgnorePointer',
+    ),
+  );
 }
 
 class _TestCampaignProgressStore implements CampaignProgressStore {

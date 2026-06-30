@@ -116,16 +116,19 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   left: 12,
                   top: 12,
                   right: 12,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _Hud(snapshot: snapshot),
-                      if (snapshot.nextWavePreview != null) ...[
-                        const SizedBox(height: 8),
-                        _NextWavePanel(preview: snapshot.nextWavePreview!),
+                  child: IgnorePointer(
+                    ignoring: true,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _Hud(snapshot: snapshot),
+                        if (snapshot.nextWavePreview != null) ...[
+                          const SizedBox(height: 8),
+                          _NextWavePanel(preview: snapshot.nextWavePreview!),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
                 Positioned(
