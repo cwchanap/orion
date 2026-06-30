@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+set -eu
+
+if ! command -v dart >/dev/null 2>&1; then
+  echo "dart is required to run the pre-commit hook." >&2
+  exit 127
+fi
+
+if ! command -v flutter >/dev/null 2>&1; then
+  echo "flutter is required to run the pre-commit hook." >&2
+  exit 127
+fi
+
+echo "Checking Dart formatting..."
+dart format --output=none --set-exit-if-changed .
+
+echo "Running Flutter analyzer..."
+flutter analyze
+

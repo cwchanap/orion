@@ -1,17 +1,45 @@
-# orion
+# Orion
 
-A new Flutter project.
+Orion is a portrait, touch-first space tower-defense game built with Flutter and
+Flame.
 
-## Getting Started
+## Local Development
 
-This project is a starting point for a Flutter application.
+Install dependencies:
 
-A few resources to get you started if this is your first Flutter project:
+```bash
+flutter pub get
+```
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+Run the app:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```bash
+flutter run
+```
+
+Run the local checks:
+
+```bash
+dart format --output=none --set-exit-if-changed .
+flutter analyze
+flutter test
+flutter build web --release
+```
+
+## Git Hooks
+
+Install the repo-owned pre-commit hook once per checkout:
+
+```bash
+scripts/install-git-hooks.sh
+```
+
+The pre-commit hook checks Dart formatting and runs `flutter analyze`.
+
+## Continuous Integration
+
+GitHub Actions runs two jobs on pushes to `main` and on pull requests:
+
+- `Build & lint`: installs dependencies, checks formatting, runs
+  `flutter analyze`, and builds the web target.
+- `Unit test`: installs dependencies and runs `flutter test`.
