@@ -44,6 +44,9 @@ jobs:
   unit_test:
     name: Unit test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -60,5 +63,13 @@ jobs:
         run: flutter pub get
 
       - name: Run unit tests
-        run: flutter test
+        run: flutter test --coverage
 
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v7.0.0
+        with:
+          files: coverage/lcov.info
+          flags: unittests
+          name: flutter-unit-tests
+          use_oidc: true
+          fail_ci_if_error: true

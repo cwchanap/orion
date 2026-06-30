@@ -23,6 +23,7 @@ Run the local checks:
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test
+flutter test --coverage
 flutter build web --release
 ```
 
@@ -42,4 +43,5 @@ GitHub Actions runs two jobs on pushes to `main` and on pull requests:
 
 - `Build & lint`: installs dependencies, checks formatting, runs
   `flutter analyze`, and builds the web target.
-- `Unit test`: installs dependencies and runs `flutter test`.
+- `Unit test`: installs dependencies, runs `flutter test --coverage`, and
+  uploads `coverage/lcov.info` to Codecov with GitHub OIDC authentication.
