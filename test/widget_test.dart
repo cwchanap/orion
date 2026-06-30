@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
@@ -82,14 +83,21 @@ void main() {
       expect(find.text('Next Wave 1/8'), findsOneWidget);
       expect(find.text('8 Drones'), findsOneWidget);
 
-      await tester.tapAt(const Offset(225, 275));
+      final createdGame = game!;
+      createdGame.onTapDown(
+        TapDownEvent(
+          1,
+          createdGame,
+          TapDownDetails(globalPosition: const Offset(225, 275)),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Build Tower'), findsOneWidget);
       expect(find.text('Next Wave 1/8'), findsOneWidget);
       expect(find.text('8 Drones'), findsOneWidget);
 
-      game!.startWave();
+      createdGame.startWave();
       await tester.pump();
 
       expect(find.text('Next Wave 1/8'), findsNothing);

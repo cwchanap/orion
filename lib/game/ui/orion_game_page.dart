@@ -1,4 +1,3 @@
-import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -112,23 +111,21 @@ class _OrionGamePageState extends State<OrionGamePage> {
           builder: (context, snapshot, _) {
             return Stack(
               children: [
-                Positioned.fill(child: _GameSurface(game: game)),
+                Positioned.fill(child: GameWidget(game: game)),
                 Positioned(
                   left: 12,
                   top: 12,
                   right: 12,
-                  child: IgnorePointer(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _Hud(snapshot: snapshot),
-                        if (snapshot.nextWavePreview != null) ...[
-                          const SizedBox(height: 8),
-                          _NextWavePanel(preview: snapshot.nextWavePreview!),
-                        ],
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _Hud(snapshot: snapshot),
+                      if (snapshot.nextWavePreview != null) ...[
+                        const SizedBox(height: 8),
+                        _NextWavePanel(preview: snapshot.nextWavePreview!),
                       ],
-                    ),
+                    ],
                   ),
                 ),
                 Positioned(
@@ -341,33 +338,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
         autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
       );
     }
-  }
-}
-
-class _GameSurface extends StatelessWidget {
-  const _GameSurface({required this.game});
-
-  final OrionDefenseGame game;
-
-  @override
-  Widget build(BuildContext context) {
-    return Listener(
-      behavior: HitTestBehavior.opaque,
-      onPointerDown: (event) {
-        game.onTapDown(
-          TapDownEvent(
-            event.pointer,
-            game,
-            TapDownDetails(
-              globalPosition: event.position,
-              localPosition: event.localPosition,
-              kind: event.kind,
-            ),
-          ),
-        );
-      },
-      child: IgnorePointer(child: GameWidget(game: game)),
-    );
   }
 }
 
