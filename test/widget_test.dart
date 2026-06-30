@@ -117,6 +117,61 @@ void main() {
     },
   );
 
+  testWidgets('next wave panel omits zero clear bonus text', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    final snapshot = game!.stateNotifier.value;
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.build,
+      gold: snapshot.gold,
+      baseHealth: snapshot.baseHealth,
+      waveNumber: 8,
+      waveTotal: snapshot.waveTotal,
+      stageId: snapshot.stageId,
+      stageName: snapshot.stageName,
+      stageLabel: snapshot.stageLabel,
+      unlockedTowerTypes: snapshot.unlockedTowerTypes,
+      nextWavePreview: WavePreview(
+        waveNumber: 8,
+        waveTotal: snapshot.waveTotal,
+        groups: [
+          WavePreviewGroup(
+            enemyCount: 4,
+            label: 'Regen Heavy Drones',
+            traits: const {EnemyTrait.regen, EnemyTrait.heavy},
+          ),
+        ],
+        traits: const {EnemyTrait.regen, EnemyTrait.heavy},
+        clearBonus: 0,
+        recommendedTowerTypes: const [TowerType.laser, TowerType.rocket],
+      ),
+      selectedCell: snapshot.selectedCell,
+      selectedTower: snapshot.selectedTower,
+      feedback: snapshot.feedback,
+      isPaused: snapshot.isPaused,
+      speedMultiplier: snapshot.speedMultiplier,
+      autoStartEnabled: snapshot.autoStartEnabled,
+      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    );
+    await tester.pump();
+
+    expect(find.text('Next Wave 8/8'), findsOneWidget);
+    expect(find.text('4 Regen Heavy Drones'), findsOneWidget);
+    expect(find.text('Clear bonus 0'), findsNothing);
+    expect(find.text('Recommended: Laser, Rocket'), findsOneWidget);
+  });
+
   testWidgets('locked stage tap shows feedback and stays on map', (
     tester,
   ) async {
@@ -214,6 +269,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
+      expect(find.text('Next Wave 1/8'), findsOneWidget);
       expect(store.progress.clearedStageIds, {'outpost-alpha'});
     },
   );
