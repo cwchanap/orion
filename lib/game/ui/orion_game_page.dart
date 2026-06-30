@@ -318,6 +318,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         stageName: snapshot.stageName,
         stageLabel: snapshot.stageLabel,
         unlockedTowerTypes: snapshot.unlockedTowerTypes,
+        nextWavePreview: snapshot.nextWavePreview,
         selectedCell: snapshot.selectedCell,
         selectedTower: snapshot.selectedTower,
         feedback: message,

@@ -336,6 +336,7 @@ class GameSnapshot {
     required this.stageName,
     required this.stageLabel,
     required List<TowerType> unlockedTowerTypes,
+    this.nextWavePreview,
     required this.selectedCell,
     required this.selectedTower,
     required this.feedback,
@@ -354,6 +355,7 @@ class GameSnapshot {
   final String stageName;
   final String stageLabel;
   final List<TowerType> unlockedTowerTypes;
+  final WavePreview? nextWavePreview;
   final GridPosition? selectedCell;
   final PlacedTower? selectedTower;
   final String? feedback;

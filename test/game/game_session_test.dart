@@ -50,6 +50,121 @@ void main() {
       expect(snapshot.autoStartCountdownRemaining, 1.5);
     });
 
+    test('snapshot exposes next wave preview only during build phase', () {
+      final session = GameSession.initial();
+
+      final firstPreview = session.snapshot().nextWavePreview;
+
+      expect(firstPreview, isNotNull);
+      expect(firstPreview!.waveNumber, 1);
+      expect(firstPreview.waveTotal, 8);
+      expect(
+        firstPreview.groups.map(
+          (group) => '${group.enemyCount} ${group.label}',
+        ),
+        ['8 Drones'],
+      );
+
+      expect(session.startWave(), isTrue);
+      expect(session.snapshot().nextWavePreview, isNull);
+
+      session.finishActiveWave();
+      final secondPreview = session.snapshot().nextWavePreview;
+
+      expect(secondPreview, isNotNull);
+      expect(secondPreview!.waveNumber, 2);
+      expect(
+        secondPreview.groups.map(
+          (group) => '${group.enemyCount} ${group.label}',
+        ),
+        ['8 Drones', '2 Armored Drones'],
+      );
+      expect(secondPreview.traits.toList(), [EnemyTrait.armored]);
+      expect(secondPreview.recommendedTowerTypes, [
+        TowerType.rocket,
+        TowerType.railgun,
+      ]);
+    });
+
+    test('snapshot preview uses selected stage single-group waves', () {
+      final stage = StageDefinition(
+        id: 'preview-stage',
+        name: 'Preview Stage',
+        mapLabel: 'Preview',
+        description: 'Stage for preview tests',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [
+          WaveDefinition(
+            groups: [
+              WaveGroup(
+                enemyCount: 3,
+                enemyStats: EnemyStats(
+                  health: 78,
+                  speed: 72,
+                  baseDamage: 1,
+                  goldReward: 14,
+                  traits: {EnemyTrait.regen},
+                  regenPerSecond: 2.5,
+                ),
+              ),
+            ],
+            clearBonus: 42,
+          ),
+        ],
+        unlockDependencies: [],
+        isMainPath: true,
+        mainPathOrder: 1,
+        mapColumn: 0,
+        mapRow: 0,
+      );
+
+      final preview = GameSession.initial(
+        stage: stage,
+      ).snapshot().nextWavePreview;
+
+      expect(preview, isNotNull);
+      expect(preview!.waveNumber, 1);
+      expect(preview.waveTotal, 1);
+      expect(preview.groups.single.enemyCount, 3);
+      expect(preview.groups.single.label, 'Regen Drones');
+      expect(preview.clearBonus, 42);
+      expect(preview.recommendedTowerTypes, [TowerType.laser]);
+    });
+
+    test('snapshot preview carries final wave zero clear bonus', () {
+      final session = GameSession.initial();
+
+      for (var wave = 0; wave < 7; wave += 1) {
+        expect(session.startWave(), isTrue);
+        session.finishActiveWave();
+      }
+
+      final preview = session.snapshot().nextWavePreview;
+
+      expect(preview, isNotNull);
+      expect(preview!.waveNumber, 8);
+      expect(preview.waveTotal, 8);
+      expect(preview.clearBonus, 0);
+    });
+
+    test('snapshot hides next wave preview after win and loss', () {
+      final wonSession = GameSession.initial();
+      for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
+        expect(wonSession.startWave(), isTrue);
+        wonSession.finishActiveWave();
+      }
+
+      expect(wonSession.phase, GamePhase.won);
+      expect(wonSession.snapshot().nextWavePreview, isNull);
+
+      final lostSession = GameSession.initial();
+      expect(lostSession.startWave(), isTrue);
+      lostSession.damageBase(GameBalance.initialBaseHealth);
+
+      expect(lostSession.phase, GamePhase.lost);
+      expect(lostSession.snapshot().nextWavePreview, isNull);
+    });
+
     test('validates invalid placements without spending gold', () {
       final session = GameSession.initial();
 

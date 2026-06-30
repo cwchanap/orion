@@ -56,16 +56,29 @@ class GameSession {
     bool autoStartEnabled = false,
     double? autoStartCountdownRemaining,
   }) {
+    final waveNumber = (_waveIndex + 1).clamp(1, stage.waves.length).toInt();
+    final unlockedTypes = unlockedTowerTypes;
+    final wave = activeWave;
+    final nextWavePreview = _phase == GamePhase.build && wave != null
+        ? GameBalance.wavePreview(
+            wave: wave,
+            waveNumber: waveNumber,
+            waveTotal: stage.waves.length,
+            unlockedTowerTypes: unlockedTypes,
+          )
+        : null;
+
     return GameSnapshot(
       phase: _phase,
       gold: _gold,
       baseHealth: _baseHealth,
-      waveNumber: (_waveIndex + 1).clamp(1, stage.waves.length).toInt(),
+      waveNumber: waveNumber,
       waveTotal: stage.waves.length,
       stageId: stage.id,
       stageName: stage.name,
       stageLabel: stage.mapLabel,
-      unlockedTowerTypes: unlockedTowerTypes,
+      unlockedTowerTypes: unlockedTypes,
+      nextWavePreview: nextWavePreview,
       selectedCell: selectedCell,
       selectedTower: selectedTower,
       feedback: feedback,
