@@ -157,7 +157,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     final game = OrionDefenseGame(
       stage: stage,
-      onStageWon: _markStageCleared,
+      onStageWon: _recordStageCompletion,
       onReturnToMap: _returnToMap,
     );
     widget.onGameCreated?.call(game);
@@ -175,17 +175,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
-  Future<void> _markStageCleared(StageDefinition stage) async {
+  Future<void> _recordStageCompletion(StageCompletion completion) async {
     final saveGeneration = _progressGeneration;
     final saveTask = _clearSaveQueue.then(
-      (_) => _saveStageClear(stage, saveGeneration),
+      (_) => _saveStageCompletion(completion, saveGeneration),
     );
     _clearSaveQueue = saveTask.catchError((_) {});
     await saveTask;
   }
 
-  Future<void> _saveStageClear(
-    StageDefinition stage,
+  Future<void> _saveStageCompletion(
+    StageCompletion completion,
     int saveGeneration,
   ) async {
     final store = _store;
@@ -198,7 +198,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    final progress = _progress.markCleared(stage.id);
+    final progress = _progress.recordResult(
+      completion.stage.id,
+      completion.result,
+    );
     try {
       await store.save(progress);
     } catch (_) {
