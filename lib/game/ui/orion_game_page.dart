@@ -202,6 +202,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
       completion.stage.id,
       completion.result,
     );
+    // recordResult returns the same instance (`this`) when the new result is
+    // not an improvement, so identity (not equality) signals "nothing to save".
     if (identical(progress, _progress)) {
       return;
     }
@@ -872,7 +874,9 @@ class _EndStatePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final didWin = snapshot.phase == GamePhase.won;
-    final result = game.resultForSnapshot(snapshot);
+    final result = didWin
+        ? StageResult.fromVictoryBaseHealth(snapshot.baseHealth)
+        : null;
 
     return ColoredBox(
       color: Colors.black.withValues(alpha: 0.62),

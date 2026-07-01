@@ -371,6 +371,8 @@ class GameSnapshot {
 class GameBalance {
   static const int startingGold = 150;
   static const int initialBaseHealth = 20;
+  // Minimum base health (inclusive) to earn the silver stage medal on a win.
+  static const int silverMedalThreshold = 10;
 
   static const EnemyStats _basicDrone = EnemyStats(
     health: 36,
