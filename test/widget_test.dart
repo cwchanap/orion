@@ -190,14 +190,12 @@ void main() {
   testWidgets('reset confirmation clears campaign progress', (tester) async {
     SharedPreferences.setMockInitialValues({
       'orion.campaign.progress': CampaignProgressCodec.encode(
-        CampaignProgress(
-          clearedStageIds: {
-            'outpost-alpha',
-            'nebula-relay',
-            'asteroid-foundry',
-            'aurora-gate',
-          },
-        ),
+        _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+          'aurora-gate',
+        }),
       ),
     });
 
@@ -247,7 +245,7 @@ void main() {
     'stage clear save failure keeps prior progress and shows feedback',
     (tester) async {
       final store = _TestCampaignProgressStore(
-        progress: CampaignProgress(clearedStageIds: {'outpost-alpha'}),
+        progress: _progressWithResults({'outpost-alpha'}),
         saveError: StateError('save failed'),
       );
       OrionDefenseGame? game;
@@ -265,12 +263,21 @@ void main() {
       await tester.tap(find.text('Alpha'));
       await tester.pumpAndSettle();
 
-      game!.onStageWon?.call(OrionCampaign.stageById('nebula-relay'));
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('nebula-relay'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
       expect(find.text('Next Wave 1/8'), findsOneWidget);
-      expect(store.progress.clearedStageIds, {'outpost-alpha'});
+      expect(store.progress.bestResultsByStageId.keys, {'outpost-alpha'});
+      expect(store.progress.resultFor('nebula-relay'), isNull);
     },
   );
 
@@ -278,9 +285,7 @@ void main() {
     tester,
   ) async {
     final store = _TestCampaignProgressStore(
-      progress: CampaignProgress(
-        clearedStageIds: {'outpost-alpha', 'nebula-relay'},
-      ),
+      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
       delaySaves: true,
     );
     OrionDefenseGame? game;
@@ -298,8 +303,18 @@ void main() {
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
 
-    game!.onStageWon?.call(OrionCampaign.stageById('salvage-rift'));
-    game!.onStageWon?.call(OrionCampaign.stageById('asteroid-foundry'));
+    game!.onStageWon?.call(
+      StageCompletion(
+        stage: OrionCampaign.stageById('salvage-rift'),
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      ),
+    );
+    game!.onStageWon?.call(
+      StageCompletion(
+        stage: OrionCampaign.stageById('asteroid-foundry'),
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      ),
+    );
 
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
     if (store.saveCompletions.length > 1) {
@@ -313,21 +328,69 @@ void main() {
     }
     await tester.pumpAndSettle();
 
-    expect(store.progress.clearedStageIds, {
+    expect(store.progress.bestResultsByStageId.keys, {
       'outpost-alpha',
       'nebula-relay',
       'salvage-rift',
       'asteroid-foundry',
     });
+    expect(
+      store.progress.resultFor('salvage-rift'),
+      const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+    );
+    expect(
+      store.progress.resultFor('asteroid-foundry'),
+      const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+  });
+
+  testWidgets('stage replay save does not downgrade an existing medal', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: CampaignProgress(
+        bestResultsByStageId: {
+          'outpost-alpha': const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+        },
+      ),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    game!.onStageWon?.call(
+      StageCompletion(
+        stage: OrionCampaign.stageById('outpost-alpha'),
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
   });
 
   testWidgets('failed reset does not let pending clear save reset progress', (
     tester,
   ) async {
     final store = _TestCampaignProgressStore(
-      progress: CampaignProgress(
-        clearedStageIds: {'outpost-alpha', 'nebula-relay'},
-      ),
+      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
       delaySaves: true,
       resetResults: [StateError('reset failed'), null],
     );
@@ -346,7 +409,12 @@ void main() {
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
 
-    game!.onStageWon?.call(OrionCampaign.stageById('salvage-rift'));
+    game!.onStageWon?.call(
+      StageCompletion(
+        stage: OrionCampaign.stageById('salvage-rift'),
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      ),
+    );
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
     game!.returnToMap();
@@ -363,11 +431,15 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.resetCalls, 1);
-    expect(store.progress.clearedStageIds, {
+    expect(store.progress.bestResultsByStageId.keys, {
       'outpost-alpha',
       'nebula-relay',
       'salvage-rift',
     });
+    expect(
+      store.progress.resultFor('salvage-rift'),
+      const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+    );
   });
 
   testWidgets('reset reports failure when no progress store is available', (
@@ -442,7 +514,7 @@ void main() {
         home: Scaffold(
           body: WorldMapView(
             stages: OrionCampaign.stages,
-            progress: CampaignProgress(clearedStageIds: {'outpost-alpha'}),
+            progress: _progressWithResults({'outpost-alpha'}),
             feedback: null,
             onStageSelected: (_) {},
             onLockedStageSelected: (_) {},
@@ -538,6 +610,15 @@ Finder _activeIgnorePointerAncestorsOf(Finder finder) {
       (widget) => widget is IgnorePointer && widget.ignoring,
       description: 'active IgnorePointer',
     ),
+  );
+}
+
+CampaignProgress _progressWithResults(Iterable<String> stageIds) {
+  return CampaignProgress(
+    bestResultsByStageId: {
+      for (final stageId in stageIds)
+        stageId: const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+    },
   );
 }
 
