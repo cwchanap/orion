@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
@@ -34,6 +36,37 @@ void main() {
         decoded.resultFor('nebula-relay'),
         progress.resultFor('nebula-relay'),
       );
+    });
+
+    test('encodes sorted version two stage result JSON', () {
+      final encoded = CampaignProgressCodec.encode(
+        CampaignProgress(
+          bestResultsByStageId: {
+            'nebula-relay': const StageResult(
+              medal: StageMedal.silver,
+              bestBaseHealth: 14,
+            ),
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
+        ),
+      );
+
+      final decoded = jsonDecode(encoded) as Map<String, Object?>;
+      final stageResults = decoded['stageResults'] as Map<String, Object?>;
+
+      expect(decoded['version'], 2);
+      expect(stageResults.keys, ['nebula-relay', 'outpost-alpha']);
+      expect(stageResults['outpost-alpha'], {
+        'medal': 'gold',
+        'bestBaseHealth': 20,
+      });
+      expect(stageResults['nebula-relay'], {
+        'medal': 'silver',
+        'bestBaseHealth': 14,
+      });
     });
 
     test('ignores unknown stage ids and invalid result entries', () {
