@@ -77,7 +77,9 @@ void main() {
     "outpost-alpha": {"medal": "gold", "bestBaseHealth": 20},
     "missing": {"medal": "gold", "bestBaseHealth": 20},
     "nebula-relay": {"medal": "diamond", "bestBaseHealth": 18},
-    "asteroid-foundry": {"medal": "silver", "bestBaseHealth": 99}
+    "salvage-rift": {"medal": "gold", "bestBaseHealth": 1},
+    "asteroid-foundry": {"medal": "silver", "bestBaseHealth": 99},
+    "aurora-gate": {"medal": "clear", "bestBaseHealth": 20}
   }
 }
 ''', knownStages: OrionCampaign.stages);
