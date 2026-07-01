@@ -162,6 +162,7 @@ class _StageMap extends StatelessWidget {
                     child: _StageNode(
                       stage: stage,
                       status: progress.statusFor(stage),
+                      result: progress.resultFor(stage.id),
                       onStageSelected: onStageSelected,
                       onLockedStageSelected: onLockedStageSelected,
                     ),
@@ -179,12 +180,14 @@ class _StageNode extends StatelessWidget {
   const _StageNode({
     required this.stage,
     required this.status,
+    required this.result,
     required this.onStageSelected,
     required this.onLockedStageSelected,
   });
 
   final StageDefinition stage;
   final StageProgressStatus status;
+  final StageResult? result;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
@@ -192,7 +195,7 @@ class _StageNode extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isLocked = status == StageProgressStatus.locked;
-    final colors = _stageColors(theme.colorScheme, status);
+    final colors = _stageColors(theme.colorScheme, status, result);
 
     return Material(
       color: colors.background,
@@ -208,7 +211,7 @@ class _StageNode extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(_statusIcon(status), color: colors.foreground),
+              Icon(_statusIcon(status, result), color: colors.foreground),
               const SizedBox(height: 5),
               Text(
                 stage.mapLabel,
@@ -221,7 +224,7 @@ class _StageNode extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                _statusLabel(status),
+                _statusLabel(status, result),
                 style: theme.textTheme.labelSmall?.copyWith(
                   color: colors.foreground,
                 ),
@@ -255,7 +258,31 @@ class _StageColors {
   final Color foreground;
 }
 
-_StageColors _stageColors(ColorScheme colorScheme, StageProgressStatus status) {
+_StageColors _stageColors(
+  ColorScheme colorScheme,
+  StageProgressStatus status,
+  StageResult? result,
+) {
+  if (status == StageProgressStatus.cleared && result != null) {
+    return switch (result.medal) {
+      StageMedal.gold => _StageColors(
+        background: colorScheme.primaryContainer,
+        border: colorScheme.primary,
+        foreground: colorScheme.onPrimaryContainer,
+      ),
+      StageMedal.silver => _StageColors(
+        background: colorScheme.secondaryContainer,
+        border: colorScheme.secondary,
+        foreground: colorScheme.onSecondaryContainer,
+      ),
+      StageMedal.clear => _StageColors(
+        background: colorScheme.tertiaryContainer,
+        border: colorScheme.tertiary,
+        foreground: colorScheme.onTertiaryContainer,
+      ),
+    };
+  }
+
   return switch (status) {
     StageProgressStatus.cleared => _StageColors(
       background: colorScheme.tertiaryContainer,
@@ -283,7 +310,15 @@ double _mapCoordinate(int value, int maxValue) {
   return value / maxValue;
 }
 
-IconData _statusIcon(StageProgressStatus status) {
+IconData _statusIcon(StageProgressStatus status, StageResult? result) {
+  if (status == StageProgressStatus.cleared && result != null) {
+    return switch (result.medal) {
+      StageMedal.gold => Icons.emoji_events,
+      StageMedal.silver => Icons.military_tech,
+      StageMedal.clear => Icons.check_circle,
+    };
+  }
+
   return switch (status) {
     StageProgressStatus.cleared => Icons.check_circle,
     StageProgressStatus.unlocked => Icons.radio_button_checked,
@@ -291,7 +326,11 @@ IconData _statusIcon(StageProgressStatus status) {
   };
 }
 
-String _statusLabel(StageProgressStatus status) {
+String _statusLabel(StageProgressStatus status, StageResult? result) {
+  if (status == StageProgressStatus.cleared && result != null) {
+    return result.medal.label;
+  }
+
   return switch (status) {
     StageProgressStatus.cleared => 'Cleared',
     StageProgressStatus.unlocked => 'Open',

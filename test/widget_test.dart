@@ -64,6 +64,48 @@ void main() {
     expect(find.text('Start Wave'), findsOneWidget);
   });
 
+  testWidgets('victory panel shows earned medal and base health', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    final snapshot = game!.stateNotifier.value;
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.won,
+      gold: snapshot.gold,
+      baseHealth: 14,
+      waveNumber: snapshot.waveTotal,
+      waveTotal: snapshot.waveTotal,
+      stageId: snapshot.stageId,
+      stageName: snapshot.stageName,
+      stageLabel: snapshot.stageLabel,
+      unlockedTowerTypes: snapshot.unlockedTowerTypes,
+      nextWavePreview: null,
+      selectedCell: snapshot.selectedCell,
+      selectedTower: snapshot.selectedTower,
+      feedback: snapshot.feedback,
+      isPaused: snapshot.isPaused,
+      speedMultiplier: snapshot.speedMultiplier,
+      autoStartEnabled: snapshot.autoStartEnabled,
+      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    );
+    await tester.pump();
+
+    expect(find.text('Victory'), findsOneWidget);
+    expect(find.text('Silver medal - Base 14/20'), findsOneWidget);
+  });
+
   testWidgets(
     'next wave panel stays visible while planning and hides in wave',
     (tester) async {
@@ -514,7 +556,14 @@ void main() {
         home: Scaffold(
           body: WorldMapView(
             stages: OrionCampaign.stages,
-            progress: _progressWithResults({'outpost-alpha'}),
+            progress: CampaignProgress(
+              bestResultsByStageId: {
+                'outpost-alpha': const StageResult(
+                  medal: StageMedal.gold,
+                  bestBaseHealth: 20,
+                ),
+              },
+            ),
             feedback: null,
             onStageSelected: (_) {},
             onLockedStageSelected: (_) {},
@@ -528,7 +577,7 @@ void main() {
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Relay'), findsOneWidget);
     expect(find.text('Core'), findsOneWidget);
-    expect(find.text('Cleared'), findsWidgets);
+    expect(find.text('Gold'), findsOneWidget);
     expect(find.text('Open'), findsWidgets);
     expect(find.text('Locked'), findsWidgets);
   });

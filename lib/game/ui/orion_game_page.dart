@@ -868,6 +868,7 @@ class _EndStatePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final didWin = snapshot.phase == GamePhase.won;
+    final result = game.resultForSnapshot(snapshot);
 
     return ColoredBox(
       color: Colors.black.withValues(alpha: 0.62),
@@ -895,6 +896,17 @@ class _EndStatePanel extends StatelessWidget {
                   didWin ? 'Victory' : 'Base Lost',
                   style: theme.textTheme.headlineSmall,
                 ),
+                if (didWin && result != null) ...[
+                  const SizedBox(height: 8),
+                  Text(
+                    '${result.medal.label} medal - '
+                    'Base ${result.bestBaseHealth}/${GameBalance.initialBaseHealth}',
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 16),
                 Wrap(
                   spacing: 8,
