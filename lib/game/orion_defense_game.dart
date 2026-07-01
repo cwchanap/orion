@@ -90,6 +90,14 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   double? get autoStartCountdownRemaining => _autoStartCountdownRemaining;
   StageCompletion? get stageCompletion => _stageCompletion;
 
+  StageResult? resultForSnapshot(GameSnapshot snapshot) {
+    if (snapshot.phase != GamePhase.won) {
+      return null;
+    }
+    return _stageCompletion?.result ??
+        StageResult.fromVictoryBaseHealth(snapshot.baseHealth);
+  }
+
   @override
   Future<void> onLoad() async {
     await super.onLoad();
