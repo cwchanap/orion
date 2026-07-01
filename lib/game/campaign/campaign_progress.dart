@@ -55,7 +55,7 @@ class StageResult {
         .toInt();
     final medal = switch (normalizedBaseHealth) {
       GameBalance.initialBaseHealth => StageMedal.gold,
-      >= 10 => StageMedal.silver,
+      >= GameBalance.silverMedalThreshold => StageMedal.silver,
       _ => StageMedal.clear,
     };
 
