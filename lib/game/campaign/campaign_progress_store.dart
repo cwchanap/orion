@@ -34,7 +34,15 @@ class CampaignProgressCodec {
 
     try {
       final decoded = jsonDecode(source);
-      if (decoded is! Map<String, Object?> || decoded['version'] != 2) {
+      if (decoded is! Map<String, Object?>) {
+        return CampaignProgress();
+      }
+
+      final version = decoded['version'];
+      if (version == 1) {
+        return _decodeVersionOne(decoded, knownStages: knownStages);
+      }
+      if (version != 2) {
         return CampaignProgress();
       }
 
@@ -64,6 +72,30 @@ class CampaignProgressCodec {
     } on TypeError {
       return CampaignProgress();
     }
+  }
+
+  static CampaignProgress _decodeVersionOne(
+    Map<String, Object?> decoded, {
+    required Iterable<StageDefinition> knownStages,
+  }) {
+    final rawIds = decoded['clearedStageIds'];
+    if (rawIds is! List) {
+      return CampaignProgress();
+    }
+
+    final knownIds = knownStages.map((stage) => stage.id).toSet();
+    final results = <String, StageResult>{};
+    for (final id in rawIds.whereType<String>()) {
+      if (!knownIds.contains(id) || results.containsKey(id)) {
+        continue;
+      }
+      results[id] = const StageResult(
+        medal: StageMedal.clear,
+        bestBaseHealth: 0,
+      );
+    }
+
+    return CampaignProgress(bestResultsByStageId: results);
   }
 }
 

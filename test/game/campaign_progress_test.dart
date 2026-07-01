@@ -14,12 +14,18 @@ void main() {
         ),
       );
       expect(
-        StageResult.fromVictoryBaseHealth(10),
-        const StageResult(medal: StageMedal.silver, bestBaseHealth: 10),
+        StageResult.fromVictoryBaseHealth(GameBalance.silverMedalThreshold),
+        const StageResult(
+          medal: StageMedal.silver,
+          bestBaseHealth: GameBalance.silverMedalThreshold,
+        ),
       );
       expect(
-        StageResult.fromVictoryBaseHealth(9),
-        const StageResult(medal: StageMedal.clear, bestBaseHealth: 9),
+        StageResult.fromVictoryBaseHealth(GameBalance.silverMedalThreshold - 1),
+        const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: GameBalance.silverMedalThreshold - 1,
+        ),
       );
     });
 
@@ -71,7 +77,7 @@ void main() {
       expect(result.toJson(), {'medal': 'silver', 'bestBaseHealth': 12});
       expect(StageResult.fromJson(result.toJson()), result);
       expect(
-        StageResult.fromJson({'medal': 'silver', 'bestBaseHealth': 21}),
+        StageResult.fromJson({'medal': 'silver', 'bestBaseHealth': -1}),
         isNull,
       );
       expect(
