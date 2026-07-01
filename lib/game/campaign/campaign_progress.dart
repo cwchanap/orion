@@ -44,7 +44,8 @@ enum StageMedal {
 }
 
 class StageResult {
-  const StageResult({required this.medal, required this.bestBaseHealth});
+  const StageResult({required this.medal, required this.bestBaseHealth})
+    : assert(bestBaseHealth >= 0, 'bestBaseHealth must be non-negative');
 
   final StageMedal medal;
   final int bestBaseHealth;
@@ -88,18 +89,17 @@ class StageResult {
     }
 
     final medal = StageMedal.fromSerializedName(rawMedal);
-    if (medal == null ||
-        rawBaseHealth < 0 ||
-        rawBaseHealth > GameBalance.initialBaseHealth) {
+    if (medal == null || rawBaseHealth < 0) {
       return null;
     }
 
-    // Preserve the stored medal rather than re-deriving it from
-    // `bestBaseHealth`. Re-deriving would couple persisted state to the current
-    // `GameBalance.silverMedalThreshold`, so a future threshold bump would
-    // silently drop older silver saves whose `bestBaseHealth` falls below the
-    // new cutoff. Trusting the stored medal keeps saves stable across tuning
-    // changes; the range check above still guards against corrupt values.
+    // Preserve the stored medal and base health rather than re-deriving them
+    // from current `GameBalance` tuning. Re-deriving would couple persisted
+    // state to the live `silverMedalThreshold` / `initialBaseHealth`, so a
+    // future tuning pass would silently drop older saves whose values fall
+    // outside the new bounds. Trusting the stored values keeps saves stable
+    // across balance changes; the `< 0` check above still guards against
+    // corrupt data.
     return StageResult(medal: medal, bestBaseHealth: rawBaseHealth);
   }
 

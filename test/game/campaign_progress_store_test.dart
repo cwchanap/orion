@@ -78,14 +78,14 @@ void main() {
     "missing": {"medal": "gold", "bestBaseHealth": 20},
     "nebula-relay": {"medal": "diamond", "bestBaseHealth": 18},
     "salvage-rift": {"medal": "gold", "bestBaseHealth": 1},
-    "asteroid-foundry": {"medal": "silver", "bestBaseHealth": 99},
+    "asteroid-foundry": {"medal": "silver", "bestBaseHealth": -1},
     "aurora-gate": {"medal": "clear", "bestBaseHealth": 20}
   }
 }
 ''', knownStages: OrionCampaign.stages);
 
       // `missing` is an unknown stage id; `nebula-relay` has an unknown medal;
-      // `asteroid-foundry` has an out-of-range `bestBaseHealth`. The remaining
+      // `asteroid-foundry` has a negative `bestBaseHealth`. The remaining
       // entries are preserved as-is — `salvage-rift` and `aurora-gate` carry
       // medals that no longer match what `bestBaseHealth` would derive under
       // the current threshold, but stored medals are trusted across tuning
@@ -109,13 +109,17 @@ void main() {
       );
     });
 
-    test('unsupported version one cleared ids decode empty', () {
+    test('migrates version one cleared ids to clear medal results', () {
       final decoded = CampaignProgressCodec.decode(
-        '{"version":1,"clearedStageIds":["outpost-alpha"]}',
+        '{"version":1,"clearedStageIds":["outpost-alpha","unknown-stage"]}',
         knownStages: OrionCampaign.stages,
       );
 
-      expect(decoded.bestResultsByStageId, isEmpty);
+      expect(decoded.bestResultsByStageId.keys, {'outpost-alpha'});
+      expect(
+        decoded.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 0),
+      );
     });
 
     test('falls back to empty progress for corrupt data', () {
