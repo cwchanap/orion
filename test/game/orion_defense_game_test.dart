@@ -148,7 +148,6 @@ void main() {
         completions.single.result,
         const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
       );
-      expect(game.stageCompletion, completions.single);
     });
 
     test(

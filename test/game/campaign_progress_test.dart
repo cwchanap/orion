@@ -78,17 +78,23 @@ void main() {
         StageResult.fromJson({'medal': 'platinum', 'bestBaseHealth': 12}),
         isNull,
       );
+    });
+
+    test('fromJson preserves the stored medal without re-deriving it', () {
+      // Saved medals must survive even if `bestBaseHealth` no longer maps to
+      // the same medal under the current `silverMedalThreshold`. This keeps
+      // persisted state stable across tuning changes.
       expect(
         StageResult.fromJson({'medal': 'gold', 'bestBaseHealth': 19}),
-        isNull,
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 19),
       );
       expect(
         StageResult.fromJson({'medal': 'silver', 'bestBaseHealth': 9}),
-        isNull,
+        const StageResult(medal: StageMedal.silver, bestBaseHealth: 9),
       );
       expect(
         StageResult.fromJson({'medal': 'clear', 'bestBaseHealth': 10}),
-        isNull,
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 10),
       );
     });
   });

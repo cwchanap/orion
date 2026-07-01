@@ -34,7 +34,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   String? _mapFeedback;
   bool _isLoading = true;
   int _progressGeneration = 0;
-  Future<void> _clearSaveQueue = Future<void>.value();
+  Future<void> _saveQueue = Future<void>.value();
 
   @override
   void initState() {
@@ -177,10 +177,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   Future<void> _recordStageCompletion(StageCompletion completion) async {
     final saveGeneration = _progressGeneration;
-    final saveTask = _clearSaveQueue.then(
+    final saveTask = _saveQueue.then(
       (_) => _saveStageCompletion(completion, saveGeneration),
     );
-    _clearSaveQueue = saveTask.catchError((_) {});
+    _saveQueue = saveTask.catchError((_) {});
     await saveTask;
   }
 
@@ -198,13 +198,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    final priorResult = _progress.resultFor(completion.stage.id);
     final progress = _progress.recordResult(
       completion.stage.id,
       completion.result,
     );
-    // recordResult returns the same instance (`this`) when the new result is
-    // not an improvement, so identity (not equality) signals "nothing to save".
-    if (identical(progress, _progress)) {
+    // recordResult returns the same instance when the new result is not an
+    // improvement; compare the stored result for the stage (via StageResult.==)
+    // so this no-op check survives a future recordResult implementation that
+    // always allocates a fresh CampaignProgress.
+    if (progress.resultFor(completion.stage.id) == priorResult) {
       return;
     }
 
@@ -224,7 +227,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     if (saveGeneration != _progressGeneration) {
-      await _resetStoreAfterStaleClearSave(store);
+      await _resetStoreAfterStaleSave(store);
       return;
     }
 
@@ -304,9 +307,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
-  Future<void> _resetStoreAfterStaleClearSave(
-    CampaignProgressStore store,
-  ) async {
+  Future<void> _resetStoreAfterStaleSave(CampaignProgressStore store) async {
     try {
       await store.reset();
     } catch (_) {

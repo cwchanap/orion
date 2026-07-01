@@ -46,7 +46,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   final ValueChanged<StageCompletion>? onStageWon;
   final VoidCallback? onReturnToMap;
   final GameSession _session;
-  StageCompletion? _stageCompletion;
 
   late final ValueNotifier<GameSnapshot> stateNotifier = ValueNotifier(
     _session.snapshot(),
@@ -88,7 +87,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   double get speedMultiplier => _speedMultiplier;
   bool get autoStartEnabled => _autoStartEnabled;
   double? get autoStartCountdownRemaining => _autoStartCountdownRemaining;
-  StageCompletion? get stageCompletion => _stageCompletion;
 
   @override
   Future<void> onLoad() async {
@@ -230,7 +228,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _nextEnemyId = 1;
     _clearSelection();
     _session.restart();
-    _stageCompletion = null;
     _resetPacing();
     _layoutBoardIfReady();
     _publishSnapshot();
@@ -591,7 +588,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         stage: stage,
         result: StageResult.fromVictoryBaseHealth(_session.baseHealth),
       );
-      _stageCompletion = completion;
     }
     _layoutBoardIfReady();
     _publishSnapshot();
