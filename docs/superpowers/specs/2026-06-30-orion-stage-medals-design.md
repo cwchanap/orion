@@ -101,6 +101,8 @@ Decode behavior:
 
 The codec intentionally does not migrate the old version 1 `clearedStageIds` shape.
 
+Decode trusts the stored `medal` and does **not** re-derive it from `bestBaseHealth`. This decouples persisted state from the current `GameBalance.silverMedalThreshold`: a future threshold bump will not silently drop older silver saves whose `bestBaseHealth` falls below the new cutoff. The range check on `bestBaseHealth` still guards against corrupt values; only the medal-to-health relationship is no longer re-validated on load.
+
 ## Game Flow
 
 On victory, `OrionDefenseGame` should report a stage completion payload instead of only a `StageDefinition`.

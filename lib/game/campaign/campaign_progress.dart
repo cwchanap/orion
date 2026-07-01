@@ -94,12 +94,13 @@ class StageResult {
       return null;
     }
 
-    final result = StageResult.fromVictoryBaseHealth(rawBaseHealth);
-    if (result.medal != medal) {
-      return null;
-    }
-
-    return result;
+    // Preserve the stored medal rather than re-deriving it from
+    // `bestBaseHealth`. Re-deriving would couple persisted state to the current
+    // `GameBalance.silverMedalThreshold`, so a future threshold bump would
+    // silently drop older silver saves whose `bestBaseHealth` falls below the
+    // new cutoff. Trusting the stored medal keeps saves stable across tuning
+    // changes; the range check above still guards against corrupt values.
+    return StageResult(medal: medal, bestBaseHealth: rawBaseHealth);
   }
 
   @override

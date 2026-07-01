@@ -84,10 +84,28 @@ void main() {
 }
 ''', knownStages: OrionCampaign.stages);
 
-      expect(decoded.bestResultsByStageId.keys, {'outpost-alpha'});
+      // `missing` is an unknown stage id; `nebula-relay` has an unknown medal;
+      // `asteroid-foundry` has an out-of-range `bestBaseHealth`. The remaining
+      // entries are preserved as-is — `salvage-rift` and `aurora-gate` carry
+      // medals that no longer match what `bestBaseHealth` would derive under
+      // the current threshold, but stored medals are trusted across tuning
+      // changes.
+      expect(decoded.bestResultsByStageId.keys, {
+        'outpost-alpha',
+        'salvage-rift',
+        'aurora-gate',
+      });
       expect(
         decoded.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      expect(
+        decoded.resultFor('salvage-rift'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 1),
+      );
+      expect(
+        decoded.resultFor('aurora-gate'),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 20),
       );
     });
 
