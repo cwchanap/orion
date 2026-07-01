@@ -94,7 +94,12 @@ class StageResult {
       return null;
     }
 
-    return StageResult(medal: medal, bestBaseHealth: rawBaseHealth);
+    final result = StageResult.fromVictoryBaseHealth(rawBaseHealth);
+    if (result.medal != medal) {
+      return null;
+    }
+
+    return result;
   }
 
   @override

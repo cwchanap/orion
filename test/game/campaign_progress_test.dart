@@ -78,6 +78,18 @@ void main() {
         StageResult.fromJson({'medal': 'platinum', 'bestBaseHealth': 12}),
         isNull,
       );
+      expect(
+        StageResult.fromJson({'medal': 'gold', 'bestBaseHealth': 19}),
+        isNull,
+      );
+      expect(
+        StageResult.fromJson({'medal': 'silver', 'bestBaseHealth': 9}),
+        isNull,
+      );
+      expect(
+        StageResult.fromJson({'medal': 'clear', 'bestBaseHealth': 10}),
+        isNull,
+      );
     });
   });
 

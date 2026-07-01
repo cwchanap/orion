@@ -390,6 +390,7 @@ void main() {
     tester,
   ) async {
     final store = _TestCampaignProgressStore(
+      saveError: StateError('save failed'),
       progress: CampaignProgress(
         bestResultsByStageId: {
           'outpost-alpha': const StageResult(
@@ -426,6 +427,8 @@ void main() {
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
+    expect(store.saveCalls, 0);
+    expect(find.text('Could not save campaign progress.'), findsNothing);
   });
 
   testWidgets('failed reset does not let pending clear save reset progress', (
@@ -686,6 +689,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
   final List<Object?> resetResults;
   final List<Completer<void>> saveCompletions = [];
   CampaignProgress progress;
+  int saveCalls = 0;
   int resetCalls = 0;
 
   @override
@@ -699,6 +703,8 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
 
   @override
   Future<void> save(CampaignProgress progress) async {
+    saveCalls += 1;
+
     if (delaySaves) {
       final completer = Completer<void>();
       saveCompletions.add(completer);

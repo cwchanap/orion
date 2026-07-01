@@ -202,6 +202,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
       completion.stage.id,
       completion.result,
     );
+    if (identical(progress, _progress)) {
+      return;
+    }
+
     try {
       await store.save(progress);
     } catch (_) {
