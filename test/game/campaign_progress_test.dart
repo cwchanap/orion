@@ -4,6 +4,83 @@ import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
 
 void main() {
+  group('StageResult', () {
+    test('calculates medal thresholds from victory base health', () {
+      expect(
+        StageResult.fromVictoryBaseHealth(GameBalance.initialBaseHealth),
+        const StageResult(
+          medal: StageMedal.gold,
+          bestBaseHealth: GameBalance.initialBaseHealth,
+        ),
+      );
+      expect(
+        StageResult.fromVictoryBaseHealth(10),
+        const StageResult(medal: StageMedal.silver, bestBaseHealth: 10),
+      );
+      expect(
+        StageResult.fromVictoryBaseHealth(9),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 9),
+      );
+    });
+
+    test('clamps victory base health into the supported range', () {
+      expect(
+        StageResult.fromVictoryBaseHealth(GameBalance.initialBaseHealth + 1),
+        const StageResult(
+          medal: StageMedal.gold,
+          bestBaseHealth: GameBalance.initialBaseHealth,
+        ),
+      );
+      expect(
+        StageResult.fromVictoryBaseHealth(-1),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 0),
+      );
+    });
+
+    test('compares by medal first and base health second', () {
+      const clearNine = StageResult(medal: StageMedal.clear, bestBaseHealth: 9);
+      const silverTen = StageResult(
+        medal: StageMedal.silver,
+        bestBaseHealth: 10,
+      );
+      const silverFourteen = StageResult(
+        medal: StageMedal.silver,
+        bestBaseHealth: 14,
+      );
+      const goldTwenty = StageResult(
+        medal: StageMedal.gold,
+        bestBaseHealth: 20,
+      );
+
+      expect(clearNine.isBetterThan(null), isTrue);
+      expect(silverTen.isBetterThan(clearNine), isTrue);
+      expect(silverFourteen.isBetterThan(silverTen), isTrue);
+      expect(silverTen.isBetterThan(silverFourteen), isFalse);
+      expect(goldTwenty.isBetterThan(silverFourteen), isTrue);
+      expect(silverFourteen.isBetterThan(goldTwenty), isFalse);
+    });
+
+    test('serializes and rejects invalid payloads', () {
+      const result = StageResult(medal: StageMedal.silver, bestBaseHealth: 12);
+
+      expect(StageMedal.silver.rank, 2);
+      expect(StageMedal.silver.label, 'Silver');
+      expect(StageMedal.silver.serializedName, 'silver');
+      expect(StageMedal.fromSerializedName('silver'), StageMedal.silver);
+      expect(StageMedal.fromSerializedName('platinum'), isNull);
+      expect(result.toJson(), {'medal': 'silver', 'bestBaseHealth': 12});
+      expect(StageResult.fromJson(result.toJson()), result);
+      expect(
+        StageResult.fromJson({'medal': 'silver', 'bestBaseHealth': 21}),
+        isNull,
+      );
+      expect(
+        StageResult.fromJson({'medal': 'platinum', 'bestBaseHealth': 12}),
+        isNull,
+      );
+    });
+  });
+
   group('CampaignProgress', () {
     final stages = [
       _stage(id: 'stage-1', mainPathOrder: 1),
@@ -19,123 +96,195 @@ void main() {
       final progress = CampaignProgress();
 
       expect(progress.isCleared('stage-1'), isFalse);
+      expect(progress.resultFor('stage-1'), isNull);
       expect(progress.isUnlocked(stages[0]), isTrue);
       expect(progress.isUnlocked(stages[1]), isFalse);
       expect(progress.statusFor(stages[0]), StageProgressStatus.unlocked);
       expect(progress.statusFor(stages[1]), StageProgressStatus.locked);
     });
 
-    test('unlocks main path and side stages from cleared milestones', () {
+    test('unlocks main path and side stages from completed results', () {
       final progress = CampaignProgress(
-        clearedStageIds: {'stage-1', 'stage-2', 'stage-3', 'stage-4'},
+        bestResultsByStageId: {
+          'stage-1': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 5,
+          ),
+          'stage-2': const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 12,
+          ),
+          'stage-3': const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+          'stage-4': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 3,
+          ),
+        },
       );
 
       expect(progress.isUnlocked(stages[4]), isTrue);
       expect(progress.isUnlocked(stages[5]), isTrue);
       expect(progress.isUnlocked(stages[6]), isTrue);
       expect(progress.statusFor(stages[0]), StageProgressStatus.cleared);
+      expect(progress.resultFor('stage-2')!.medal, StageMedal.silver);
     });
 
-    test('completes campaign when all main stages are cleared', () {
-      final withoutSideStages = CampaignProgress(
-        clearedStageIds: {
-          'stage-1',
-          'stage-2',
-          'stage-3',
-          'stage-4',
-          'stage-5',
-        },
-      );
-
-      expect(withoutSideStages.isCampaignComplete(stages), isTrue);
-    });
-
-    test('completes campaign from a non-list iterable of main stages', () {
+    test('completes campaign when all main stages have results', () {
       final progress = CampaignProgress(
-        clearedStageIds: {
-          'stage-1',
-          'stage-2',
-          'stage-3',
-          'stage-4',
-          'stage-5',
+        bestResultsByStageId: {
+          for (final id in [
+            'stage-1',
+            'stage-2',
+            'stage-3',
+            'stage-4',
+            'stage-5',
+          ])
+            id: const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
         },
       );
 
+      expect(progress.isCampaignComplete(stages), isTrue);
       expect(
         progress.isCampaignComplete(stages.where((stage) => stage.isMainPath)),
         isTrue,
       );
     });
 
-    test('incomplete main path returns false', () {
+    test('incomplete, empty, and side-only collections are not complete', () {
       final progress = CampaignProgress(
-        clearedStageIds: {'stage-1', 'stage-2', 'stage-3', 'stage-4'},
+        bestResultsByStageId: {
+          'stage-1': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+        },
+      );
+      final sideProgress = CampaignProgress(
+        bestResultsByStageId: {
+          'side-only': const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+        },
       );
 
       expect(progress.isCampaignComplete(stages), isFalse);
-    });
-
-    test('empty stage collection returns false', () {
-      final progress = CampaignProgress();
-
       expect(progress.isCampaignComplete(const <StageDefinition>[]), isFalse);
-    });
-
-    test('side-only stage collection returns false even when cleared', () {
-      final sideStage = _stage(id: 'side-only', isMainPath: false);
-      final progress = CampaignProgress(clearedStageIds: {'side-only'});
-
-      expect(progress.isCampaignComplete([sideStage]), isFalse);
-    });
-
-    test('markCleared returns normalized immutable progress', () {
-      final progress = CampaignProgress(clearedStageIds: {'stage-1'});
-
-      final updated = progress.markCleared('stage-2');
-
-      expect(updated.clearedStageIds, {'stage-1', 'stage-2'});
-      expect(progress.clearedStageIds, {'stage-1'});
       expect(
-        () => updated.clearedStageIds.add('stage-3'),
-        throwsUnsupportedError,
+        sideProgress.isCampaignComplete([
+          _stage(id: 'side-only', isMainPath: false),
+        ]),
+        isFalse,
       );
     });
 
-    test('withoutUnknownStages filters unknown ids', () {
+    test('recordResult improves but never downgrades a saved result', () {
       final progress = CampaignProgress(
-        clearedStageIds: {'stage-1', 'side-a', 'unknown-stage'},
+        bestResultsByStageId: {
+          'stage-1': const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 10,
+          ),
+        },
+      );
+
+      final worse = progress.recordResult(
+        'stage-1',
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 9),
+      );
+      final sameMedalBetter = progress.recordResult(
+        'stage-1',
+        const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      final betterMedal = sameMedalBetter.recordResult(
+        'stage-1',
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+
+      expect(worse.resultFor('stage-1'), progress.resultFor('stage-1'));
+      expect(
+        sameMedalBetter.resultFor('stage-1'),
+        const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      expect(
+        betterMedal.resultFor('stage-1'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+    });
+
+    test('withoutUnknownStages filters unknown results', () {
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          'stage-1': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+          'side-a': const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 11,
+          ),
+          'unknown-stage': const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+        },
       );
 
       final filtered = progress.withoutUnknownStages(stages.take(2));
 
-      expect(filtered.clearedStageIds, {'stage-1'});
-      expect(progress.clearedStageIds, {'stage-1', 'side-a', 'unknown-stage'});
+      expect(filtered.bestResultsByStageId.keys, {'stage-1'});
+      expect(progress.bestResultsByStageId.keys, {
+        'stage-1',
+        'side-a',
+        'unknown-stage',
+      });
       expect(
-        () => filtered.clearedStageIds.add('stage-2'),
+        () => filtered.bestResultsByStageId['stage-2'] = const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
         throwsUnsupportedError,
       );
     });
 
     test('constructor defensively copies mutable input', () {
-      final clearedStageIds = {'stage-1'};
-      final progress = CampaignProgress(clearedStageIds: clearedStageIds);
+      final results = {
+        'stage-1': const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+      };
+      final progress = CampaignProgress(bestResultsByStageId: results);
 
-      clearedStageIds.add('stage-2');
+      results['stage-2'] = const StageResult(
+        medal: StageMedal.gold,
+        bestBaseHealth: 20,
+      );
 
-      expect(progress.clearedStageIds, {'stage-1'});
+      expect(progress.bestResultsByStageId.keys, {'stage-1'});
       expect(progress.isCleared('stage-2'), isFalse);
       expect(
-        () => progress.clearedStageIds.add('stage-3'),
+        () => progress.bestResultsByStageId.clear(),
         throwsUnsupportedError,
       );
     });
 
-    test('cleared stage with unmet dependencies is not unlocked', () {
+    test('cleared stage with unmet dependencies is still completed', () {
       final dependentStage = _stage(
         id: 'dependent-stage',
         dependencies: ['missing-stage'],
       );
-      final progress = CampaignProgress(clearedStageIds: {'dependent-stage'});
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          'dependent-stage': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+        },
+      );
 
       expect(progress.isUnlocked(dependentStage), isFalse);
       expect(progress.statusFor(dependentStage), StageProgressStatus.cleared);
