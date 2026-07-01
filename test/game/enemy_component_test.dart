@@ -1,6 +1,7 @@
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/components/enemy_component.dart';
+import 'package:orion/game/components/enemy_overlay.dart';
 import 'package:orion/game/models/game_models.dart';
 
 void main() {
@@ -151,6 +152,221 @@ void main() {
       enemy.update(1);
 
       expect(enemy.health, 80);
+    });
+
+    group('EnemyOverlayState', () {
+      test('full-health traitless enemies do not render normal overlays', () {
+        final state = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: false,
+            health: 100,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: {},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+
+        expect(state.shouldRender, isFalse);
+        expect(state.showHealthBar, isFalse);
+        expect(state.showShieldBar, isFalse);
+        expect(state.badges, isEmpty);
+      });
+
+      test('damaged enemies expose clamped health ratio', () {
+        final damaged = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: false,
+            health: 25,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: {},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+        final overhealed = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: false,
+            health: 125,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: {},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+
+        expect(damaged.shouldRender, isTrue);
+        expect(damaged.healthRatio, 0.25);
+        expect(damaged.showHealthBar, isTrue);
+        expect(overhealed.healthRatio, 1);
+      });
+
+      test('shielded enemies expose shield state separately from health', () {
+        final state = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: false,
+            health: 100,
+            maxHealth: 100,
+            shield: 10,
+            maxShield: 40,
+            traits: {EnemyTrait.shielded},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+
+        expect(state.shouldRender, isTrue);
+        expect(state.healthRatio, 1);
+        expect(state.shieldRatio, 0.25);
+        expect(state.showHealthBar, isTrue);
+        expect(state.showShieldBar, isTrue);
+        expect(state.badges, [EnemyOverlayBadge.shielded]);
+      });
+
+      test('resolved enemies suppress overlays even when inspected', () {
+        final state = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: true,
+            isInspected: true,
+            health: 25,
+            maxHealth: 100,
+            shield: 10,
+            maxShield: 40,
+            traits: {EnemyTrait.armored, EnemyTrait.regen},
+            isSlowed: true,
+            isCorroded: true,
+          ),
+        );
+
+        expect(state.shouldRender, isFalse);
+        expect(state.isExpanded, isFalse);
+        expect(state.showHealthBar, isFalse);
+        expect(state.showShieldBar, isFalse);
+        expect(state.badges, isEmpty);
+      });
+
+      test('inspected enemies expand even when not otherwise notable', () {
+        final state = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: true,
+            health: 100,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: {},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+
+        expect(state.shouldRender, isTrue);
+        expect(state.isExpanded, isTrue);
+        expect(state.showHealthBar, isTrue);
+        expect(state.showShieldBar, isFalse);
+      });
+
+      test('badges are ordered and capped by overlay mode', () {
+        const data = EnemyOverlayData(
+          isResolved: false,
+          health: 50,
+          maxHealth: 100,
+          shield: 10,
+          maxShield: 40,
+          traits: {
+            EnemyTrait.shielded,
+            EnemyTrait.armored,
+            EnemyTrait.regen,
+            EnemyTrait.heavy,
+            EnemyTrait.swarm,
+          },
+          isSlowed: true,
+          isCorroded: true,
+        );
+
+        final normal = EnemyOverlayState.fromData(
+          data.copyWith(isInspected: false),
+        );
+        final expanded = EnemyOverlayState.fromData(
+          data.copyWith(isInspected: true),
+        );
+
+        expect(normal.badges, [
+          EnemyOverlayBadge.corroded,
+          EnemyOverlayBadge.slowed,
+        ]);
+        expect(expanded.badges, [
+          EnemyOverlayBadge.corroded,
+          EnemyOverlayBadge.slowed,
+          EnemyOverlayBadge.shielded,
+          EnemyOverlayBadge.armored,
+        ]);
+      });
+
+      test('corroded regen enemies keep both badges in priority order', () {
+        final state = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: true,
+            health: 80,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: {EnemyTrait.regen},
+            isSlowed: false,
+            isCorroded: true,
+          ),
+        );
+
+        expect(state.badges, [
+          EnemyOverlayBadge.corroded,
+          EnemyOverlayBadge.regen,
+        ]);
+      });
+
+      test('swarm-only enemies are not automatically notable', () {
+        final normal = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: false,
+            health: 100,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: {EnemyTrait.swarm},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+        final inspected = EnemyOverlayState.fromData(
+          const EnemyOverlayData(
+            isResolved: false,
+            isInspected: true,
+            health: 100,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: {EnemyTrait.swarm},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+
+        expect(normal.shouldRender, isFalse);
+        expect(normal.badges, isEmpty);
+        expect(inspected.shouldRender, isTrue);
+        expect(inspected.badges, [EnemyOverlayBadge.swarm]);
+      });
     });
   });
 }
