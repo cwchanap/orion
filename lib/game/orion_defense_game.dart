@@ -10,6 +10,7 @@ import 'assets/game_path_tiles.dart';
 import 'assets/game_sprite_sheet.dart';
 import 'assets/game_tower_variety_sheet.dart';
 import 'assets/game_terrain.dart';
+import 'campaign/campaign_progress.dart';
 import 'campaign/orion_campaign.dart';
 import 'campaign/stage_definition.dart';
 import 'components/board_component.dart';
@@ -24,6 +25,13 @@ import 'rules/combat_effects.dart';
 import 'rules/game_session.dart';
 import 'rules/tower_targeting.dart';
 
+class StageCompletion {
+  const StageCompletion({required this.stage, required this.result});
+
+  final StageDefinition stage;
+  final StageResult result;
+}
+
 class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
@@ -35,9 +43,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   final StageDefinition stage;
-  final ValueChanged<StageDefinition>? onStageWon;
+  final ValueChanged<StageCompletion>? onStageWon;
   final VoidCallback? onReturnToMap;
   final GameSession _session;
+  StageCompletion? _stageCompletion;
 
   late final ValueNotifier<GameSnapshot> stateNotifier = ValueNotifier(
     _session.snapshot(),
@@ -79,6 +88,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   double get speedMultiplier => _speedMultiplier;
   bool get autoStartEnabled => _autoStartEnabled;
   double? get autoStartCountdownRemaining => _autoStartCountdownRemaining;
+  StageCompletion? get stageCompletion => _stageCompletion;
 
   @override
   Future<void> onLoad() async {
@@ -220,6 +230,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _nextEnemyId = 1;
     _clearSelection();
     _session.restart();
+    _stageCompletion = null;
     _resetPacing();
     _layoutBoardIfReady();
     _publishSnapshot();
@@ -574,10 +585,18 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     } else {
       _startAutoStartCountdownIfNeeded();
     }
+    StageCompletion? completion;
+    if (didWin) {
+      completion = StageCompletion(
+        stage: stage,
+        result: StageResult.fromVictoryBaseHealth(_session.baseHealth),
+      );
+      _stageCompletion = completion;
+    }
     _layoutBoardIfReady();
     _publishSnapshot();
-    if (didWin) {
-      onStageWon?.call(stage);
+    if (completion != null) {
+      onStageWon?.call(completion);
     }
   }
 

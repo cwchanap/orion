@@ -3,6 +3,7 @@ import 'package:flame/events.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/projectile_component.dart';
@@ -119,7 +120,7 @@ void main() {
       );
     });
 
-    test('calls onStageWon after a wave clear publishes won phase', () {
+    test('calls onStageWon with a completion result after won snapshot', () {
       final stage = StageDefinition(
         id: 'one-wave-stage',
         name: 'One Wave Stage',
@@ -133,15 +134,21 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final wonStages = <StageDefinition>[];
-      final game = OrionDefenseGame(stage: stage, onStageWon: wonStages.add);
+      final completions = <StageCompletion>[];
+      final game = OrionDefenseGame(stage: stage, onStageWon: completions.add);
 
       game.startWave();
       game.onGameResize(Vector2(800, 1200));
       game.update(0);
 
-      expect(wonStages, [stage]);
       expect(game.snapshot.phase, GamePhase.won);
+      expect(completions, hasLength(1));
+      expect(completions.single.stage, stage);
+      expect(
+        completions.single.result,
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      expect(game.stageCompletion, completions.single);
     });
 
     test(
