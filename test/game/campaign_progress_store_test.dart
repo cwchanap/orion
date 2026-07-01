@@ -6,9 +6,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('CampaignProgressCodec', () {
-    test('encodes and decodes versioned progress', () {
+    test('encodes and decodes versioned stage results', () {
       final progress = CampaignProgress(
-        clearedStageIds: {'outpost-alpha', 'nebula-relay'},
+        bestResultsByStageId: {
+          'outpost-alpha': const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+          'nebula-relay': const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        },
       );
 
       final encoded = CampaignProgressCodec.encode(progress);
@@ -17,16 +26,43 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
 
-      expect(decoded.clearedStageIds, {'outpost-alpha', 'nebula-relay'});
+      expect(
+        decoded.resultFor('outpost-alpha'),
+        progress.resultFor('outpost-alpha'),
+      );
+      expect(
+        decoded.resultFor('nebula-relay'),
+        progress.resultFor('nebula-relay'),
+      );
     });
 
-    test('ignores unknown and duplicate stage ids', () {
+    test('ignores unknown stage ids and invalid result entries', () {
+      final decoded = CampaignProgressCodec.decode('''
+{
+  "version": 2,
+  "stageResults": {
+    "outpost-alpha": {"medal": "gold", "bestBaseHealth": 20},
+    "missing": {"medal": "gold", "bestBaseHealth": 20},
+    "nebula-relay": {"medal": "diamond", "bestBaseHealth": 18},
+    "asteroid-foundry": {"medal": "silver", "bestBaseHealth": 99}
+  }
+}
+''', knownStages: OrionCampaign.stages);
+
+      expect(decoded.bestResultsByStageId.keys, {'outpost-alpha'});
+      expect(
+        decoded.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+    });
+
+    test('unsupported version one cleared ids decode empty', () {
       final decoded = CampaignProgressCodec.decode(
-        '{"version":1,"clearedStageIds":["outpost-alpha","missing","outpost-alpha"]}',
+        '{"version":1,"clearedStageIds":["outpost-alpha"]}',
         knownStages: OrionCampaign.stages,
       );
 
-      expect(decoded.clearedStageIds, {'outpost-alpha'});
+      expect(decoded.bestResultsByStageId, isEmpty);
     });
 
     test('falls back to empty progress for corrupt data', () {
@@ -35,7 +71,7 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
 
-      expect(decoded.clearedStageIds, isEmpty);
+      expect(decoded.bestResultsByStageId, isEmpty);
     });
 
     test('in-memory store saves, loads, and resets progress', () async {
@@ -43,11 +79,23 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
 
-      await store.save(CampaignProgress(clearedStageIds: {'outpost-alpha'}));
-      expect((await store.load()).clearedStageIds, {'outpost-alpha'});
+      await store.save(
+        CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 4,
+            ),
+          },
+        ),
+      );
+      expect(
+        (await store.load()).resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 4),
+      );
 
       await store.reset();
-      expect((await store.load()).clearedStageIds, isEmpty);
+      expect((await store.load()).bestResultsByStageId, isEmpty);
     });
   });
 
@@ -66,16 +114,35 @@ void main() {
         key: key,
       );
 
-      await store.save(CampaignProgress(clearedStageIds: {'outpost-alpha'}));
+      await store.save(
+        CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 4,
+            ),
+          },
+        ),
+      );
 
       expect(preferences.getString(key), isNotNull);
-      expect((await store.load()).clearedStageIds, {'outpost-alpha'});
+      expect(
+        (await store.load()).resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 4),
+      );
     });
 
     test('reset clears progress', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         key: CampaignProgressCodec.encode(
-          CampaignProgress(clearedStageIds: {'outpost-alpha'}),
+          CampaignProgress(
+            bestResultsByStageId: {
+              'outpost-alpha': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 4,
+              ),
+            },
+          ),
         ),
       });
       final preferences = await SharedPreferences.getInstance();
@@ -88,7 +155,7 @@ void main() {
       await store.reset();
 
       expect(preferences.getString(key), isNull);
-      expect((await store.load()).clearedStageIds, isEmpty);
+      expect((await store.load()).bestResultsByStageId, isEmpty);
     });
 
     test('malformed stored state falls back to empty progress', () async {
@@ -100,7 +167,7 @@ void main() {
         key: key,
       );
 
-      expect((await store.load()).clearedStageIds, isEmpty);
+      expect((await store.load()).bestResultsByStageId, isEmpty);
     });
   });
 }

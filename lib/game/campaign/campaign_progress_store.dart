@@ -15,8 +15,13 @@ class CampaignProgressCodec {
   const CampaignProgressCodec._();
 
   static String encode(CampaignProgress progress) {
-    final ids = progress.clearedStageIds.toList()..sort();
-    return jsonEncode({'version': 1, 'clearedStageIds': ids});
+    final stageIds = progress.bestResultsByStageId.keys.toList()..sort();
+    final stageResults = <String, Object>{};
+    for (final stageId in stageIds) {
+      stageResults[stageId] = progress.bestResultsByStageId[stageId]!.toJson();
+    }
+
+    return jsonEncode({'version': 2, 'stageResults': stageResults});
   }
 
   static CampaignProgress decode(
@@ -29,18 +34,31 @@ class CampaignProgressCodec {
 
     try {
       final decoded = jsonDecode(source);
-      if (decoded is! Map<String, Object?> || decoded['version'] != 1) {
+      if (decoded is! Map<String, Object?> || decoded['version'] != 2) {
         return CampaignProgress();
       }
 
-      final rawIds = decoded['clearedStageIds'];
-      if (rawIds is! List) {
+      final rawResults = decoded['stageResults'];
+      if (rawResults is! Map<String, Object?>) {
         return CampaignProgress();
       }
 
       final knownIds = knownStages.map((stage) => stage.id).toSet();
-      final ids = rawIds.whereType<String>().where(knownIds.contains).toSet();
-      return CampaignProgress(clearedStageIds: ids);
+      final results = <String, StageResult>{};
+      for (final entry in rawResults.entries) {
+        if (!knownIds.contains(entry.key)) {
+          continue;
+        }
+
+        final result = StageResult.fromJson(entry.value);
+        if (result == null) {
+          continue;
+        }
+
+        results[entry.key] = result;
+      }
+
+      return CampaignProgress(bestResultsByStageId: results);
     } on FormatException {
       return CampaignProgress();
     } on TypeError {
