@@ -155,9 +155,52 @@ void main() {
     });
 
     group('EnemyOverlayState', () {
+      test('overlay data defensively copies traits', () {
+        final traits = {EnemyTrait.armored};
+        final data = EnemyOverlayData(
+          isResolved: false,
+          health: 100,
+          maxHealth: 100,
+          shield: 0,
+          maxShield: 0,
+          traits: traits,
+          isSlowed: false,
+          isCorroded: false,
+        );
+
+        traits.add(EnemyTrait.regen);
+
+        expect(data.traits, {EnemyTrait.armored});
+        expect(
+          () => data.traits.add(EnemyTrait.shielded),
+          throwsUnsupportedError,
+        );
+      });
+
+      test('overlay state defensively copies badges', () {
+        final badges = [EnemyOverlayBadge.armored];
+        final state = EnemyOverlayState(
+          shouldRender: true,
+          isExpanded: true,
+          healthRatio: 1,
+          shieldRatio: 0,
+          showHealthBar: true,
+          showShieldBar: false,
+          badges: badges,
+        );
+
+        badges.add(EnemyOverlayBadge.regen);
+
+        expect(state.badges, [EnemyOverlayBadge.armored]);
+        expect(
+          () => state.badges.add(EnemyOverlayBadge.shielded),
+          throwsUnsupportedError,
+        );
+      });
+
       test('full-health traitless enemies do not render normal overlays', () {
         final state = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: false,
             health: 100,
@@ -178,7 +221,7 @@ void main() {
 
       test('damaged enemies expose clamped health ratio', () {
         final damaged = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: false,
             health: 25,
@@ -191,7 +234,7 @@ void main() {
           ),
         );
         final overhealed = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: false,
             health: 125,
@@ -212,7 +255,7 @@ void main() {
 
       test('shielded enemies expose shield state separately from health', () {
         final state = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: false,
             health: 100,
@@ -235,7 +278,7 @@ void main() {
 
       test('resolved enemies suppress overlays even when inspected', () {
         final state = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: true,
             isInspected: true,
             health: 25,
@@ -257,7 +300,7 @@ void main() {
 
       test('inspected enemies expand even when not otherwise notable', () {
         final state = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: true,
             health: 100,
@@ -277,7 +320,7 @@ void main() {
       });
 
       test('badges are ordered and capped by overlay mode', () {
-        const data = EnemyOverlayData(
+        final data = EnemyOverlayData(
           isResolved: false,
           health: 50,
           maxHealth: 100,
@@ -315,7 +358,7 @@ void main() {
 
       test('corroded regen enemies keep both badges in priority order', () {
         final state = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: true,
             health: 80,
@@ -336,7 +379,7 @@ void main() {
 
       test('swarm-only enemies are not automatically notable', () {
         final normal = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: false,
             health: 100,
@@ -349,7 +392,7 @@ void main() {
           ),
         );
         final inspected = EnemyOverlayState.fromData(
-          const EnemyOverlayData(
+          EnemyOverlayData(
             isResolved: false,
             isInspected: true,
             health: 100,
