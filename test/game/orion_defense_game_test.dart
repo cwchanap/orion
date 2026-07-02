@@ -284,6 +284,84 @@ void main() {
       expect(game.snapshot.isPaused, isTrue);
     });
 
+    test('tapping an active enemy marks it inspected', () {
+      final game = OrionDefenseGame(stage: _twoEnemyImmediateSpawnStage());
+
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.05);
+      game.processLifecycleEvents();
+
+      final enemies = game.children.whereType<EnemyComponent>().toList();
+      expect(enemies, hasLength(2));
+      enemies[0].position = Vector2(120, 200);
+      enemies[1].position = Vector2(420, 200);
+
+      _tapPoint(game, enemies[0].position);
+
+      expect(game.inspectedEnemyId, enemies[0].enemyId);
+      expect(enemies[0].isInspected, isTrue);
+      expect(enemies[1].isInspected, isFalse);
+      expect(enemies[0].overlayState.isExpanded, isTrue);
+    });
+
+    test('tapping another active enemy switches inspection', () {
+      final game = OrionDefenseGame(stage: _twoEnemyImmediateSpawnStage());
+
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.05);
+      game.processLifecycleEvents();
+
+      final enemies = game.children.whereType<EnemyComponent>().toList();
+      enemies[0].position = Vector2(120, 200);
+      enemies[1].position = Vector2(420, 200);
+
+      _tapPoint(game, enemies[0].position);
+      _tapPoint(game, enemies[1].position);
+
+      expect(game.inspectedEnemyId, enemies[1].enemyId);
+      expect(enemies[0].isInspected, isFalse);
+      expect(enemies[1].isInspected, isTrue);
+    });
+
+    test('tapping away from enemies clears inspection', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      enemy.position = Vector2(120, 200);
+
+      _tapPoint(game, enemy.position);
+      _tapPoint(game, Vector2(700, 1100));
+
+      expect(game.inspectedEnemyId, isNull);
+      expect(enemy.isInspected, isFalse);
+    });
+
+    test('resolving the inspected enemy clears inspection', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      enemy.position = Vector2(120, 200);
+      _tapPoint(game, enemy.position);
+
+      enemy.applyDamage(1000);
+      game.processLifecycleEvents();
+
+      expect(game.inspectedEnemyId, isNull);
+      expect(enemy.isResolved, isTrue);
+    });
+
     test('3x speed accelerates real enemy progress compared with 1x', () {
       final oneXGame = OrionDefenseGame(stage: _singleEnemyStage());
       final threeXGame = OrionDefenseGame(stage: _singleEnemyStage());
@@ -455,6 +533,38 @@ StageDefinition _twoEnemyDelayedSpawnStage() {
   );
 }
 
+StageDefinition _twoEnemyImmediateSpawnStage() {
+  return StageDefinition(
+    id: 'two-enemy-immediate-spawn-stage',
+    name: 'Two Enemy Immediate Spawn Stage',
+    mapLabel: 'Immediate',
+    description: 'Stage with two enemies for inspection tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 2,
+            spawnInterval: 0.01,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 0,
+              baseDamage: 1,
+              goldReward: 0,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
 StageDefinition _lethalSingleEnemyStage() {
   return StageDefinition(
     id: 'lethal-single-enemy-stage',
@@ -493,4 +603,14 @@ void _tapCell(OrionDefenseGame game, GridPosition position) {
     boardOrigin: Offset.zero,
   );
   game.onTapDown(TapDownEvent(1, game, TapDownDetails(globalPosition: center)));
+}
+
+void _tapPoint(OrionDefenseGame game, Vector2 point) {
+  game.onTapDown(
+    TapDownEvent(
+      1,
+      game,
+      TapDownDetails(globalPosition: Offset(point.x, point.y)),
+    ),
+  );
 }
