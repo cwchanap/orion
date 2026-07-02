@@ -11,9 +11,33 @@ enum EnemyOverlayBadge {
 }
 
 class EnemyOverlayData {
-  const EnemyOverlayData({
+  factory EnemyOverlayData({
+    required bool isResolved,
+    bool isInspected = false,
+    required double health,
+    required double maxHealth,
+    required double shield,
+    required double maxShield,
+    required Set<EnemyTrait> traits,
+    required bool isSlowed,
+    required bool isCorroded,
+  }) {
+    return EnemyOverlayData._(
+      isResolved: isResolved,
+      isInspected: isInspected,
+      health: health,
+      maxHealth: maxHealth,
+      shield: shield,
+      maxShield: maxShield,
+      traits: Set.unmodifiable(traits),
+      isSlowed: isSlowed,
+      isCorroded: isCorroded,
+    );
+  }
+
+  const EnemyOverlayData._({
     required this.isResolved,
-    this.isInspected = false,
+    required this.isInspected,
     required this.health,
     required this.maxHealth,
     required this.shield,
@@ -59,7 +83,27 @@ class EnemyOverlayData {
 }
 
 class EnemyOverlayState {
-  const EnemyOverlayState({
+  factory EnemyOverlayState({
+    required bool shouldRender,
+    required bool isExpanded,
+    required double healthRatio,
+    required double shieldRatio,
+    required bool showHealthBar,
+    required bool showShieldBar,
+    required List<EnemyOverlayBadge> badges,
+  }) {
+    return EnemyOverlayState._(
+      shouldRender: shouldRender,
+      isExpanded: isExpanded,
+      healthRatio: healthRatio,
+      shieldRatio: shieldRatio,
+      showHealthBar: showHealthBar,
+      showShieldBar: showShieldBar,
+      badges: List.unmodifiable(badges),
+    );
+  }
+
+  const EnemyOverlayState._({
     required this.shouldRender,
     required this.isExpanded,
     required this.healthRatio,
@@ -82,7 +126,7 @@ class EnemyOverlayState {
 
   factory EnemyOverlayState.fromData(EnemyOverlayData data) {
     if (data.isResolved) {
-      return const EnemyOverlayState(
+      return const EnemyOverlayState._(
         shouldRender: false,
         isExpanded: false,
         healthRatio: 0,
@@ -119,7 +163,7 @@ class EnemyOverlayState {
         : const <EnemyOverlayBadge>[];
     final badgeLimit = data.isInspected ? expandedBadgeLimit : normalBadgeLimit;
 
-    return EnemyOverlayState(
+    return EnemyOverlayState._(
       shouldRender: shouldRender,
       isExpanded: data.isInspected,
       healthRatio: healthRatio,
