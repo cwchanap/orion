@@ -7,6 +7,7 @@ import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/combat_effects.dart';
+import '../rules/enemy_overlay_state.dart';
 import '../rules/tower_targeting.dart';
 import 'enemy_overlay.dart';
 

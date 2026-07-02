@@ -2,9 +2,12 @@ import 'dart:ui' as ui;
 
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/assets/game_sprite_sheet.dart';
+import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/enemy_overlay.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/enemy_overlay_state.dart';
 
 void main() {
   group('EnemyComponent', () {
@@ -315,6 +318,32 @@ void main() {
         );
       });
 
+      test('copyWith preserves fields not explicitly provided', () {
+        final original = EnemyOverlayData(
+          isResolved: false,
+          isInspected: true,
+          health: 50,
+          maxHealth: 100,
+          shield: 10,
+          maxShield: 40,
+          traits: {EnemyTrait.armored},
+          isSlowed: true,
+          isCorroded: false,
+        );
+
+        final copy = original.copyWith(health: 75);
+
+        expect(copy.isInspected, isTrue);
+        expect(copy.isResolved, isFalse);
+        expect(copy.health, 75);
+        expect(copy.maxHealth, 100);
+        expect(copy.shield, 10);
+        expect(copy.maxShield, 40);
+        expect(copy.traits, {EnemyTrait.armored});
+        expect(copy.isSlowed, isTrue);
+        expect(copy.isCorroded, isFalse);
+      });
+
       test('overlay state defensively copies badges', () {
         final badges = [EnemyOverlayBadge.armored];
         final state = EnemyOverlayState(
@@ -551,7 +580,7 @@ void main() {
     });
 
     group('EnemyOverlayRenderer', () {
-      test('overlay dimensions scale with enemy radius', () async {
+      test('overlay layout height scales linearly with enemy radius', () {
         final state = EnemyOverlayState(
           shouldRender: true,
           isExpanded: false,
@@ -561,60 +590,197 @@ void main() {
           showShieldBar: true,
           badges: [EnemyOverlayBadge.corroded, EnemyOverlayBadge.slowed],
         );
-        final renderer = EnemyOverlayRenderer();
 
-        final smallHeight = await _renderedOverlayHeight(
-          renderer: renderer,
-          state: state,
-          radius: 10,
-        );
-        final largeHeight = await _renderedOverlayHeight(
-          renderer: renderer,
-          state: state,
-          radius: 20,
+        final small = EnemyOverlayLayout.compute(state, 10);
+        final large = EnemyOverlayLayout.compute(state, 20);
+
+        expect(small.height, greaterThan(0));
+        expect(large.height, greaterThan(small.height));
+        expect(large.height / small.height, closeTo(2, 0.001));
+      });
+
+      test('overlay layout reports zero height when not rendering', () {
+        final state = EnemyOverlayState(
+          shouldRender: false,
+          isExpanded: false,
+          healthRatio: 0.5,
+          shieldRatio: 0.25,
+          showHealthBar: true,
+          showShieldBar: true,
+          badges: [EnemyOverlayBadge.corroded],
         );
 
-        expect(largeHeight / smallHeight, closeTo(2, 0.25));
+        final layout = EnemyOverlayLayout.compute(state, 20);
+
+        expect(layout.height, 0);
+        expect(layout.badgesY, isNull);
+        expect(layout.healthBarY, isNull);
+        expect(layout.shieldBarY, isNull);
+      });
+
+      test('overlay layout omits skipped elements', () {
+        final state = EnemyOverlayState(
+          shouldRender: true,
+          isExpanded: true,
+          healthRatio: 0.5,
+          shieldRatio: 0,
+          showHealthBar: true,
+          showShieldBar: false,
+          badges: [],
+        );
+
+        final layout = EnemyOverlayLayout.compute(state, 20);
+
+        expect(layout.badgesY, isNull);
+        expect(layout.healthBarY, isNotNull);
+        expect(layout.shieldBarY, isNull);
+        expect(layout.height, closeTo(layout.healthBarHeight, 0.001));
+      });
+
+      test(
+        'render with tower variety sheet uses sprites for indicator badges',
+        () async {
+          final sheet = GameTowerVarietySheet.fromImage(
+            await _blankImage(1024, 1024),
+          );
+          final state = EnemyOverlayState(
+            shouldRender: true,
+            isExpanded: true,
+            healthRatio: 0.5,
+            shieldRatio: 0.25,
+            showHealthBar: true,
+            showShieldBar: true,
+            badges: [
+              EnemyOverlayBadge.shielded,
+              EnemyOverlayBadge.armored,
+              EnemyOverlayBadge.regen,
+              EnemyOverlayBadge.corroded,
+              EnemyOverlayBadge.slowed,
+              EnemyOverlayBadge.heavy,
+              EnemyOverlayBadge.swarm,
+            ],
+          );
+          final renderer = EnemyOverlayRenderer();
+
+          expect(
+            () => _renderOverlayToCanvas(
+              renderer: renderer,
+              state: state,
+              radius: 20,
+              towerVarietySheet: sheet,
+            ),
+            returnsNormally,
+          );
+        },
+      );
+
+      test(
+        'render fallback shapes for all badge types without sheet',
+        () async {
+          for (final badge in EnemyOverlayBadge.values) {
+            final state = EnemyOverlayState(
+              shouldRender: true,
+              isExpanded: true,
+              healthRatio: 0.5,
+              shieldRatio: 0.25,
+              showHealthBar: true,
+              showShieldBar: true,
+              badges: [badge],
+            );
+            final renderer = EnemyOverlayRenderer();
+
+            expect(
+              () => _renderOverlayToCanvas(
+                renderer: renderer,
+                state: state,
+                radius: 20,
+              ),
+              returnsNormally,
+            );
+          }
+        },
+      );
+    });
+
+    group('EnemyComponent.render', () {
+      test(
+        'render draws sprite and overlay when sprite sheet is provided',
+        () async {
+          final spriteSheet = GameSpriteSheet.fromImage(
+            await _blankImage(1024, 768),
+          );
+          final enemy = EnemyComponent(
+            enemyId: 1,
+            stats: const EnemyStats(
+              health: 100,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 1,
+            ),
+            waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+            onKilled: (_) {},
+            onReachedBase: (_) {},
+            spriteSheet: spriteSheet,
+          );
+          enemy.setInspected(true);
+
+          expect(() => _renderEnemyToCanvas(enemy), returnsNormally);
+        },
+      );
+
+      test('render draws fallback circle and overlay without sprite sheet', () {
+        final enemy = EnemyComponent(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+          onKilled: (_) {},
+          onReachedBase: (_) {},
+        );
+        enemy.setInspected(true);
+
+        expect(() => _renderEnemyToCanvas(enemy), returnsNormally);
       });
     });
   });
 }
 
-Future<int> _renderedOverlayHeight({
+Future<ui.Image> _blankImage(int width, int height) async {
+  final recorder = ui.PictureRecorder();
+  ui.Canvas(recorder).drawRect(
+    ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+    ui.Paint()..color = const ui.Color(0xFFFFFFFF),
+  );
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width, height);
+  picture.dispose();
+  return image;
+}
+
+void _renderOverlayToCanvas({
   required EnemyOverlayRenderer renderer,
   required EnemyOverlayState state,
   required double radius,
-}) async {
-  const imageSize = 120;
+  GameTowerVarietySheet? towerVarietySheet,
+}) {
   final recorder = ui.PictureRecorder();
-  final canvas = ui.Canvas(recorder)..translate(40, 60);
+  final canvas = ui.Canvas(recorder)..translate(60, 80);
+  renderer.render(
+    canvas,
+    state: state,
+    radius: radius,
+    towerVarietySheet: towerVarietySheet,
+  );
+  recorder.endRecording().dispose();
+}
 
-  renderer.render(canvas, state: state, radius: radius);
-
-  final picture = recorder.endRecording();
-  final image = await picture.toImage(imageSize, imageSize);
-  final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-  picture.dispose();
-  image.dispose();
-
-  final data = bytes!;
-  var minY = imageSize;
-  var maxY = -1;
-
-  for (var y = 0; y < imageSize; y += 1) {
-    for (var x = 0; x < imageSize; x += 1) {
-      final alpha = data.getUint8(((y * imageSize) + x) * 4 + 3);
-      if (alpha == 0) {
-        continue;
-      }
-      if (y < minY) {
-        minY = y;
-      }
-      if (y > maxY) {
-        maxY = y;
-      }
-    }
-  }
-
-  return maxY - minY + 1;
+void _renderEnemyToCanvas(EnemyComponent enemy) {
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder)..translate(60, 80);
+  enemy.render(canvas);
+  recorder.endRecording().dispose();
 }
