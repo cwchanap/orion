@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/components/enemy_component.dart';
@@ -473,5 +475,72 @@ void main() {
         expect(inspected.badges, [EnemyOverlayBadge.swarm]);
       });
     });
+
+    group('EnemyOverlayRenderer', () {
+      test('overlay dimensions scale with enemy radius', () async {
+        final state = EnemyOverlayState(
+          shouldRender: true,
+          isExpanded: false,
+          healthRatio: 0.5,
+          shieldRatio: 0.25,
+          showHealthBar: true,
+          showShieldBar: true,
+          badges: [EnemyOverlayBadge.corroded, EnemyOverlayBadge.slowed],
+        );
+        final renderer = EnemyOverlayRenderer();
+
+        final smallHeight = await _renderedOverlayHeight(
+          renderer: renderer,
+          state: state,
+          radius: 10,
+        );
+        final largeHeight = await _renderedOverlayHeight(
+          renderer: renderer,
+          state: state,
+          radius: 20,
+        );
+
+        expect(largeHeight / smallHeight, closeTo(2, 0.25));
+      });
+    });
   });
+}
+
+Future<int> _renderedOverlayHeight({
+  required EnemyOverlayRenderer renderer,
+  required EnemyOverlayState state,
+  required double radius,
+}) async {
+  const imageSize = 120;
+  final recorder = ui.PictureRecorder();
+  final canvas = ui.Canvas(recorder)..translate(40, 60);
+
+  renderer.render(canvas, state: state, radius: radius);
+
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(imageSize, imageSize);
+  final bytes = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+  picture.dispose();
+  image.dispose();
+
+  final data = bytes!;
+  var minY = imageSize;
+  var maxY = -1;
+
+  for (var y = 0; y < imageSize; y += 1) {
+    for (var x = 0; x < imageSize; x += 1) {
+      final alpha = data.getUint8(((y * imageSize) + x) * 4 + 3);
+      if (alpha == 0) {
+        continue;
+      }
+      if (y < minY) {
+        minY = y;
+      }
+      if (y > maxY) {
+        maxY = y;
+      }
+    }
+  }
+
+  return maxY - minY + 1;
 }
