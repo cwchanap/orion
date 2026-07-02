@@ -4,9 +4,11 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 
 import '../assets/game_sprite_sheet.dart';
+import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/combat_effects.dart';
 import '../rules/tower_targeting.dart';
+import 'enemy_overlay.dart';
 
 typedef EnemyKilledCallback = void Function(EnemyComponent enemy);
 typedef EnemyReachedBaseCallback = void Function(EnemyComponent enemy);
@@ -19,6 +21,7 @@ class EnemyComponent extends CircleComponent {
     required this.onKilled,
     required this.onReachedBase,
     this.spriteSheet,
+    this.towerVarietySheet,
     double radius = 11,
     super.priority,
   }) : waypoints = List.unmodifiable(waypoints.map((point) => point.clone())),
@@ -40,10 +43,12 @@ class EnemyComponent extends CircleComponent {
   final EnemyKilledCallback onKilled;
   final EnemyReachedBaseCallback onReachedBase;
   final GameSpriteSheet? spriteSheet;
+  final GameTowerVarietySheet? towerVarietySheet;
 
   double health;
   late double shield = stats.shieldHealth;
   late final double maxHealth = stats.health;
+  bool _isInspected = false;
   bool _isResolved = false;
   int _targetWaypointIndex = 1;
   double _completedDistance = 0;
@@ -54,12 +59,31 @@ class EnemyComponent extends CircleComponent {
   double _corrosionRemaining = 0;
   double _armorShred = 0;
 
+  static final EnemyOverlayRenderer _overlayRenderer = EnemyOverlayRenderer();
+
   bool get isAlive => !_isResolved && health > 0;
   bool get isResolved => _isResolved;
+  bool get isInspected => _isInspected;
   bool get isCorroded => _corrosionRemaining > 0;
   bool get isSlowed => _slowRemaining > 0 && _slowMultiplier < 1;
   double get armorReduction =>
       (stats.armorReduction - _armorShred).clamp(0, 0.75).toDouble();
+
+  EnemyOverlayState get overlayState {
+    return EnemyOverlayState.fromData(
+      EnemyOverlayData(
+        isResolved: isResolved,
+        isInspected: isInspected,
+        health: health,
+        maxHealth: maxHealth,
+        shield: shield,
+        maxShield: stats.shieldHealth,
+        traits: stats.traits,
+        isSlowed: isSlowed,
+        isCorroded: isCorroded,
+      ),
+    );
+  }
 
   double get pathProgress {
     return _completedDistance + _currentSegmentLength * _segmentProgress;
@@ -73,6 +97,10 @@ class EnemyComponent extends CircleComponent {
       pathProgress: pathProgress,
       isAlive: isAlive,
     );
+  }
+
+  void setInspected(bool value) {
+    _isInspected = value;
   }
 
   void applyDamage(
@@ -143,17 +171,23 @@ class EnemyComponent extends CircleComponent {
     final spriteSheet = this.spriteSheet;
     if (spriteSheet == null) {
       super.render(canvas);
-      return;
+    } else {
+      spriteSheet
+          .sprite(GameSpriteSheet.spriteForEnemy(stats))
+          .render(
+            canvas,
+            position: Vector2(radius, radius),
+            size: Vector2.all(radius * 2.4),
+            anchor: Anchor.center,
+          );
     }
 
-    spriteSheet
-        .sprite(GameSpriteSheet.spriteForEnemy(stats))
-        .render(
-          canvas,
-          position: Vector2(radius, radius),
-          size: Vector2.all(radius * 2.4),
-          anchor: Anchor.center,
-        );
+    _overlayRenderer.render(
+      canvas,
+      state: overlayState,
+      radius: radius,
+      towerVarietySheet: towerVarietySheet,
+    );
   }
 
   @override

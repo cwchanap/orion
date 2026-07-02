@@ -1,3 +1,8 @@
+import 'dart:ui';
+
+import 'package:flame/components.dart';
+
+import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
 
 enum EnemyOverlayBadge {
@@ -198,5 +203,211 @@ class EnemyOverlayState {
       if (traits.contains(EnemyTrait.heavy)) EnemyOverlayBadge.heavy,
       if (traits.contains(EnemyTrait.swarm)) EnemyOverlayBadge.swarm,
     ];
+  }
+}
+
+class EnemyOverlayRenderer {
+  EnemyOverlayRenderer();
+
+  final Paint _barBackgroundPaint = Paint()..color = const Color(0xCC101624);
+  final Paint _healthPaint = Paint()..color = const Color(0xFFE35D6A);
+  final Paint _shieldPaint = Paint()..color = const Color(0xFF6EC6FF);
+  final Paint _badgeBackgroundPaint = Paint()..color = const Color(0xD9141B2B);
+  final Paint _badgeStrokePaint = Paint()
+    ..color = const Color(0xCCFFFFFF)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1;
+
+  void render(
+    Canvas canvas, {
+    required EnemyOverlayState state,
+    required double radius,
+    GameTowerVarietySheet? towerVarietySheet,
+  }) {
+    if (!state.shouldRender) {
+      return;
+    }
+
+    final centerX = radius;
+    var top = -radius * (state.isExpanded ? 0.92 : 0.72);
+
+    if (state.badges.isNotEmpty) {
+      _renderBadges(
+        canvas,
+        badges: state.badges,
+        centerX: centerX,
+        y: top,
+        size: state.isExpanded ? 9 : 7,
+        towerVarietySheet: towerVarietySheet,
+      );
+      top += state.isExpanded ? 11 : 9;
+    }
+
+    if (state.showHealthBar) {
+      _renderBar(
+        canvas,
+        centerX: centerX,
+        y: top,
+        width: radius * (state.isExpanded ? 2.8 : 2.25),
+        height: state.isExpanded ? 4 : 3,
+        ratio: state.healthRatio,
+        fillPaint: _healthPaint,
+      );
+      top += state.isExpanded ? 5 : 4;
+    }
+
+    if (state.showShieldBar) {
+      _renderBar(
+        canvas,
+        centerX: centerX,
+        y: top,
+        width: radius * (state.isExpanded ? 2.8 : 2.25),
+        height: 2.5,
+        ratio: state.shieldRatio,
+        fillPaint: _shieldPaint,
+      );
+    }
+  }
+
+  void _renderBar(
+    Canvas canvas, {
+    required double centerX,
+    required double y,
+    required double width,
+    required double height,
+    required double ratio,
+    required Paint fillPaint,
+  }) {
+    final rect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(centerX - (width / 2), y, width, height),
+      Radius.circular(height / 2),
+    );
+    canvas.drawRRect(rect, _barBackgroundPaint);
+
+    if (ratio <= 0) {
+      return;
+    }
+
+    final fillRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(centerX - (width / 2), y, width * ratio, height),
+      Radius.circular(height / 2),
+    );
+    canvas.drawRRect(fillRect, fillPaint);
+  }
+
+  void _renderBadges(
+    Canvas canvas, {
+    required List<EnemyOverlayBadge> badges,
+    required double centerX,
+    required double y,
+    required double size,
+    required GameTowerVarietySheet? towerVarietySheet,
+  }) {
+    const gap = 2.0;
+    final totalWidth = (badges.length * size) + ((badges.length - 1) * gap);
+    var x = centerX - (totalWidth / 2);
+
+    for (final badge in badges) {
+      final rect = Rect.fromLTWH(x, y, size, size);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+        _badgeBackgroundPaint,
+      );
+
+      final sprite = _spriteForBadge(towerVarietySheet, badge);
+      if (sprite == null) {
+        _renderFallbackBadge(canvas, rect, badge);
+      } else {
+        sprite.render(
+          canvas,
+          position: Vector2(rect.left, rect.top),
+          size: Vector2.all(size),
+        );
+      }
+
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+        _badgeStrokePaint,
+      );
+      x += size + gap;
+    }
+  }
+
+  Sprite? _spriteForBadge(
+    GameTowerVarietySheet? towerVarietySheet,
+    EnemyOverlayBadge badge,
+  ) {
+    if (towerVarietySheet == null) {
+      return null;
+    }
+
+    final sprite = switch (badge) {
+      EnemyOverlayBadge.shielded => GameTowerVarietySprite.shieldIndicator,
+      EnemyOverlayBadge.armored => GameTowerVarietySprite.armorIndicator,
+      EnemyOverlayBadge.regen => GameTowerVarietySprite.regenIndicator,
+      EnemyOverlayBadge.corroded => GameTowerVarietySprite.corrosionIndicator,
+      EnemyOverlayBadge.slowed => null,
+      EnemyOverlayBadge.heavy => null,
+      EnemyOverlayBadge.swarm => null,
+    };
+
+    if (sprite == null) {
+      return null;
+    }
+    return towerVarietySheet.sprite(sprite);
+  }
+
+  void _renderFallbackBadge(Canvas canvas, Rect rect, EnemyOverlayBadge badge) {
+    final paint = Paint()..color = _fallbackColor(badge);
+    final center = rect.center;
+    final insetRect = rect.deflate(rect.width * 0.22);
+
+    switch (badge) {
+      case EnemyOverlayBadge.slowed:
+        canvas.drawCircle(center, insetRect.width / 2, paint);
+        canvas.drawLine(
+          Offset(insetRect.left, insetRect.bottom),
+          Offset(insetRect.right, insetRect.top),
+          _badgeStrokePaint,
+        );
+        return;
+      case EnemyOverlayBadge.heavy:
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(insetRect, const Radius.circular(1.5)),
+          paint,
+        );
+        return;
+      case EnemyOverlayBadge.swarm:
+        canvas.drawCircle(
+          Offset(center.dx - rect.width * 0.16, center.dy),
+          rect.width * 0.13,
+          paint,
+        );
+        canvas.drawCircle(center, rect.width * 0.13, paint);
+        canvas.drawCircle(
+          Offset(center.dx + rect.width * 0.16, center.dy),
+          rect.width * 0.13,
+          paint,
+        );
+        return;
+      case EnemyOverlayBadge.corroded:
+      case EnemyOverlayBadge.shielded:
+      case EnemyOverlayBadge.armored:
+      case EnemyOverlayBadge.regen:
+        canvas.drawCircle(center, insetRect.width / 2, paint);
+        return;
+    }
+  }
+
+  Color _fallbackColor(EnemyOverlayBadge badge) {
+    return switch (badge) {
+      EnemyOverlayBadge.corroded => const Color(0xFF67D46E),
+      EnemyOverlayBadge.slowed => const Color(0xFF78D8FF),
+      EnemyOverlayBadge.shielded => const Color(0xFF6EC6FF),
+      EnemyOverlayBadge.armored => const Color(0xFFC9D6E8),
+      EnemyOverlayBadge.regen => const Color(0xFF67D46E),
+      EnemyOverlayBadge.heavy => const Color(0xFFFFB84D),
+      EnemyOverlayBadge.swarm => const Color(0xFFFFD166),
+    };
   }
 }

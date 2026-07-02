@@ -538,6 +538,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       stats: stats,
       waypoints: _pathWaypoints(),
       spriteSheet: _spriteSheet,
+      towerVarietySheet: _towerVarietySheet,
       onKilled: _handleEnemyKilled,
       onReachedBase: _handleEnemyReachedBase,
       priority: 20,
