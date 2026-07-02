@@ -154,6 +154,68 @@ void main() {
       expect(enemy.health, 80);
     });
 
+    test(
+      'component overlay state reflects runtime health shield and effects',
+      () {
+        final enemy = EnemyComponent(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+            shieldHealth: 40,
+            traits: {EnemyTrait.shielded, EnemyTrait.regen},
+            regenPerSecond: 10,
+          ),
+          waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+          onKilled: (_) {},
+          onReachedBase: (_) {},
+        );
+
+        enemy.applyDamage(30);
+        enemy.applySlow(multiplier: 0.5, duration: 2);
+        enemy.applyCorrosion(damagePerSecond: 5, duration: 2, armorShred: 0.1);
+
+        final state = enemy.overlayState;
+
+        expect(state.shouldRender, isTrue);
+        expect(state.healthRatio, 1);
+        expect(state.shieldRatio, 0.25);
+        expect(state.showHealthBar, isTrue);
+        expect(state.showShieldBar, isTrue);
+        expect(state.badges, [
+          EnemyOverlayBadge.corroded,
+          EnemyOverlayBadge.slowed,
+        ]);
+      },
+    );
+
+    test('component inspection expands the overlay state', () {
+      final enemy = EnemyComponent(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+
+      expect(enemy.isInspected, isFalse);
+      expect(enemy.overlayState.shouldRender, isFalse);
+
+      enemy.setInspected(true);
+
+      expect(enemy.isInspected, isTrue);
+      expect(enemy.overlayState.shouldRender, isTrue);
+      expect(enemy.overlayState.isExpanded, isTrue);
+      expect(enemy.overlayState.showHealthBar, isTrue);
+    });
+
     group('EnemyOverlayState', () {
       test('overlay data defensively copies traits', () {
         final traits = {EnemyTrait.armored};
