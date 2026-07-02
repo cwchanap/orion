@@ -184,7 +184,11 @@ class EnemyOverlayState {
     if (maxValue <= 0) {
       return 0;
     }
-    return (value / maxValue).clamp(0, 1).toDouble();
+    final ratio = value / maxValue;
+    if (ratio.isNaN) {
+      return 0;
+    }
+    return ratio.clamp(0, 1).toDouble();
   }
 
   static List<EnemyOverlayBadge> _orderedBadges({
@@ -230,6 +234,11 @@ class EnemyOverlayRenderer {
     ..color = const Color(0xCCFFFFFF)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
+
+  static final Map<EnemyOverlayBadge, Paint> _fallbackPaints = {
+    for (final badge in EnemyOverlayBadge.values)
+      badge: Paint()..color = _fallbackColor(badge),
+  };
 
   void render(
     Canvas canvas, {
@@ -402,7 +411,7 @@ class EnemyOverlayRenderer {
     EnemyOverlayBadge badge, {
     required double heavyCornerRadius,
   }) {
-    final paint = Paint()..color = _fallbackColor(badge);
+    final paint = _fallbackPaints[badge]!;
     final center = rect.center;
     final insetRect = rect.deflate(rect.width * 0.22);
 
@@ -446,7 +455,7 @@ class EnemyOverlayRenderer {
     }
   }
 
-  Color _fallbackColor(EnemyOverlayBadge badge) {
+  static Color _fallbackColor(EnemyOverlayBadge badge) {
     return switch (badge) {
       EnemyOverlayBadge.corroded => const Color(0xFF67D46E),
       EnemyOverlayBadge.slowed => const Color(0xFF78D8FF),

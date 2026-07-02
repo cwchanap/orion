@@ -59,6 +59,9 @@ class EnemyComponent extends CircleComponent {
   double _corrosionRemaining = 0;
   double _armorShred = 0;
 
+  EnemyOverlayState? _cachedOverlayState;
+  bool _overlayDirty = true;
+
   static final EnemyOverlayRenderer _overlayRenderer = EnemyOverlayRenderer();
 
   bool get isAlive => !_isResolved && health > 0;
@@ -70,7 +73,11 @@ class EnemyComponent extends CircleComponent {
       (stats.armorReduction - _armorShred).clamp(0, 0.75).toDouble();
 
   EnemyOverlayState get overlayState {
-    return EnemyOverlayState.fromData(
+    final cached = _cachedOverlayState;
+    if (cached != null && !_overlayDirty) {
+      return cached;
+    }
+    final state = EnemyOverlayState.fromData(
       EnemyOverlayData(
         isResolved: isResolved,
         isInspected: isInspected,
@@ -83,6 +90,9 @@ class EnemyComponent extends CircleComponent {
         isCorroded: isCorroded,
       ),
     );
+    _cachedOverlayState = state;
+    _overlayDirty = false;
+    return state;
   }
 
   double get pathProgress {
@@ -100,7 +110,11 @@ class EnemyComponent extends CircleComponent {
   }
 
   void setInspected(bool value) {
+    if (_isInspected == value) {
+      return;
+    }
     _isInspected = value;
+    _overlayDirty = true;
   }
 
   void applyDamage(
@@ -129,6 +143,7 @@ class EnemyComponent extends CircleComponent {
     );
     health = result.health;
     shield = result.shield;
+    _overlayDirty = true;
     if (health == 0) {
       _resolve(onKilled);
     }
@@ -147,6 +162,7 @@ class EnemyComponent extends CircleComponent {
     );
     _slowMultiplier = result.multiplier;
     _slowRemaining = result.remaining;
+    _overlayDirty = true;
   }
 
   void applyCorrosion({
@@ -164,6 +180,7 @@ class EnemyComponent extends CircleComponent {
     );
     _corrosionRemaining = math.max(_corrosionRemaining, duration);
     _armorShred = math.max(_armorShred, armorShred);
+    _overlayDirty = true;
   }
 
   @override
@@ -264,6 +281,7 @@ class EnemyComponent extends CircleComponent {
       if (_corrosionRemaining == 0) {
         _corrosionDamagePerSecond = 0;
         _armorShred = 0;
+        _overlayDirty = true;
       }
     }
 
@@ -271,6 +289,7 @@ class EnemyComponent extends CircleComponent {
       return;
     }
 
+    final previousHealth = health;
     health = CombatEffects.applyRegen(
       health: health,
       maxHealth: maxHealth,
@@ -278,6 +297,9 @@ class EnemyComponent extends CircleComponent {
       dt: dt,
       isCorroded: wasCorrodedAtTickStart,
     );
+    if (health != previousHealth) {
+      _overlayDirty = true;
+    }
   }
 
   void _tickSlow(double dt) {
@@ -285,6 +307,7 @@ class EnemyComponent extends CircleComponent {
       _slowRemaining = math.max(0, _slowRemaining - dt);
       if (_slowRemaining == 0) {
         _slowMultiplier = 1;
+        _overlayDirty = true;
       }
     }
   }
@@ -295,6 +318,7 @@ class EnemyComponent extends CircleComponent {
     }
 
     _isResolved = true;
+    _overlayDirty = true;
     callback(this);
     removeFromParent();
   }

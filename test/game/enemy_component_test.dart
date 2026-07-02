@@ -218,6 +218,80 @@ void main() {
       expect(enemy.overlayState.showHealthBar, isTrue);
     });
 
+    test('reaching the end of the path resolves via onReachedBase', () {
+      var reachedBase = false;
+      final enemy = EnemyComponent(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        waypoints: [Vector2(0, 0), Vector2(5, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {
+          reachedBase = true;
+        },
+      );
+
+      enemy.update(1);
+
+      expect(reachedBase, isTrue);
+      expect(enemy.isResolved, isTrue);
+      expect(enemy.isAlive, isFalse);
+    });
+
+    test('corrosion killing the enemy resolves via onKilled', () {
+      var killed = false;
+      final enemy = EnemyComponent(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 10,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        onKilled: (_) {
+          killed = true;
+        },
+        onReachedBase: (_) {},
+      );
+
+      enemy.applyCorrosion(damagePerSecond: 20, duration: 2, armorShred: 0);
+      enemy.update(1);
+
+      expect(killed, isTrue);
+      expect(enemy.isResolved, isTrue);
+      expect(enemy.isAlive, isFalse);
+    });
+
+    test('overlay state is cached until a mutation marks it dirty', () {
+      final enemy = EnemyComponent(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+
+      enemy.applyDamage(20);
+      final first = enemy.overlayState;
+      expect(identical(enemy.overlayState, first), isTrue);
+
+      enemy.applyDamage(10);
+      final afterMutation = enemy.overlayState;
+      expect(identical(afterMutation, first), isFalse);
+      expect(afterMutation.healthRatio, closeTo(0.7, 0.001));
+      expect(identical(enemy.overlayState, afterMutation), isTrue);
+    });
+
     group('EnemyOverlayState', () {
       test('overlay data defensively copies traits', () {
         final traits = {EnemyTrait.armored};
