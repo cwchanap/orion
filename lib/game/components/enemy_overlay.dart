@@ -209,6 +209,19 @@ class EnemyOverlayState {
 class EnemyOverlayRenderer {
   EnemyOverlayRenderer();
 
+  static const double _normalBadgeSizeFactor = 0.6363636364;
+  static const double _expandedBadgeSizeFactor = 0.8181818182;
+  static const double _badgeGapFactor = 0.1818181818;
+  static const double _normalBadgeAdvanceFactor = 0.8181818182;
+  static const double _expandedBadgeAdvanceFactor = 1;
+  static const double _normalHealthBarHeightFactor = 0.2727272727;
+  static const double _expandedHealthBarHeightFactor = 0.3636363636;
+  static const double _normalHealthBarAdvanceFactor = 0.3636363636;
+  static const double _expandedHealthBarAdvanceFactor = 0.4545454545;
+  static const double _shieldBarHeightFactor = 0.2272727273;
+  static const double _badgeCornerRadiusFactor = 0.1818181818;
+  static const double _heavyBadgeCornerRadiusFactor = 0.1363636364;
+
   final Paint _barBackgroundPaint = Paint()..color = const Color(0xCC101624);
   final Paint _healthPaint = Paint()..color = const Color(0xFFE35D6A);
   final Paint _shieldPaint = Paint()..color = const Color(0xFF6EC6FF);
@@ -237,10 +250,21 @@ class EnemyOverlayRenderer {
         badges: state.badges,
         centerX: centerX,
         y: top,
-        size: state.isExpanded ? 9 : 7,
+        size:
+            radius *
+            (state.isExpanded
+                ? _expandedBadgeSizeFactor
+                : _normalBadgeSizeFactor),
+        gap: radius * _badgeGapFactor,
+        cornerRadius: radius * _badgeCornerRadiusFactor,
+        heavyCornerRadius: radius * _heavyBadgeCornerRadiusFactor,
         towerVarietySheet: towerVarietySheet,
       );
-      top += state.isExpanded ? 11 : 9;
+      top +=
+          radius *
+          (state.isExpanded
+              ? _expandedBadgeAdvanceFactor
+              : _normalBadgeAdvanceFactor);
     }
 
     if (state.showHealthBar) {
@@ -249,11 +273,19 @@ class EnemyOverlayRenderer {
         centerX: centerX,
         y: top,
         width: radius * (state.isExpanded ? 2.8 : 2.25),
-        height: state.isExpanded ? 4 : 3,
+        height:
+            radius *
+            (state.isExpanded
+                ? _expandedHealthBarHeightFactor
+                : _normalHealthBarHeightFactor),
         ratio: state.healthRatio,
         fillPaint: _healthPaint,
       );
-      top += state.isExpanded ? 5 : 4;
+      top +=
+          radius *
+          (state.isExpanded
+              ? _expandedHealthBarAdvanceFactor
+              : _normalHealthBarAdvanceFactor);
     }
 
     if (state.showShieldBar) {
@@ -262,7 +294,7 @@ class EnemyOverlayRenderer {
         centerX: centerX,
         y: top,
         width: radius * (state.isExpanded ? 2.8 : 2.25),
-        height: 2.5,
+        height: radius * _shieldBarHeightFactor,
         ratio: state.shieldRatio,
         fillPaint: _shieldPaint,
       );
@@ -301,22 +333,29 @@ class EnemyOverlayRenderer {
     required double centerX,
     required double y,
     required double size,
+    required double gap,
+    required double cornerRadius,
+    required double heavyCornerRadius,
     required GameTowerVarietySheet? towerVarietySheet,
   }) {
-    const gap = 2.0;
     final totalWidth = (badges.length * size) + ((badges.length - 1) * gap);
     var x = centerX - (totalWidth / 2);
 
     for (final badge in badges) {
       final rect = Rect.fromLTWH(x, y, size, size);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+        RRect.fromRectAndRadius(rect, Radius.circular(cornerRadius)),
         _badgeBackgroundPaint,
       );
 
       final sprite = _spriteForBadge(towerVarietySheet, badge);
       if (sprite == null) {
-        _renderFallbackBadge(canvas, rect, badge);
+        _renderFallbackBadge(
+          canvas,
+          rect,
+          badge,
+          heavyCornerRadius: heavyCornerRadius,
+        );
       } else {
         sprite.render(
           canvas,
@@ -326,7 +365,7 @@ class EnemyOverlayRenderer {
       }
 
       canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, const Radius.circular(2)),
+        RRect.fromRectAndRadius(rect, Radius.circular(cornerRadius)),
         _badgeStrokePaint,
       );
       x += size + gap;
@@ -357,7 +396,12 @@ class EnemyOverlayRenderer {
     return towerVarietySheet.sprite(sprite);
   }
 
-  void _renderFallbackBadge(Canvas canvas, Rect rect, EnemyOverlayBadge badge) {
+  void _renderFallbackBadge(
+    Canvas canvas,
+    Rect rect,
+    EnemyOverlayBadge badge, {
+    required double heavyCornerRadius,
+  }) {
     final paint = Paint()..color = _fallbackColor(badge);
     final center = rect.center;
     final insetRect = rect.deflate(rect.width * 0.22);
@@ -373,7 +417,10 @@ class EnemyOverlayRenderer {
         return;
       case EnemyOverlayBadge.heavy:
         canvas.drawRRect(
-          RRect.fromRectAndRadius(insetRect, const Radius.circular(1.5)),
+          RRect.fromRectAndRadius(
+            insetRect,
+            Radius.circular(heavyCornerRadius),
+          ),
           paint,
         );
         return;
