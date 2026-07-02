@@ -80,6 +80,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   Image? _terrainImage;
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
+  int? _inspectedEnemyId;
   final Map<int, int> _activeDronesByTower = {};
 
   GameSnapshot get snapshot => stateNotifier.value;
@@ -87,6 +88,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   double get speedMultiplier => _speedMultiplier;
   bool get autoStartEnabled => _autoStartEnabled;
   double? get autoStartCountdownRemaining => _autoStartCountdownRemaining;
+  int? get inspectedEnemyId => _inspectedEnemyId;
 
   @override
   Future<void> onLoad() async {
@@ -119,6 +121,16 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   void onTapDown(TapDownEvent event) {
     if (_session.phase == GamePhase.won || _session.phase == GamePhase.lost) {
       return;
+    }
+
+    if (_session.phase == GamePhase.wave) {
+      final enemy = _enemyAt(event.canvasPosition);
+      if (enemy != null) {
+        _setInspectedEnemy(enemy.enemyId);
+        _publishSnapshot();
+        return;
+      }
+      _setInspectedEnemy(null);
     }
 
     final tappedCell = BoardLayout.cellAt(
@@ -460,6 +472,36 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     return selected;
   }
 
+  EnemyComponent? _enemyAt(Vector2 canvasPosition) {
+    for (final enemy in _activeEnemyComponents.values.toList().reversed) {
+      if (!enemy.isAlive || enemy.parent == null) {
+        continue;
+      }
+
+      final touchRadius = math.max(enemy.radius * 1.8, 24);
+      if (enemy.position.distanceTo(canvasPosition) <= touchRadius) {
+        return enemy;
+      }
+    }
+    return null;
+  }
+
+  void _setInspectedEnemy(int? enemyId) {
+    if (_inspectedEnemyId == enemyId) {
+      return;
+    }
+
+    final previous = _inspectedEnemyId;
+    if (previous != null) {
+      _activeEnemyComponents[previous]?.setInspected(false);
+    }
+
+    _inspectedEnemyId = enemyId;
+    if (enemyId != null) {
+      _activeEnemyComponents[enemyId]?.setInspected(true);
+    }
+  }
+
   void _handleDroneExpired(DroneComponent drone) {
     final current = _activeDronesByTower[drone.ownerTowerId] ?? 0;
     _activeDronesByTower[drone.ownerTowerId] = math.max(0, current - 1);
@@ -549,12 +591,18 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _handleEnemyKilled(EnemyComponent enemy) {
+    if (_inspectedEnemyId == enemy.enemyId) {
+      _setInspectedEnemy(null);
+    }
     _activeEnemyComponents.remove(enemy.enemyId);
     _session.rewardKill(enemy.stats.goldReward);
     _publishSnapshot();
   }
 
   void _handleEnemyReachedBase(EnemyComponent enemy) {
+    if (_inspectedEnemyId == enemy.enemyId) {
+      _setInspectedEnemy(null);
+    }
     _activeEnemyComponents.remove(enemy.enemyId);
     _session.damageBase(enemy.stats.baseDamage);
     if (_session.phase == GamePhase.lost) {
@@ -598,10 +646,19 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _removeInactiveEnemyReferences() {
+    final inspectedEnemyId = _inspectedEnemyId;
+    if (inspectedEnemyId != null) {
+      final inspectedEnemy = _activeEnemyComponents[inspectedEnemyId];
+      if (inspectedEnemy == null || inspectedEnemy.isResolved) {
+        _setInspectedEnemy(null);
+      }
+    }
+
     _activeEnemyComponents.removeWhere((_, enemy) => enemy.isResolved);
   }
 
   void _clearCombatComponents({required bool removeTowers}) {
+    _setInspectedEnemy(null);
     for (final enemy in _activeEnemyComponents.values.toList()) {
       enemy.removeFromParent();
     }
