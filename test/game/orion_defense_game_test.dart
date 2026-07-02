@@ -362,6 +362,26 @@ void main() {
       expect(enemy.isResolved, isTrue);
     });
 
+    test('inspected enemy reaching the base clears inspection', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      _tapPoint(game, enemy.position);
+
+      expect(game.inspectedEnemyId, enemy.enemyId);
+
+      enemy.update(100);
+      game.processLifecycleEvents();
+
+      expect(game.inspectedEnemyId, isNull);
+      expect(enemy.isResolved, isTrue);
+    });
+
     test('3x speed accelerates real enemy progress compared with 1x', () {
       final oneXGame = OrionDefenseGame(stage: _singleEnemyStage());
       final threeXGame = OrionDefenseGame(stage: _singleEnemyStage());
