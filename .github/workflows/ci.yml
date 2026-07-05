@@ -115,6 +115,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Enable KVM group perms for GitHub-hosted Ubuntu runner
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="O+G"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
       - name: Run integration tests on Android emulator
         uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
         with:
@@ -123,5 +129,5 @@ jobs:
           arch: x86_64
           profile: pixel
           disable-animations: true
-          emulator-options: -no-snapshot -gpu swiftshader_indirect
+          emulator-options: -no-window -noaudio -no-boot-anim -no-snapshot -gpu swiftshader_indirect
           script: flutter test integration_test
