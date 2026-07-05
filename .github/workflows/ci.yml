@@ -20,6 +20,7 @@ jobs:
   build_lint:
     name: Build & lint
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -33,6 +34,9 @@ jobs:
           channel: stable
           cache: true
           pub-cache: true
+
+      - name: Flutter doctor
+        run: flutter doctor -v
 
       - name: Install dependencies
         run: flutter pub get
@@ -49,6 +53,7 @@ jobs:
   unit_test:
     name: Unit test
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
       id-token: write
@@ -109,10 +114,12 @@ jobs:
         run: flutter pub get
 
       - name: Run integration tests on Android emulator
-        uses: reactivecircus/android-emulator-runner@v2
+        uses: reactivecircus/android-emulator-runner@v2.37.0
         with:
           api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel
+          disable-animations: true
+          emulator-options: -no-snapshot -gpu swiftshader_indirect
           script: flutter test integration_test

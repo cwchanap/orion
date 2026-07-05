@@ -30,10 +30,13 @@ void main() {
 
     // 3. Tap the center of a known buildable cell to open the tower picker.
     //    Cell (0,0) is never on the enemy path (see BoardLayout.pathCells).
-    final cellCenter = _cellCenter(tester, const GridPosition(0, 0));
+    //    cellCenter is recomputed inside the action closure on each retry so a
+    //    mid-loop resize (e.g. async board layout settling) can't tap a stale
+    //    coordinate.
+    const targetCell = GridPosition(0, 0);
     await _tapUntil(
       tester,
-      () => tester.tapAt(cellCenter),
+      () => tester.tapAt(_cellCenter(tester, targetCell)),
       () => tester.any(find.text('Build Tower')),
       timeoutMessage:
           'Tapping buildable cell (0,0) did not open the tower '

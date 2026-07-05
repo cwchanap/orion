@@ -34,6 +34,9 @@ jobs:
           cache: true
           pub-cache: true
 
+      - name: Flutter doctor
+        run: flutter doctor -v
+
       - name: Install dependencies
         run: flutter pub get
 
