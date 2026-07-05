@@ -263,6 +263,8 @@ git commit -m "test: extend smoke test to place tower and start wave"
 
 ### Task 3: Add `ci.yml` (unit/widget tests + integration test)
 
+> **Execution amendment (2026-07-05):** The greenfield workflow below is **superseded** — see the design spec's [Execution amendment (2026-07-04)](../specs/2026-07-04-orion-e2e-integration-and-ci-workflows-design.md#execution-amendment-2026-07-04). A `ci.yml` already existed on `main` with a `build_lint` job (`dart format` gate, `flutter analyze`, `flutter build web --release`) and a `unit_test` job (`flutter test --coverage` + Codecov OIDC). The actual implementation **preserved those jobs** and only appended a new `integration-test` job. The YAML in Step 1 below is retained for plan-history fidelity only; do not re-create `ci.yml` from it. Subsequent review hardening (SHA-pinned actions, Gradle cache, `ubuntu-22.04` for the emulator job, Codecov upload gated to non-fork runs) is reflected in the committed `.github/workflows/ci.yml`, not in the snippet below.
+
 **Files:**
 - Create: `.github/workflows/ci.yml`
 
