@@ -142,7 +142,7 @@ concurrency:
 
 ## Execution amendment (2026-07-04)
 
-The original spec was written assuming greenfield CI ("no `.github/workflows/` at all yet"). That was incorrect: a committed `.github/workflows/ci.yml` already existed on `main` with a `build_lint` job (`dart format` gate, `flutter analyze`, `flutter build web --release`) and a `unit_test` job (`flutter test --coverage` + Codecov OIDC). After user confirmation, the implementation **preserved those jobs byte-for-byte** and only (a) added `schedule` + `workflow_dispatch` triggers and (b) appended a new `integration-test` (Android emulator) job. Nothing on `main` was dropped.
+The original spec was written assuming greenfield CI ("no `.github/workflows/` at all yet"). That was incorrect: a committed `.github/workflows/ci.yml` already existed on `main` with a `build_lint` job (`dart format` gate, `flutter analyze`, `flutter build web --release`) and a `unit_test` job (`flutter test --coverage` + Codecov OIDC). After user confirmation, the implementation **preserved those jobs' steps and ordering** and only (a) added `schedule` + `workflow_dispatch` triggers, (b) hardened the existing checkout steps with `persist-credentials: false`, and (c) appended a new `integration-test` (Android emulator) job. Nothing on `main` was dropped.
 
 Other deviations from the original plan, all empirically forced and reviewer-verified:
 - `build-android.yml` and `build-ios.yml` pin `actions/checkout@v7` + `subosito/flutter-action@v2.23.0` (matching the existing `ci.yml`) instead of the plan's older pins.
