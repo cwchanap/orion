@@ -37,6 +37,11 @@ void main() {
       await tester.tapAt(cellCenter);
       await tester.pump(const Duration(milliseconds: 100));
     }
+    if (!tester.any(find.text('Build Tower'))) {
+      fail(
+        'Tapping buildable cell (0,0) did not open the tower picker within the timeout.',
+      );
+    }
     expect(find.text('Build Tower'), findsOneWidget);
 
     // 4. Place a Laser tower; gold decreases and the picker closes.
