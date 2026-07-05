@@ -31,18 +31,14 @@ void main() {
     // 3. Tap the center of a known buildable cell to open the tower picker.
     //    Cell (0,0) is never on the enemy path (see BoardLayout.pathCells).
     final cellCenter = _cellCenter(tester, const GridPosition(0, 0));
-    final tapDeadline = DateTime.now().add(const Duration(seconds: 15));
-    while (!tester.any(find.text('Build Tower')) &&
-        DateTime.now().isBefore(tapDeadline)) {
-      await tester.tapAt(cellCenter);
-      await tester.pump(const Duration(milliseconds: 100));
-    }
-    if (!tester.any(find.text('Build Tower'))) {
-      fail(
-        'Tapping buildable cell (0,0) did not open the tower picker within the timeout.',
-      );
-    }
-    expect(find.text('Build Tower'), findsOneWidget);
+    await _tapUntil(
+      tester,
+      () => tester.tapAt(cellCenter),
+      () => tester.any(find.text('Build Tower')),
+      timeoutMessage:
+          'Tapping buildable cell (0,0) did not open the tower '
+          'picker within the timeout.',
+    );
 
     // 4. Place a Laser tower; gold decreases and the picker closes.
     await tester.tap(find.text('Laser $laserCost'));
@@ -95,4 +91,22 @@ Future<void> _pumpUntil(
     await tester.pump(const Duration(milliseconds: 100));
   }
   fail('Condition was not met within $timeout.');
+}
+
+Future<void> _tapUntil(
+  WidgetTester tester,
+  Future<void> Function() action,
+  bool Function() predicate, {
+  Duration timeout = const Duration(seconds: 15),
+  required String timeoutMessage,
+}) async {
+  final deadline = DateTime.now().add(timeout);
+  while (DateTime.now().isBefore(deadline)) {
+    if (predicate()) {
+      return;
+    }
+    await action();
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+  fail(timeoutMessage);
 }
