@@ -70,8 +70,8 @@ concurrency:
 
 **Smoke scenario — single `testWidgets`, five assertions:**
 
-1. **Boot.** Pump `OrionApp`. Wait for the World Map. Expect to find the first stage name (`"Outpost Alpha"`) as a selectable element.
-2. **Enter stage.** Tap the `"Outpost Alpha"` stage. Pump until the HUD shows `"Outpost Alpha"`, the `"Build"` phase chip, and a `"Start Wave"` button (bottom controls `ValueKey('start-wave')`).
+1. **Boot.** Pump `OrionApp`. Wait for the World Map. Expect to find the first stage label (`"Alpha"`) as a selectable element.
+2. **Enter stage.** Tap the `"Alpha"` stage. Pump until the HUD shows `"Outpost Alpha"`, the `"Build"` phase chip, and a `"Start Wave"` button (bottom controls `ValueKey('start-wave')`).
 3. **Select a buildable cell.** Compute a non-path cell using `BoardLayout` (its `pathCells` set + 8×12 grid) and tap the pixel center of that cell inside the rendered `GameWidget`'s global rect. Expect the tower picker to appear (`"Build Tower"` text / `ValueKey('tower-picker')`).
 4. **Place a tower.** Tap a tower button (e.g. `"Laser 50"`). Pump until the `Gold` status chip decreases from its starting value and the bottom controls return to `"Start Wave"` (i.e. `selectedCell` cleared and placement succeeded).
 5. **Start a wave.** Tap `"Start Wave"`. Expect the phase chip to flip from `"Build"` to `"Wave Active"`.
@@ -83,7 +83,7 @@ concurrency:
 
 **Harness details:**
 - Use `tester.runAsync(() async { ... })` for the initial pump so Flame's async image loading (sprite sheets) and `SharedPreferences` campaign-progress loading complete.
-- Use `tester.tap` + `tester.pumpAndSettle()` (with a bounded `Duration`) between steps; fall back to `waitUntil*`-style polling on the gold/phase chips since some transitions are frame-driven.
+- Use `tester.tap` + bounded `_pumpUntil`-style polling (a deadline loop of `tester.pump(Duration(milliseconds: 100))` until a predicate holds) between steps for all step transitions, since some are frame-driven. `tester.pumpAndSettle()` is avoided entirely — Flame's live game loop never settles, so an unbounded settle would hang the test.
 
 ### 2. `ci.yml` — two parallel jobs
 
