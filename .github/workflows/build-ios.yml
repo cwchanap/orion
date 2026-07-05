@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
   schedule:
     - cron: '0 6 * * 1'
   workflow_dispatch:
@@ -38,7 +39,7 @@ jobs:
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: ~/Library/Caches/CocoaPods
-          key: cocoapods-${{ runner.os }}-${{ hashFiles('ios/Podfile.lock', 'ios/Flutter/AppFrameworkInfo.plist') }}
+          key: cocoapods-${{ runner.os }}-${{ hashFiles('pubspec.lock') }}
           restore-keys: cocoapods-${{ runner.os }}-
 
       - name: Flutter doctor
