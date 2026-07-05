@@ -139,3 +139,12 @@ concurrency:
 - Full win/lose playthrough integration tests.
 - iOS integration tests.
 - Branch-protection rules requiring these status checks (a GitHub repo-settings task, not code).
+
+## Execution amendment (2026-07-04)
+
+The original spec was written assuming greenfield CI ("no `.github/workflows/` at all yet"). That was incorrect: a committed `.github/workflows/ci.yml` already existed on `main` with a `build_lint` job (`dart format` gate, `flutter analyze`, `flutter build web --release`) and a `unit_test` job (`flutter test --coverage` + Codecov OIDC). After user confirmation, the implementation **preserved those jobs byte-for-byte** and only (a) added `schedule` + `workflow_dispatch` triggers and (b) appended a new `integration-test` (Android emulator) job. Nothing on `main` was dropped.
+
+Other deviations from the original plan, all empirically forced and reviewer-verified:
+- `build-android.yml` and `build-ios.yml` pin `actions/checkout@v7` + `subosito/flutter-action@v2.23.0` (matching the existing `ci.yml`) instead of the plan's older pins.
+- The Android jobs (`integration-test`, `build-android`) add `actions/setup-java@v4` (Temurin 17) since `android/app/build.gradle.kts` pins `VERSION_17`; the existing `ci.yml` jobs don't build Android and legitimately omit Java.
+- The integration test uses `find.bySubtype<GameWidget>()` (not `find.byType(GameWidget)`, which matches zero widgets because `GameWidget` is generic), a bounded retry-tap loop (board geometry is set in async `onLoad`, after the HUD renders), and a dual-condition wait (the `AnimatedSwitcher` keeps the outgoing picker widget alive ~160 ms). No `pumpAndSettle` is used anywhere.
