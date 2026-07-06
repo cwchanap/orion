@@ -117,7 +117,7 @@ jobs:
 
       - name: Enable KVM group perms for GitHub-hosted Ubuntu runner
         run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="O+G"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
