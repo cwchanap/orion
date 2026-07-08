@@ -750,8 +750,9 @@ class _UpgradePanel extends StatelessWidget {
               : WrapAlignment.end,
         );
 
+        final Widget summaryAndActions;
         if (constraints.maxWidth < 440) {
-          return Column(
+          summaryAndActions = Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -760,21 +761,60 @@ class _UpgradePanel extends StatelessWidget {
               Align(alignment: Alignment.centerLeft, child: actions),
             ],
           );
+        } else {
+          summaryAndActions = Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: _TowerSummary(tower: tower, towerName: towerName),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Align(alignment: Alignment.centerRight, child: actions),
+              ),
+            ],
+          );
         }
 
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: _TowerSummary(tower: tower, towerName: towerName),
-            ),
-            const SizedBox(width: 12),
-            Flexible(
-              child: Align(alignment: Alignment.centerRight, child: actions),
-            ),
+            summaryAndActions,
+            const SizedBox(height: 10),
+            _TargetingModePicker(game: game, snapshot: snapshot, tower: tower),
           ],
         );
       },
+    );
+  }
+}
+
+class _TargetingModePicker extends StatelessWidget {
+  const _TargetingModePicker({
+    required this.game,
+    required this.snapshot,
+    required this.tower,
+  });
+
+  final OrionDefenseGame game;
+  final GameSnapshot snapshot;
+  final PlacedTower tower;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = snapshot.phase == GamePhase.build;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final mode in TowerTargetingMode.values)
+          ChoiceChip(
+            label: Text(mode.label),
+            selected: tower.targetingMode == mode,
+            onSelected: enabled ? (_) => game.setTargetingMode(mode) : null,
+          ),
+      ],
     );
   }
 }
