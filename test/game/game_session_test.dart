@@ -451,6 +451,71 @@ void main() {
       expect(session.gold, 119);
     });
 
+    group('targeting mode', () {
+      test('newly placed tower defaults to First', () {
+        final session = GameSession.initial();
+        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+
+        expect(session.towers.single.targetingMode, TowerTargetingMode.first);
+      });
+
+      test('setTargetingMode updates the mode during build phase', () {
+        final session = GameSession.initial();
+        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final tower = session.towers.single;
+
+        expect(
+          session.setTargetingMode(tower.id, TowerTargetingMode.strongest),
+          isTrue,
+        );
+        expect(
+          session.towers.single.targetingMode,
+          TowerTargetingMode.strongest,
+        );
+      });
+
+      test('setTargetingMode is denied during wave', () {
+        final session = GameSession.initial();
+        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final tower = session.towers.single;
+        expect(session.startWave(), isTrue);
+
+        expect(
+          session.setTargetingMode(tower.id, TowerTargetingMode.weakest),
+          isFalse,
+        );
+        expect(session.towers.single.targetingMode, TowerTargetingMode.first);
+      });
+
+      test('setTargetingMode returns false for an unknown tower id', () {
+        final session = GameSession.initial();
+
+        expect(
+          session.setTargetingMode(999, TowerTargetingMode.closest),
+          isFalse,
+        );
+      });
+
+      test('targeting mode survives upgrade and specialization', () {
+        final session = GameSession.initial(gold: 500);
+        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final tower = session.towers.single;
+        expect(
+          session.setTargetingMode(tower.id, TowerTargetingMode.closest),
+          isTrue,
+        );
+
+        expect(session.upgradeTower(tower.id), isTrue);
+        expect(session.towers.single.targetingMode, TowerTargetingMode.closest);
+
+        expect(
+          session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
+          isTrue,
+        );
+        expect(session.towers.single.targetingMode, TowerTargetingMode.closest);
+      });
+    });
+
     test('starts waves only from build phase', () {
       final session = GameSession.initial();
 

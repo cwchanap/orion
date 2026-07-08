@@ -179,6 +179,20 @@ class GameSession {
     return true;
   }
 
+  bool setTargetingMode(int towerId, TowerTargetingMode mode) {
+    if (_phase != GamePhase.build) {
+      return false;
+    }
+
+    final entry = _findTowerEntry(towerId);
+    if (entry == null) {
+      return false;
+    }
+
+    _towersByPosition[entry.key] = entry.value.copyWith(targetingMode: mode);
+    return true;
+  }
+
   bool startWave() {
     if (_phase != GamePhase.build || _waveIndex >= stage.waves.length) {
       return false;
