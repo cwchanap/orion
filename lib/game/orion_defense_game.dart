@@ -222,6 +222,29 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
+  void setTargetingMode(TowerTargetingMode mode) {
+    final tower = _selectedTower;
+    if (tower == null) {
+      _publishSnapshot(feedback: 'Select a tower first.');
+      return;
+    }
+
+    if (!_session.setTargetingMode(tower.id, mode)) {
+      _publishSnapshot(
+        feedback: 'Targeting can only change during build phase.',
+      );
+      return;
+    }
+
+    final updated = _session.towerAt(tower.position);
+    final component = _towerComponents[tower.id];
+    if (updated != null && component != null) {
+      component.updateTower(updated);
+      _selectedTower = updated;
+    }
+    _publishSnapshot();
+  }
+
   void startWave() {
     if (!_session.startWave()) {
       _publishSnapshot(feedback: 'Wave cannot start right now.');
@@ -376,6 +399,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       tower: TargetPoint(x: tower.position.x, y: tower.position.y),
       range: tower.stats.range,
       candidates: candidates,
+      mode: tower.placedTower.targetingMode,
     );
     if (selected == null) {
       return null;
