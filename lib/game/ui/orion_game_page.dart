@@ -804,16 +804,24 @@ class _TargetingModePicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final enabled = snapshot.phase == GamePhase.build;
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (final mode in TowerTargetingMode.values)
-          ChoiceChip(
-            label: Text(mode.label),
-            selected: tower.targetingMode == mode,
-            onSelected: enabled ? (_) => game.setTargetingMode(mode) : null,
-          ),
+        Text('Targeting', style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final mode in TowerTargetingMode.values)
+              ChoiceChip(
+                label: Text(mode.label),
+                selected: tower.targetingMode == mode,
+                onSelected: enabled ? (_) => game.setTargetingMode(mode) : null,
+              ),
+          ],
+        ),
       ],
     );
   }
