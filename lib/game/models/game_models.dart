@@ -60,6 +60,18 @@ enum PlacementFailure {
   lockedTower,
 }
 
+enum TowerTargetingMode {
+  first('First'),
+  strongest('Strongest'),
+  weakest('Weakest'),
+  closest('Closest'),
+  shielded('Shielded'),
+  armored('Armored');
+
+  const TowerTargetingMode(this.label);
+  final String label;
+}
+
 class GridPosition {
   const GridPosition(this.column, this.row);
 
@@ -279,6 +291,7 @@ class PlacedTower {
     required this.position,
     this.level = 1,
     this.specialization,
+    this.targetingMode = TowerTargetingMode.first,
   });
 
   final int id;
@@ -286,6 +299,7 @@ class PlacedTower {
   final GridPosition position;
   final int level;
   final TowerSpecialization? specialization;
+  final TowerTargetingMode targetingMode;
 
   bool get canUpgrade => level == 1;
   bool get canSpecialize => level == 2;
@@ -301,6 +315,7 @@ class PlacedTower {
       position: position,
       level: 2,
       specialization: specialization,
+      targetingMode: targetingMode,
     );
   }
 
@@ -321,6 +336,18 @@ class PlacedTower {
       position: position,
       level: 3,
       specialization: specialization,
+      targetingMode: targetingMode,
+    );
+  }
+
+  PlacedTower copyWith({TowerTargetingMode? targetingMode}) {
+    return PlacedTower(
+      id: id,
+      type: type,
+      position: position,
+      level: level,
+      specialization: specialization,
+      targetingMode: targetingMode ?? this.targetingMode,
     );
   }
 }
