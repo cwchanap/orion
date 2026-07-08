@@ -107,6 +107,10 @@ class EnemyComponent extends CircleComponent {
       y: position.y,
       pathProgress: pathProgress,
       isAlive: isAlive,
+      currentHealth: health,
+      currentShield: shield,
+      isShielded: stats.traits.contains(EnemyTrait.shielded),
+      isArmored: stats.traits.contains(EnemyTrait.armored),
     );
   }
 
