@@ -642,6 +642,108 @@ void main() {
     expect(coreInkWell.onTap, isNull);
     expect(alphaInkWell.onTap, isNotNull);
   });
+
+  testWidgets(
+    'selected tower panel shows targeting chips reflecting the current mode',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(onGameCreated: (created) => game = created),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      final snapshot = game!.stateNotifier.value;
+      const selectedTower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(0, 0),
+        targetingMode: TowerTargetingMode.strongest,
+      );
+      game!.stateNotifier.value = GameSnapshot(
+        phase: GamePhase.build,
+        gold: snapshot.gold,
+        baseHealth: snapshot.baseHealth,
+        waveNumber: snapshot.waveNumber,
+        waveTotal: snapshot.waveTotal,
+        stageId: snapshot.stageId,
+        stageName: snapshot.stageName,
+        stageLabel: snapshot.stageLabel,
+        unlockedTowerTypes: snapshot.unlockedTowerTypes,
+        nextWavePreview: snapshot.nextWavePreview,
+        selectedCell: snapshot.selectedCell,
+        selectedTower: selectedTower,
+        feedback: snapshot.feedback,
+        isPaused: snapshot.isPaused,
+        speedMultiplier: snapshot.speedMultiplier,
+        autoStartEnabled: snapshot.autoStartEnabled,
+        autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+      );
+      await tester.pump();
+
+      for (final mode in TowerTargetingMode.values) {
+        expect(find.text(mode.label), findsOneWidget);
+      }
+      final strongestChip = tester.widget<ChoiceChip>(
+        find.ancestor(
+          of: find.text('Strongest'),
+          matching: find.byType(ChoiceChip),
+        ),
+      );
+      expect(strongestChip.selected, isTrue);
+    },
+  );
+
+  testWidgets('targeting chips are disabled during wave phase', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    final snapshot = game!.stateNotifier.value;
+    const selectedTower = PlacedTower(
+      id: 1,
+      type: TowerType.laser,
+      position: GridPosition(0, 0),
+    );
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.wave,
+      gold: snapshot.gold,
+      baseHealth: snapshot.baseHealth,
+      waveNumber: snapshot.waveNumber,
+      waveTotal: snapshot.waveTotal,
+      stageId: snapshot.stageId,
+      stageName: snapshot.stageName,
+      stageLabel: snapshot.stageLabel,
+      unlockedTowerTypes: snapshot.unlockedTowerTypes,
+      nextWavePreview: snapshot.nextWavePreview,
+      selectedCell: snapshot.selectedCell,
+      selectedTower: selectedTower,
+      feedback: snapshot.feedback,
+      isPaused: snapshot.isPaused,
+      speedMultiplier: snapshot.speedMultiplier,
+      autoStartEnabled: snapshot.autoStartEnabled,
+      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    );
+    await tester.pump();
+
+    final firstChip = tester.widget<ChoiceChip>(
+      find.ancestor(of: find.text('First'), matching: find.byType(ChoiceChip)),
+    );
+    expect(firstChip.onSelected, isNull);
+  });
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
