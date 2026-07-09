@@ -259,20 +259,8 @@ void main() {
     test('closest tie breaks to higher path progress', () {
       // Both candidates equidistant from the tower (dist² = 100).
       const tied = <TargetCandidate>[
-        TargetCandidate(
-          id: 1,
-          x: 10,
-          y: 0,
-          pathProgress: 0.3,
-          isAlive: true,
-        ),
-        TargetCandidate(
-          id: 2,
-          x: 0,
-          y: 10,
-          pathProgress: 0.8,
-          isAlive: true,
-        ),
+        TargetCandidate(id: 1, x: 10, y: 0, pathProgress: 0.3, isAlive: true),
+        TargetCandidate(id: 2, x: 0, y: 10, pathProgress: 0.8, isAlive: true),
       ];
       final target = TowerTargeting.selectTarget(
         tower: const TargetPoint(x: 0, y: 0),
@@ -285,27 +273,9 @@ void main() {
 
     test('first resolves equal path progress by ascending id', () {
       const tied = <TargetCandidate>[
-        TargetCandidate(
-          id: 3,
-          x: 10,
-          y: 0,
-          pathProgress: 0.5,
-          isAlive: true,
-        ),
-        TargetCandidate(
-          id: 1,
-          x: 20,
-          y: 0,
-          pathProgress: 0.5,
-          isAlive: true,
-        ),
-        TargetCandidate(
-          id: 2,
-          x: 30,
-          y: 0,
-          pathProgress: 0.5,
-          isAlive: true,
-        ),
+        TargetCandidate(id: 3, x: 10, y: 0, pathProgress: 0.5, isAlive: true),
+        TargetCandidate(id: 1, x: 20, y: 0, pathProgress: 0.5, isAlive: true),
+        TargetCandidate(id: 2, x: 30, y: 0, pathProgress: 0.5, isAlive: true),
       ];
       final target = TowerTargeting.selectTarget(
         tower: const TargetPoint(x: 0, y: 0),
