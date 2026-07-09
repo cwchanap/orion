@@ -148,3 +148,7 @@ Mode changes are free (no gold cost).
 - Invalid or unavailable targets fall back gracefully — no in-range candidate returns `null`; trait modes fall back to `first` when their subset is empty.
 - Tower upgrades and specializations preserve the selected targeting mode — `upgraded()` / `specialized()` carry `targetingMode` through; covered by session tests.
 - Tests cover each targeting mode with representative target candidates — `tower_targeting_test.dart` per-mode groups.
+
+## Future Tuning Note: `isShielded` Derivation
+
+`TargetCandidate.isShielded` is populated from the enemy's **static trait** (`stats.traits.contains(EnemyTrait.shielded)`), not from live shield > 0. This is spec-compliant and intentional for HPA-96, but it means a shielded-trait enemy whose shield has been depleted still counts as "Shielded" for the `shielded` targeting mode. A future tuning pass may want to switch the flag to `shield > 0` so the mode tracks live shield state rather than trait membership. No change for now.
