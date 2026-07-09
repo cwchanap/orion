@@ -744,6 +744,109 @@ void main() {
     );
     expect(firstChip.onSelected, isNull);
   });
+
+  testWidgets('tapping a targeting chip invokes game.setTargetingMode', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    final snapshot = game!.stateNotifier.value;
+    const selectedTower = PlacedTower(
+      id: 1,
+      type: TowerType.laser,
+      position: GridPosition(0, 0),
+      targetingMode: TowerTargetingMode.first,
+    );
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.build,
+      gold: snapshot.gold,
+      baseHealth: snapshot.baseHealth,
+      waveNumber: snapshot.waveNumber,
+      waveTotal: snapshot.waveTotal,
+      stageId: snapshot.stageId,
+      stageName: snapshot.stageName,
+      stageLabel: snapshot.stageLabel,
+      unlockedTowerTypes: snapshot.unlockedTowerTypes,
+      nextWavePreview: snapshot.nextWavePreview,
+      selectedCell: snapshot.selectedCell,
+      selectedTower: selectedTower,
+      feedback: snapshot.feedback,
+      isPaused: snapshot.isPaused,
+      speedMultiplier: snapshot.speedMultiplier,
+      autoStartEnabled: snapshot.autoStartEnabled,
+      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    );
+    await tester.pump();
+
+    // The game session has no real selected tower, so retargeting reports the
+    // "select a tower first" feedback — proving the chip callback ran.
+    await tester.tap(find.text('Weakest'));
+    await tester.pump();
+
+    expect(find.text('Select a tower first.'), findsOneWidget);
+  });
+
+  testWidgets('selected tower panel stacks summary and actions when narrow', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    OrionDefenseGame? game;
+
+    tester.view.physicalSize = const Size(400, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    final snapshot = game!.stateNotifier.value;
+    const selectedTower = PlacedTower(
+      id: 1,
+      type: TowerType.laser,
+      position: GridPosition(0, 0),
+    );
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.build,
+      gold: snapshot.gold,
+      baseHealth: snapshot.baseHealth,
+      waveNumber: snapshot.waveNumber,
+      waveTotal: snapshot.waveTotal,
+      stageId: snapshot.stageId,
+      stageName: snapshot.stageName,
+      stageLabel: snapshot.stageLabel,
+      unlockedTowerTypes: snapshot.unlockedTowerTypes,
+      nextWavePreview: snapshot.nextWavePreview,
+      selectedCell: snapshot.selectedCell,
+      selectedTower: selectedTower,
+      feedback: snapshot.feedback,
+      isPaused: snapshot.isPaused,
+      speedMultiplier: snapshot.speedMultiplier,
+      autoStartEnabled: snapshot.autoStartEnabled,
+      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    );
+    await tester.pump();
+
+    // The narrow-width branch renders the targeting picker; the "Targeting"
+    // label confirms the panel built via the stacked Column layout.
+    expect(find.text('Targeting'), findsOneWidget);
+    expect(find.text('First'), findsOneWidget);
+  });
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {

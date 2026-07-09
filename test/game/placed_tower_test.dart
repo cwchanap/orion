@@ -39,6 +39,17 @@ void main() {
       expect(retargeted.level, 1);
     });
 
+    test('copyWith with no argument preserves the targeting mode', () {
+      const tower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(0, 0),
+        targetingMode: TowerTargetingMode.closest,
+      );
+      expect(tower.copyWith().targetingMode, TowerTargetingMode.closest);
+      expect(tower.copyWith().id, 1);
+    });
+
     test('upgraded preserves the targeting mode', () {
       const tower = PlacedTower(
         id: 1,

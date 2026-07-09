@@ -221,6 +221,55 @@ void main() {
       expect(enemy.overlayState.showHealthBar, isTrue);
     });
 
+    test('targetCandidate exposes runtime health shield and trait flags', () {
+      final enemy = EnemyComponent(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+          shieldHealth: 40,
+          traits: {EnemyTrait.shielded, EnemyTrait.armored},
+        ),
+        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+
+      enemy.applyDamage(30);
+
+      final candidate = enemy.targetCandidate;
+      expect(candidate.id, 1);
+      expect(candidate.isAlive, isTrue);
+      expect(candidate.currentHealth, enemy.health);
+      expect(candidate.currentShield, enemy.shield);
+      expect(candidate.isShielded, isTrue);
+      expect(candidate.isArmored, isTrue);
+      expect(candidate.effectiveHealth, enemy.health + enemy.shield);
+    });
+
+    test('targetCandidate reports no traits for plain enemies', () {
+      final enemy = EnemyComponent(
+        enemyId: 2,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+
+      final candidate = enemy.targetCandidate;
+      expect(candidate.currentHealth, 100);
+      expect(candidate.currentShield, 0);
+      expect(candidate.isShielded, isFalse);
+      expect(candidate.isArmored, isFalse);
+    });
+
     test('reaching the end of the path resolves via onReachedBase', () {
       var reachedBase = false;
       final enemy = EnemyComponent(
