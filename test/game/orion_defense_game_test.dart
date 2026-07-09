@@ -467,6 +467,67 @@ void main() {
       expect(game.snapshot.autoStartCountdownRemaining, isNull);
       expect(game.timeScale, 1);
     });
+
+    test('setTargetingMode without a selected tower reports feedback', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+      game.onGameResize(Vector2(800, 1200));
+
+      game.setTargetingMode(TowerTargetingMode.strongest);
+
+      expect(game.snapshot.feedback, 'Select a tower first.');
+      expect(game.snapshot.selectedTower, isNull);
+    });
+
+    test('setTargetingMode updates the selected tower during build phase', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+
+      // Re-tap the placed tower's cell to select it.
+      _tapCell(game, const GridPosition(0, 1));
+      game.processLifecycleEvents();
+
+      final tower = game.snapshot.selectedTower;
+      expect(tower, isNotNull);
+      expect(tower!.targetingMode, TowerTargetingMode.first);
+
+      game.setTargetingMode(TowerTargetingMode.strongest);
+
+      expect(
+        game.snapshot.selectedTower!.targetingMode,
+        TowerTargetingMode.strongest,
+      );
+      expect(game.snapshot.feedback, isNull);
+    });
+
+    test('setTargetingMode is denied during an active wave', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+      game.startWave();
+
+      // startWave clears the selection; re-select the tower during the wave.
+      _tapCell(game, const GridPosition(0, 1));
+      game.processLifecycleEvents();
+      expect(game.snapshot.selectedTower, isNotNull);
+
+      game.setTargetingMode(TowerTargetingMode.strongest);
+
+      expect(game.snapshot.phase, GamePhase.wave);
+      expect(
+        game.snapshot.feedback,
+        'Targeting can only change during build phase.',
+      );
+      // Mode is unchanged.
+      expect(
+        game.snapshot.selectedTower!.targetingMode,
+        TowerTargetingMode.first,
+      );
+    });
   });
 }
 
