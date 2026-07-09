@@ -186,6 +186,20 @@ void main() {
       expect(target?.id, 2); // fallback to highest path progress
     });
 
+    test('armored falls back to first when no armored enemy is in range', () {
+      const unarmored = <TargetCandidate>[
+        TargetCandidate(id: 1, x: 10, y: 0, pathProgress: 0.2, isAlive: true),
+        TargetCandidate(id: 2, x: 20, y: 0, pathProgress: 0.9, isAlive: true),
+      ];
+      final target = TowerTargeting.selectTarget(
+        tower: const TargetPoint(x: 0, y: 0),
+        range: 999,
+        candidates: unarmored,
+        mode: TowerTargetingMode.armored,
+      );
+      expect(target?.id, 2); // fallback to highest path progress
+    });
+
     test('strongest tie breaks to higher path progress', () {
       const tied = <TargetCandidate>[
         TargetCandidate(
@@ -212,6 +226,93 @@ void main() {
         mode: TowerTargetingMode.strongest,
       );
       expect(target?.id, 2);
+    });
+
+    test('weakest tie breaks to higher path progress', () {
+      const tied = <TargetCandidate>[
+        TargetCandidate(
+          id: 1,
+          x: 10,
+          y: 0,
+          pathProgress: 0.3,
+          isAlive: true,
+          currentHealth: 50,
+        ),
+        TargetCandidate(
+          id: 2,
+          x: 20,
+          y: 0,
+          pathProgress: 0.8,
+          isAlive: true,
+          currentHealth: 50,
+        ),
+      ];
+      final target = TowerTargeting.selectTarget(
+        tower: const TargetPoint(x: 0, y: 0),
+        range: 999,
+        candidates: tied,
+        mode: TowerTargetingMode.weakest,
+      );
+      expect(target?.id, 2);
+    });
+
+    test('closest tie breaks to higher path progress', () {
+      // Both candidates equidistant from the tower (dist² = 100).
+      const tied = <TargetCandidate>[
+        TargetCandidate(
+          id: 1,
+          x: 10,
+          y: 0,
+          pathProgress: 0.3,
+          isAlive: true,
+        ),
+        TargetCandidate(
+          id: 2,
+          x: 0,
+          y: 10,
+          pathProgress: 0.8,
+          isAlive: true,
+        ),
+      ];
+      final target = TowerTargeting.selectTarget(
+        tower: const TargetPoint(x: 0, y: 0),
+        range: 999,
+        candidates: tied,
+        mode: TowerTargetingMode.closest,
+      );
+      expect(target?.id, 2);
+    });
+
+    test('first resolves equal path progress by ascending id', () {
+      const tied = <TargetCandidate>[
+        TargetCandidate(
+          id: 3,
+          x: 10,
+          y: 0,
+          pathProgress: 0.5,
+          isAlive: true,
+        ),
+        TargetCandidate(
+          id: 1,
+          x: 20,
+          y: 0,
+          pathProgress: 0.5,
+          isAlive: true,
+        ),
+        TargetCandidate(
+          id: 2,
+          x: 30,
+          y: 0,
+          pathProgress: 0.5,
+          isAlive: true,
+        ),
+      ];
+      final target = TowerTargeting.selectTarget(
+        tower: const TargetPoint(x: 0, y: 0),
+        range: 999,
+        candidates: tied,
+      );
+      expect(target?.id, 1);
     });
   });
 }
