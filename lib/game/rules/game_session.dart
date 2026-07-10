@@ -179,6 +179,20 @@ class GameSession {
     return true;
   }
 
+  int? sellTower(int towerId) {
+    if (_phase != GamePhase.build) {
+      return null;
+    }
+    final entry = _findTowerEntry(towerId);
+    if (entry == null) {
+      return null;
+    }
+    final refund = GameBalance.refundValue(entry.value);
+    _towersByPosition.remove(entry.key);
+    _gold += refund;
+    return refund;
+  }
+
   bool setTargetingMode(int towerId, TowerTargetingMode mode) {
     if (_phase != GamePhase.build) {
       return false;
