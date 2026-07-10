@@ -98,6 +98,28 @@ void main() {
     expect(find.text('Sell +35'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'Sell button renders without overflow on a narrow screen with specialization chips',
+    (tester) async {
+      tester.view.physicalSize = const Size(400, 1200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await _pumpStageWithSelectedTower(
+        tester,
+        const PlacedTower(
+          id: 1,
+          type: TowerType.laser,
+          position: GridPosition(0, 0),
+          level: 2,
+        ),
+      );
+
+      expect(find.text('Sell +84'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 /// Pumps [OrionGamePage], enters the first stage, and drives the panel with a
