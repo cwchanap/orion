@@ -222,6 +222,33 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
+  void sellSelectedTower() {
+    final tower = _selectedTower;
+    if (tower == null) {
+      _publishSnapshot(feedback: 'Select a tower first.');
+      return;
+    }
+
+    final refund = _session.sellTower(tower.id);
+    if (refund == null) {
+      _publishSnapshot(feedback: 'Sell towers between waves.');
+      return;
+    }
+
+    final component = _towerComponents.remove(tower.id);
+    component?.removeFromParent();
+    for (final drone
+        in children
+            .whereType<DroneComponent>()
+            .where((drone) => drone.ownerTowerId == tower.id)
+            .toList()) {
+      drone.removeFromParent();
+    }
+    _activeDronesByTower.remove(tower.id);
+    _clearSelection();
+    _publishSnapshot(feedback: 'Sold for $refund gold.');
+  }
+
   void setTargetingMode(TowerTargetingMode mode) {
     final tower = _selectedTower;
     if (tower == null) {

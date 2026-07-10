@@ -5,8 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/components/drone_component.dart';
 import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/projectile_component.dart';
+import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
@@ -528,6 +530,116 @@ void main() {
         TowerTargetingMode.first,
       );
     });
+
+    test(
+      'sellSelectedTower removes the component, clears selection, refunds',
+      () {
+        final game = OrionDefenseGame(stage: _singleEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        _tapCell(game, const GridPosition(0, 1)); // select the placed tower
+        game.processLifecycleEvents();
+        expect(game.snapshot.selectedTower, isNotNull);
+        expect(game.children.whereType<TowerComponent>(), hasLength(1));
+
+        game.sellSelectedTower();
+        game.processLifecycleEvents();
+
+        expect(game.children.whereType<TowerComponent>(), isEmpty);
+        expect(game.snapshot.selectedTower, isNull);
+        expect(game.snapshot.feedback, 'Sold for 35 gold.');
+        expect(game.snapshot.gold, GameBalance.startingGold - 50 + 35);
+      },
+    );
+
+    test('sellSelectedTower with no selection reports feedback', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+      game.onGameResize(Vector2(800, 1200));
+
+      game.sellSelectedTower();
+
+      expect(game.snapshot.feedback, 'Select a tower first.');
+    });
+
+    test('sellSelectedTower is denied during an active wave', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+      game.startWave();
+      _tapCell(game, const GridPosition(0, 1)); // re-select during wave
+      game.processLifecycleEvents();
+      expect(game.snapshot.selectedTower, isNotNull);
+
+      game.sellSelectedTower();
+      game.processLifecycleEvents();
+
+      expect(game.snapshot.feedback, 'Sell towers between waves.');
+      expect(game.children.whereType<TowerComponent>(), hasLength(1));
+    });
+
+    test('sellSelectedTower despawns a sold drone bay live drones', () {
+      final game = OrionDefenseGame(stage: _droneBayUnlockStage());
+      game.onGameResize(Vector2(800, 1200));
+
+      // Advance 5 empty waves so the drone bay (unlocks at wave 6) is available.
+      for (var wave = 0; wave < 5; wave += 1) {
+        game.startWave();
+        game.update(0);
+        game.processLifecycleEvents();
+      }
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.unlockedTowerTypes, contains(TowerType.droneBay));
+
+      // Place the drone bay adjacent to the wave-6 path and run that wave.
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.droneBay);
+      game.processLifecycleEvents();
+      expect(game.children.whereType<TowerComponent>(), hasLength(1));
+
+      game.startWave(); // wave 6: one durable enemy
+      game.update(0.01); // spawn the enemy
+      game.processLifecycleEvents();
+      // The game is not mounted in unit tests, so add() during updateTree
+      // iteration modifies the children set directly instead of queueing,
+      // which throws a concurrent-modification error when the drone bay fires
+      // inside game.update(). Firing the tower via its own update() (outside
+      // the iteration) launches the drones safely; the end state matches the
+      // real mounted-game behavior.
+      game.children.whereType<TowerComponent>().single.update(0.01);
+      game.processLifecycleEvents();
+
+      final dronesBefore = game.children.whereType<DroneComponent>().toList();
+      expect(dronesBefore, isNotEmpty); // guards against a vacuous pass
+
+      // End the wave (sell is build-phase only) by resolving the enemy.
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      enemy.applyDamage(10000);
+      game.update(0.01);
+      game.processLifecycleEvents();
+      expect(game.snapshot.phase, GamePhase.build);
+
+      final droneBayId = game.snapshot.selectedTower?.id;
+      expect(droneBayId, isNull); // not selected yet
+
+      _tapCell(game, const GridPosition(0, 1)); // select the drone bay
+      game.processLifecycleEvents();
+      final ownerTowerId = game.snapshot.selectedTower!.id;
+
+      game.sellSelectedTower();
+      game.processLifecycleEvents();
+
+      expect(
+        game.children.whereType<DroneComponent>().where(
+          (d) => d.ownerTowerId == ownerTowerId,
+        ),
+        isEmpty,
+      );
+      expect(game.children.whereType<TowerComponent>(), isEmpty);
+    });
   });
 }
 
@@ -668,6 +780,44 @@ StageDefinition _lethalSingleEnemyStage() {
         ],
         clearBonus: 0,
       ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+/// Stage whose first 5 waves are empty (to unlock the wave-6 drone bay) and
+/// whose 6th wave spawns a single durable enemy for drone-launch tests.
+StageDefinition _droneBayUnlockStage() {
+  return StageDefinition(
+    id: 'drone-bay-unlock-stage',
+    name: 'Drone Bay Unlock Stage',
+    mapLabel: 'Drone',
+    description: 'Stage that unlocks the drone bay for sell tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: [
+      for (var wave = 0; wave < 5; wave += 1)
+        const WaveDefinition(groups: [], clearBonus: 0),
+      const WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 1,
+            enemyStats: EnemyStats(
+              health: 10000,
+              speed: 1,
+              baseDamage: 1,
+              goldReward: 0,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+      // A trailing empty wave so clearing wave 6 leaves the game in build
+      // phase (not won), allowing the sell-during-build flow to be tested.
+      const WaveDefinition(groups: [], clearBonus: 0),
     ],
     unlockDependencies: const [],
     isMainPath: true,
