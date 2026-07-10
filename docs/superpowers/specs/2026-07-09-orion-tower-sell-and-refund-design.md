@@ -139,6 +139,7 @@ void sellSelectedTower() {
 - Removes the `TowerComponent` from `_towerComponents` and the scene (mirrors `_clearCombatComponents`'s tower-removal path).
 - **Despawns the tower's live drones, then clears the bookkeeping.** Drones can survive a wave's end (their `_finishWaveIfComplete` only checks `_activeEnemyComponents`, not drones) and live up to `droneLifetime` (5.4s for hunterBay). Removing only `_activeDronesByTower[tower.id]` would leave orphaned `DroneComponent`s flying, attacking the next wave's enemies while excluded from the active-drone count. Selling the tower despawns its drones outright — consistent with "the tower and its effects are gone" — matching the player's expectation.
 - `_clearSelection()` clears `_selectedTower`, `_selectedCell`, and the board highlight, satisfying the "selling clears selection" criterion.
+- **Projectiles and gravity fields are not despawned.** Neither `ProjectileComponent` nor `GravityFieldComponent` carries an `ownerTowerId`, so they cannot be filtered by the sold tower. This is acceptable because sell is build-phase-gated: projectiles resolve on impact/expiry and gravity fields self-expire on `_remaining <= 0` (≤ `fieldDuration`, max 3.1s). Verified gap: a `GravityFieldComponent` is *not* cleared by `_finishWaveIfComplete`, so a field fired at the end of a wave can briefly persist into build phase — but it is inert there (`enemiesProvider` returns no enemies) and self-expires within its `fieldDuration`, so the effect is cosmetic and bounded, not a functional leak. No change is needed for this ticket; revisit only if gravity wells gain build-phase-active effects.
 
 ### `lib/game/ui/orion_game_page.dart`
 
@@ -172,10 +173,10 @@ return Wrap(
 ```
 
 - The label shows the refund up front (`Sell +35`) so the player knows the payoff before tapping.
-- `onPressed` is `null` (disabled) outside `GamePhase.build`, satisfying the "disabled during waves/won/lost" criterion.
+- The Sell button's enabled condition is **phase-only by design** (`onPressed: snapshot.phase == GamePhase.build ? game.sellSelectedTower : null`). Unlike the Upgrade button, selling grants gold rather than costing it, so it deliberately does *not* mirror upgrade's `gold >= cost` check. This is stated explicitly so a future reader doesn't "fix" it to add one.
 - A tonal button reads as a secondary action without being alarming. `Icons.sell` is the chosen glyph.
 
-The existing specialize branch already returns a `Wrap`; combining it with the sell button into a single `Wrap` keeps the layout consistent across all three tower states.
+The existing branch bodies (Upgrade button, Specialize chips, Max label) are **reused verbatim** — including the Upgrade branch's `canUpgrade` gate (`snapshot.phase == GamePhase.build && tower.canUpgrade && snapshot.gold >= stats.upgradeCost`), which must be preserved unchanged. The refactor only assigns each branch's result to a `primary` local and wraps it: the Upgrade and Max branches currently return bare `FilledButton.icon`s and thus *gain* a `Wrap` wrapper they didn't have before, while the Specialize branch already returns a `Wrap`. That layout change is exactly why the "narrow layout, no overflow" widget test is doing real verification rather than box-ticking.
 
 ## Testing
 
@@ -224,7 +225,7 @@ Add widget tests for the selected-tower panel, covering the UI behaviors the low
 - Tapping Sell invokes `game.sellSelectedTower` (verify via a spy/stub game or by observing the resulting snapshot).
 - Narrow layout (`maxWidth < 440`) stacks the summary and actions without overflow.
 
-These establish UI test coverage that does not yet exist for the upgrade panel; place them under `test/widget/` (or `test/game/ui/` following the suite's existing conventions — confirm the chosen location during implementation).
+These establish UI test coverage that does not yet exist for the upgrade panel. They go under `test/widget/`: the repo's only existing widget test is `test/widget_test.dart`, there is no `test/game/ui/` directory, and `test/game/` is reserved (per `AGENTS.md`) for the pure logic layer — widget tests belong in `test/widget/`.
 
 ## Verification
 
