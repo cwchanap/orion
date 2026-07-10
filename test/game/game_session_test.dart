@@ -451,6 +451,60 @@ void main() {
       expect(session.gold, 119);
     });
 
+    test('sells a placed tower, refunds 70 percent, and frees the cell', () {
+      final session = GameSession.initial(gold: 200);
+      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final tower = session.towers.single;
+      expect(session.gold, 150); // 200 - 50
+
+      final refund = session.sellTower(tower.id);
+
+      expect(refund, 35); // 70% of 50
+      expect(session.gold, 185); // 150 + 35
+      expect(session.towers, isEmpty);
+
+      // The cell is free for re-placement.
+      final replace = session.placeTower(
+        const GridPosition(0, 0),
+        TowerType.cryo,
+      );
+      expect(replace.isAllowed, isTrue);
+    });
+
+    test('sellTower refunds upgraded and specialized investment', () {
+      final session = GameSession.initial(gold: 500);
+      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final tower = session.towers.single;
+      session.upgradeTower(tower.id);
+      session.specializeTower(tower.id, TowerSpecialization.pulseLaser);
+
+      final refund = session.sellTower(session.towers.single.id);
+
+      expect(refund, 168); // 70% of 50 + 70 + 120 = 240
+      expect(session.towers, isEmpty);
+    });
+
+    test(
+      'sellTower returns null during an active wave and keeps the tower',
+      () {
+        final session = GameSession.initial(gold: 200);
+        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final tower = session.towers.single;
+        expect(session.startWave(), isTrue);
+
+        expect(session.sellTower(tower.id), isNull);
+        expect(session.towers, hasLength(1));
+        expect(session.gold, 150); // unchanged
+      },
+    );
+
+    test('sellTower returns null for an unknown tower id', () {
+      final session = GameSession.initial(gold: 200);
+
+      expect(session.sellTower(999), isNull);
+      expect(session.gold, 200);
+    });
+
     group('targeting mode', () {
       test('newly placed tower defaults to First', () {
         final session = GameSession.initial();
