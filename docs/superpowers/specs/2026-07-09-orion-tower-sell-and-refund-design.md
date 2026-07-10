@@ -20,34 +20,36 @@ Invested gold and refund are pure functions of the tower's state:
 invested = towerStats(type, level: 1).cost
          + (level >= 2 ? towerStats(type, level: 1).upgradeCost : 0)
          + (level == 3 ? towerStats(type, level: 1).specializationCost : 0)
-refund   = (invested * sellRefundRate).floor()
+refund   = invested * sellRefundPercent ~/ 100
 ```
 
-Where `sellRefundRate` is a new `static const double = 0.70` on `GameBalance`, placed beside `startingGold` and `initialBaseHealth` so the rate is a single tunable knob.
+Where `sellRefundPercent` is a new `static const int = 70` on `GameBalance`, placed beside `startingGold` and `initialBaseHealth` so the rate is a single tunable knob.
 
 - Flat rate regardless of tower level: one predictable rule for the player.
-- `.floor()` (truncate): a refund never returns *more* than exactly 70%, so fractional amounts round down. Example: an Ion Chain tower specialized to Storm Relay has invested 95 + 130 + 190 = 415; 415 × 0.70 = 290.5 → refunds 290.
+- **Integer arithmetic (`* 70 ~/ 100`), not a `double` rate:** `(invested * 0.70).floor()` suffers floating-point error because 0.7 is not exactly representable in IEEE-754. Verified: `(90 * 0.70).floor()` = 62 (should be 63), `(180 * 0.70).floor()` = 125 (should be 126), `(330 * 0.70).floor()` = 230 (should be 231). `invested * 70 ~/ 100` is exact for all current tower totals. The `~/ 100` integer division truncates, so a refund never returns *more* than exactly 70% on a fractional total. Example: an Ion Chain tower specialized to Storm Relay has invested 95 + 130 + 190 = 415; 415 * 70 ~/ 100 = 29050 ~/ 100 = 290.
 
 Concrete refund reference values:
 
-| Tower (state)        | Invested | Refund (70%, floored) |
-|----------------------|----------|-----------------------|
-| Laser L1             | 50       | 35                    |
-| Laser L2             | 120      | 84                    |
-| Laser L3 pulseLaser  | 240      | 168                   |
-| Rocket L1            | 80       | 56                    |
-| DroneBay L3 hunterBay| 540      | 378                   |
-| IonChain L3 stormRelay | 415    | 290                   |
+| Tower (state)          | Invested | Refund (70%, truncated) |
+|------------------------|----------|-------------------------|
+| Laser L1               | 50       | 35                      |
+| Laser L2               | 120      | 84                      |
+| Laser L3 pulseLaser    | 240      | 168                     |
+| Rocket L1              | 80       | 56                      |
+| Nanite L1              | 90       | 63                      |
+| Rocket L3 siegeRocket  | 330      | 231                     |
+| DroneBay L3 hunterBay  | 540      | 378                     |
+| IonChain L3 stormRelay | 415      | 290                     |
 
 ## Scope
 
 In scope:
 
-- A `GameBalance.refundValue(PlacedTower tower)` static method and a `GameBalance.sellRefundRate` constant.
+- A `GameBalance.refundValue(PlacedTower tower)` static method and a `GameBalance.sellRefundPercent` constant.
 - A `GameSession.sellTower(int towerId)` method returning the refund (or `null` when rejected).
-- An `OrionDefenseGame.sellSelectedTower()` wrapper that removes the `TowerComponent`, clears selection, and publishes feedback.
+- An `OrionDefenseGame.sellSelectedTower()` wrapper that removes the `TowerComponent`, despawns the tower's live drones, clears selection, and publishes feedback.
 - A Sell button in the selected-tower panel, visible at every tower level, disabled outside build phase, showing the refund amount.
-- Pure-rule and balance tests covering level-1, upgraded, and specialized refund values, plus session behavior.
+- Pure-rule, balance, game-layer, and widget tests covering refund values, session behavior, component removal/selection/feedback, and UI state.
 
 Out of scope (non-goals from the issue):
 
@@ -63,7 +65,7 @@ Out of scope (non-goals from the issue):
 Add the tuning constant next to the other economy constants:
 
 ```dart
-static const double sellRefundRate = 0.70;
+static const int sellRefundPercent = 70;
 ```
 
 Add the pure refund function. It reads costs from level-1 stats (which always carry all three cost fields), so it never throws on level/specialization combination:
@@ -78,7 +80,7 @@ static int refundValue(PlacedTower tower) {
   if (tower.level == 3) {
     invested += base.specializationCost;
   }
-  return (invested * sellRefundRate).floor();
+  return invested * sellRefundPercent ~/ 100;
 }
 ```
 
@@ -124,6 +126,10 @@ void sellSelectedTower() {
   }
   final component = _towerComponents.remove(tower.id);
   component?.removeFromParent();
+  for (final drone
+      in children.whereType<DroneComponent>().where((d) => d.ownerTowerId == tower.id).toList()) {
+    drone.removeFromParent();
+  }
   _activeDronesByTower.remove(tower.id);
   _clearSelection();
   _publishSnapshot(feedback: 'Sold for $refund gold.');
@@ -131,7 +137,7 @@ void sellSelectedTower() {
 ```
 
 - Removes the `TowerComponent` from `_towerComponents` and the scene (mirrors `_clearCombatComponents`'s tower-removal path).
-- Clears any `_activeDronesByTower` bookkeeping entry for the tower (a drone bay sold mid-build otherwise leaves a stale counter).
+- **Despawns the tower's live drones, then clears the bookkeeping.** Drones can survive a wave's end (their `_finishWaveIfComplete` only checks `_activeEnemyComponents`, not drones) and live up to `droneLifetime` (5.4s for hunterBay). Removing only `_activeDronesByTower[tower.id]` would leave orphaned `DroneComponent`s flying, attacking the next wave's enemies while excluded from the active-drone count. Selling the tower despawns its drones outright — consistent with "the tower and its effects are gone" — matching the player's expectation.
 - `_clearSelection()` clears `_selectedTower`, `_selectedCell`, and the board highlight, satisfying the "selling clears selection" criterion.
 
 ### `lib/game/ui/orion_game_page.dart`
@@ -173,18 +179,20 @@ The existing specialize branch already returns a `Wrap`; combining it with the s
 
 ## Testing
 
-No new test files — existing files cover the right surfaces.
+Pure-rule, balance, game-layer, and widget tests are all required. Session and balance tests cannot verify component removal, drone despawn, selection clearing, feedback messages, or UI state — those need the game-layer and widget suites.
 
 ### `test/game/game_balance_test.dart`
 
-Add a `refundValue` test covering level-1, upgraded, and specialized towers, plus a `.5` floor case:
+Add a `refundValue` test covering level-1, upgraded, and specialized towers, plus the floating-point-error regression cases (these guard against reverting to a `double` rate):
 
 - L1 Laser → 35.
 - L2 Laser → 84.
 - L3 Laser pulseLaser → 168.
 - L1 Rocket → 56.
+- L1 Nanite (90) → 63 (would be 62 under `double`).
+- L3 Rocket siegeRocket (330) → 231 (would be 230 under `double`).
 - L3 DroneBay hunterBay → 378.
-- L3 IonChain stormRelay (415 × 0.7 = 290.5) → 290 (floor).
+- L3 IonChain stormRelay (415) → 290 (truncated from 290.5).
 
 ### `test/game/game_session_test.dart`
 
@@ -195,11 +203,30 @@ Add a `sellTower` group mirroring the existing upgrade/specialize tests:
 - Returns `null` outside build phase (after `startWave`).
 - Returns `null` for an unknown tower id.
 
-### `test/game/orion_defense_game_test.dart`
+### `test/game/orion_defense_game_test.dart` (required)
 
-If the existing suite covers upgrade/specialize wiring at the game layer, add a parallel sell test asserting the `TowerComponent` is removed and the snapshot carries the refund feedback. (If that suite only covers pure-rule wiring, the session tests are sufficient.)
+The existing suite covers pacing/snapshots but has no upgrade/specialize wiring tests. Add a `sellSelectedTower` group — this is net-new game-layer coverage, required because the session tests cannot verify the Flame component tree:
+
+- The `TowerComponent` for the sold tower is removed from the scene (no `DroneComponent`/`TowerComponent` with that id remains).
+- Selling a drone bay despawns its live `DroneComponent`s (assert no `DroneComponent` with `ownerTowerId == soldId` remains after sell).
+- `_selectedTower` is cleared (snapshot `selectedTower` is `null`).
+- The snapshot carries the refund feedback (`Sold for N gold.`).
+- Calling sell with no tower selected publishes the "Select a tower first." feedback.
+
+If asserting component-tree state requires a running Flame game (i.e. `onLoad` has run and components are attached), these tests build the game through its load lifecycle rather than constructing a bare instance.
+
+### `test/widget/` — widget tests (required)
+
+Add widget tests for the selected-tower panel, covering the UI behaviors the lower layers cannot:
+
+- The Sell button renders with the correct refund in its label (e.g. `Sell +35` for an L1 Laser).
+- The Sell button is enabled during `GamePhase.build` and disabled (null `onPressed`) during wave / won / lost.
+- Tapping Sell invokes `game.sellSelectedTower` (verify via a spy/stub game or by observing the resulting snapshot).
+- Narrow layout (`maxWidth < 440`) stacks the summary and actions without overflow.
+
+These establish UI test coverage that does not yet exist for the upgrade panel; place them under `test/widget/` (or `test/game/ui/` following the suite's existing conventions — confirm the chosen location during implementation).
 
 ## Verification
 
 - `flutter analyze` passes.
-- `flutter test` passes, including the new `refundValue` and `sellTower` cases.
+- `flutter test` passes, including the new `refundValue`, `sellTower`, `sellSelectedTower`, and widget cases.
