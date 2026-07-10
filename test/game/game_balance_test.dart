@@ -1062,6 +1062,19 @@ void main() {
         ),
         290,
       );
+      // DroneBay is the largest investment in the game (540 total).
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.droneBay,
+            position: GridPosition(0, 0),
+            level: 3,
+            specialization: TowerSpecialization.hunterBay,
+          ),
+        ),
+        378,
+      );
     });
   });
 }
