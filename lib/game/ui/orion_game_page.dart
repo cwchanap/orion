@@ -873,16 +873,15 @@ class _UpgradeActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final Widget primary;
     if (tower.canUpgrade) {
-      return FilledButton.icon(
+      primary = FilledButton.icon(
         onPressed: canUpgrade ? game.upgradeSelectedTower : null,
         icon: const Icon(Icons.upgrade),
         label: Text('Upgrade ${stats.upgradeCost}'),
       );
-    }
-
-    if (tower.canSpecialize) {
-      return Wrap(
+    } else if (tower.canSpecialize) {
+      primary = Wrap(
         alignment: alignment,
         spacing: 8,
         runSpacing: 8,
@@ -903,12 +902,28 @@ class _UpgradeActions extends StatelessWidget {
             ),
         ],
       );
+    } else {
+      primary = FilledButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.check),
+        label: const Text('Max'),
+      );
     }
 
-    return FilledButton.icon(
-      onPressed: null,
-      icon: const Icon(Icons.check),
-      label: const Text('Max'),
+    return Wrap(
+      alignment: alignment,
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        primary,
+        FilledButton.tonalIcon(
+          onPressed: snapshot.phase == GamePhase.build
+              ? game.sellSelectedTower
+              : null,
+          icon: const Icon(Icons.sell),
+          label: Text('Sell +${GameBalance.refundValue(tower)}'),
+        ),
+      ],
     );
   }
 }
