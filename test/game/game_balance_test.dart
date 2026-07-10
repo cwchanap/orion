@@ -975,6 +975,94 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('refundValue returns 70 percent of invested gold, truncated', () {
+      // Level 1 base values.
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.laser,
+            position: GridPosition(0, 0),
+          ),
+        ),
+        35,
+      );
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.rocket,
+            position: GridPosition(0, 0),
+          ),
+        ),
+        56,
+      );
+      // Float regression: 90 * 0.7 floors to 62; integer math yields 63.
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.nanite,
+            position: GridPosition(0, 0),
+          ),
+        ),
+        63,
+      );
+
+      // Level 2 adds the upgrade cost.
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.laser,
+            position: GridPosition(0, 0),
+            level: 2,
+          ),
+        ),
+        84,
+      );
+
+      // Level 3 specialized adds the specialization cost.
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.laser,
+            position: GridPosition(0, 0),
+            level: 3,
+            specialization: TowerSpecialization.pulseLaser,
+          ),
+        ),
+        168,
+      );
+      // Float regression: 330 total -> 231 (not 230).
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.rocket,
+            position: GridPosition(0, 0),
+            level: 3,
+            specialization: TowerSpecialization.siegeRocket,
+          ),
+        ),
+        231,
+      );
+      // Truncation: 415 * 70 ~/ 100 = 290 (the .5 is dropped).
+      expect(
+        GameBalance.refundValue(
+          const PlacedTower(
+            id: 1,
+            type: TowerType.ionChain,
+            position: GridPosition(0, 0),
+            level: 3,
+            specialization: TowerSpecialization.stormRelay,
+          ),
+        ),
+        290,
+      );
+    });
   });
 }
 

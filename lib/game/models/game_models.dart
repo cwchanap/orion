@@ -400,6 +400,8 @@ class GameBalance {
   static const int initialBaseHealth = 20;
   // Minimum base health (inclusive) to earn the silver stage medal on a win.
   static const int silverMedalThreshold = 10;
+  // Fraction of invested gold refunded when a tower is sold, as a percent.
+  static const int sellRefundPercent = 70;
 
   static const EnemyStats _basicDrone = EnemyStats(
     health: 36,
@@ -1214,6 +1216,19 @@ class GameBalance {
       ),
       _ => throw StateError('Unsupported tower stats: $type level $level'),
     };
+  }
+
+  /// Gold refunded when selling [tower]: 70% of everything invested, truncated.
+  static int refundValue(PlacedTower tower) {
+    final base = towerStats(tower.type, level: 1);
+    var invested = base.cost;
+    if (tower.level >= 2) {
+      invested += base.upgradeCost;
+    }
+    if (tower.level == 3) {
+      invested += base.specializationCost;
+    }
+    return invested * sellRefundPercent ~/ 100;
   }
 
   static _TowerCosts _towerCosts(TowerType type) {
