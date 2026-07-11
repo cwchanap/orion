@@ -32,7 +32,7 @@ This ticket implements exactly the three rewards above. The first two are gamepl
 
 ### `CampaignReward` enum
 
-New enum in `lib/game/campaign/campaign_progress.dart`:
+New enum in `lib/game/campaign/stage_definition.dart` (not `campaign_progress.dart`, which would create a circular import since `campaign_progress.dart` already imports `stage_definition.dart`):
 
 ```dart
 enum CampaignReward {
@@ -42,7 +42,7 @@ enum CampaignReward {
 }
 ```
 
-Each side stage carries one reward type on its `StageDefinition`. Main stages have no reward (`null`). The challenge badge is a compound reward derived from clearing both side stages; it is not assigned to a single stage.
+Each side stage carries one reward type on its `StageDefinition`. Main stages have no reward (`null`). The challenge badge is a compound reward derived from clearing both side stages; it is not assigned to a single stage. `campaign_progress.dart` gets `CampaignReward` transitively through its existing `stage_definition.dart` import.
 
 ### `GameBalance` constants
 
@@ -57,7 +57,7 @@ These follow the existing pattern where all economy tuning lives in `GameBalance
 
 ### `StageDefinition` change
 
-Add an optional field to `StageDefinition` in `lib/game/campaign/stage_definition.dart`:
+`StageDefinition` in `lib/game/campaign/stage_definition.dart` gains the `CampaignReward` enum (defined above) and an optional field:
 
 ```dart
 final CampaignReward? reward;
@@ -112,17 +112,68 @@ This is pure and testable without any Flame dependency.
    ```dart
    final modifiers = CampaignModifiers.fromProgress(_progress, OrionCampaign.stages);
    ```
-2. `OrionDefenseGame` constructor gains an optional `CampaignModifiers? modifiers` parameter (defaults to `null`). When non-null, it passes the adjusted starting values to the session:
+2. `OrionDefenseGame` constructor gains an optional `CampaignModifiers? modifiers` parameter (defaults to `null`). The `_session` field is `final`, so it must be initialized in the initializer list, not the constructor body:
    ```dart
-   _session = GameSession.initial(
-     stage: stage ?? OrionCampaign.stageOne,
-     gold: modifiers?.adjustedStartingGold,
-     baseHealth: modifiers?.adjustedStartingBaseHealth,
-   )
+   OrionDefenseGame({
+     StageDefinition? stage,
+     this.modifiers,
+     this.onStageWon,
+     this.onReturnToMap,
+   }) : stage = stage ?? OrionCampaign.stageOne,
+        _session = GameSession.initial(
+          stage: stage ?? OrionCampaign.stageOne,
+          gold: modifiers?.adjustedStartingGold,
+          baseHealth: modifiers?.adjustedStartingBaseHealth,
+        ) {
+     _resetPacing();
+   }
+
+   final CampaignModifiers? modifiers;
    ```
 3. `GameSession.initial` already accepts optional `gold` and `baseHealth` overrides and defaults to `GameBalance.startingGold` / `GameBalance.initialBaseHealth` when omitted. No signature change needed.
 
 When `modifiers` is `null` (the default), behavior is identical to today. This keeps existing tests and callers unchanged.
+
+### Effective starting values on GameSession
+
+`GameSession` must store the effective starting gold and health (including any campaign bonus) as fields, not just the base-health ceiling. Both are needed:
+
+```dart
+final int startingGold;
+final int startingBaseHealth;
+```
+
+These are set in the `GameSession.initial` constructor to the resolved values (the override if provided, otherwise the `GameBalance` default):
+
+```dart
+GameSession.initial({StageDefinition? stage, int? gold, int? baseHealth})
+  : stage = stage ?? OrionCampaign.stageOne,
+    startingGold = gold ?? GameBalance.startingGold,
+    startingBaseHealth = baseHealth ?? GameBalance.initialBaseHealth,
+    _gold = gold ?? GameBalance.startingGold,
+    _baseHealth = baseHealth ?? GameBalance.initialBaseHealth { ... }
+```
+
+### Clamps and restart
+
+Two existing code paths hardcode `GameBalance` defaults and must use the session's effective starting values instead:
+
+1. **`damageBase`** (`game_session.dart:245-247`) currently clamps to `GameBalance.initialBaseHealth` (20). With a +5 health bonus, a session starts at 25; the first enemy hit of even 1 damage would clamp from 24 down to 20, instantly destroying the bonus. The clamp must use `startingBaseHealth`:
+   ```dart
+   _baseHealth = (_baseHealth - amount).clamp(0, startingBaseHealth).toInt();
+   ```
+
+2. **`restart()`** (`game_session.dart:255-262`) currently resets to hardcoded `GameBalance.startingGold` and `GameBalance.initialBaseHealth`. A restart during a bonus session would silently drop both bonuses and make a Gold medal unreachable (the player restarts at 20 but `startingBaseHealth` says 25). It must reset to the stored starting values:
+   ```dart
+   void restart() {
+     _towersByPosition.clear();
+     _nextTowerId = 1;
+     _gold = startingGold;
+     _baseHealth = startingBaseHealth;
+     _waveIndex = 0;
+     _phase = GamePhase.build;
+   }
+   ```
 
 ### Medal calculation with bonus health
 
@@ -130,7 +181,7 @@ The current `StageResult.fromVictoryBaseHealth` clamps `bestBaseHealth` to `Game
 
 Changes:
 
-- `GameSession` stores a `final int startingBaseHealth` field, set to the effective starting health (the `_baseHealth` value after the constructor initializer). This field records the health ceiling for the session, including any campaign bonus.
+- `GameSession` stores `final int startingBaseHealth` (see "Effective starting values" above).
 - `StageResult.fromVictoryBaseHealth` gains a required `startingBaseHealth` parameter:
   ```dart
   factory StageResult.fromVictoryBaseHealth(
@@ -142,11 +193,41 @@ Changes:
   - Silver when `baseHealth >= GameBalance.silverMedalThreshold` (absolute threshold, unchanged at 10).
   - Clear otherwise.
   - `bestBaseHealth` stores `baseHealth.clamp(0, startingBaseHealth)`.
-- `OrionDefenseGame` passes `session.startingBaseHealth` when constructing the `StageResult` for `StageCompletion`.
 
-### Backward compatibility of medal change
+### Callers of `fromVictoryBaseHealth`
 
-All callers of `StageResult.fromVictoryBaseHealth` must supply `startingBaseHealth`. The only production caller is `OrionDefenseGame`, which has access to the session. Tests that construct results directly will pass `GameBalance.initialBaseHealth` (the default 20) for non-bonus scenarios, preserving existing behavior.
+There are **two** production callers, both of which must supply `startingBaseHealth`:
+
+1. **`OrionDefenseGame._onPhaseChange`** (`orion_defense_game.dart:697`) — builds the `StageCompletion` result. It has access to `_session.startingBaseHealth`:
+   ```dart
+   result: StageResult.fromVictoryBaseHealth(
+     _session.baseHealth,
+     startingBaseHealth: _session.startingBaseHealth,
+   ),
+   ```
+
+2. **`_EndStatePanel.build`** (`orion_game_page.dart:942`) — the victory screen. It currently calls `StageResult.fromVictoryBaseHealth(snapshot.baseHealth)` and displays `Base ${result.bestBaseHealth}/${GameBalance.initialBaseHealth}` (a hardcoded `/20`). With the new required parameter this won't compile, and the `/20` denominator is wrong with a bonus.
+
+   The UI follows the pattern "never reads game state directly — only via the snapshot." So `GameSnapshot` must carry `startingBaseHealth`. Add it as a required field:
+   ```dart
+   final int startingBaseHealth;
+   ```
+   `GameSession.snapshot()` includes it, and `_EndStatePanel` uses it:
+   ```dart
+   final result = didWin
+       ? StageResult.fromVictoryBaseHealth(
+           snapshot.baseHealth,
+           startingBaseHealth: snapshot.startingBaseHealth,
+         )
+       : null;
+   ```
+   The victory display denominator changes from `${GameBalance.initialBaseHealth}` to `${snapshot.startingBaseHealth}` so it shows `Base 25/25` (not `Base 25/20`).
+
+### Backward compatibility of medal and snapshot changes
+
+All callers of `StageResult.fromVictoryBaseHealth` must supply `startingBaseHealth`. Tests that construct results directly will pass `GameBalance.initialBaseHealth` (the default 20) for non-bonus scenarios, preserving existing behavior.
+
+`GameSnapshot` gains a new required field (`startingBaseHealth`). All snapshot construction sites (`GameSession.snapshot()` and any test helpers) must be updated. For non-bonus sessions the value is always `GameBalance.initialBaseHealth`.
 
 ### What stays unchanged
 
@@ -168,7 +249,7 @@ Label format (amounts resolved from `GameBalance`, not hardcoded):
 | `bonusGold` | `+30 Gold` | `Reward: +30 Gold` |
 | `bonusHealth` | `+5 HP` | `Reward: +5 HP` |
 
-The line appears below the existing status label, using `theme.textTheme.labelSmall`. It is omitted for main stages (no reward) and does not change the compact node dimensions.
+The line appears below the existing status label, using `theme.textTheme.labelSmall`. It is omitted for main stages (no reward). The current `_StageNode` is a fixed 92px tall `Positioned` box with centered content (icon + label + status); adding a fourth text line (~15px) is tight against the available content area (~74px after vertical padding). The implementer should verify the reward line fits without clipping, or bump `nodeHeight` from 92 to ~104 if needed.
 
 ### Challenge badge
 
@@ -193,6 +274,10 @@ The `bestBaseHealth` field in saved `StageResult`s may now store values up to `G
 - The codec trusts stored medal and base-health values and does not re-derive them.
 - The existing `< 0` corruption guard still applies.
 - Values above 20 in old saves are impossible, so no clamping change is needed for decode.
+
+**Cross-bonus replay comparison:** `StageResult.isBetterThan` compares medal rank first, then `bestBaseHealth`. A Gold medal earned at 25 HP (with bonus) ranks higher than a prior Gold at 20 HP (no bonus), so the stored "best" can reflect the bonus rather than raw play. This is a deliberate consequence of the "trust stored values" model — the health bonus is a permanent reward, and its effect on recorded bests is part of that reward.
+
+**Silver threshold interaction:** The Silver threshold remains absolute (`>= 10` remaining). With 25 starting HP, the player can absorb 15 damage and still earn Silver; without the bonus, only 10. This makes Silver (and to a lesser degree Gold, since "no damage" is still required) easier with the bonus. This is the intended reward effect, not an unintended rebalance — but it does mean the HP bonus has a real balance impact on medal attainment, which sits in mild tension with the "no rebalancing" non-goal. This is acceptable because the bonus is earned and optional.
 
 ## Validation
 
@@ -234,8 +319,11 @@ These are development-time guards caught by tests, not runtime errors.
 
 `GameSession`:
 
-- `startingBaseHealth` reflects bonus when `baseHealth` override is provided.
-- `startingBaseHealth` equals `GameBalance.initialBaseHealth` when no override.
+- `startingBaseHealth` and `startingGold` reflect bonus when overrides are provided.
+- `startingBaseHealth` and `startingGold` equal `GameBalance` defaults when no override.
+- `damageBase` with bonus starting health (25) preserves health above 20 after small hits (e.g., 1 damage -> 24, not clamped to 20).
+- `restart()` restores `startingGold` and `startingBaseHealth`, not bare `GameBalance` defaults.
+- `snapshot()` includes `startingBaseHealth` matching the session's effective ceiling.
 
 `OrionCampaign.validate`:
 
@@ -247,19 +335,23 @@ These are development-time guards caught by tests, not runtime errors.
 - `OrionDefenseGame` with `CampaignModifiers(bonusGold: 30, bonusHealth: 5)` starts session with 180 gold and 25 base health.
 - `OrionDefenseGame` with `null` modifiers starts with defaults (regression).
 - Victory with bonus health produces the correct medal via `startingBaseHealth`.
+- Victory panel displays `Base 25/25` (not `Base 25/20`) when session had bonus health.
 - World map shows reward label on uncleared side stages (teaser format).
 - World map shows reward label on cleared side stages (earned format).
 - World map shows challenge badge summary when both side stages cleared.
-- Existing tests pass unchanged when modifiers default to none. Callers of `StageResult.fromVictoryBaseHealth` in tests are updated to pass `startingBaseHealth`.
+- Existing tests pass unchanged when modifiers default to none. All callers of `StageResult.fromVictoryBaseHealth` in tests are updated to pass `startingBaseHealth`. All `GameSnapshot` construction sites in tests are updated to include `startingBaseHealth`.
 
 ## Acceptance Criteria
 
 - `StageDefinition` can describe an optional `CampaignReward`.
 - `CampaignProgress` can determine which side-stage rewards are active via `CampaignModifiers.fromProgress`.
 - Starting a mission applies active campaign modifiers consistently (adjusted gold and base health).
+- `damageBase` and `restart()` use the session's effective starting values, not bare `GameBalance` defaults.
+- `GameSnapshot` carries `startingBaseHealth` so the UI can compute medals and display correct denominators.
+- The victory panel displays the correct `startingBaseHealth` denominator (not hardcoded `/20`).
 - The world map shows reward information for side stages (earned/teaser labels and challenge badge).
 - Rewards persist across app restarts (derived from existing clear status, no new save data).
 - Main-path unlock behavior remains unchanged.
 - Medal calculation remains damage-based: Gold at zero damage, Silver at 10+ remaining, Clear below.
 - `OrionCampaign.validate()` guards reward assignments on stage definitions.
-- Tests cover reward activation, persistence, mission-start modifiers, medal calculation with bonus health, and world map display.
+- Tests cover reward activation, persistence, mission-start modifiers, damage/restart clamp behavior, medal calculation with bonus health, victory panel display, and world map display.
