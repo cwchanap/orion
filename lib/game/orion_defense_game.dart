@@ -244,6 +244,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
             .toList()) {
       drone.removeFromParent();
     }
+    for (final field
+        in children
+            .whereType<GravityFieldComponent>()
+            .where((field) => field.ownerTowerId == tower.id)
+            .toList()) {
+      field.removeFromParent();
+    }
     _activeDronesByTower.remove(tower.id);
     _clearSelection();
     _publishSnapshot(feedback: 'Sold for $refund gold.');
@@ -438,6 +445,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (tower.stats.fieldRadius > 0 && tower.stats.fieldDuration > 0) {
       add(
         GravityFieldComponent(
+          ownerTowerId: tower.placedTower.id,
           stats: tower.stats,
           center: target.position,
           enemiesProvider: () => _activeEnemyComponents.values,

@@ -9,6 +9,7 @@ typedef GravityEnemiesProvider = Iterable<EnemyComponent> Function();
 
 class GravityFieldComponent extends CircleComponent {
   GravityFieldComponent({
+    required this.ownerTowerId,
     required this.stats,
     required Vector2 center,
     required this.enemiesProvider,
@@ -22,6 +23,7 @@ class GravityFieldComponent extends CircleComponent {
          paint: Paint()..color = const Color(0x446E7BFF),
        );
 
+  final int ownerTowerId;
   final TowerStats stats;
   final GravityEnemiesProvider enemiesProvider;
   double _remaining;
