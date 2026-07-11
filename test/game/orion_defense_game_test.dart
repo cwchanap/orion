@@ -7,6 +7,7 @@ import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/components/drone_component.dart';
 import 'package:orion/game/components/enemy_component.dart';
+import 'package:orion/game/components/gravity_field_component.dart';
 import 'package:orion/game/components/projectile_component.dart';
 import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -640,6 +641,75 @@ void main() {
       );
       expect(game.children.whereType<TowerComponent>(), isEmpty);
     });
+
+    test('sellSelectedTower despawns a sold gravity well lingering fields', () {
+      final game = OrionDefenseGame(stage: _gravityWellUnlockStage());
+      game.onGameResize(Vector2(800, 1200));
+
+      // Advance 4 empty waves so the gravity well (unlocks at wave 5) is
+      // available.
+      for (var wave = 0; wave < 4; wave += 1) {
+        game.startWave();
+        game.update(0);
+        game.processLifecycleEvents();
+      }
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.unlockedTowerTypes, contains(TowerType.gravityWell));
+
+      // Place the gravity well adjacent to the wave-5 path and run that wave.
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.gravityWell);
+      game.processLifecycleEvents();
+      expect(game.children.whereType<TowerComponent>(), hasLength(1));
+
+      game.startWave(); // wave 5: one durable enemy
+      game.update(0.01); // spawn the enemy
+      game.processLifecycleEvents();
+      // See the drone bay test: firing the tower via its own update() avoids
+      // a concurrent-modification error in unmounted unit tests.
+      game.children.whereType<TowerComponent>().single.update(0.01);
+      game.processLifecycleEvents();
+
+      final fieldsBefore = game.children
+          .whereType<GravityFieldComponent>()
+          .toList();
+      expect(fieldsBefore, isNotEmpty); // guards against a vacuous pass
+
+      // End the wave (sell is build-phase only) by resolving the enemy. The
+      // field's fieldDuration (2.0s) has NOT elapsed, so it would otherwise
+      // linger into the next wave.
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      enemy.applyDamage(10000);
+      game.update(0.01);
+      game.processLifecycleEvents();
+      expect(game.snapshot.phase, GamePhase.build);
+
+      // The lingering field is still on screen before the sell.
+      final ownerTowerId = game.children
+          .whereType<TowerComponent>()
+          .single
+          .placedTower
+          .id;
+      expect(
+        game.children.whereType<GravityFieldComponent>().where(
+          (f) => f.ownerTowerId == ownerTowerId,
+        ),
+        isNotEmpty,
+      );
+
+      _tapCell(game, const GridPosition(0, 1)); // select the gravity well
+      game.processLifecycleEvents();
+      game.sellSelectedTower();
+      game.processLifecycleEvents();
+
+      expect(
+        game.children.whereType<GravityFieldComponent>().where(
+          (f) => f.ownerTowerId == ownerTowerId,
+        ),
+        isEmpty,
+      );
+      expect(game.children.whereType<TowerComponent>(), isEmpty);
+    });
   });
 }
 
@@ -816,6 +886,44 @@ StageDefinition _droneBayUnlockStage() {
         clearBonus: 0,
       ),
       // A trailing empty wave so clearing wave 6 leaves the game in build
+      // phase (not won), allowing the sell-during-build flow to be tested.
+      const WaveDefinition(groups: [], clearBonus: 0),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+/// Stage whose first 4 waves are empty (to unlock the wave-5 gravity well) and
+/// whose 5th wave spawns a single durable enemy for gravity-field tests.
+StageDefinition _gravityWellUnlockStage() {
+  return StageDefinition(
+    id: 'gravity-well-unlock-stage',
+    name: 'Gravity Well Unlock Stage',
+    mapLabel: 'Gravity',
+    description: 'Stage that unlocks the gravity well for sell tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: [
+      for (var wave = 0; wave < 4; wave += 1)
+        const WaveDefinition(groups: [], clearBonus: 0),
+      const WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 1,
+            enemyStats: EnemyStats(
+              health: 10000,
+              speed: 1,
+              baseDamage: 1,
+              goldReward: 0,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+      // A trailing empty wave so clearing wave 5 leaves the game in build
       // phase (not won), allowing the sell-during-build flow to be tested.
       const WaveDefinition(groups: [], clearBonus: 0),
     ],
