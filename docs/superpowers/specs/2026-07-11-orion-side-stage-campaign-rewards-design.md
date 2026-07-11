@@ -234,7 +234,49 @@ All callers of `StageResult.fromVictoryBaseHealth` must supply `startingBaseHeal
 - `GameSession.initial` constructor signature (already accepts overrides).
 - Main-path unlock behavior (unlocks still derive from `isCleared`).
 - Losing a stage does not change campaign progress.
-- The `StageCompletion` payload shape and the save flow in `OrionGamePage`.
+- The `StageCompletion` payload shape.
+
+## Activation Boundary
+
+Rewards are computed from in-memory `CampaignProgress` at two moments: when `_startStage` creates a new `OrionDefenseGame`, and nowhere else. Two edge cases need explicit rules.
+
+### Restart replays with original modifiers
+
+The victory panel's Restart button calls `game.restart()`, which calls `_session.restart()`. This resets the session to its `startingGold` / `startingBaseHealth` — the values locked at session creation. It does **not** re-evaluate campaign modifiers.
+
+This is by design: Restart means "replay this exact mission setup," not "start a fresh mission with current campaign state." If a player clears Salvage Rift for the first time and immediately hits Restart, the replay still starts with 150 gold because the session predates the clear. The player must return to the world map and launch a new mission to benefit from the newly earned reward.
+
+This avoids a surprising difficulty change mid-victory-screen and keeps `OrionDefenseGame` free of a dependency on live campaign progress.
+
+### Optimistic in-memory progress update
+
+`_saveStageCompletion` currently updates `_progress` via `setState` only after `await store.save(progress)` succeeds (`orion_game_page.dart:234`). Between victory and save completion, the player can return to the map and `_startStage` will derive modifiers from stale `_progress` — missing a reward that finishes saving moments later. This same race affects stage unlock visibility today.
+
+Fix: update `_progress` optimistically **before** awaiting the store save, and roll back on failure:
+
+```dart
+final priorProgress = _progress;
+setState(() {
+  _progress = progress;
+});
+
+try {
+  await store.save(progress);
+} catch (_) {
+  if (!mounted || saveGeneration != _progressGeneration) {
+    return;
+  }
+  setState(() {
+    _progress = priorProgress;
+  });
+  _showCampaignPersistenceFailure();
+  return;
+}
+```
+
+The rollback restores the exact prior `_progress` instance. On success, no further `setState` is needed — the optimistic update already applied. The generation guard still prevents stale saves from overwriting a reset.
+
+This is a targeted change to the save flow, not a redesign. It also fixes the pre-existing unlock-visibility race for the same reason.
 
 ## World Map Display
 
@@ -296,7 +338,7 @@ These are development-time guards caught by tests, not runtime errors.
 - `OrionDefenseGame` with `null` modifiers behaves exactly as before (no bonus).
 - A stage with a reward that is never cleared never activates its reward - no special handling needed.
 - Invalid persisted progress is still discarded safely by the existing codec.
-- A save failure after victory still leaves previous progress in place and shows the existing save-failure feedback.
+- A save failure after victory rolls back in-memory progress to its prior state and shows the existing save-failure feedback. The optimistic update is reverted so stale modifiers are not applied to the next mission.
 
 ## Testing Strategy
 
@@ -336,10 +378,16 @@ These are development-time guards caught by tests, not runtime errors.
 - `OrionDefenseGame` with `null` modifiers starts with defaults (regression).
 - Victory with bonus health produces the correct medal via `startingBaseHealth`.
 - Victory panel displays `Base 25/25` (not `Base 25/20`) when session had bonus health.
+- **Restart after first clear:** a session created without modifiers (side stage not yet cleared) still restarts with original starting values (150 gold / 20 health), not newly earned bonus values. Restart does not re-evaluate campaign modifiers.
 - World map shows reward label on uncleared side stages (teaser format).
 - World map shows reward label on cleared side stages (earned format).
 - World map shows challenge badge summary when both side stages cleared.
 - Existing tests pass unchanged when modifiers default to none. All callers of `StageResult.fromVictoryBaseHealth` in tests are updated to pass `startingBaseHealth`. All `GameSnapshot` construction sites in tests are updated to include `startingBaseHealth`.
+
+### Persistence tests
+
+- **Save → reload → derive modifiers:** save a `CampaignProgress` with side-stage results to `InMemoryCampaignProgressStore`, load a fresh progress from the store, compute `CampaignModifiers.fromProgress` from the loaded progress, and verify `bonusGold`, `bonusHealth`, and `hasChallengeBadge` are correct. This covers the "rewards persist across app restarts" acceptance criterion with a real store round-trip, not just in-memory data.
+- **Optimistic update with rollback:** after recording a stage completion, in-memory `_progress` reflects the clear immediately (before the store save resolves). On save failure, `_progress` rolls back to its prior state and the save-failure feedback is shown.
 
 ## Acceptance Criteria
 
@@ -347,11 +395,13 @@ These are development-time guards caught by tests, not runtime errors.
 - `CampaignProgress` can determine which side-stage rewards are active via `CampaignModifiers.fromProgress`.
 - Starting a mission applies active campaign modifiers consistently (adjusted gold and base health).
 - `damageBase` and `restart()` use the session's effective starting values, not bare `GameBalance` defaults.
+- Restart replays the mission with its original modifiers; newly earned rewards require returning to the map.
+- In-memory campaign progress updates optimistically on victory; save failure rolls back to prior progress.
 - `GameSnapshot` carries `startingBaseHealth` so the UI can compute medals and display correct denominators.
 - The victory panel displays the correct `startingBaseHealth` denominator (not hardcoded `/20`).
 - The world map shows reward information for side stages (earned/teaser labels and challenge badge).
-- Rewards persist across app restarts (derived from existing clear status, no new save data).
+- Rewards persist across app restarts (derived from existing clear status, no new save data), verified by a store round-trip test.
 - Main-path unlock behavior remains unchanged.
 - Medal calculation remains damage-based: Gold at zero damage, Silver at 10+ remaining, Clear below.
 - `OrionCampaign.validate()` guards reward assignments on stage definitions.
-- Tests cover reward activation, persistence, mission-start modifiers, damage/restart clamp behavior, medal calculation with bonus health, victory panel display, and world map display.
+- Tests cover reward activation, persistence (store round-trip), mission-start modifiers, damage/restart clamp behavior, restart boundary, optimistic update with rollback, medal calculation with bonus health, victory panel display, and world map display.
