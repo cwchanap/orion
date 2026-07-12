@@ -174,31 +174,7 @@ class OrionCampaign {
         errors.add('${stage.id} side stage must not have an order.');
       }
     }
-    for (final stage in mainStageList) {
-      if (stage.reward != null) {
-        errors.add('${stage.id} main stage must not have a reward.');
-      }
-    }
-    final statRewardCounts = <CampaignReward, int>{};
-    for (final stage in sideStageList) {
-      final reward = stage.reward;
-      if (reward == null) {
-        errors.add('${stage.id} side stage must have a reward.');
-      } else if (reward == CampaignReward.challengeBadge) {
-        errors.add(
-          '${stage.id} must not carry challengeBadge; it is compound-derived.',
-        );
-      } else {
-        statRewardCounts[reward] = (statRewardCounts[reward] ?? 0) + 1;
-      }
-    }
-    for (final entry in statRewardCounts.entries) {
-      if (entry.value > 1) {
-        errors.add(
-          '${entry.key} reward appears on ${entry.value} stages; expected at most one.',
-        );
-      }
-    }
+    errors.addAll(_validateRewards(mainStageList, sideStageList));
     final sortedMainPathOrders = mainPathOrders.toList(growable: false)..sort();
     if (!_listEquals(sortedMainPathOrders, const [1, 2, 3, 4, 5])) {
       errors.add('Main path orders must be exactly [1, 2, 3, 4, 5].');
@@ -230,6 +206,39 @@ class OrionCampaign {
     }
 
     return List.unmodifiable(errors);
+  }
+
+  static List<String> _validateRewards(
+    List<StageDefinition> mainStageList,
+    List<StageDefinition> sideStageList,
+  ) {
+    final errors = <String>[];
+    for (final stage in mainStageList) {
+      if (stage.reward != null) {
+        errors.add('${stage.id} main stage must not have a reward.');
+      }
+    }
+    final statRewardCounts = <CampaignReward, int>{};
+    for (final stage in sideStageList) {
+      final reward = stage.reward;
+      if (reward == null) {
+        errors.add('${stage.id} side stage must have a reward.');
+      } else if (reward == CampaignReward.challengeBadge) {
+        errors.add(
+          '${stage.id} must not carry challengeBadge; it is compound-derived.',
+        );
+      } else {
+        statRewardCounts[reward] = (statRewardCounts[reward] ?? 0) + 1;
+      }
+    }
+    for (final entry in statRewardCounts.entries) {
+      if (entry.value > 1) {
+        errors.add(
+          '${entry.key} reward appears on ${entry.value} stages; expected at most one.',
+        );
+      }
+    }
+    return errors;
   }
 }
 

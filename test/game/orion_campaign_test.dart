@@ -202,6 +202,36 @@ void main() {
         ),
       );
     });
+
+    test('validation rejects duplicate stat rewards across side stages', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(
+        errors,
+        contains(
+          '${CampaignReward.bonusGold} reward appears on 2 stages; '
+          'expected at most one.',
+        ),
+      );
+    });
   });
 }
 

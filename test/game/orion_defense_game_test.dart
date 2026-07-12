@@ -732,26 +732,51 @@ void main() {
       expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
     });
 
-    test(
-      'restart preserves original starting values, not newly earned bonuses',
-      () {
-        // Simulate a session created BEFORE the side stage was cleared:
-        // no modifiers, so baseline economy.
-        final game = OrionDefenseGame(stage: _emptyWaveStage());
+    test('restart resets base health to modifier-adjusted starting value', () {
+      // A session created with non-zero modifiers must reset back to the
+      // adjusted starting values (not the unmodified baseline, and not the
+      // damaged mid-wave value) after restart.
+      const bonusHealth = 5;
+      const bonusGold = 30;
+      const adjustedStartingHealth =
+          GameBalance.initialBaseHealth + bonusHealth;
+      const adjustedStartingGold = GameBalance.startingGold + bonusGold;
+      final game = OrionDefenseGame(
+        stage: _lethalSingleEnemyStage(),
+        modifiers: const CampaignModifiers(
+          bonusGold: bonusGold,
+          bonusHealth: bonusHealth,
+        ),
+      );
 
-        // The session starts with baseline values.
-        expect(game.snapshot.gold, GameBalance.startingGold);
-        expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
+      expect(game.snapshot.gold, adjustedStartingGold);
+      expect(game.snapshot.baseHealth, adjustedStartingHealth);
+      expect(game.snapshot.startingBaseHealth, adjustedStartingHealth);
 
-        game.restart();
+      // Damage the base: the lethal enemy deals initialBaseHealth damage,
+      // which the bonus health absorbs so the base survives but is hurt.
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      enemy.update(1);
+      game.processLifecycleEvents();
 
-        // After restart, still baseline — restart does not re-evaluate
-        // campaign modifiers.
-        expect(game.snapshot.gold, GameBalance.startingGold);
-        expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
-        expect(game.snapshot.startingBaseHealth, GameBalance.initialBaseHealth);
-      },
-    );
+      expect(
+        game.snapshot.baseHealth,
+        lessThan(adjustedStartingHealth),
+        reason: 'base should be damaged before restart',
+      );
+      expect(game.snapshot.baseHealth, greaterThan(0));
+
+      game.restart();
+
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.baseHealth, adjustedStartingHealth);
+      expect(game.snapshot.startingBaseHealth, adjustedStartingHealth);
+      expect(game.snapshot.gold, adjustedStartingGold);
+    });
   });
 }
 

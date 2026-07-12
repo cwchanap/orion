@@ -343,27 +343,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
 
     if (_activeStage != null && game != null) {
-      final snapshot = game.stateNotifier.value;
-      game.stateNotifier.value = GameSnapshot(
-        phase: snapshot.phase,
-        gold: snapshot.gold,
-        baseHealth: snapshot.baseHealth,
-        startingBaseHealth: snapshot.startingBaseHealth,
-        waveNumber: snapshot.waveNumber,
-        waveTotal: snapshot.waveTotal,
-        stageId: snapshot.stageId,
-        stageName: snapshot.stageName,
-        stageLabel: snapshot.stageLabel,
-        unlockedTowerTypes: snapshot.unlockedTowerTypes,
-        nextWavePreview: snapshot.nextWavePreview,
-        selectedCell: snapshot.selectedCell,
-        selectedTower: snapshot.selectedTower,
-        feedback: message,
-        isPaused: snapshot.isPaused,
-        speedMultiplier: snapshot.speedMultiplier,
-        autoStartEnabled: snapshot.autoStartEnabled,
-        autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
-      );
+      game.overrideFeedback(message);
     }
   }
 }

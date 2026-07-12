@@ -308,6 +308,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
+  /// Publishes [message] as the current snapshot feedback without mutating
+  /// any other game state. Used by the UI to surface campaign-persistence
+  /// failures on top of the live game snapshot.
+  void overrideFeedback(String message) {
+    _publishSnapshot(feedback: message);
+  }
+
   void returnToMap() {
     if (_session.phase == GamePhase.wave) {
       _publishSnapshot(feedback: 'Finish the active wave before returning.');
