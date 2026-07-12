@@ -359,6 +359,136 @@ void main() {
       );
     });
   });
+
+  group('CampaignModifiers', () {
+    final stages = [
+      _stage(id: 'stage-1', mainPathOrder: 1),
+      _stage(id: 'stage-2', dependencies: ['stage-1'], mainPathOrder: 2),
+      _stage(id: 'stage-3', dependencies: ['stage-2'], mainPathOrder: 3),
+      _stage(id: 'stage-4', dependencies: ['stage-3'], mainPathOrder: 4),
+      _stage(id: 'stage-5', dependencies: ['stage-4'], mainPathOrder: 5),
+      _stage(
+        id: 'side-a',
+        dependencies: ['stage-2'],
+        isMainPath: false,
+        reward: CampaignReward.bonusGold,
+      ),
+      _stage(
+        id: 'side-b',
+        dependencies: ['stage-4'],
+        isMainPath: false,
+        reward: CampaignReward.bonusHealth,
+      ),
+    ];
+
+    test('empty progress yields zero modifiers', () {
+      const modifiers = CampaignModifiers.empty;
+
+      expect(modifiers.bonusGold, 0);
+      expect(modifiers.bonusHealth, 0);
+      expect(modifiers.hasChallengeBadge, isFalse);
+      expect(modifiers.adjustedStartingGold, GameBalance.startingGold);
+      expect(
+        modifiers.adjustedStartingBaseHealth,
+        GameBalance.initialBaseHealth,
+      );
+    });
+
+    test('fromProgress with no clears returns empty modifiers', () {
+      final modifiers = CampaignModifiers.fromProgress(
+        CampaignProgress(),
+        stages,
+      );
+
+      expect(modifiers.bonusGold, 0);
+      expect(modifiers.bonusHealth, 0);
+      expect(modifiers.hasChallengeBadge, isFalse);
+    });
+
+    test('fromProgress with only bonusGold stage cleared grants gold', () {
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          'side-a': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+        },
+      );
+
+      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+
+      expect(modifiers.bonusGold, GameBalance.salvageRiftGoldBonus);
+      expect(modifiers.bonusHealth, 0);
+      expect(modifiers.hasChallengeBadge, isFalse);
+      expect(
+        modifiers.adjustedStartingGold,
+        GameBalance.startingGold + GameBalance.salvageRiftGoldBonus,
+      );
+    });
+
+    test('fromProgress with only bonusHealth stage cleared grants health', () {
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          'side-b': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+        },
+      );
+
+      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+
+      expect(modifiers.bonusGold, 0);
+      expect(modifiers.bonusHealth, GameBalance.voidBastionHealthBonus);
+      expect(modifiers.hasChallengeBadge, isFalse);
+      expect(
+        modifiers.adjustedStartingBaseHealth,
+        GameBalance.initialBaseHealth + GameBalance.voidBastionHealthBonus,
+      );
+    });
+
+    test('fromProgress with both side stages cleared grants badge', () {
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          'side-a': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+          'side-b': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+        },
+      );
+
+      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+
+      expect(modifiers.bonusGold, GameBalance.salvageRiftGoldBonus);
+      expect(modifiers.bonusHealth, GameBalance.voidBastionHealthBonus);
+      expect(modifiers.hasChallengeBadge, isTrue);
+    });
+
+    test('fromProgress ignores main stage clears for badge', () {
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          for (final id in [
+            'stage-1',
+            'stage-2',
+            'stage-3',
+            'stage-4',
+            'stage-5',
+          ])
+            id: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        },
+      );
+
+      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+
+      expect(modifiers.bonusGold, 0);
+      expect(modifiers.bonusHealth, 0);
+      expect(modifiers.hasChallengeBadge, isFalse);
+    });
+  });
 }
 
 StageDefinition _stage({
