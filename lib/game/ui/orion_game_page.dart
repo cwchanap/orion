@@ -221,10 +221,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     final priorProgressState = _progress;
+    // Update _progress even when unmounted so queued saves derive from the
+    // latest in-memory state; guard only setState (no rebuild after disposal).
     if (mounted) {
       setState(() {
         _progress = progress;
       });
+    } else {
+      _progress = progress;
     }
 
     try {
