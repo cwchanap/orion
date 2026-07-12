@@ -1,5 +1,7 @@
 import 'package:orion/game/models/game_models.dart';
 
+enum CampaignReward { bonusGold, bonusHealth, challengeBadge }
+
 class StageDefinition {
   StageDefinition({
     required this.id,
@@ -11,6 +13,7 @@ class StageDefinition {
     List<String> unlockDependencies = const [],
     this.isMainPath = true,
     this.mainPathOrder,
+    this.reward,
     required this.mapColumn,
     required this.mapRow,
   }) : pathCells = List.unmodifiable(pathCells),
@@ -26,6 +29,7 @@ class StageDefinition {
   final List<String> unlockDependencies;
   final bool isMainPath;
   final int? mainPathOrder;
+  final CampaignReward? reward;
   final int mapColumn;
   final int mapRow;
 }

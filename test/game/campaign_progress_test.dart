@@ -366,6 +366,7 @@ StageDefinition _stage({
   List<String> dependencies = const [],
   bool isMainPath = true,
   int? mainPathOrder,
+  CampaignReward? reward,
 }) {
   return StageDefinition(
     id: id,
@@ -377,6 +378,7 @@ StageDefinition _stage({
     unlockDependencies: dependencies,
     isMainPath: isMainPath,
     mainPathOrder: mainPathOrder,
+    reward: reward,
     mapColumn: mainPathOrder ?? 0,
     mapRow: isMainPath ? 1 : 0,
   );
