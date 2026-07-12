@@ -11,6 +11,7 @@ class WorldMapView extends StatelessWidget {
     required this.progress,
     this.modifiers,
     required this.feedback,
+    this.isSavingProgress = false,
     required this.onStageSelected,
     this.onLockedStageSelected,
     required this.onResetCampaign,
@@ -20,6 +21,7 @@ class WorldMapView extends StatelessWidget {
   final CampaignProgress progress;
   final CampaignModifiers? modifiers;
   final String? feedback;
+  final bool isSavingProgress;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
   final VoidCallback onResetCampaign;
@@ -31,6 +33,9 @@ class WorldMapView extends StatelessWidget {
         .where((stage) => progress.isCleared(stage.id))
         .length;
     final total = stages.length;
+    final effectiveFeedback = isSavingProgress && feedback == null
+        ? 'Saving campaign progress…'
+        : feedback;
 
     return SafeArea(
       child: Padding(
@@ -55,10 +60,10 @@ class WorldMapView extends StatelessWidget {
                 ),
               ],
             ),
-            if (feedback != null) ...[
+            if (effectiveFeedback != null) ...[
               const SizedBox(height: 8),
               Text(
-                feedback!,
+                effectiveFeedback,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.secondary,
                 ),
@@ -98,6 +103,7 @@ class WorldMapView extends StatelessWidget {
               child: _StageMap(
                 stages: stages,
                 progress: progress,
+                isSavingProgress: isSavingProgress,
                 onStageSelected: onStageSelected,
                 onLockedStageSelected: onLockedStageSelected,
               ),
@@ -113,12 +119,14 @@ class _StageMap extends StatelessWidget {
   const _StageMap({
     required this.stages,
     required this.progress,
+    required this.isSavingProgress,
     required this.onStageSelected,
     required this.onLockedStageSelected,
   });
 
   final List<StageDefinition> stages;
   final CampaignProgress progress;
+  final bool isSavingProgress;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
@@ -176,6 +184,7 @@ class _StageMap extends StatelessWidget {
                       stage: stage,
                       status: progress.statusFor(stage),
                       result: progress.resultFor(stage.id),
+                      isSavingProgress: isSavingProgress,
                       onStageSelected: onStageSelected,
                       onLockedStageSelected: onLockedStageSelected,
                     ),
@@ -213,6 +222,7 @@ class _StageNode extends StatelessWidget {
     required this.stage,
     required this.status,
     required this.result,
+    required this.isSavingProgress,
     required this.onStageSelected,
     required this.onLockedStageSelected,
   });
@@ -220,6 +230,7 @@ class _StageNode extends StatelessWidget {
   final StageDefinition stage;
   final StageProgressStatus status;
   final StageResult? result;
+  final bool isSavingProgress;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
@@ -289,6 +300,10 @@ class _StageNode extends StatelessWidget {
     if (isLocked) {
       final callback = onLockedStageSelected;
       return callback == null ? null : () => callback(stage);
+    }
+
+    if (isSavingProgress) {
+      return null;
     }
 
     return () => onStageSelected(stage);
