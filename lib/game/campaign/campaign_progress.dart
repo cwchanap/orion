@@ -183,3 +183,60 @@ class CampaignProgress {
     );
   }
 }
+
+class CampaignModifiers {
+  const CampaignModifiers({
+    this.bonusGold = 0,
+    this.bonusHealth = 0,
+    this.hasChallengeBadge = false,
+  });
+
+  final int bonusGold;
+  final int bonusHealth;
+  final bool hasChallengeBadge;
+
+  int get adjustedStartingGold => GameBalance.startingGold + bonusGold;
+  int get adjustedStartingBaseHealth =>
+      GameBalance.initialBaseHealth + bonusHealth;
+
+  static const CampaignModifiers empty = CampaignModifiers();
+
+  static CampaignModifiers fromProgress(
+    CampaignProgress progress,
+    Iterable<StageDefinition> stages,
+  ) {
+    var bonusGold = 0;
+    var bonusHealth = 0;
+    final sideStageIds = <String>[];
+
+    for (final stage in stages) {
+      if (!stage.isMainPath) {
+        sideStageIds.add(stage.id);
+      }
+
+      if (!progress.isCleared(stage.id)) {
+        continue;
+      }
+
+      switch (stage.reward) {
+        case CampaignReward.bonusGold:
+          bonusGold += GameBalance.salvageRiftGoldBonus;
+        case CampaignReward.bonusHealth:
+          bonusHealth += GameBalance.voidBastionHealthBonus;
+        case CampaignReward.challengeBadge:
+          break;
+        case null:
+          break;
+      }
+    }
+
+    final allSideStagesCleared =
+        sideStageIds.isNotEmpty && sideStageIds.every(progress.isCleared);
+
+    return CampaignModifiers(
+      bonusGold: bonusGold,
+      bonusHealth: bonusHealth,
+      hasChallengeBadge: allSideStagesCleared,
+    );
+  }
+}
