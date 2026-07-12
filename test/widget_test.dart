@@ -325,6 +325,59 @@ void main() {
     },
   );
 
+  testWidgets(
+    'optimistic stage clear is visible on map before save fails, then reverts',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+        delaySaves: true,
+        saveError: StateError('save failed'),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('nebula-relay'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      game!.returnToMap();
+      await tester.pumpAndSettle();
+
+      // Optimistic: Relay shows as cleared with Silver medal before save
+      // completes.
+      expect(find.text('Relay'), findsOneWidget);
+      expect(find.text('Silver'), findsOneWidget);
+
+      // Complete the save → throws → rollback to prior progress.
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Relay'), findsOneWidget);
+      expect(find.text('Silver'), findsNothing);
+      expect(find.text('Open'), findsWidgets);
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+    },
+  );
+
   testWidgets('serializes sibling stage clear saves without losing progress', (
     tester,
   ) async {

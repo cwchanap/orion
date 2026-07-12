@@ -98,7 +98,6 @@ class WorldMapView extends StatelessWidget {
               child: _StageMap(
                 stages: stages,
                 progress: progress,
-                modifiers: modifiers,
                 onStageSelected: onStageSelected,
                 onLockedStageSelected: onLockedStageSelected,
               ),
@@ -114,14 +113,12 @@ class _StageMap extends StatelessWidget {
   const _StageMap({
     required this.stages,
     required this.progress,
-    this.modifiers,
     required this.onStageSelected,
     required this.onLockedStageSelected,
   });
 
   final List<StageDefinition> stages;
   final CampaignProgress progress;
-  final CampaignModifiers? modifiers;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
