@@ -441,6 +441,73 @@ void main() {
     );
   });
 
+  testWidgets(
+    'persists queued stage save even if page is disposed before it runs',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Queue two saves; the first is delayed so the second waits in _saveQueue.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('asteroid-foundry'),
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        ),
+      );
+
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      // Dispose OrionGamePage while the first save is still pending, so the
+      // second _saveStageCompletion will run on an unmounted widget.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpAndSettle();
+
+      // Complete the first save; the second _saveStageCompletion now runs.
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+
+      // The second save is also delayed; complete it.
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 2);
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        contains('asteroid-foundry'),
+      );
+      expect(
+        store.progress.resultFor('asteroid-foundry'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+    },
+  );
+
   testWidgets('stage replay save does not downgrade an existing medal', (
     tester,
   ) async {
