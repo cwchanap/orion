@@ -35,14 +35,20 @@ class StageCompletion {
 class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
+    this.modifiers,
     this.onStageWon,
     this.onReturnToMap,
   }) : stage = stage ?? OrionCampaign.stageOne,
-       _session = GameSession.initial(stage: stage ?? OrionCampaign.stageOne) {
+       _session = GameSession.initial(
+         stage: stage ?? OrionCampaign.stageOne,
+         gold: modifiers?.adjustedStartingGold,
+         baseHealth: modifiers?.adjustedStartingBaseHealth,
+       ) {
     _resetPacing();
   }
 
   final StageDefinition stage;
+  final CampaignModifiers? modifiers;
   final ValueChanged<StageCompletion>? onStageWon;
   final VoidCallback? onReturnToMap;
   final GameSession _session;
