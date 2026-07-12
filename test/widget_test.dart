@@ -508,6 +508,90 @@ void main() {
     },
   );
 
+  testWidgets(
+    'queued save after disposal keeps earlier queued result in store',
+    (tester) async {
+      // Regression: when a save's _saveStageCompletion runs after the page is
+      // disposed, _progress must still advance so a later queued save derives
+      // from the latest in-memory state instead of overwriting the store with
+      // stale progress that drops the earlier result.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Prior save keeps _saveQueue pending so the next two saves queue behind
+      // it and only run after disposal.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      // Queue two more saves; neither runs until the prior save completes.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('asteroid-foundry'),
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        ),
+      );
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('aurora-gate'),
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 18),
+        ),
+      );
+
+      // Dispose before the queued saves run, so both _saveStageCompletion calls
+      // execute on an unmounted widget.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpAndSettle();
+
+      // Complete the prior save; the first queued save now runs unmounted.
+      store.saveCompletions[0].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+      store.saveCompletions[2].complete();
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 3);
+      // The asteroid-foundry result from the first queued save must survive the
+      // second queued save's overwrite of the store snapshot.
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        contains('asteroid-foundry'),
+      );
+      expect(
+        store.progress.resultFor('asteroid-foundry'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      expect(
+        store.progress.resultFor('aurora-gate'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 18),
+      );
+    },
+  );
+
   testWidgets('stage replay save does not downgrade an existing medal', (
     tester,
   ) async {
