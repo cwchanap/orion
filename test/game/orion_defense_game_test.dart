@@ -710,6 +710,27 @@ void main() {
       );
       expect(game.children.whereType<TowerComponent>(), isEmpty);
     });
+
+    test('applies campaign modifiers to session starting values', () {
+      final game = OrionDefenseGame(
+        stage: _emptyWaveStage(),
+        modifiers: const CampaignModifiers(bonusGold: 30, bonusHealth: 5),
+      );
+
+      expect(game.snapshot.gold, GameBalance.startingGold + 30);
+      expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth + 5);
+      expect(
+        game.snapshot.startingBaseHealth,
+        GameBalance.initialBaseHealth + 5,
+      );
+    });
+
+    test('defaults to no modifiers and baseline economy', () {
+      final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+      expect(game.snapshot.gold, GameBalance.startingGold);
+      expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
+    });
   });
 }
 
