@@ -44,6 +44,7 @@ class OrionCampaign {
       unlockDependencies: const ['nebula-relay'],
       isMainPath: false,
       mainPathOrder: null,
+      reward: CampaignReward.bonusGold,
       mapColumn: 2,
       mapRow: 0,
     ),
@@ -83,6 +84,7 @@ class OrionCampaign {
       unlockDependencies: const ['aurora-gate'],
       isMainPath: false,
       mainPathOrder: null,
+      reward: CampaignReward.bonusHealth,
       mapColumn: 4,
       mapRow: 2,
     ),
@@ -170,6 +172,31 @@ class OrionCampaign {
     for (final stage in sideStageList) {
       if (stage.mainPathOrder != null) {
         errors.add('${stage.id} side stage must not have an order.');
+      }
+    }
+    for (final stage in mainStageList) {
+      if (stage.reward != null) {
+        errors.add('${stage.id} main stage must not have a reward.');
+      }
+    }
+    final statRewardCounts = <CampaignReward, int>{};
+    for (final stage in sideStageList) {
+      final reward = stage.reward;
+      if (reward == null) {
+        errors.add('${stage.id} side stage must have a reward.');
+      } else if (reward == CampaignReward.challengeBadge) {
+        errors.add(
+          '${stage.id} must not carry challengeBadge; it is compound-derived.',
+        );
+      } else {
+        statRewardCounts[reward] = (statRewardCounts[reward] ?? 0) + 1;
+      }
+    }
+    for (final entry in statRewardCounts.entries) {
+      if (entry.value > 1) {
+        errors.add(
+          '${entry.key} reward appears on ${entry.value} stages; expected at most one.',
+        );
       }
     }
     final sortedMainPathOrders = mainPathOrders.toList(growable: false)..sort();
