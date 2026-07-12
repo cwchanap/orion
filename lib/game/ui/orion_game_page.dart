@@ -221,9 +221,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     final priorProgressState = _progress;
-    setState(() {
-      _progress = progress;
-    });
+    if (mounted) {
+      setState(() {
+        _progress = progress;
+      });
+    }
 
     try {
       await store.save(progress);
