@@ -35,6 +35,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   bool _isLoading = true;
   int _progressGeneration = 0;
   Future<void> _saveQueue = Future<void>.value();
+  bool _isSavingProgress = false;
 
   @override
   void initState() {
@@ -101,6 +102,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
             OrionCampaign.stages,
           ),
           feedback: _mapFeedback,
+          isSavingProgress: _isSavingProgress,
           onStageSelected: _startStage,
           onLockedStageSelected: _showLockedStageFeedback,
           onResetCampaign: _confirmResetCampaign,
@@ -154,6 +156,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   void _startStage(StageDefinition stage) {
+    if (_isSavingProgress) {
+      setState(() {
+        _mapFeedback = 'Saving campaign progress…';
+      });
+      return;
+    }
+
     if (!_progress.isUnlocked(stage)) {
       _showLockedStageFeedback(stage);
       return;
@@ -221,37 +230,48 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     final priorProgressState = _progress;
-    // Update _progress even when unmounted so queued saves derive from the
-    // latest in-memory state; guard only setState (no rebuild after disposal).
-    if (mounted) {
-      setState(() {
-        _progress = progress;
-      });
-    } else {
-      _progress = progress;
-    }
-
+    // Block stage launches while the optimistic update is unpersisted so a
+    // failed save cannot leave a running session with bonus gold/health that
+    // was never persisted. Update _progress even when unmounted so queued
+    // saves derive from the latest in-memory state; guard only setState (no
+    // rebuild after disposal).
+    _isSavingProgress = true;
     try {
-      await store.save(progress);
-    } catch (_) {
-      if (!mounted || saveGeneration != _progressGeneration) {
+      if (mounted) {
+        setState(() {
+          _progress = progress;
+        });
+      } else {
+        _progress = progress;
+      }
+
+      try {
+        await store.save(progress);
+      } catch (_) {
+        if (!mounted || saveGeneration != _progressGeneration) {
+          return;
+        }
+
+        setState(() {
+          _progress = priorProgressState;
+        });
+        _showCampaignPersistenceFailure();
         return;
       }
 
-      setState(() {
-        _progress = priorProgressState;
-      });
-      _showCampaignPersistenceFailure();
-      return;
-    }
+      if (!mounted) {
+        return;
+      }
 
-    if (!mounted) {
-      return;
-    }
-
-    if (saveGeneration != _progressGeneration) {
-      await _resetStoreAfterStaleSave(store);
-      return;
+      if (saveGeneration != _progressGeneration) {
+        await _resetStoreAfterStaleSave(store);
+        return;
+      }
+    } finally {
+      _isSavingProgress = false;
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 

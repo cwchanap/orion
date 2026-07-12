@@ -378,6 +378,67 @@ void main() {
     },
   );
 
+  testWidgets(
+    'blocks stage launch while a stage-completion save is in flight',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+        saveError: StateError('save failed'),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Start a stage, then fire onStageWon for salvage-rift (bonus gold).
+      await tester.tap(find.text('Foundry'));
+      await tester.pumpAndSettle();
+
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      // Return to map while the save is still pending.
+      game!.returnToMap();
+      await tester.pumpAndSettle();
+
+      // Tapping another stage must not launch it while the save is in flight.
+      await tester.tap(find.text('Relay'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Orion Sector Map'), findsOneWidget);
+      expect(find.text('Start Wave'), findsNothing);
+
+      // Complete the save → it throws → progress rolls back.
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      // Now the stage can be started, and it must NOT carry the bonus gold
+      // from the reverted salvage-rift clear.
+      await tester.tap(find.text('Relay'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start Wave'), findsOneWidget);
+      expect(find.text('Gold 150'), findsOneWidget);
+      expect(find.text('Gold 180'), findsNothing);
+    },
+  );
+
   testWidgets('serializes sibling stage clear saves without losing progress', (
     tester,
   ) async {
