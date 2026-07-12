@@ -6,6 +6,8 @@ import 'board_layout.dart';
 class GameSession {
   GameSession.initial({StageDefinition? stage, int? gold, int? baseHealth})
     : stage = stage ?? OrionCampaign.stageOne,
+      startingGold = gold ?? GameBalance.startingGold,
+      startingBaseHealth = baseHealth ?? GameBalance.initialBaseHealth,
       _gold = gold ?? GameBalance.startingGold,
       _baseHealth = baseHealth ?? GameBalance.initialBaseHealth {
     if (this.stage.waves.isEmpty) {
@@ -18,6 +20,8 @@ class GameSession {
   }
 
   final StageDefinition stage;
+  final int startingGold;
+  final int startingBaseHealth;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
   int _nextTowerId = 1;
   int _gold;
@@ -242,9 +246,7 @@ class GameSession {
     if (_phase != GamePhase.wave || amount <= 0) {
       return;
     }
-    _baseHealth = (_baseHealth - amount)
-        .clamp(0, GameBalance.initialBaseHealth)
-        .toInt();
+    _baseHealth = (_baseHealth - amount).clamp(0, startingBaseHealth).toInt();
     if (_baseHealth == 0) {
       _phase = GamePhase.lost;
     }
@@ -255,8 +257,8 @@ class GameSession {
   void restart() {
     _towersByPosition.clear();
     _nextTowerId = 1;
-    _gold = GameBalance.startingGold;
-    _baseHealth = GameBalance.initialBaseHealth;
+    _gold = startingGold;
+    _baseHealth = startingBaseHealth;
     _waveIndex = 0;
     _phase = GamePhase.build;
   }

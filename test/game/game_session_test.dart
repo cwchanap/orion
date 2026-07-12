@@ -713,7 +713,7 @@ void main() {
       session.restart();
 
       expect(session.waveIndex, 0);
-      expect(session.gold, GameBalance.startingGold);
+      expect(session.gold, session.startingGold);
       expect(session.unlockedTowerTypes, [
         TowerType.laser,
         TowerType.rocket,
@@ -832,5 +832,44 @@ void main() {
         ),
       );
     });
+
+    test('stores effective starting gold and base health', () {
+      final session = GameSession.initial(gold: 200, baseHealth: 25);
+
+      expect(session.startingGold, 200);
+      expect(session.startingBaseHealth, 25);
+    });
+
+    test('starting values default to GameBalance when no override', () {
+      final session = GameSession.initial();
+
+      expect(session.startingGold, GameBalance.startingGold);
+      expect(session.startingBaseHealth, GameBalance.initialBaseHealth);
+    });
+
+    test('damageBase does not clamp below startingBaseHealth ceiling', () {
+      final session = GameSession.initial(baseHealth: 25);
+      session.startWave();
+
+      session.damageBase(1);
+
+      expect(session.baseHealth, 24);
+    });
+
+    test(
+      'restart restores effective starting values, not GameBalance defaults',
+      () {
+        final session = GameSession.initial(gold: 200, baseHealth: 25);
+        session.startWave();
+        session.damageBase(5);
+        session.rewardKill(50);
+
+        session.restart();
+
+        expect(session.gold, 200);
+        expect(session.baseHealth, 25);
+        expect(session.phase, GamePhase.build);
+      },
+    );
   });
 }
