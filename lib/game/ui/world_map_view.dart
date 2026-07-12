@@ -2,13 +2,15 @@ import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
 import '../campaign/stage_definition.dart';
+import '../models/game_models.dart';
 
 class WorldMapView extends StatelessWidget {
   const WorldMapView({
     super.key,
     required this.stages,
     required this.progress,
-    required this.feedback,
+    this.modifiers,
+    this.feedback,
     required this.onStageSelected,
     this.onLockedStageSelected,
     required this.onResetCampaign,
@@ -16,6 +18,7 @@ class WorldMapView extends StatelessWidget {
 
   final List<StageDefinition> stages;
   final CampaignProgress progress;
+  final CampaignModifiers? modifiers;
   final String? feedback;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
@@ -80,11 +83,22 @@ class WorldMapView extends StatelessWidget {
                 ),
               ),
             ],
+            if (modifiers?.hasChallengeBadge == true) ...[
+              const SizedBox(height: 8),
+              Text(
+                'Challenge Badge Earned - All side stages cleared',
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: theme.colorScheme.tertiary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
             const SizedBox(height: 16),
             Expanded(
               child: _StageMap(
                 stages: stages,
                 progress: progress,
+                modifiers: modifiers,
                 onStageSelected: onStageSelected,
                 onLockedStageSelected: onLockedStageSelected,
               ),
@@ -100,12 +114,14 @@ class _StageMap extends StatelessWidget {
   const _StageMap({
     required this.stages,
     required this.progress,
+    this.modifiers,
     required this.onStageSelected,
     required this.onLockedStageSelected,
   });
 
   final List<StageDefinition> stages;
   final CampaignProgress progress;
+  final CampaignModifiers? modifiers;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
@@ -141,7 +157,7 @@ class _StageMap extends StatelessWidget {
                 .map((stage) => stage.mapRow)
                 .reduce((a, b) => a > b ? a : b);
             final nodeWidth = constraints.maxWidth < 420 ? 86.0 : 104.0;
-            const nodeHeight = 92.0;
+            const nodeHeight = 124.0;
             final availableWidth = constraints.maxWidth > nodeWidth
                 ? constraints.maxWidth - nodeWidth
                 : 0.0;
@@ -176,6 +192,25 @@ class _StageMap extends StatelessWidget {
   }
 }
 
+String? _rewardLabel(StageDefinition stage, bool isCleared) {
+  final reward = stage.reward;
+  if (reward == null) {
+    return null;
+  }
+
+  final amount = switch (reward) {
+    CampaignReward.bonusGold => '+${GameBalance.salvageRiftGoldBonus} Gold',
+    CampaignReward.bonusHealth => '+${GameBalance.voidBastionHealthBonus} HP',
+    CampaignReward.challengeBadge => null,
+  };
+
+  if (amount == null) {
+    return null;
+  }
+
+  return isCleared ? amount : 'Reward: $amount';
+}
+
 class _StageNode extends StatelessWidget {
   const _StageNode({
     required this.stage,
@@ -196,6 +231,10 @@ class _StageNode extends StatelessWidget {
     final theme = Theme.of(context);
     final isLocked = status == StageProgressStatus.locked;
     final colors = _stageColors(theme.colorScheme, status, result);
+    final rewardLabel = _rewardLabel(
+      stage,
+      status == StageProgressStatus.cleared,
+    );
 
     return Material(
       color: colors.background,
@@ -229,6 +268,17 @@ class _StageNode extends StatelessWidget {
                   color: colors.foreground,
                 ),
               ),
+              if (rewardLabel != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  rewardLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: colors.foreground,
+                  ),
+                ),
+              ],
             ],
           ),
         ),

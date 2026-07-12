@@ -96,6 +96,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
         body: WorldMapView(
           stages: OrionCampaign.stages,
           progress: _progress,
+          modifiers: CampaignModifiers.fromProgress(
+            _progress,
+            OrionCampaign.stages,
+          ),
           feedback: _mapFeedback,
           onStageSelected: _startStage,
           onLockedStageSelected: _showLockedStageFeedback,

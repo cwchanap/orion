@@ -902,6 +902,107 @@ void main() {
       );
     },
   );
+
+  testWidgets('world map shows reward teaser on uncleared side stage', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = InMemoryCampaignProgressStore(
+      knownStages: OrionCampaign.stages,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Reward: +30 Gold'), findsOneWidget);
+    expect(find.text('Reward: +5 HP'), findsOneWidget);
+  });
+
+  testWidgets('world map shows earned reward label on cleared side stage', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = InMemoryCampaignProgressStore(
+      knownStages: OrionCampaign.stages,
+    );
+    await store.save(
+      CampaignProgress(
+        bestResultsByStageId: {
+          'outpost-alpha': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+          'nebula-relay': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+          'salvage-rift': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+        },
+      ),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('+30 Gold'), findsOneWidget);
+  });
+
+  testWidgets(
+    'world map shows challenge badge when both side stages are cleared',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      );
+      await store.save(
+        CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'nebula-relay': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'asteroid-foundry': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'aurora-gate': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'salvage-rift': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'void-bastion': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+          },
+        ),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: OrionGamePage(progressStore: store)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Challenge Badge Earned - All side stages cleared'),
+        findsOneWidget,
+      );
+    },
+  );
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
