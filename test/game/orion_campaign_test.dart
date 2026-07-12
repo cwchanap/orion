@@ -111,6 +111,97 @@ void main() {
     test('validation returns no errors for shipped campaign data', () {
       expect(OrionCampaign.validate(), isEmpty);
     });
+
+    test('side stages carry campaign rewards and main stages do not', () {
+      expect(
+        OrionCampaign.stageById('salvage-rift').reward,
+        CampaignReward.bonusGold,
+      );
+      expect(
+        OrionCampaign.stageById('void-bastion').reward,
+        CampaignReward.bonusHealth,
+      );
+      for (final stage in OrionCampaign.mainStages) {
+        expect(stage.reward, isNull, reason: stage.id);
+      }
+    });
+
+    test('validation rejects main stage with a reward', () {
+      final invalidStages = [
+        _stage(
+          id: 'stage-1',
+          mainPathOrder: 1,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(errors, contains('stage-1 main stage must not have a reward.'));
+    });
+
+    test('validation rejects side stage without a reward', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5),
+        _stage(id: 'side-a', isMainPath: false),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(errors, contains('side-a side stage must have a reward.'));
+    });
+
+    test('validation rejects challengeBadge on an individual stage', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.challengeBadge,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(
+        errors,
+        contains(
+          'side-b must not carry challengeBadge; it is compound-derived.',
+        ),
+      );
+    });
   });
 }
 
