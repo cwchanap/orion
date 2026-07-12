@@ -50,15 +50,18 @@ class StageResult {
   final StageMedal medal;
   final int bestBaseHealth;
 
-  factory StageResult.fromVictoryBaseHealth(int baseHealth) {
+  factory StageResult.fromVictoryBaseHealth(
+    int baseHealth, {
+    required int startingBaseHealth,
+  }) {
     final normalizedBaseHealth = baseHealth
-        .clamp(0, GameBalance.initialBaseHealth)
+        .clamp(0, startingBaseHealth)
         .toInt();
-    final medal = switch (normalizedBaseHealth) {
-      GameBalance.initialBaseHealth => StageMedal.gold,
-      >= GameBalance.silverMedalThreshold => StageMedal.silver,
-      _ => StageMedal.clear,
-    };
+    final medal = baseHealth >= startingBaseHealth
+        ? StageMedal.gold
+        : normalizedBaseHealth >= GameBalance.silverMedalThreshold
+        ? StageMedal.silver
+        : StageMedal.clear;
 
     return StageResult(medal: medal, bestBaseHealth: normalizedBaseHealth);
   }

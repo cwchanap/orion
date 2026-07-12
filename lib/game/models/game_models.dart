@@ -357,6 +357,7 @@ class GameSnapshot {
     required this.phase,
     required this.gold,
     required this.baseHealth,
+    required this.startingBaseHealth,
     required this.waveNumber,
     required this.waveTotal,
     required this.stageId,
@@ -376,6 +377,7 @@ class GameSnapshot {
   final GamePhase phase;
   final int gold;
   final int baseHealth;
+  final int startingBaseHealth;
   final int waveNumber;
   final int waveTotal;
   final String stageId;

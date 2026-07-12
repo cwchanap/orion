@@ -7,21 +7,30 @@ void main() {
   group('StageResult', () {
     test('calculates medal thresholds from victory base health', () {
       expect(
-        StageResult.fromVictoryBaseHealth(GameBalance.initialBaseHealth),
+        StageResult.fromVictoryBaseHealth(
+          GameBalance.initialBaseHealth,
+          startingBaseHealth: GameBalance.initialBaseHealth,
+        ),
         const StageResult(
           medal: StageMedal.gold,
           bestBaseHealth: GameBalance.initialBaseHealth,
         ),
       );
       expect(
-        StageResult.fromVictoryBaseHealth(GameBalance.silverMedalThreshold),
+        StageResult.fromVictoryBaseHealth(
+          GameBalance.silverMedalThreshold,
+          startingBaseHealth: GameBalance.initialBaseHealth,
+        ),
         const StageResult(
           medal: StageMedal.silver,
           bestBaseHealth: GameBalance.silverMedalThreshold,
         ),
       );
       expect(
-        StageResult.fromVictoryBaseHealth(GameBalance.silverMedalThreshold - 1),
+        StageResult.fromVictoryBaseHealth(
+          GameBalance.silverMedalThreshold - 1,
+          startingBaseHealth: GameBalance.initialBaseHealth,
+        ),
         const StageResult(
           medal: StageMedal.clear,
           bestBaseHealth: GameBalance.silverMedalThreshold - 1,
@@ -31,15 +40,38 @@ void main() {
 
     test('clamps victory base health into the supported range', () {
       expect(
-        StageResult.fromVictoryBaseHealth(GameBalance.initialBaseHealth + 1),
+        StageResult.fromVictoryBaseHealth(
+          GameBalance.initialBaseHealth + 1,
+          startingBaseHealth: GameBalance.initialBaseHealth,
+        ),
         const StageResult(
           medal: StageMedal.gold,
           bestBaseHealth: GameBalance.initialBaseHealth,
         ),
       );
       expect(
-        StageResult.fromVictoryBaseHealth(-1),
+        StageResult.fromVictoryBaseHealth(
+          -1,
+          startingBaseHealth: GameBalance.initialBaseHealth,
+        ),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 0),
+      );
+    });
+
+    test('medal thresholds scale with bonus starting health', () {
+      const bonusHealth = 25;
+
+      expect(
+        StageResult.fromVictoryBaseHealth(25, startingBaseHealth: bonusHealth),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 25),
+      );
+      expect(
+        StageResult.fromVictoryBaseHealth(23, startingBaseHealth: bonusHealth),
+        const StageResult(medal: StageMedal.silver, bestBaseHealth: 23),
+      );
+      expect(
+        StageResult.fromVictoryBaseHealth(9, startingBaseHealth: bonusHealth),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 9),
       );
     });
 

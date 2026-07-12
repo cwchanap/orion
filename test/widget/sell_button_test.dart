@@ -146,6 +146,7 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
     phase: phase,
     gold: snapshot.gold,
     baseHealth: snapshot.baseHealth,
+    startingBaseHealth: snapshot.startingBaseHealth,
     waveNumber: snapshot.waveNumber,
     waveTotal: snapshot.waveTotal,
     stageId: snapshot.stageId,
