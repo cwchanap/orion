@@ -694,7 +694,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (didWin) {
       completion = StageCompletion(
         stage: stage,
-        result: StageResult.fromVictoryBaseHealth(_session.baseHealth),
+        result: StageResult.fromVictoryBaseHealth(
+          _session.baseHealth,
+          startingBaseHealth: _session.startingBaseHealth,
+        ),
       );
     }
     _layoutBoardIfReady();

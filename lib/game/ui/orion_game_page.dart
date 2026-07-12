@@ -335,6 +335,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         phase: snapshot.phase,
         gold: snapshot.gold,
         baseHealth: snapshot.baseHealth,
+        startingBaseHealth: snapshot.startingBaseHealth,
         waveNumber: snapshot.waveNumber,
         waveTotal: snapshot.waveTotal,
         stageId: snapshot.stageId,
@@ -939,7 +940,10 @@ class _EndStatePanel extends StatelessWidget {
     final theme = Theme.of(context);
     final didWin = snapshot.phase == GamePhase.won;
     final result = didWin
-        ? StageResult.fromVictoryBaseHealth(snapshot.baseHealth)
+        ? StageResult.fromVictoryBaseHealth(
+            snapshot.baseHealth,
+            startingBaseHealth: snapshot.startingBaseHealth,
+          )
         : null;
 
     return ColoredBox(
@@ -972,7 +976,7 @@ class _EndStatePanel extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     '${result.medal.label} medal - '
-                    'Base ${result.bestBaseHealth}/${GameBalance.initialBaseHealth}',
+                    'Base ${result.bestBaseHealth}/${snapshot.startingBaseHealth}',
                     style: theme.textTheme.titleSmall?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.w700,

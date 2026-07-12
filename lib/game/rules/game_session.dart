@@ -76,6 +76,7 @@ class GameSession {
       phase: _phase,
       gold: _gold,
       baseHealth: _baseHealth,
+      startingBaseHealth: startingBaseHealth,
       waveNumber: waveNumber,
       waveTotal: stage.waves.length,
       stageId: stage.id,
