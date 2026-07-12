@@ -10,7 +10,7 @@ class WorldMapView extends StatelessWidget {
     required this.stages,
     required this.progress,
     this.modifiers,
-    this.feedback,
+    required this.feedback,
     required this.onStageSelected,
     this.onLockedStageSelected,
     required this.onResetCampaign,
