@@ -853,6 +853,55 @@ void main() {
     expect(find.text('Targeting'), findsOneWidget);
     expect(find.text('First'), findsOneWidget);
   });
+
+  testWidgets(
+    'starting a stage after clearing salvage rift applies bonus gold',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      );
+      await store.save(
+        CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'nebula-relay': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'salvage-rift': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+          },
+        ),
+      );
+
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap the salvage-rift stage node (it should be unlocked).
+      await tester.tap(find.text('Rift'));
+      await tester.pumpAndSettle();
+
+      expect(game, isNotNull);
+      expect(
+        game!.snapshot.gold,
+        GameBalance.startingGold + GameBalance.salvageRiftGoldBonus,
+      );
+    },
+  );
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {

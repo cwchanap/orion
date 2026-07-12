@@ -155,8 +155,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    final modifiers = CampaignModifiers.fromProgress(
+      _progress,
+      OrionCampaign.stages,
+    );
     final game = OrionDefenseGame(
       stage: stage,
+      modifiers: modifiers,
       onStageWon: _recordStageCompletion,
       onReturnToMap: _returnToMap,
     );
@@ -211,6 +216,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    final priorProgressState = _progress;
+    setState(() {
+      _progress = progress;
+    });
+
     try {
       await store.save(progress);
     } catch (_) {
@@ -218,6 +228,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return;
       }
 
+      setState(() {
+        _progress = priorProgressState;
+      });
       _showCampaignPersistenceFailure();
       return;
     }
@@ -230,10 +243,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
       await _resetStoreAfterStaleSave(store);
       return;
     }
-
-    setState(() {
-      _progress = progress;
-    });
   }
 
   void _returnToMap() {
