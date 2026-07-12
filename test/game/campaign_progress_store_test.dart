@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/models/game_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -226,5 +227,49 @@ void main() {
 
       expect((await store.load()).bestResultsByStageId, isEmpty);
     });
+  });
+
+  group('CampaignModifiers', () {
+    test(
+      'side-stage results persist and produce correct campaign modifiers',
+      () async {
+        final store = InMemoryCampaignProgressStore(
+          knownStages: OrionCampaign.stages,
+        );
+
+        final progress = CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'nebula-relay': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'salvage-rift': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'void-bastion': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+          },
+        );
+
+        await store.save(progress);
+
+        final loaded = await store.load();
+        final modifiers = CampaignModifiers.fromProgress(
+          loaded,
+          OrionCampaign.stages,
+        );
+
+        expect(modifiers.bonusGold, GameBalance.salvageRiftGoldBonus);
+        expect(modifiers.bonusHealth, GameBalance.voidBastionHealthBonus);
+        expect(modifiers.hasChallengeBadge, isTrue);
+      },
+    );
   });
 }
