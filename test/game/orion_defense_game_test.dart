@@ -731,6 +731,27 @@ void main() {
       expect(game.snapshot.gold, GameBalance.startingGold);
       expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
     });
+
+    test(
+      'restart preserves original starting values, not newly earned bonuses',
+      () {
+        // Simulate a session created BEFORE the side stage was cleared:
+        // no modifiers, so baseline economy.
+        final game = OrionDefenseGame(stage: _emptyWaveStage());
+
+        // The session starts with baseline values.
+        expect(game.snapshot.gold, GameBalance.startingGold);
+        expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
+
+        game.restart();
+
+        // After restart, still baseline — restart does not re-evaluate
+        // campaign modifiers.
+        expect(game.snapshot.gold, GameBalance.startingGold);
+        expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
+        expect(game.snapshot.startingBaseHealth, GameBalance.initialBaseHealth);
+      },
+    );
   });
 }
 
