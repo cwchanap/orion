@@ -118,6 +118,7 @@ StageDefinition _stage({
   required String id,
   bool isMainPath = true,
   int? mainPathOrder,
+  CampaignReward? reward,
 }) {
   return StageDefinition(
     id: id,
@@ -128,6 +129,7 @@ StageDefinition _stage({
     waves: GameBalance.waves,
     isMainPath: isMainPath,
     mainPathOrder: mainPathOrder,
+    reward: reward,
     mapColumn: mainPathOrder ?? 0,
     mapRow: isMainPath ? 1 : 0,
   );

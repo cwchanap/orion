@@ -6,6 +6,8 @@ void main() {
     test('matches the approved starting economy and base health', () {
       expect(GameBalance.startingGold, 150);
       expect(GameBalance.initialBaseHealth, 20);
+      expect(GameBalance.salvageRiftGoldBonus, 30);
+      expect(GameBalance.voidBastionHealthBonus, 5);
     });
 
     test('defines tower order and unlock waves', () {

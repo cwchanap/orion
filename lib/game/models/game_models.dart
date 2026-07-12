@@ -402,6 +402,10 @@ class GameBalance {
   static const int silverMedalThreshold = 10;
   // Fraction of invested gold refunded when a tower is sold, as a percent.
   static const int sellRefundPercent = 70;
+  // Bonus starting gold granted by clearing the Salvage Rift side stage.
+  static const int salvageRiftGoldBonus = 30;
+  // Bonus starting base health granted by clearing the Void Bastion side stage.
+  static const int voidBastionHealthBonus = 5;
 
   static const EnemyStats _basicDrone = EnemyStats(
     health: 36,
