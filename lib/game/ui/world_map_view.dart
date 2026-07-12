@@ -270,12 +270,14 @@ class _StageNode extends StatelessWidget {
               ),
               if (rewardLabel != null) ...[
                 const SizedBox(height: 2),
-                Text(
-                  rewardLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelSmall?.copyWith(
-                    color: colors.foreground,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    rewardLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colors.foreground,
+                    ),
                   ),
                 ),
               ],
