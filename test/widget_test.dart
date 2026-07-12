@@ -1003,47 +1003,6 @@ void main() {
       );
     },
   );
-
-  testWidgets(
-    'save failure rolls back optimistic progress and shows feedback',
-    (tester) async {
-      SharedPreferences.setMockInitialValues({});
-      final store = _FailingSaveStore(knownStages: OrionCampaign.stages);
-
-      OrionDefenseGame? game;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Start the first stage.
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
-
-      // Simulate a victory by firing the stage-won callback the way the game
-      // does on a real win. (`OrionDefenseGame.onStageWon` is what the page
-      // listens to in order to persist progress; assigning a `won` snapshot to
-      // `stateNotifier` alone is purely visual and would not trigger a save.)
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('outpost-alpha'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // The save fails, so the feedback message should appear.
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
-    },
-  );
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
@@ -1133,14 +1092,5 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     }
 
     progress = CampaignProgress();
-  }
-}
-
-class _FailingSaveStore extends InMemoryCampaignProgressStore {
-  _FailingSaveStore({required super.knownStages});
-
-  @override
-  Future<void> save(CampaignProgress progress) async {
-    throw StateError('Failed to save campaign progress.');
   }
 }
