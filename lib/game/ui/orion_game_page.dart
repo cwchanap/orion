@@ -34,6 +34,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   CampaignProgress _progress = CampaignProgress();
   CampaignTechTree _techTree = CampaignTechTree();
   CampaignProgressStore? _store;
+  // ignore: unused_field — tracked for future stage-context work (T11/T12).
   StageDefinition? _activeStage;
   String? _mapFeedback;
   // ignore: unused_field — consumed by TechTreeView (T12).
@@ -203,7 +204,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final game = OrionDefenseGame(
       stage: stage,
       modifiers: modifiers,
-      onStageWon: _recordStageCompletion,
+      onStageWon: _saveStageCompletion,
       onReturnToMap: _returnToMap,
     );
     widget.onGameCreated?.call(game);
@@ -222,31 +223,69 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
-  Future<void> _recordStageCompletion(StageCompletion completion) async {
-    final saveGeneration = _progressGeneration;
-    final saveTask = _saveQueue.then(
-      (_) => _saveStageCompletion(completion, saveGeneration),
-    );
-    _saveQueue = saveTask.catchError((_) {});
-    await saveTask;
-  }
-
-  Future<void> _saveStageCompletion(
-    StageCompletion completion,
-    int saveGeneration,
-  ) async {
+  Future<void> _persistSave({
+    CampaignProgress? nextProgress,
+    CampaignTechTree? nextTechTree,
+  }) async {
     final store = _store;
     if (store == null) {
       _showCampaignPersistenceFailure();
       return;
     }
 
-    if (saveGeneration != _progressGeneration) {
-      return;
+    final saveGeneration = _progressGeneration;
+    final priorProgress = _progress;
+    final priorTechTree = _techTree;
+
+    // Optimistic update: scoped to provided fields. Bare assignment when
+    // unmounted so queued saves derive from the latest state (HPA-94 700cef1).
+    if (nextProgress != null) _progress = nextProgress;
+    if (nextTechTree != null) _techTree = nextTechTree;
+    _isSavingProgress = true;
+    if (mounted) {
+      setState(() {});
     }
 
+    final saveTask = _saveQueue.then((_) async {
+      if (saveGeneration != _progressGeneration) {
+        return;
+      }
+      await store.save(CampaignSave(progress: _progress, techTree: _techTree));
+    });
+    _saveQueue = saveTask.catchError((_) {});
+
+    try {
+      await saveTask;
+      // Post-stale-save reset: if a reset happened during the save, the disk
+      // write may have landed with pre-reset data. Wipe the store to match
+      // the post-reset in-memory state.
+      if (saveGeneration != _progressGeneration) {
+        await _resetStoreAfterStaleSave(store);
+      }
+    } catch (_) {
+      if (!mounted || saveGeneration != _progressGeneration) {
+        return;
+      }
+      // Field-scoped rollback (HPA-100 spec round-2 issue #4): only restore
+      // the field(s) this save touched, so a failed stage save can't clobber
+      // a concurrent tech-purchase save's optimistic update.
+      if (nextProgress != null) _progress = priorProgress;
+      if (nextTechTree != null) _techTree = priorTechTree;
+      if (mounted) {
+        setState(() {});
+      }
+      _showCampaignPersistenceFailure();
+    } finally {
+      if (saveGeneration == _progressGeneration) {
+        _isSavingProgress = false;
+        if (mounted) setState(() {});
+      }
+    }
+  }
+
+  Future<void> _saveStageCompletion(StageCompletion completion) {
     final priorResult = _progress.resultFor(completion.stage.id);
-    final progress = _progress.recordResult(
+    final newProgress = _progress.recordResult(
       completion.stage.id,
       completion.result,
     );
@@ -254,56 +293,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // improvement; compare the stored result for the stage (via StageResult.==)
     // so this no-op check survives a future recordResult implementation that
     // always allocates a fresh CampaignProgress.
-    if (progress.resultFor(completion.stage.id) == priorResult) {
-      return;
+    if (newProgress.resultFor(completion.stage.id) == priorResult) {
+      return Future<void>.value();
     }
-
-    final priorProgressState = _progress;
-    // Block stage launches while the optimistic update is unpersisted so a
-    // failed save cannot leave a running session with bonus gold/health that
-    // was never persisted. Update _progress even when unmounted so queued
-    // saves derive from the latest in-memory state; guard only setState (no
-    // rebuild after disposal).
-    _isSavingProgress = true;
-    try {
-      if (mounted) {
-        setState(() {
-          _progress = progress;
-        });
-      } else {
-        _progress = progress;
-      }
-
-      try {
-        await store.save(
-          CampaignSave(progress: progress, techTree: CampaignTechTree()),
-        );
-      } catch (_) {
-        if (!mounted || saveGeneration != _progressGeneration) {
-          return;
-        }
-
-        setState(() {
-          _progress = priorProgressState;
-        });
-        _showCampaignPersistenceFailure();
-        return;
-      }
-
-      if (!mounted) {
-        return;
-      }
-
-      if (saveGeneration != _progressGeneration) {
-        await _resetStoreAfterStaleSave(store);
-        return;
-      }
-    } finally {
-      _isSavingProgress = false;
-      if (mounted) {
-        setState(() {});
-      }
-    }
+    return _persistSave(nextProgress: newProgress);
   }
 
   void _returnToMap() {
@@ -397,12 +390,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
   void _showCampaignPersistenceFailure() {
     const message = 'Could not save campaign progress.';
     final game = _game;
-
     setState(() {
-      _mapFeedback = message;
+      _mapFeedback = message; // always; preserves HPA-94 breadcrumb behavior
+      if (_activeView == _ShellView.techTree) {
+        _techTreeFeedback = message;
+      }
     });
-
-    if (_activeStage != null && game != null) {
+    if (_activeView == _ShellView.stage && game != null) {
       game.overrideFeedback(message);
     }
   }
