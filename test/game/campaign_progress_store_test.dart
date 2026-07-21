@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -264,6 +265,7 @@ void main() {
         final modifiers = CampaignModifiers.fromProgress(
           loaded,
           OrionCampaign.stages,
+          CampaignTechTree(),
         );
 
         expect(modifiers.bonusGold, GameBalance.salvageRiftGoldBonus);
