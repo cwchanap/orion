@@ -4,6 +4,7 @@ import 'package:flame/components.dart';
 
 import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
+import '../campaign/campaign_progress.dart';
 import '../models/game_models.dart';
 import 'enemy_component.dart';
 
@@ -19,14 +20,11 @@ class TowerComponent extends CircleComponent {
     required this.launchProjectile,
     this.spriteSheet,
     this.towerVarietySheet,
+    this.modifiers = CampaignModifiers.empty,
     double radius = 15,
     super.priority,
   }) : placedTower = tower,
-       stats = GameBalance.towerStats(
-         tower.type,
-         level: tower.level,
-         specialization: tower.specialization,
-       ),
+       stats = _resolveStats(tower, modifiers),
        super(
          radius: radius,
          anchor: Anchor.center,
@@ -36,6 +34,7 @@ class TowerComponent extends CircleComponent {
 
   PlacedTower placedTower;
   TowerStats stats;
+  final CampaignModifiers modifiers;
   final TargetAcquirer acquireTarget;
   final ProjectileLauncher launchProjectile;
   final GameSpriteSheet? spriteSheet;
@@ -50,12 +49,35 @@ class TowerComponent extends CircleComponent {
 
   void updateTower(PlacedTower tower) {
     placedTower = tower;
-    stats = GameBalance.towerStats(
+    stats = _resolveStats(tower, modifiers);
+    paint.color = _towerColor(tower.type);
+  }
+
+  /// Resolves a tower's runtime [TowerStats] from [GameBalance], then applies
+  /// the laser/cryo tech-tree combat upgrades. Called from the constructor
+  /// and from [updateTower] so upgrades/specializations re-apply the bonus.
+  /// Pure: identical inputs yield identical outputs. The laser/cryo branches
+  /// are filtered by tower type so a non-matching tower is unaffected.
+  static TowerStats _resolveStats(
+    PlacedTower tower,
+    CampaignModifiers modifiers,
+  ) {
+    final base = GameBalance.towerStats(
       tower.type,
       level: tower.level,
       specialization: tower.specialization,
     );
-    paint.color = _towerColor(tower.type);
+    if (tower.type == TowerType.laser && modifiers.laserDamageFraction > 0) {
+      return base.copyWith(
+        damage: base.damage * (1 + modifiers.laserDamageFraction),
+      );
+    }
+    if (tower.type == TowerType.cryo && modifiers.cryoSlowDurationBonus > 0) {
+      return base.copyWith(
+        slowDuration: base.slowDuration + modifiers.cryoSlowDurationBonus,
+      );
+    }
+    return base;
   }
 
   @override
