@@ -212,15 +212,18 @@ ProjectileComponent / GravityFieldComponent / DroneComponent
 
 The enemy-side `applyDamage(amount)` / `applySlow({multiplier, duration})` APIs (verified at `enemy_component.dart:125, 157`) carry **no source-tower-type information**. There are many damage call sites — direct projectile hits, splash, pierce, chain, prism-split, cluster-burst, gravity-field ticks, drone attacks (`projectile_component.dart` alone has ~9 branches). Filtering "when source is laser/cryo" at each call site would scatter the modifier logic across half a dozen branches and miss any future damage path.
 
-**Decision: bake the laser/cryo tech-tree modifiers into `TowerStats` at tower-create / tower-upgrade time.** This is the reviewer's Option A and covers every damage path automatically because they all read from the tower's resolved `stats`.
+**Decision: bake the laser/cryo tech-tree modifiers into `TowerStats` at the runtime-stats resolution site, NOT on the `PlacedTower` record.** This covers every damage path automatically because they all read from the same resolved `TowerStats`.
 
-- **Application site:** wherever `GameSession` resolves a `TowerStats` (place at `game_session.dart:113, 126`; upgrade at `:152, :177`) — or, more cleanly, in a single `GameBalance.towerStats(...)` wrapper on the session that applies the modifiers after the base stats are looked up. The session already holds `modifiers`, so it can apply:
+**Correction from review (issue #1, round 2):** `PlacedTower` (defined at `game_models.dart:287-302`) is a pure data record with fields `id`, `type`, `position`, `level`, `specialization`, `targetingMode` — it has **no `stats` field**. The runtime `TowerStats` live on `TowerComponent.stats` (and are passed by reference to `ProjectileComponent.stats`, `GravityFieldComponent.stats`, `DroneComponent.stats`). Combat code reads `tower.stats` where `tower` is a `TowerComponent` — never a `PlacedTower`.
+
+- **Application site:** wherever `TowerComponent` resolves its `stats` field from `GameBalance.towerStats(tower.type, level: ..., specialization: ...)`. After the base lookup, the resolver applies the active session modifiers:
   - **Laser Tuning:** if `tower.type == TowerType.laser`, multiply the resolved `stats.damage` by `(1 + modifiers.laserDamageFraction)`.
   - **Cryo Coolant:** if `tower.type == TowerType.cryo`, add `modifiers.cryoSlowDurationBonus` to the resolved `stats.slowDuration`.
-- The bonus applies to the placed/upgraded tower for its lifetime. Specializing or upgrading a tower re-resolves stats and re-applies the bonus.
-- `PlacedTower.stats` therefore carries the post-modifier values; combat code reads them as-is, no changes.
+- The resolver must re-run whenever a tower is placed, upgraded (`level 1 → 2`), or specialized (`level 2 → 3`); the post-modifier `TowerStats` is what gets stored on the `TowerComponent` and passed to spawned projectiles/fields/drones.
+- `GameSession` exposes the active `CampaignModifiers` (e.g. via a getter) so the resolver can read them. `PlacedTower` itself is unchanged.
+- `OrionDefenseGame` already passes modifiers through to `GameSession`; the resolver reads `session.modifiers` (or `game.modifiers` if the resolver lives on the game side).
 
-**Why not at projectile/enemy call sites:** the reviewer's Option B (apply in `ProjectileComponent` before `applyDamage`) requires touching every damage branch and would miss gravity-field ticks and drone attacks. Option C (pass `TowerType` into `applyDamage`) pollutes a general enemy API. Baking into `TowerStats` is the only option that covers all damage paths with one application site.
+**Why not at projectile/enemy call sites:** the reviewer's Option B (apply in `ProjectileComponent` before `applyDamage`) requires touching every damage branch and would miss gravity-field ticks and drone attacks. Option C (pass `TowerType` into `applyDamage`) pollutes a general enemy API. Baking into the resolved `TowerStats` is the only option that covers all damage paths with one application site.
 
 ### What stays unchanged
 
@@ -233,74 +236,126 @@ The enemy-side `applyDamage(amount)` / `applySlow({multiplier, duration})` APIs 
 
 ## Save Flow
 
-HPA-94 established a save pipeline in `_OrionGamePageState` with three pieces of machinery: `_saveQueue` (serializes saves), `_progressGeneration` (rejects stale saves after a reset), and `_isSavingProgress` (blocks stage launch while a save is in flight). Tech-tree purchases **must** reuse this same pipeline — running a parallel save chain for purchases would race with stage-completion saves, restore a stale `_techTree` after a failed save, or let a mission start while a purchase is still rolling back.
+HPA-94 established a save pipeline in `_OrionGamePageState` with three pieces of machinery: `_saveQueue` (serializes saves), `_progressGeneration` (rejects stale saves after a reset), and `_isSavingProgress` (blocks stage launch while a save is in flight). It also established two non-obvious invariants that any unified helper **must** preserve (verified against the current `_saveStageCompletion` at `orion_game_page.dart:196-275`):
 
-### Unified persist helper
+1. **`_isSavingProgress` clears in a `finally` block, not inside the success branch.** Otherwise a generation-mismatch early return leaves `_isSavingProgress = true` forever and permanently locks stage launch and purchases.
+2. **A successful save that hits a generation mismatch must trigger `_resetStoreAfterStaleSave(store)`.** The generation check only guards in-memory state — the disk write may still have completed with pre-reset data, so the store must be reset to match the post-reset in-memory state. Failure to do this leaks stale data across resets.
 
-Extract the HPA-94 save logic into one private helper used by both stage completion and tech purchase:
+Tech-tree purchases **must** reuse this same pipeline. Running a parallel save chain for purchases would race with stage-completion saves, restore a stale `_techTree` after a failed save, or let a mission start while a purchase is still rolling back.
+
+### Field-scoped unified helper
+
+The helper takes **optional** `nextProgress` and `nextTechTree`. Each call touches only the field(s) it provides; the other field passes through unchanged. This is the key to safe rollback when stage-completion and tech-purchase saves are queued behind each other (issue #4, round 2):
 
 ```dart
 Future<void> _persistSave({
-  required CampaignSave next,
-  required CampaignSave prior,
-}) {
+  CampaignProgress? nextProgress,
+  CampaignTechTree? nextTechTree,
+}) async {
+  final store = _store;
+  if (store == null) {
+    _showCampaignPersistenceFailure(); // view-routed; see Feedback routing below
+    return;
+  }
+
   final saveGeneration = _progressGeneration;
+  final priorProgress = _progress;     // captured BEFORE optimistic update
+  final priorTechTree = _techTree;     // captured BEFORE optimistic update
+
+  // Optimistic update scoped to provided fields. Note: this update fires at
+  // queue time (the helper is awaited from the calling handler), but the
+  // store.write captures the CURRENT in-memory state at fire time, so a later
+  // queued save's optimistic update is included in an earlier save's disk
+  // write. The write order is still serialized via _saveQueue.
   setState(() {
-    _progress = next.progress;
-    _techTree = next.techTree;
+    if (nextProgress != null) _progress = nextProgress;
+    if (nextTechTree != null) _techTree = nextTechTree;
     _isSavingProgress = true;
   });
 
-  final saveTask = _saveQueue.then((_) => store.save(next));
-
+  final saveTask = _saveQueue.then((_) async {
+    if (saveGeneration != _progressGeneration) {
+      return; // stale; do not write
+    }
+    await store.save(CampaignSave(progress: _progress, techTree: _techTree));
+  });
   _saveQueue = saveTask.catchError((_) {});
 
-  return saveTask.then((_) {
+  try {
+    await saveTask;
+    // Post-stale-save reset (issue #3, round 2): if a reset happened during
+    // the save, the disk write may have landed with pre-reset data. Wipe the
+    // store to match the post-reset in-memory state. Preserves the existing
+    // _resetStoreAfterStaleSave behavior and its failed-reset feedback path.
+    if (saveGeneration != _progressGeneration) {
+      await _resetStoreAfterStaleSave(store);
+    }
+  } catch (_) {
     if (!mounted || saveGeneration != _progressGeneration) {
       return;
     }
+    // Scoped rollback (issue #4, round 2): only the field(s) this save
+    // provided are restored. A stage-completion save does not clobber a
+    // concurrent tech-purchase save's optimistic update, and vice versa.
     setState(() {
-      _isSavingProgress = false;
-    });
-  }).catchError((_) {
-    if (!mounted || saveGeneration != _progressGeneration) {
-      return;
-    }
-    setState(() {
-      _progress = prior.progress;
-      _techTree = prior.techTree;
-      _isSavingProgress = false;
+      if (nextProgress != null) _progress = priorProgress;
+      if (nextTechTree != null) _techTree = priorTechTree;
     });
     _showCampaignPersistenceFailure();
-  });
+  } finally {
+    // _isSavingProgress MUST clear in finally (issue #2, round 2). The
+    // generation check prevents stomping a newer save's flag.
+    if (saveGeneration == _progressGeneration) {
+      _isSavingProgress = false;
+      if (mounted) setState(() {});
+    }
+  }
 }
 ```
 
-The generation check still prevents a stale save (from before a reset) from overwriting fresh state. `_isSavingProgress` blocks stage launch and any further purchases while a save is in flight. Stage launch and tech purchase both consult `_isSavingProgress` before initiating.
+**Why field-scoped rollback is safe:** saves serialize through `_saveQueue`, so writes are totally ordered. The disk's final state is whatever the last successful write produced. Each save's optimistic update applies immediately at queue time, but the actual `store.save` captures in-memory state at fire time — so a queued save behind another picks up the earlier save's optimistic update. On failure, rolling back only the field this save touched leaves any newer queued save's update intact.
 
 ### All `CampaignSave` writers
 
-After the store API change, every save site writes a `CampaignSave` aggregate. There are exactly four writers; each must be updated:
+After the store API change, every save site writes a `CampaignSave` aggregate. There are exactly four writers:
 
 1. **Load (app start / `initState`):** `final save = await store.load(); _progress = save.progress; _techTree = save.techTree;`. Decodes both pieces from one JSON blob.
-2. **Stage completion (`_saveStageCompletion`, ~line 197):** `_persistSave(next: CampaignSave(progress: newProgress, techTree: _techTree), prior: CampaignSave(progress: _progress, techTree: _techTree));`. Tech tree is unchanged by a stage win; it is passed through so the aggregate save doesn't wipe purchases.
-3. **Tech-tree purchase (`_purchaseTech`):** `_persistSave(next: CampaignSave(progress: _progress, techTree: newTechTree), prior: CampaignSave(progress: _progress, techTree: _techTree));`. Progress is unchanged by a purchase; passed through so the save doesn't wipe stage results.
-4. **Campaign reset (`_confirmResetCampaign`, ~line 339):** `_progressGeneration++;` then `await store.reset();` then `setState(() { _progress = CampaignProgress(); _techTree = CampaignTechTree(); _activeView = _ShellView.worldMap; _activeStage = null; _game = null; });`. Reset intentionally clears both progress and tech tree (the player is wiping the whole campaign). The generation bump invalidates any in-flight save from either writer.
+2. **Stage completion (`_saveStageCompletion`, ~line 205):** refactored to call `_persistSave(nextProgress: newProgress);` — no `nextTechTree`, so `_techTree` is untouched and a failed stage save cannot roll back a concurrent tech purchase. The existing `_recordStageCompletion` queueing wrapper and its sibling-save serialization test (`test/widget_test.dart:442`) are preserved.
+3. **Tech-tree purchase (`_purchaseTech`):** `_persistSave(nextTechTree: newTechTree);` — no `nextProgress`, so a failed purchase cannot roll back a concurrent stage-completion save.
+4. **Campaign reset (`_confirmResetCampaign`, ~line 339):** `_progressGeneration++;` then `await store.reset();` then `setState(() { _progress = CampaignProgress(); _techTree = CampaignTechTree(); _activeView = _ShellView.worldMap; _activeStage = null; _game = null; });`. Reset intentionally clears both progress and tech tree (the player is wiping the whole campaign). The generation bump invalidates any in-flight save from either writer; the post-stale-save reset (issue #3) wipes any disk write that races with the reset. Failed-reset feedback path preserved (`_resetStoreAfterStaleSave` → `_mapFeedback = 'Could not reset campaign progress.'`).
 
 ### Tech-tree purchase handler
 
 ```dart
 void _purchaseTech(CampaignTechUpgrade upgrade) {
   if (_isSavingProgress) {
-    return; // block concurrent saves
+    return; // block concurrent saves; matches stage-launch guard
   }
   final newTechTree = _techTree.purchase(upgrade, _progress);
-  _persistSave(
-    next: CampaignSave(progress: _progress, techTree: newTechTree),
-    prior: CampaignSave(progress: _progress, techTree: _techTree),
-  );
+  _persistSave(nextTechTree: newTechTree);
 }
 ```
+
+The optimistic `setState` inside `_persistSave` updates `_techTree` before the await; scoped rollback restores `priorTechTree` on failure.
+
+### Feedback routing (issue #5, round 2)
+
+`_store` is nullable (`CampaignProgressStore? _store` at `orion_game_page.dart:32`) — the helper must guard. The existing `_showCampaignPersistenceFailure` only routes feedback to `_mapFeedback` (world map) and `game.overrideFeedback` (active stage). It misses the tech tree view, where the user may be sitting when a purchase save fails. Update the router to dispatch on `_activeView`:
+
+```dart
+void _showCampaignPersistenceFailure() {
+  const message = 'Could not save campaign progress.';
+  setState(() {
+    switch (_activeView) {
+      case _ShellView.worldMap: _mapFeedback     = message; break;
+      case _ShellView.techTree: _techTreeFeedback = message; break;
+      case _ShellView.stage:    _game?.overrideFeedback(message); break;
+    }
+  });
+}
+```
+
+A new `_techTreeFeedback` field on `_OrionGamePageState` is consumed by `TechTreeView`. The field clears on the next successful purchase or on navigation away from the tech tree view.
 
 The optimistic `setState` inside `_persistSave` updates `_techTree` before the await; rollback restores `prior.techTree` on failure. This reuses the exact discipline HPA-94 established for `_progress` saves.
 
@@ -457,35 +512,40 @@ The Tech Tree view receives `_progress`, `_techTree`, and an `onPurchase(Campaig
 - `restart()` preserves the session's modifiers (regression on HPA-94's restart boundary).
 - `GameSession.modifiers` field exposes the stored modifiers for combat application.
 
-### Combat application (TowerStats bake site — issue #1 from review)
+### Combat application (TowerStats bake site — round-2 review issue #1)
 
-Because the laser/cryo modifiers are baked into `TowerStats` at tower create/update time (see "Laser damage and Cryo slow" under Application of Upgrades), the combat-application tests target the `GameSession` tower-resolution path, not `enemy_component.dart` call sites:
+Because the laser/cryo modifiers are baked into the resolved `TowerStats` (see "Laser damage and Cryo slow" under Application of Upgrades), the combat-application tests target the resolution site — wherever `TowerComponent.stats` is computed from `GameBalance.towerStats(...)` — not `enemy_component.dart` call sites and not `GameSession` (which uses `GameBalance.towerStats(...)` only for cost lookups; `PlacedTower` carries no stats field):
 
 - **Place a laser tower** with `laserTuning` purchased → resolved `TowerStats.damage == baseDamage * (1 + 0.10)`. Without `laserTuning` → `damage == baseDamage` (regression).
 - **Place a cryo tower** with `cryoCoolant` purchased → resolved `TowerStats.slowDuration == baseSlowDuration + 0.30`. Without `cryoCoolant` → `slowDuration == baseSlowDuration` (regression).
 - **Place a non-laser, non-cryo tower** (e.g. `rocket`, `railgun`, `ionChain`, `nanite`, `gravityWell`, `droneBay`) with both combat upgrades purchased → `damage` and `slowDuration` unchanged (only the matching tower type is affected).
-- **Upgrade a laser tower** (level 1 → 2) with `laserTuning` purchased → the upgraded `damage` includes the `(1 + 0.10)` multiplier on top of the new base.
+- **Upgrade a laser tower** (level 1 → 2) with `laserTuning` purchased → the re-resolved `damage` includes the `(1 + 0.10)` multiplier on top of the new base.
 - **Specialize a laser tower** (e.g. into `pulseLaser`) with `laserTuning` purchased → specialization re-resolves stats and the multiplier is reapplied.
+- **End-to-end damage verification:** with `laserTuning` purchased, a laser-tower projectile's `stats.damage` (read inside `ProjectileComponent` / `GravityFieldComponent` / `DroneComponent`) carries the multiplier; the enemy's resolved health after `applyDamage` reflects it.
 - Empty modifiers (`CampaignModifiers.empty`) → resolved stats identical to today (regression).
 
-`CombatEffects` itself is not modified and its existing tests remain green. The damage-path components (`ProjectileComponent`, `GravityFieldComponent`, `DroneComponent`) are unchanged — they read `stats.damage` / `stats.slowDuration` as today; the bonus is already baked in.
+`CombatEffects` itself is not modified and its existing tests remain green. The damage-path components (`ProjectileComponent`, `GravityFieldComponent`, `DroneComponent`) are unchanged — they read `stats.damage` / `stats.slowDuration` as today; the bonus is already baked in at the resolution site.
 
-### Save flow (`_persistSave` unified helper — issues #2 and #3 from review)
+### Save flow (`_persistSave` unified helper — round-2 review issues #2, #3, #4)
 
 - **Stage completion save:** trigger a stage win → `_progress` and `_techTree` both persisted; reload returns both intact. A pre-existing tech tree is not wiped by a stage win.
 - **Tech-tree purchase save:** trigger a purchase → `_techTree` persists; reload returns the new tree. A pre-existing progress is not wiped by a purchase.
-- **Race serialization:** fire a stage-completion save and a tech-purchase save in quick succession → both serialize through `_saveQueue`; final reloaded state matches the last write.
+- **Race serialization (regression of HPA-94 test at `widget_test.dart:442`):** fire a stage-completion save and a tech-purchase save in quick succession → both serialize through `_saveQueue`; final reloaded state matches the last write; **sibling queued saves do not roll each other back** (issue #4 round 2).
+- **Cross-writer rollback:** queue a stage save, then queue a tech-purchase save; inject failure in the stage save only → `_progress` rolls back to its prior, `_techTree` remains at the new value (not clobbered by the stage save's field-scoped rollback).
+- **`_isSavingProgress` clears on generation mismatch (issue #2 round 2):** trigger a reset mid-save; verify `_isSavingProgress` returns to `false` afterward (no permanent UI lock).
 - **`_isSavingProgress` blocks:** while a save is in flight, stage launch (`_startStage`) and further purchases (`_purchaseTech`) are rejected (verify via a flag check, not by actual race timing).
-- **Save failure on purchase:** inject a failing store → `_techTree` rolls back to prior instance; save-failure feedback shown.
-- **Save failure on stage completion:** inject a failing store → `_progress` rolls back to prior instance (regression of HPA-94 behavior).
-- **Reset invalidates in-flight save:** start a save, then trigger `_confirmResetCampaign` → `_progressGeneration++` → in-flight save's success/failure callback no-ops; reloaded state is empty for both progress and tech tree.
+- **Save failure on purchase:** inject a failing store → `_techTree` rolls back to prior instance; save-failure feedback routed to `_techTreeFeedback` (issue #5 round 2).
+- **Save failure on stage completion:** inject a failing store → `_progress` rolls back to prior instance (regression of HPA-94 behavior); feedback routed to `_mapFeedback` or `_game.overrideFeedback` as before.
+- **Stale-save reset (regression of HPA-94 test at `widget_test.dart:701`, issue #3 round 2):** start a save, then trigger `_confirmResetCampaign` → in-flight save succeeds on disk with pre-reset data → post-stale-save reset wipes the store → reloaded returns empty progress AND empty tech tree.
+- **Reset failure:** inject a failing `store.reset()` → `_mapFeedback = 'Could not reset campaign progress.'` (preserve existing behavior).
+- **Null store:** `_store == null` → `_persistSave` shows persistence failure and returns without throwing.
 
 ### Persistence
 
 - **Codec v3 round-trip:** encode `CampaignSave(progress, techTree)` → decode → both `progress` and `techTree` fields match inputs.
 - **v2 → v3 migration:** decode a v2-shaped JSON string → `techPurchases == []`, `stageResults` decoded correctly.
 - **v1 path regression:** decode a v1-shaped JSON string → `techPurchases == []`, v1 stage-id migration intact.
-- **Unknown `techPurchases` IDs dropped:** encode with a future/unknown ID present → decode → unknown ID absent, known IDs preserved.
+- **Unknown `techPurchases` IDs dropped:** decode a raw JSON string containing a future/unknown ID alongside known IDs → unknown ID absent, known IDs preserved. (Encode-via-enum cannot produce an unknown ID since the enum is closed; the test must construct raw JSON and pass it to `CampaignProgressCodec.decode` directly.)
 - **Missing `techPurchases` field** on a v3-shaped JSON: decode → empty tech tree.
 - **Unknown codec version (e.g. 99):** decode → empty `CampaignSave` (both fields empty).
 - **Store round-trip** (`InMemoryCampaignProgressStore`): save a `CampaignSave` with both progress + tech tree → reload → verify both intact (covers the "persists across app restarts" acceptance criterion).
@@ -518,15 +578,15 @@ The migration is mechanical (wrap/unwrap `CampaignSave`) but high-touch; the imp
 
 ## Acceptance Criteria
 
-Mapped to the issue:
+Mapped to the issue. These describe the end state after implementation; they are not yet satisfied today (the codec is still v2 at `campaign_progress_store.dart:24`, and the tech-tree files do not yet exist):
 
-- [x] **Persistent campaign tech-tree state in progress storage** — codec v3 adds `techPurchases`.
-- [x] **At least three purchasable upgrades** — five shipped.
-- [x] **Upgrades visibly affect mission start or tower stats** — three at mission start (gold, health, clear-bonus multiplier) and two in combat (laser damage, cryo slow).
-- [x] **The player can view purchased and locked upgrades from the campaign map** — full-screen `TechTreeView` reached via a world-map header button.
-- [x] **Upgrade purchases persist across app restarts** — codec v3 + `InMemoryCampaignProgressStore` round-trip test.
-- [x] **Existing saved progress remains loadable** — v2 → v3 migration defaults `techPurchases = []`.
-- [x] **Tests cover purchase validation, persistence, and application to gameplay** — pure-logic, persistence, session-application, combat-application, and widget tests specified above.
+- [ ] **Persistent campaign tech-tree state in progress storage** — codec v3 adds `techPurchases`.
+- [ ] **At least three purchasable upgrades** — five shipped.
+- [ ] **Upgrades visibly affect mission start or tower stats** — three at mission start (gold, health, clear-bonus multiplier) and two via resolved `TowerStats` (laser damage, cryo slow). Combat-upgrade visibility is satisfied by panel `effectLabel`s + combat-application tests; no in-mission HUD chip ships in MVP.
+- [ ] **The player can view purchased and locked upgrades from the campaign map** — full-screen `TechTreeView` reached via a world-map header button.
+- [ ] **Upgrade purchases persist across app restarts** — codec v3 + `InMemoryCampaignProgressStore` round-trip test.
+- [ ] **Existing saved progress remains loadable** — v2 → v3 migration defaults `techPurchases = []`.
+- [ ] **Tests cover purchase validation, persistence, and application to gameplay** — pure-logic, persistence, save-flow (including sibling stage/purchase saves and stale-save reset), session-application, combat-application, and widget tests specified above.
 
 ## References
 
