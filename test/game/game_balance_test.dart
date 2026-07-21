@@ -1079,6 +1079,45 @@ void main() {
       );
     });
   });
+
+  group('Campaign tech-tree constants', () {
+    test('upgrade costs total 20 (intentional 1-pt slack vs 21 max)', () {
+      const costs = [
+        GameBalance.solarCapacitorsCost,
+        GameBalance.hardenedCoreCost,
+        GameBalance.salvageCrewCost,
+        GameBalance.laserTuningCost,
+        GameBalance.cryoCoolantCost,
+      ];
+      expect(costs.fold(0, (sum, c) => sum + c), 20);
+    });
+
+    test('magnitudes match design', () {
+      expect(GameBalance.solarCapacitorsGoldBonus, 15);
+      expect(GameBalance.hardenedCoreHealthBonus, 3);
+      expect(GameBalance.salvageCrewClearBonusFraction, 0.25);
+      expect(GameBalance.laserTuningDamageFraction, 0.10);
+      expect(GameBalance.cryoCoolantSlowDurationBonus, 0.30);
+    });
+  });
+
+  group('TowerStats.copyWith', () {
+    test('overrides damage and slowDuration only', () {
+      final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      final tuned = base.copyWith(damage: base.damage * 1.10);
+      expect(tuned.damage, closeTo(base.damage * 1.10, 1e-9));
+      expect(tuned.slowDuration, base.slowDuration);
+      expect(tuned.range, base.range);
+      expect(tuned.cost, base.cost);
+    });
+
+    test('overrides slowDuration only', () {
+      final base = GameBalance.towerStats(TowerType.cryo, level: 1);
+      final cooled = base.copyWith(slowDuration: base.slowDuration + 0.30);
+      expect(cooled.slowDuration, closeTo(base.slowDuration + 0.30, 1e-9));
+      expect(cooled.damage, base.damage);
+    });
+  });
 }
 
 class _ExpectedTowerCosts {
