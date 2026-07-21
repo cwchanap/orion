@@ -11,6 +11,8 @@ import '../models/game_models.dart';
 import '../orion_defense_game.dart';
 import 'world_map_view.dart';
 
+enum _ShellView { worldMap, techTree, stage }
+
 class OrionGamePage extends StatefulWidget {
   const OrionGamePage({
     super.key,
@@ -30,9 +32,13 @@ class OrionGamePage extends StatefulWidget {
 class _OrionGamePageState extends State<OrionGamePage> {
   OrionDefenseGame? _game;
   CampaignProgress _progress = CampaignProgress();
+  CampaignTechTree _techTree = CampaignTechTree();
   CampaignProgressStore? _store;
   StageDefinition? _activeStage;
   String? _mapFeedback;
+  // ignore: unused_field — consumed by TechTreeView (T12).
+  String? _techTreeFeedback;
+  _ShellView _activeView = _ShellView.worldMap;
   bool _isLoading = true;
   int _progressGeneration = 0;
   Future<void> _saveQueue = Future<void>.value();
@@ -61,7 +67,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         }
       }
 
-      final progress = await store.load();
+      final save = await store.load();
 
       if (!mounted) {
         return;
@@ -69,7 +75,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
       setState(() {
         _store = store;
-        _progress = progress.progress;
+        _progress = save.progress;
+        _techTree = save.techTree;
         _isLoading = false;
       });
     } catch (_) {
@@ -80,6 +87,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       setState(() {
         _store = store;
         _progress = CampaignProgress();
+        _techTree = CampaignTechTree();
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
       });
@@ -92,26 +100,43 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
-    final game = _game;
-    if (_activeStage == null || game == null) {
-      return Scaffold(
-        body: WorldMapView(
-          stages: OrionCampaign.stages,
-          progress: _progress,
-          modifiers: CampaignModifiers.fromProgress(
-            _progress,
-            OrionCampaign.stages,
-            CampaignTechTree(),
-          ),
-          feedback: _mapFeedback,
-          isSavingProgress: _isSavingProgress,
-          onStageSelected: _startStage,
-          onLockedStageSelected: _showLockedStageFeedback,
-          onResetCampaign: _confirmResetCampaign,
-        ),
-      );
+    switch (_activeView) {
+      case _ShellView.worldMap:
+      case _ShellView.techTree:
+        // TODO(T12): TechTreeView gets its own scaffold; for now both non-stage
+        // views fall through to the world-map scaffold so the build stays green.
+        return _buildWorldMapScaffold();
+      case _ShellView.stage:
+        return _buildStageScaffold();
     }
+  }
 
+  Widget _buildWorldMapScaffold() {
+    return Scaffold(
+      body: WorldMapView(
+        stages: OrionCampaign.stages,
+        progress: _progress,
+        modifiers: CampaignModifiers.fromProgress(
+          _progress,
+          OrionCampaign.stages,
+          _techTree,
+        ),
+        feedback: _mapFeedback,
+        isSavingProgress: _isSavingProgress,
+        onStageSelected: _startStage,
+        onLockedStageSelected: _showLockedStageFeedback,
+        onResetCampaign: _confirmResetCampaign,
+      ),
+    );
+  }
+
+  Widget _buildStageScaffold() {
+    final game = _game;
+    if (game == null) {
+      // Defensive: _activeView == stage implies _game is set, but if state
+      // ever drifts we fall back to the world map rather than crashing.
+      return _buildWorldMapScaffold();
+    }
     return Scaffold(
       body: SafeArea(
         child: ValueListenableBuilder<GameSnapshot>(
@@ -173,7 +198,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final modifiers = CampaignModifiers.fromProgress(
       _progress,
       OrionCampaign.stages,
-      CampaignTechTree(),
+      _techTree,
     );
     final game = OrionDefenseGame(
       stage: stage,
@@ -187,6 +212,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _activeStage = stage;
       _mapFeedback = null;
       _game = game;
+      _activeView = _ShellView.stage;
     });
   }
 
@@ -284,6 +310,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     setState(() {
       _activeStage = null;
       _game = null;
+      _activeView = _ShellView.worldMap;
     });
   }
 
@@ -345,8 +372,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     setState(() {
       _progress = CampaignProgress();
+      _techTree = CampaignTechTree();
       _activeStage = null;
       _game = null;
+      _activeView = _ShellView.worldMap;
       _mapFeedback = 'Campaign reset.';
     });
   }
