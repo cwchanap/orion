@@ -127,6 +127,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         onStageSelected: _startStage,
         onLockedStageSelected: _showLockedStageFeedback,
         onResetCampaign: _confirmResetCampaign,
+        onOpenTechTree: _openTechTree,
       ),
     );
   }
@@ -221,6 +222,29 @@ class _OrionGamePageState extends State<OrionGamePage> {
     setState(() {
       _mapFeedback = '${stage.name} is locked.';
     });
+  }
+
+  void _openTechTree() {
+    setState(() {
+      _techTreeFeedback = null;
+      _activeView = _ShellView.techTree;
+    });
+  }
+
+  // ignore: unused_element — wired up by TechTreeView's back button (T12).
+  void _closeTechTree() {
+    setState(() {
+      _activeView = _ShellView.worldMap;
+    });
+  }
+
+  // ignore: unused_element — invoked by TechTreeView purchase buttons (T12).
+  Future<void> _purchaseTech(CampaignTechUpgrade upgrade) async {
+    if (_isSavingProgress) {
+      return; // matches stage-launch guard
+    }
+    final newTechTree = _techTree.purchase(upgrade, _progress);
+    await _persistSave(nextTechTree: newTechTree);
   }
 
   Future<void> _persistSave({

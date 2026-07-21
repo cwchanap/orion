@@ -15,6 +15,7 @@ class WorldMapView extends StatelessWidget {
     required this.onStageSelected,
     this.onLockedStageSelected,
     required this.onResetCampaign,
+    this.onOpenTechTree,
   });
 
   final List<StageDefinition> stages;
@@ -25,6 +26,7 @@ class WorldMapView extends StatelessWidget {
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
   final VoidCallback onResetCampaign;
+  final VoidCallback? onOpenTechTree;
 
   @override
   Widget build(BuildContext context) {
@@ -53,6 +55,12 @@ class WorldMapView extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onOpenTechTree != null)
+                  IconButton(
+                    tooltip: 'Tech Tree',
+                    onPressed: onOpenTechTree,
+                    icon: const Icon(Icons.account_tree),
+                  ),
                 IconButton(
                   tooltip: 'Reset Campaign',
                   onPressed: onResetCampaign,
