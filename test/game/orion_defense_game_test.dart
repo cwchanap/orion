@@ -732,6 +732,58 @@ void main() {
       expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
     });
 
+    test('clearBonusFraction amplifies the wave-clear gold bonus when set', () {
+      // Wave-clear bonus resolution lives in GameSession.finishActiveWave,
+      // which reads session.modifiers.clearBonusFraction. If OrionDefenseGame
+      // fails to forward its modifiers to GameSession.initial, the fraction
+      // stays 0 and the bonus is unscaled.
+      final game = OrionDefenseGame(
+        stage: _clearBonusStage(clearBonus: 100),
+        modifiers: const CampaignModifiers(clearBonusFraction: 0.5),
+      );
+      game.onGameResize(Vector2(800, 1200));
+
+      final goldBefore = game.snapshot.gold;
+      game.startWave();
+      game.update(0);
+
+      expect(game.snapshot.phase, GamePhase.build);
+      // 100 * (1 + 0.5) = 150 added on top of the starting gold.
+      expect(game.snapshot.gold, goldBefore + 150);
+    });
+
+    test('wave-clear gold bonus is unscaled when modifiers are absent', () {
+      final game = OrionDefenseGame(stage: _clearBonusStage(clearBonus: 100));
+      game.onGameResize(Vector2(800, 1200));
+
+      final goldBefore = game.snapshot.gold;
+      game.startWave();
+      game.update(0);
+
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.snapshot.gold, goldBefore + 100);
+    });
+
+    test('laser tower stats reflect laserDamageFraction from modifiers', () {
+      // TowerComponent resolves its stats through _resolveStats, which reads
+      // its modifiers field. If OrionDefenseGame fails to forward modifiers
+      // to _addTowerComponent, the placed tower uses CampaignModifiers.empty
+      // and the damage is unscaled.
+      const mods = CampaignModifiers(laserDamageFraction: 0.10);
+      final game = OrionDefenseGame(
+        stage: _singleEnemyStage(),
+        modifiers: mods,
+      );
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+
+      final component = game.children.whereType<TowerComponent>().single;
+      final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
+    });
+
     test('restart resets base health to modifier-adjusted starting value', () {
       // A session created with non-zero modifiers must reset back to the
       // adjusted starting values (not the unmodified baseline, and not the
@@ -790,6 +842,26 @@ StageDefinition _emptyWaveStage({int waveCount = 2}) {
     waves: List<WaveDefinition>.generate(
       waveCount,
       (_) => const WaveDefinition(groups: [], clearBonus: 0),
+      growable: false,
+    ),
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _clearBonusStage({required int clearBonus, int waveCount = 2}) {
+  return StageDefinition(
+    id: 'clear-bonus-stage',
+    name: 'Clear Bonus Stage',
+    mapLabel: 'Bonus',
+    description: 'Stage with non-zero clear bonus for modifier tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: List<WaveDefinition>.generate(
+      waveCount,
+      (_) => WaveDefinition(groups: const [], clearBonus: clearBonus),
       growable: false,
     ),
     unlockDependencies: const [],
