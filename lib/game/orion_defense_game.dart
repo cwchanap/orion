@@ -41,6 +41,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }) : stage = stage ?? OrionCampaign.stageOne,
        _session = GameSession.initial(
          stage: stage ?? OrionCampaign.stageOne,
+         modifiers: modifiers ?? CampaignModifiers.empty,
          gold: modifiers?.adjustedStartingGold,
          baseHealth: modifiers?.adjustedStartingBaseHealth,
        ) {
@@ -432,6 +433,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       launchProjectile: _launchProjectile,
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
+      modifiers: modifiers ?? CampaignModifiers.empty,
       priority: 10,
     );
     _towerComponents[tower.id] = component;
