@@ -1,3 +1,4 @@
+import '../models/game_models.dart';
 import 'campaign_progress.dart';
 
 /// The five campaign-wide tech-tree upgrades available in the MVP.
@@ -10,35 +11,35 @@ import 'campaign_progress.dart';
 enum CampaignTechUpgrade {
   solarCapacitors(
     id: 'solar-capacitors',
-    cost: 3,
+    cost: GameBalance.solarCapacitorsCost,
     label: 'Solar Capacitors',
     description: 'Start each mission with extra gold.',
     effectLabel: '+15 Starting Gold',
   ),
   hardenedCore(
     id: 'hardened-core',
-    cost: 4,
+    cost: GameBalance.hardenedCoreCost,
     label: 'Hardened Core',
     description: 'Start each mission with extra base health.',
     effectLabel: '+3 Starting Health',
   ),
   salvageCrew(
     id: 'salvage-crew',
-    cost: 4,
+    cost: GameBalance.salvageCrewCost,
     label: 'Salvage Crew',
     description: 'Earn more gold from wave clears.',
     effectLabel: '+25% Wave Clear Gold',
   ),
   laserTuning(
     id: 'laser-tuning',
-    cost: 4,
+    cost: GameBalance.laserTuningCost,
     label: 'Laser Tuning',
     description: 'Laser towers deal more damage.',
     effectLabel: '+10% Laser Damage',
   ),
   cryoCoolant(
     id: 'cryo-coolant',
-    cost: 5,
+    cost: GameBalance.cryoCoolantCost,
     label: 'Cryo Coolant',
     description: 'Cryo towers slow enemies longer.',
     effectLabel: '+0.3s Cryo Slow',

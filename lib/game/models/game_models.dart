@@ -193,6 +193,52 @@ class TowerStats {
 
   bool get canUpgrade => level == 1;
   bool get canSpecialize => level == 2;
+
+  /// Returns a copy with overridden fields. Only the fields the tech-tree
+  /// combat upgrades touch are exposed; everything else copies from `this`.
+  /// Kept narrow on purpose — extend only if another feature needs it.
+  TowerStats copyWith({double? damage, double? slowDuration}) {
+    return TowerStats(
+      type: type,
+      level: level,
+      specialization: specialization,
+      cost: cost,
+      upgradeCost: upgradeCost,
+      specializationCost: specializationCost,
+      range: range,
+      damage: damage ?? this.damage,
+      fireInterval: fireInterval,
+      projectileSpeed: projectileSpeed,
+      splashRadius: splashRadius,
+      slowMultiplier: slowMultiplier,
+      slowDuration: slowDuration ?? this.slowDuration,
+      pierceCount: pierceCount,
+      pierceWidth: pierceWidth,
+      chainCount: chainCount,
+      chainRange: chainRange,
+      chainFalloff: chainFalloff,
+      corrosionDamagePerSecond: corrosionDamagePerSecond,
+      corrosionDuration: corrosionDuration,
+      armorShred: armorShred,
+      fieldRadius: fieldRadius,
+      fieldDuration: fieldDuration,
+      fieldTickInterval: fieldTickInterval,
+      droneCount: droneCount,
+      droneLifetime: droneLifetime,
+      droneDamage: droneDamage,
+      droneAttackInterval: droneAttackInterval,
+      maxActiveDrones: maxActiveDrones,
+      shieldDamageMultiplier: shieldDamageMultiplier,
+      armorDamageMultiplier: armorDamageMultiplier,
+      slowedDamageMultiplier: slowedDamageMultiplier,
+      prismSplitDamageMultiplier: prismSplitDamageMultiplier,
+      prismSplitRange: prismSplitRange,
+      clusterBurstCount: clusterBurstCount,
+      clusterBurstDamageMultiplier: clusterBurstDamageMultiplier,
+      clusterBurstRadius: clusterBurstRadius,
+    );
+  }
+
   bool get isMaxLevel => level >= 3;
 }
 
@@ -408,6 +454,24 @@ class GameBalance {
   static const int salvageRiftGoldBonus = 30;
   // Bonus starting base health granted by clearing the Void Bastion side stage.
   static const int voidBastionHealthBonus = 5;
+
+  // Campaign tech-tree upgrade costs. Total is 20 (intentional 1-pt slack
+  // below the 21-pt max medal rank: 7 stages × 3 rank). Tests assert this.
+  static const int solarCapacitorsCost = 3;
+  static const int hardenedCoreCost = 4;
+  static const int salvageCrewCost = 4;
+  static const int laserTuningCost = 4;
+  static const int cryoCoolantCost = 5;
+
+  // Campaign tech-tree upgrade magnitudes. The two "*Fraction" constants are
+  // additive fractions (applied as `(1 + fraction)`), NOT multipliers —
+  // storing 0.25 and applying as `* clearBonusFraction` would silently grant
+  // 25% of the bonus instead of 125%. See HPA-100 spec.
+  static const int solarCapacitorsGoldBonus = 15;
+  static const int hardenedCoreHealthBonus = 3;
+  static const double salvageCrewClearBonusFraction = 0.25;
+  static const double laserTuningDamageFraction = 0.10;
+  static const double cryoCoolantSlowDurationBonus = 0.30;
 
   static const EnemyStats _basicDrone = EnemyStats(
     health: 36,
