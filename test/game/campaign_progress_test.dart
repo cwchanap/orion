@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 
 void main() {
@@ -430,6 +431,7 @@ void main() {
       final modifiers = CampaignModifiers.fromProgress(
         CampaignProgress(),
         stages,
+        CampaignTechTree(),
       );
 
       expect(modifiers.bonusGold, 0);
@@ -447,7 +449,11 @@ void main() {
         },
       );
 
-      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+      final modifiers = CampaignModifiers.fromProgress(
+        progress,
+        stages,
+        CampaignTechTree(),
+      );
 
       expect(modifiers.bonusGold, GameBalance.salvageRiftGoldBonus);
       expect(modifiers.bonusHealth, 0);
@@ -468,7 +474,11 @@ void main() {
         },
       );
 
-      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+      final modifiers = CampaignModifiers.fromProgress(
+        progress,
+        stages,
+        CampaignTechTree(),
+      );
 
       expect(modifiers.bonusGold, 0);
       expect(modifiers.bonusHealth, GameBalance.voidBastionHealthBonus);
@@ -493,7 +503,11 @@ void main() {
         },
       );
 
-      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+      final modifiers = CampaignModifiers.fromProgress(
+        progress,
+        stages,
+        CampaignTechTree(),
+      );
 
       expect(modifiers.bonusGold, GameBalance.salvageRiftGoldBonus);
       expect(modifiers.bonusHealth, GameBalance.voidBastionHealthBonus);
@@ -514,12 +528,147 @@ void main() {
         },
       );
 
-      final modifiers = CampaignModifiers.fromProgress(progress, stages);
+      final modifiers = CampaignModifiers.fromProgress(
+        progress,
+        stages,
+        CampaignTechTree(),
+      );
 
       expect(modifiers.bonusGold, 0);
       expect(modifiers.bonusHealth, 0);
       expect(modifiers.hasChallengeBadge, isFalse);
     });
+
+    group('tech-tree effects', () {
+      CampaignTechTree treeWith(CampaignTechUpgrade upgrade) =>
+          CampaignTechTree(purchased: {upgrade});
+
+      test('solarCapacitors adds solarCapacitorsGoldBonus to bonusGold', () {
+        final mods = CampaignModifiers.fromProgress(
+          CampaignProgress(),
+          const [],
+          treeWith(CampaignTechUpgrade.solarCapacitors),
+        );
+        expect(mods.bonusGold, GameBalance.solarCapacitorsGoldBonus);
+        expect(mods.bonusHealth, 0);
+      });
+
+      test('hardenedCore adds hardenedCoreHealthBonus to bonusHealth', () {
+        final mods = CampaignModifiers.fromProgress(
+          CampaignProgress(),
+          const [],
+          treeWith(CampaignTechUpgrade.hardenedCore),
+        );
+        expect(mods.bonusHealth, GameBalance.hardenedCoreHealthBonus);
+        expect(mods.bonusGold, 0);
+      });
+
+      test('salvageCrew sets clearBonusFraction', () {
+        final mods = CampaignModifiers.fromProgress(
+          CampaignProgress(),
+          const [],
+          treeWith(CampaignTechUpgrade.salvageCrew),
+        );
+        expect(
+          mods.clearBonusFraction,
+          GameBalance.salvageCrewClearBonusFraction,
+        );
+      });
+
+      test('laserTuning sets laserDamageFraction', () {
+        final mods = CampaignModifiers.fromProgress(
+          CampaignProgress(),
+          const [],
+          treeWith(CampaignTechUpgrade.laserTuning),
+        );
+        expect(mods.laserDamageFraction, GameBalance.laserTuningDamageFraction);
+      });
+
+      test('cryoCoolant sets cryoSlowDurationBonus', () {
+        final mods = CampaignModifiers.fromProgress(
+          CampaignProgress(),
+          const [],
+          treeWith(CampaignTechUpgrade.cryoCoolant),
+        );
+        expect(
+          mods.cryoSlowDurationBonus,
+          GameBalance.cryoCoolantSlowDurationBonus,
+        );
+      });
+
+      test('all five upgrades stack with each other', () {
+        final all = CampaignTechTree(
+          purchased: CampaignTechUpgrade.values.toSet(),
+        );
+        final mods = CampaignModifiers.fromProgress(
+          CampaignProgress(),
+          const [],
+          all,
+        );
+        expect(mods.bonusGold, GameBalance.solarCapacitorsGoldBonus);
+        expect(mods.bonusHealth, GameBalance.hardenedCoreHealthBonus);
+        expect(
+          mods.clearBonusFraction,
+          GameBalance.salvageCrewClearBonusFraction,
+        );
+        expect(mods.laserDamageFraction, GameBalance.laserTuningDamageFraction);
+        expect(
+          mods.cryoSlowDurationBonus,
+          GameBalance.cryoCoolantSlowDurationBonus,
+        );
+      });
+
+      test('empty tech tree behaves like HPA-94 (no tech fields set)', () {
+        final mods = CampaignModifiers.fromProgress(
+          CampaignProgress(),
+          const [],
+          CampaignTechTree(),
+        );
+        expect(mods.bonusGold, 0);
+        expect(mods.bonusHealth, 0);
+        expect(mods.clearBonusFraction, 0);
+        expect(mods.laserDamageFraction, 0);
+        expect(mods.cryoSlowDurationBonus, 0);
+      });
+    });
+
+    test(
+      'solarCapacitors stacks additively with Salvage Rift side-stage reward',
+      () {
+        // Salvage Rift is the side stage with CampaignReward.bonusGold.
+        final salvageRift = StageDefinition(
+          id: 'salvage-rift',
+          name: 'Salvage Rift',
+          mapLabel: 'Rift',
+          description: '',
+          pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+          waves: const [],
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+          mapColumn: 0,
+          mapRow: 0,
+        );
+        final cleared = CampaignProgress(
+          bestResultsByStageId: {
+            salvageRift.id: const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+          },
+        );
+        final tree = CampaignTechTree(
+          purchased: {CampaignTechUpgrade.solarCapacitors},
+        );
+        final mods = CampaignModifiers.fromProgress(cleared, [
+          salvageRift,
+        ], tree);
+        expect(
+          mods.bonusGold,
+          GameBalance.salvageRiftGoldBonus +
+              GameBalance.solarCapacitorsGoldBonus,
+        );
+      },
+    );
   });
 }
 

@@ -6,6 +6,7 @@ import '../campaign/campaign_progress.dart';
 import '../campaign/campaign_progress_store.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
+import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
 import 'world_map_view.dart';
@@ -100,6 +101,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
           modifiers: CampaignModifiers.fromProgress(
             _progress,
             OrionCampaign.stages,
+            CampaignTechTree(),
           ),
           feedback: _mapFeedback,
           isSavingProgress: _isSavingProgress,
@@ -171,6 +173,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final modifiers = CampaignModifiers.fromProgress(
       _progress,
       OrionCampaign.stages,
+      CampaignTechTree(),
     );
     final game = OrionDefenseGame(
       stage: stage,

@@ -1,6 +1,7 @@
 import 'package:orion/game/models/game_models.dart';
 
 import 'stage_definition.dart';
+import 'tech_tree.dart';
 
 enum StageProgressStatus { locked, unlocked, cleared }
 
@@ -192,11 +193,21 @@ class CampaignModifiers {
     this.bonusGold = 0,
     this.bonusHealth = 0,
     this.hasChallengeBadge = false,
+    this.clearBonusFraction = 0,
+    this.laserDamageFraction = 0,
+    this.cryoSlowDurationBonus = 0,
   });
 
   final int bonusGold;
   final int bonusHealth;
   final bool hasChallengeBadge;
+
+  /// Additive fraction applied as `(1 + clearBonusFraction)`. Named `Fraction`
+  /// (not `Multiplier`) to prevent the `* clearBonusFraction` mis-application
+  /// trap. See HPA-100 spec round-1 review issue #4.
+  final double clearBonusFraction;
+  final double laserDamageFraction;
+  final double cryoSlowDurationBonus;
 
   int get adjustedStartingGold => GameBalance.startingGold + bonusGold;
   int get adjustedStartingBaseHealth =>
@@ -207,6 +218,7 @@ class CampaignModifiers {
   static CampaignModifiers fromProgress(
     CampaignProgress progress,
     Iterable<StageDefinition> stages,
+    CampaignTechTree techTree,
   ) {
     var bonusGold = 0;
     var bonusHealth = 0;
@@ -233,6 +245,13 @@ class CampaignModifiers {
       }
     }
 
+    if (techTree.isPurchased(CampaignTechUpgrade.solarCapacitors)) {
+      bonusGold += GameBalance.solarCapacitorsGoldBonus;
+    }
+    if (techTree.isPurchased(CampaignTechUpgrade.hardenedCore)) {
+      bonusHealth += GameBalance.hardenedCoreHealthBonus;
+    }
+
     final allSideStagesCleared =
         sideStageIds.isNotEmpty && sideStageIds.every(progress.isCleared);
 
@@ -240,6 +259,16 @@ class CampaignModifiers {
       bonusGold: bonusGold,
       bonusHealth: bonusHealth,
       hasChallengeBadge: allSideStagesCleared,
+      clearBonusFraction: techTree.isPurchased(CampaignTechUpgrade.salvageCrew)
+          ? GameBalance.salvageCrewClearBonusFraction
+          : 0,
+      laserDamageFraction: techTree.isPurchased(CampaignTechUpgrade.laserTuning)
+          ? GameBalance.laserTuningDamageFraction
+          : 0,
+      cryoSlowDurationBonus:
+          techTree.isPurchased(CampaignTechUpgrade.cryoCoolant)
+          ? GameBalance.cryoCoolantSlowDurationBonus
+          : 0,
     );
   }
 }
