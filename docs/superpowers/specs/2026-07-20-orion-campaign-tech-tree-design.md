@@ -21,10 +21,12 @@ Five upgrades shipped in the MVP:
 | Solar Capacitors | +15 starting gold | 3 |
 | Hardened Core | +3 starting base health | 4 |
 | Salvage Crew | +25% wave-clear bonus gold | 4 |
-| Laser Tuning | +10% damage on `TowerType.laser` towers | 5 |
+| Laser Tuning | +10% damage on `TowerType.laser` towers | 4 |
 | Cryo Coolant | +0.3s slow duration on `TowerType.cryo` towers | 5 |
 
 Three economy upgrades + two tower-stat upgrades. Gold/health/clear-bonus take effect at mission start and per-wave; laser/cryo take effect during combat.
+
+**Total cost: 20 medal points.** Max earnable across the seven-stage campaign is 21 (all gold). The 1-point slack is intentional: a player who earns silver instead of gold on exactly one stage can still complete the tree. Balance tests should assert the total stays at 20 unless the slack is deliberately revisited.
 
 ## Out of Scope
 
@@ -102,10 +104,10 @@ class CampaignModifiers {
   final int bonusGold;            // HPA-94 side-stage + Solar Capacitors
   final int bonusHealth;          // HPA-94 side-stage + Hardened Core
   final bool hasChallengeBadge;   // HPA-94 only
-  // NEW (tech tree):
-  final double clearBonusMultiplier;   // +0.25 if Salvage Crew
-  final double laserDamageMultiplier;  // +0.10 if Laser Tuning
-  final double cryoSlowDurationBonus;  // +0.30 if Cryo Coolant
+  // NEW (tech tree) — additive fractions, NOT multipliers:
+  final double clearBonusFraction;   // +0.25 if Salvage Crew
+  final double laserDamageFraction;  // +0.10 if Laser Tuning
+  final double cryoSlowDurationBonus; // +0.30 if Cryo Coolant
 
   int get adjustedStartingGold       => GameBalance.startingGold       + bonusGold;
   int get adjustedStartingBaseHealth => GameBalance.initialBaseHealth  + bonusHealth;
@@ -120,6 +122,8 @@ class CampaignModifiers {
 }
 ```
 
+The first two new fields are named `*Fraction` (not `*Multiplier`) because they are additive fractions applied as `(1 + fraction)`, not standalone multipliers. This avoids the mis-application trap of writing `* clearBonusMultiplier` and silently getting 0.25× gold. `cryoSlowDurationBonus` keeps its name because it is an additive duration, not a fraction.
+
 `fromProgress` accumulates HPA-94 side-stage rewards **and** tech-tree effects into the same fields:
 
 - For each cleared side stage with `CampaignReward.bonusGold`: add `GameBalance.salvageRiftGoldBonus`. (Existing behavior.)
@@ -127,8 +131,8 @@ class CampaignModifiers {
 - `hasChallengeBadge`: every side stage cleared. (Existing behavior.)
 - If `techTree.isPurchased(CampaignTechUpgrade.solarCapacitors)`: add `GameBalance.solarCapacitorsGoldBonus` to `bonusGold`.
 - If `techTree.isPurchased(CampaignTechUpgrade.hardenedCore)`: add `GameBalance.hardenedCoreHealthBonus` to `bonusHealth`.
-- If `techTree.isPurchased(CampaignTechUpgrade.salvageCrew)`: set `clearBonusMultiplier = GameBalance.salvageCrewClearBonusMultiplier`.
-- If `techTree.isPurchased(CampaignTechUpgrade.laserTuning)`: set `laserDamageMultiplier = GameBalance.laserTuningDamageMultiplier`.
+- If `techTree.isPurchased(CampaignTechUpgrade.salvageCrew)`: set `clearBonusFraction = GameBalance.salvageCrewClearBonusFraction`.
+- If `techTree.isPurchased(CampaignTechUpgrade.laserTuning)`: set `laserDamageFraction = GameBalance.laserTuningDamageFraction`.
 - If `techTree.isPurchased(CampaignTechUpgrade.cryoCoolant)`: set `cryoSlowDurationBonus = GameBalance.cryoCoolantSlowDurationBonus`.
 
 ### `GameBalance` constants
@@ -136,19 +140,19 @@ class CampaignModifiers {
 Add to `GameBalance` in `lib/game/models/game_models.dart`:
 
 ```dart
-// Tech-tree upgrade costs
+// Tech-tree upgrade costs (total = 20; max medal rank = 21, intentional 1-pt slack)
 static const int solarCapacitorsCost = 3;
 static const int hardenedCoreCost     = 4;
 static const int salvageCrewCost      = 4;
-static const int laserTuningCost      = 5;
+static const int laserTuningCost      = 4;
 static const int cryoCoolantCost      = 5;
 
-// Tech-tree upgrade magnitudes
-static const int    solarCapacitorsGoldBonus        = 15;
-static const int    hardenedCoreHealthBonus         = 3;
-static const double salvageCrewClearBonusMultiplier = 0.25;
-static const double laserTuningDamageMultiplier     = 0.10;
-static const double cryoCoolantSlowDurationBonus    = 0.30;
+// Tech-tree upgrade magnitudes (fractions are additive, not multipliers)
+static const int    solarCapacitorsGoldBonus         = 15;
+static const int    hardenedCoreHealthBonus          = 3;
+static const double salvageCrewClearBonusFraction    = 0.25;
+static const double laserTuningDamageFraction        = 0.10;
+static const double cryoCoolantSlowDurationBonus     = 0.30;
 ```
 
 These follow the existing "all tuning lives in `GameBalance`" convention.
@@ -171,8 +175,10 @@ This becomes:
 
 ```dart
 final waveBonus = completedWave?.clearBonus ?? 0;
-_gold += (waveBonus * (1 + modifiers.clearBonusMultiplier)).round();
+_gold += (waveBonus * (1 + modifiers.clearBonusFraction)).round();
 ```
+
+**Scope note (issue #8 from review):** `finishActiveWave` returns early when transitioning to `GamePhase.won` (line 230–233), so the `clearBonus` credit only runs on waves 1–7. Wave 8's `clearBonus` is already 0 by design (`orion_campaign.dart:474`). Salvage Crew therefore affects intermediate waves only — this is the intended scope. Tests should assert the multiplier applies to a wave-3 (or similar) clear, not the final wave.
 
 ### `GameSession` signature change
 
@@ -192,16 +198,29 @@ GameSession.initial({
 final CampaignModifiers modifiers;
 ```
 
-All four application sites (starting gold/health, wave-clear bonus) read from this stored field. `OrionDefenseGame`'s constructor passes the resolved modifiers through; existing tests that construct `GameSession.initial()` without modifiers continue to work (defaults to `CampaignModifiers.empty`).
+Both application sites (starting gold/health, wave-clear bonus) read from this stored field. `OrionDefenseGame`'s constructor passes the resolved modifiers through; existing tests that construct `GameSession.initial()` without modifiers continue to work (defaults to `CampaignModifiers.empty`).
 
-### Laser damage and Cryo slow (new application points in `enemy_component.dart`)
+### Laser damage and Cryo slow (baked into `TowerStats`)
 
-`CombatEffects.resolveDamage` and `CombatEffects.mergeSlow` are **pure** and carry no tower-type awareness — they must remain pure and unit-testable. The laser/cryo tech-tree modifiers apply at the call site in `lib/game/components/enemy_component.dart` (lines 136 and 162 respectively), where the source tower type is already known via the projectile:
+`CombatEffects.resolveDamage` and `CombatEffects.mergeSlow` are **pure** and must stay pure. The damage path today is:
 
-- **Laser damage** (`enemy_component.dart:136`, before constructing `DamageInput`): when the source projectile's tower type is `TowerType.laser`, multiply the incoming `damage` value by `(1 + modifiers.laserDamageMultiplier)`.
-- **Cryo slow** (`enemy_component.dart:162`, when calling `mergeSlow`): when the source projectile's tower type is `TowerType.cryo`, add `modifiers.cryoSlowDurationBonus` to `incomingDuration`.
+```
+ProjectileComponent / GravityFieldComponent / DroneComponent
+  → enemy.applyDamage(stats.damage) / applySlow(...)
+  → CombatEffects.resolveDamage / mergeSlow
+```
 
-`EnemyComponent` reads the active modifiers via a `CampaignModifiers` getter on `OrionDefenseGame` (e.g., `game.modifiers`), which already holds the modifiers object. This avoids threading modifiers through every projectile.
+The enemy-side `applyDamage(amount)` / `applySlow({multiplier, duration})` APIs (verified at `enemy_component.dart:125, 157`) carry **no source-tower-type information**. There are many damage call sites — direct projectile hits, splash, pierce, chain, prism-split, cluster-burst, gravity-field ticks, drone attacks (`projectile_component.dart` alone has ~9 branches). Filtering "when source is laser/cryo" at each call site would scatter the modifier logic across half a dozen branches and miss any future damage path.
+
+**Decision: bake the laser/cryo tech-tree modifiers into `TowerStats` at tower-create / tower-upgrade time.** This is the reviewer's Option A and covers every damage path automatically because they all read from the tower's resolved `stats`.
+
+- **Application site:** wherever `GameSession` resolves a `TowerStats` (place at `game_session.dart:113, 126`; upgrade at `:152, :177`) — or, more cleanly, in a single `GameBalance.towerStats(...)` wrapper on the session that applies the modifiers after the base stats are looked up. The session already holds `modifiers`, so it can apply:
+  - **Laser Tuning:** if `tower.type == TowerType.laser`, multiply the resolved `stats.damage` by `(1 + modifiers.laserDamageFraction)`.
+  - **Cryo Coolant:** if `tower.type == TowerType.cryo`, add `modifiers.cryoSlowDurationBonus` to the resolved `stats.slowDuration`.
+- The bonus applies to the placed/upgraded tower for its lifetime. Specializing or upgrading a tower re-resolves stats and re-applies the bonus.
+- `PlacedTower.stats` therefore carries the post-modifier values; combat code reads them as-is, no changes.
+
+**Why not at projectile/enemy call sites:** the reviewer's Option B (apply in `ProjectileComponent` before `applyDamage`) requires touching every damage branch and would miss gravity-field ticks and drone attacks. Option C (pass `TowerType` into `applyDamage`) pollutes a general enemy API. Baking into `TowerStats` is the only option that covers all damage paths with one application site.
 
 ### What stays unchanged
 
@@ -210,19 +229,80 @@ All four application sites (starting gold/health, wave-clear bonus) read from th
 - HPA-94's optimistic in-memory progress update with rollback on save failure.
 - Side-stage reward activation (unlocks still derive from `isCleared`).
 - `GameSession.initial`'s existing `gold` / `baseHealth` override parameters (kept for test back-compat; now default to the modifiers-derived values when omitted).
+- `EnemyComponent.applyDamage` / `applySlow` signatures (no new parameters).
 
-## Purchase Flow
+## Save Flow
 
-1. UI invokes `techTree.purchase(upgrade, progress)` → returns a new immutable `CampaignTechTree` with the upgrade added (throws `ArgumentError` if `!canPurchase`).
-2. UI calls the `onTechPurchased` callback on `OrionGamePage`.
-3. `OrionGamePage` mirrors HPA-94's optimistic-save pattern:
-   - Captures `priorTechTree = _techTree`.
-   - `setState(() { _techTree = newTechTree; })`.
-   - `await store.save(CampaignSave(progress: _progress, techTree: _techTree))` — the codec encodes both together (see Persistence).
-   - On failure: if still mounted and the save generation is current, `setState(() { _techTree = priorTechTree; })` and show the existing save-failure feedback.
-   - On success: no further state change needed (optimistic update already applied).
+HPA-94 established a save pipeline in `_OrionGamePageState` with three pieces of machinery: `_saveQueue` (serializes saves), `_progressGeneration` (rejects stale saves after a reset), and `_isSavingProgress` (blocks stage launch while a save is in flight). Tech-tree purchases **must** reuse this same pipeline — running a parallel save chain for purchases would race with stage-completion saves, restore a stale `_techTree` after a failed save, or let a mission start while a purchase is still rolling back.
 
-This reuses the exact rollback discipline HPA-94 established for `_progress` saves.
+### Unified persist helper
+
+Extract the HPA-94 save logic into one private helper used by both stage completion and tech purchase:
+
+```dart
+Future<void> _persistSave({
+  required CampaignSave next,
+  required CampaignSave prior,
+}) {
+  final saveGeneration = _progressGeneration;
+  setState(() {
+    _progress = next.progress;
+    _techTree = next.techTree;
+    _isSavingProgress = true;
+  });
+
+  final saveTask = _saveQueue.then((_) => store.save(next));
+
+  _saveQueue = saveTask.catchError((_) {});
+
+  return saveTask.then((_) {
+    if (!mounted || saveGeneration != _progressGeneration) {
+      return;
+    }
+    setState(() {
+      _isSavingProgress = false;
+    });
+  }).catchError((_) {
+    if (!mounted || saveGeneration != _progressGeneration) {
+      return;
+    }
+    setState(() {
+      _progress = prior.progress;
+      _techTree = prior.techTree;
+      _isSavingProgress = false;
+    });
+    _showCampaignPersistenceFailure();
+  });
+}
+```
+
+The generation check still prevents a stale save (from before a reset) from overwriting fresh state. `_isSavingProgress` blocks stage launch and any further purchases while a save is in flight. Stage launch and tech purchase both consult `_isSavingProgress` before initiating.
+
+### All `CampaignSave` writers
+
+After the store API change, every save site writes a `CampaignSave` aggregate. There are exactly four writers; each must be updated:
+
+1. **Load (app start / `initState`):** `final save = await store.load(); _progress = save.progress; _techTree = save.techTree;`. Decodes both pieces from one JSON blob.
+2. **Stage completion (`_saveStageCompletion`, ~line 197):** `_persistSave(next: CampaignSave(progress: newProgress, techTree: _techTree), prior: CampaignSave(progress: _progress, techTree: _techTree));`. Tech tree is unchanged by a stage win; it is passed through so the aggregate save doesn't wipe purchases.
+3. **Tech-tree purchase (`_purchaseTech`):** `_persistSave(next: CampaignSave(progress: _progress, techTree: newTechTree), prior: CampaignSave(progress: _progress, techTree: _techTree));`. Progress is unchanged by a purchase; passed through so the save doesn't wipe stage results.
+4. **Campaign reset (`_confirmResetCampaign`, ~line 339):** `_progressGeneration++;` then `await store.reset();` then `setState(() { _progress = CampaignProgress(); _techTree = CampaignTechTree(); _activeView = _ShellView.worldMap; _activeStage = null; _game = null; });`. Reset intentionally clears both progress and tech tree (the player is wiping the whole campaign). The generation bump invalidates any in-flight save from either writer.
+
+### Tech-tree purchase handler
+
+```dart
+void _purchaseTech(CampaignTechUpgrade upgrade) {
+  if (_isSavingProgress) {
+    return; // block concurrent saves
+  }
+  final newTechTree = _techTree.purchase(upgrade, _progress);
+  _persistSave(
+    next: CampaignSave(progress: _progress, techTree: newTechTree),
+    prior: CampaignSave(progress: _progress, techTree: _techTree),
+  );
+}
+```
+
+The optimistic `setState` inside `_persistSave` updates `_techTree` before the await; rollback restores `prior.techTree` on failure. This reuses the exact discipline HPA-94 established for `_progress` saves.
 
 ## Persistence
 
@@ -263,6 +343,7 @@ This reuses the exact rollback discipline HPA-94 established for `_progress` sav
 - `version == 2`: decode `stageResults`, default `techPurchases = []`.
 - `version == 1`: existing v1 path (clearedStageIds → `StageResult.clear` with `bestBaseHealth: 0`); `techPurchases = []`.
 - Missing `techPurchases` field on an otherwise-v3 save: treated as empty list.
+- **Any other version (future v4+, or corrupt data):** return an empty `CampaignSave` (both progress and tech tree empty). This is the existing policy for unknown versions and is preserved.
 
 ### Backward compatibility
 
@@ -274,16 +355,32 @@ The app has not launched (per HPA-94 spec), so there are no live v2 players to r
 
 A full-screen panel reached from the world map. Layout:
 
-- **Header row:** "Campaign Tech Tree" title, medal-points bank (`Medal Points: 12` — the derived `unspentPoints(_progress)`), and a back button.
+- **Header row:** "Campaign Tech Tree" title, medal-points bank readout, and a back button. The bank readout shows all three numbers so the derived-bank model (and the cost-tweak clamp) is legible:
+
+  ```
+  Unspent: 9 · Earned: 12 · Spent: 3
+  ```
+
+  `Earned` is `totalMedalRank(_progress)`; `Spent` is `_techTree.totalSpent`; `Unspent` is `_techTree.unspentPoints(_progress)` (i.e. `max(0, earned − spent)`). When `spent > earned` (only possible after a cost-tweak in a future release), `Unspent` shows 0 and the player can read why from the other two numbers.
 - **Body:** `ListView` of five `_UpgradeRow` widgets, one per `CampaignTechUpgrade`. Each row shows:
   - Name (`label`) and one-line `description`.
   - `effectLabel` (e.g., `+15 Starting Gold`, `+10% Laser Damage`).
-  - Cost (e.g., `Cost: 3 pts`).
+  - Cost (e.g., `Cost: 4 pts`).
   - State badge and primary action:
     - **Purchased** — disabled chip, no action.
     - **Purchase** (affordable: `unspentPoints >= cost` and not yet purchased) — filled button; tap triggers the purchase flow.
     - **Locked** (`unspentPoints < cost`) — disabled button showing `Need N more points`.
-- **Post-purchase:** the row re-renders as Purchased; the header bank decrements; subsequent rows re-evaluate their state. All updates flow through `ValueListenableBuilder` / `setState` on the parent — the panel itself remains stateless beyond the purchase callback.
+- **Post-purchase:** the row re-renders as Purchased; the header bank decrements; subsequent rows re-evaluate their state. All updates flow through `setState` on the parent — the panel itself remains stateless beyond the purchase callback.
+
+### Visibility of combat upgrades (issue #9 from review)
+
+Solar Capacitors, Hardened Core, and Salvage Crew produce numbers the player sees immediately (starting gold/HP HUD; per-wave clear bonus). Laser Tuning and Cryo Coolant produce per-shot damage/slow deltas that are easy to miss in the heat of combat.
+
+For MVP scope, visibility of the two combat upgrades is satisfied by:
+- The `effectLabel` in the tech-tree panel row (`+10% Laser Damage`, `+0.3s Cryo Slow`).
+- The pure-logic and combat-application tests that assert the modifier changes the resolved `TowerStats`.
+
+No in-mission HUD indicator (e.g. "Active upgrades" chip) ships in MVP. If playtesting finds the combat upgrades feel invisible, that's a follow-up.
 
 ### World map entry point
 
@@ -294,25 +391,34 @@ A full-screen panel reached from the world map. Layout:
 
 ### Navigation state in `_OrionGamePageState`
 
-The existing view-switching pattern (currently world-map vs. stage) extends to a third view:
+The existing shell routes on `_activeStage == null` (world map) vs `_activeStage != null` (mission). Extending with a third view via a parallel `_showWorldMap` flag would desync from `_activeStage` and `_game`. Instead, replace the implicit routing with an explicit enum:
 
 ```dart
-bool _showWorldMap = true;
-bool _showTechTree = false; // NEW
-StageDefinition? _currentStage;
+enum _ShellView { worldMap, techTree, stage }
+
+_ShellView _activeView = _ShellView.worldMap;
+StageDefinition? _activeStage;     // non-null iff _activeView == _ShellView.stage
+OrionDefenseGame? _game;            // non-null iff _activeView == _ShellView.stage
 ```
 
-`_returnToMap()` resets both `_showTechTree = false` and `_currentStage = null`. The Tech Tree button's `onOpenTechTree` callback sets `_showWorldMap = false; _showTechTree = true;`. The Tech Tree panel's back button calls `_returnToMap()`.
+- World-map "Tech Tree" button: `setState(() { _activeView = _ShellView.techTree; });`.
+- Tech-tree panel back button: `setState(() { _activeView = _ShellView.worldMap; });`.
+- Stage launch (`_startStage`): `setState(() { _activeStage = stage; _game = game; _activeView = _ShellView.stage; });`.
+- Return-to-map (`_returnToMap`, restart-with-different-stage): `setState(() { _activeStage = null; _game = null; _activeView = _ShellView.worldMap; });`.
+- Reset (`_confirmResetCampaign`): as above after `store.reset()`.
+- `build()` switches on `_activeView`. The existing `_activeStage != null` checks migrate to `_activeView == _ShellView.stage` (or simply `_activeStage != null && _game != null` if the test surface depends on it — the migration is mechanical).
 
-The Tech Tree view receives `_progress`, `_techTree`, and a `onPurchase(CampaignTechUpgrade)` callback. It does not mutate state directly.
+The Tech Tree view receives `_progress`, `_techTree`, and an `onPurchase(CampaignTechUpgrade)` callback. It does not mutate state directly.
 
 ## Error Handling
 
-- **New player** (empty `CampaignProgress`): `totalMedalRank == 0`, `unspentPoints == 0`, no upgrades affordable. Bank displays `0 / 0 earned`. Safe.
+- **New player** (empty `CampaignProgress`): `totalMedalRank == 0`, `unspentPoints == 0`, no upgrades affordable. Bank readout shows `Unspent: 0 · Earned: 0 · Spent: 0`. Safe.
 - **Corrupt `techPurchases` list** (unknown IDs): dropped silently on decode; known IDs preserved.
-- **Save failure on purchase**: optimistic `_techTree` update rolled back to prior instance; existing save-failure feedback shown.
-- **Overdrawn bank from a future cost tweak**: `unspentPoints` clamped at 0 via `max(0, ...)`. Player earns more medals to buy again. No auto-refund.
-- **Missing `techPurchases` field on a v3 save**: treated as empty list.
+- **Save failure on purchase or stage completion:** the unified `_persistSave` helper rolls back both `_progress` and `_techTree` to their prior values; existing save-failure feedback shown. The generation check prevents a stale save from overwriting fresh state after a reset.
+- **Race between purchase and stage completion:** both writers go through `_persistSave` → `_saveQueue`, so saves serialize. `_isSavingProgress` blocks stage launch and further purchases while a save is in flight.
+- **Overdrawn bank from a future cost tweak:** `unspentPoints` clamped at 0 via `max(0, ...)`. Bank readout still shows the true `Earned` and `Spent` so the player can see why. Player earns more medals to buy again. No auto-refund.
+- **Missing `techPurchases` field on a v3 save:** treated as empty list.
+- **Unknown codec version** (future v4+ or corrupt): empty `CampaignSave` returned (existing policy).
 - **Empty `CampaignTechTree`** passed to `CampaignModifiers.fromProgress`: behaves exactly like HPA-94 (regression-safe — `fromProgress` defaults the new fields to 0).
 - **Invalid persisted progress**: still discarded safely by the existing codec.
 
@@ -336,9 +442,9 @@ The Tech Tree view receives `_progress`, `_techTree`, and a `onPurchase(Campaign
 
 - With `solarCapacitors` purchased: `bonusGold` includes `+solarCapacitorsGoldBonus` (15) on top of any side-stage bonus.
 - With `hardenedCore` purchased: `bonusHealth` includes `+hardenedCoreHealthBonus` (3) on top of any side-stage bonus.
-- With `salvageCrew` purchased: `clearBonusMultiplier == salvageCrewClearBonusMultiplier`.
-- With `laserTuning` purchased: `laserDamageMultiplier == laserTuningDamageMultiplier`.
-- With `cryoCoolant` purchased: `cryoSlowDurationBonus == cryoCoolantSlowDurationBonus`.
+- With `salvageCrew` purchased: `clearBonusFraction == salvageCrewClearBonusFraction` (0.25).
+- With `laserTuning` purchased: `laserDamageFraction == laserTuningDamageFraction` (0.10).
+- With `cryoCoolant` purchased: `cryoSlowDurationBonus == cryoCoolantSlowDurationBonus` (0.30).
 - **Stacking:** side-stage reward (HPA-94) + matching tech-tree upgrade both add into the same `bonusGold` / `bonusHealth` field (e.g., Salvage Rift cleared + Solar Capacitors purchased → `bonusGold == 30 + 15 == 45`).
 - Empty tech tree + empty progress → `CampaignModifiers.empty` (regression with HPA-94).
 - Empty tech tree + Salvage Rift cleared → HPA-94 behavior unchanged (regression).
@@ -346,39 +452,69 @@ The Tech Tree view receives `_progress`, `_techTree`, and a `onPurchase(Campaign
 ### `GameSession` application
 
 - Starting gold/health reflect tech-tree bonuses via existing override path.
-- **Wave-clear bonus** with `salvageCrew` purchased: clearing a wave credits `round(clearBonus * 1.25)` gold (e.g., 30 → 37, 40 → 50).
+- **Wave-clear bonus** with `salvageCrew` purchased: clearing an intermediate wave credits `round(clearBonus * (1 + 0.25))` gold (e.g., 30 → 38, 40 → 50, 65 → 81). Test against a wave-3 clear, **not** the final wave — `finishActiveWave` returns early on the last wave before crediting `clearBonus`, and wave 8's `clearBonus` is already 0 (issue #8 from review).
 - **Wave-clear bonus** without `salvageCrew`: unchanged (regression).
 - `restart()` preserves the session's modifiers (regression on HPA-94's restart boundary).
 - `GameSession.modifiers` field exposes the stored modifiers for combat application.
 
-### Combat application (`enemy_component.dart` call sites)
+### Combat application (TowerStats bake site — issue #1 from review)
 
-- Laser tower damage multiplied by `(1 + 0.10)` when `laserTuning` purchased and source tower type is `TowerType.laser`.
-- Cryo tower slow duration extended by `+0.3` when `cryoCoolant` purchased and source tower type is `TowerType.cryo`.
-- Non-affected tower types (`rocket`, `railgun`, `ionChain`, `nanite`, `gravityWell`, `droneBay`) unchanged when only `laserTuning` / `cryoCoolant` purchased.
-- Empty modifiers (`CampaignModifiers.empty`) → combat behavior unchanged (regression).
+Because the laser/cryo modifiers are baked into `TowerStats` at tower create/update time (see "Laser damage and Cryo slow" under Application of Upgrades), the combat-application tests target the `GameSession` tower-resolution path, not `enemy_component.dart` call sites:
 
-These tests should target the call sites in `enemy_component.dart` directly, asserting the `DamageInput.damage` / `mergeSlow` `incomingDuration` values are adjusted before being passed to `CombatEffects`. `CombatEffects` itself is not modified and its existing tests remain green.
+- **Place a laser tower** with `laserTuning` purchased → resolved `TowerStats.damage == baseDamage * (1 + 0.10)`. Without `laserTuning` → `damage == baseDamage` (regression).
+- **Place a cryo tower** with `cryoCoolant` purchased → resolved `TowerStats.slowDuration == baseSlowDuration + 0.30`. Without `cryoCoolant` → `slowDuration == baseSlowDuration` (regression).
+- **Place a non-laser, non-cryo tower** (e.g. `rocket`, `railgun`, `ionChain`, `nanite`, `gravityWell`, `droneBay`) with both combat upgrades purchased → `damage` and `slowDuration` unchanged (only the matching tower type is affected).
+- **Upgrade a laser tower** (level 1 → 2) with `laserTuning` purchased → the upgraded `damage` includes the `(1 + 0.10)` multiplier on top of the new base.
+- **Specialize a laser tower** (e.g. into `pulseLaser`) with `laserTuning` purchased → specialization re-resolves stats and the multiplier is reapplied.
+- Empty modifiers (`CampaignModifiers.empty`) → resolved stats identical to today (regression).
+
+`CombatEffects` itself is not modified and its existing tests remain green. The damage-path components (`ProjectileComponent`, `GravityFieldComponent`, `DroneComponent`) are unchanged — they read `stats.damage` / `stats.slowDuration` as today; the bonus is already baked in.
+
+### Save flow (`_persistSave` unified helper — issues #2 and #3 from review)
+
+- **Stage completion save:** trigger a stage win → `_progress` and `_techTree` both persisted; reload returns both intact. A pre-existing tech tree is not wiped by a stage win.
+- **Tech-tree purchase save:** trigger a purchase → `_techTree` persists; reload returns the new tree. A pre-existing progress is not wiped by a purchase.
+- **Race serialization:** fire a stage-completion save and a tech-purchase save in quick succession → both serialize through `_saveQueue`; final reloaded state matches the last write.
+- **`_isSavingProgress` blocks:** while a save is in flight, stage launch (`_startStage`) and further purchases (`_purchaseTech`) are rejected (verify via a flag check, not by actual race timing).
+- **Save failure on purchase:** inject a failing store → `_techTree` rolls back to prior instance; save-failure feedback shown.
+- **Save failure on stage completion:** inject a failing store → `_progress` rolls back to prior instance (regression of HPA-94 behavior).
+- **Reset invalidates in-flight save:** start a save, then trigger `_confirmResetCampaign` → `_progressGeneration++` → in-flight save's success/failure callback no-ops; reloaded state is empty for both progress and tech tree.
 
 ### Persistence
 
 - **Codec v3 round-trip:** encode `CampaignSave(progress, techTree)` → decode → both `progress` and `techTree` fields match inputs.
 - **v2 → v3 migration:** decode a v2-shaped JSON string → `techPurchases == []`, `stageResults` decoded correctly.
+- **v1 path regression:** decode a v1-shaped JSON string → `techPurchases == []`, v1 stage-id migration intact.
 - **Unknown `techPurchases` IDs dropped:** encode with a future/unknown ID present → decode → unknown ID absent, known IDs preserved.
 - **Missing `techPurchases` field** on a v3-shaped JSON: decode → empty tech tree.
+- **Unknown codec version (e.g. 99):** decode → empty `CampaignSave` (both fields empty).
 - **Store round-trip** (`InMemoryCampaignProgressStore`): save a `CampaignSave` with both progress + tech tree → reload → verify both intact (covers the "persists across app restarts" acceptance criterion).
+
+### Store interface migration (issue #11 from review)
+
+The `CampaignProgressStore` signature change touches every implementor and caller. The implementation plan must update all of these — not just the codec tests:
+
+- `CampaignProgressStore` (abstract interface) — `load()` returns `CampaignSave`; `save(CampaignSave)`.
+- `SharedPreferencesCampaignProgressStore` — encode/decode `CampaignSave`.
+- `InMemoryCampaignProgressStore` — hold a `CampaignSave` (or the source string, decoded on load).
+- `_TestCampaignProgressStore` in `test/widget_test.dart` (line 1303) — implement against the new interface.
+- All `store.save(progress)` call sites in `test/widget_test.dart` (15+ uses of `_TestCampaignProgressStore` and `InMemoryCampaignProgressStore`).
+- All `store.save(progress)` / `store.load()` call sites in `test/game/campaign_progress_store_test.dart` (lines 140, 175, 261, 1129, 1195, 1229, etc.).
+- `_OrionGamePageState` in `lib/game/ui/orion_game_page.dart` — read/write via `CampaignSave` through the unified `_persistSave` helper.
+
+The migration is mechanical (wrap/unwrap `CampaignSave`) but high-touch; the implementation plan should sequence it before the new application logic so the build stays green at each step.
 
 ### Widget
 
 - `TechTreeView` renders all five upgrade rows with correct name, effect, cost.
-- Header bank displays the correct derived `unspentPoints` value.
+- Header bank displays the correct three-number readout: `Unspent: X · Earned: Y · Spent: Z`.
 - A purchased upgrade shows "Purchased" state (disabled).
 - An affordable upgrade shows "Purchase" button (enabled).
 - An unaffordable upgrade shows "Locked" with `Need N more points`.
 - Tapping an affordable upgrade invokes the purchase callback; the bank decrements; the row re-renders as Purchased; subsequent rows re-evaluate affordability.
-- World map shows the "Tech Tree" button; tapping it opens the panel.
-- Tech Tree panel's back button returns to the world map.
-- Existing widget tests pass when tech tree is empty (regression).
+- World map shows the "Tech Tree" button; tapping it sets `_activeView = _ShellView.techTree`.
+- Tech Tree panel's back button sets `_activeView = _ShellView.worldMap`.
+- Existing widget tests pass when tech tree is empty (regression). Any test that asserted on `_activeStage != null` for shell routing migrates to `_activeView == _ShellView.stage`.
 
 ## Acceptance Criteria
 
