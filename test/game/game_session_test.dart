@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/game_session.dart';
@@ -871,5 +872,64 @@ void main() {
         expect(session.phase, GamePhase.build);
       },
     );
+  });
+
+  group('GameSession tech-tree modifiers', () {
+    test('modifiers default to empty when omitted', () {
+      final session = GameSession.initial();
+      expect(session.modifiers, CampaignModifiers.empty);
+    });
+
+    test('modifiers are stored on the session', () {
+      const mods = CampaignModifiers(
+        bonusGold: 30,
+        bonusHealth: 5,
+        clearBonusFraction: 0.25,
+      );
+      final session = GameSession.initial(modifiers: mods);
+      expect(session.modifiers, mods);
+    });
+
+    test('starting gold/health reflect modifiers when no overrides', () {
+      const mods = CampaignModifiers(bonusGold: 30, bonusHealth: 5);
+      final session = GameSession.initial(modifiers: mods);
+      expect(session.startingGold, GameBalance.startingGold + 30);
+      expect(session.startingBaseHealth, GameBalance.initialBaseHealth + 5);
+    });
+
+    test('explicit gold/baseHealth overrides still win over modifiers', () {
+      const mods = CampaignModifiers(bonusGold: 30);
+      final session = GameSession.initial(
+        modifiers: mods,
+        gold: 999,
+        baseHealth: 999,
+      );
+      expect(session.startingGold, 999);
+      expect(session.startingBaseHealth, 999);
+    });
+
+    test('wave-clear bonus scales by (1 + clearBonusFraction)', () {
+      const mods = CampaignModifiers(clearBonusFraction: 0.25);
+      final session = GameSession.initial(modifiers: mods);
+
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+
+      // First wave clearBonus is 30; 30 * 1.25 = 37.5 -> 38 when rounded.
+      expect(session.phase, GamePhase.build);
+      expect(session.gold, GameBalance.startingGold + 38);
+    });
+
+    test('wave-clear without salvageCrew is unchanged', () {
+      final session = GameSession.initial();
+
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+
+      // Default modifiers: clearBonusFraction is 0, so clearBonus stays 30.
+      expect(session.phase, GamePhase.build);
+      expect(session.gold, GameBalance.startingGold + 30);
+      expect(session.modifiers.clearBonusFraction, 0);
+    });
   });
 }
