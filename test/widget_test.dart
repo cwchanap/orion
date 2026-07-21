@@ -822,6 +822,69 @@ void main() {
     ]);
   });
 
+  testWidgets('Tech Tree button fires onOpenTechTree', (tester) async {
+    var tapped = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WorldMapView(
+            stages: const [],
+            progress: CampaignProgress(),
+            feedback: null,
+            onStageSelected: (_) {},
+            onResetCampaign: () {},
+            onOpenTechTree: () => tapped++,
+          ),
+        ),
+      ),
+    );
+
+    // Wired callback → button is visible and tappable.
+    await tester.tap(find.byTooltip('Tech Tree'));
+    expect(tapped, 1);
+  });
+
+  testWidgets('Tech Tree button is hidden when onOpenTechTree is null', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WorldMapView(
+            stages: const [],
+            progress: CampaignProgress(),
+            feedback: null,
+            onStageSelected: (_) {},
+            onResetCampaign: () {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Tech Tree'), findsNothing);
+  });
+
+  testWidgets(
+    'tapping Tech Tree button on OrionGamePage falls through to world map',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      await tester.pumpWidget(const OrionApp());
+      await tester.pumpAndSettle();
+
+      // Sanity: button is present on the world map header.
+      expect(find.byTooltip('Tech Tree'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+
+      // _ShellView.techTree still falls through to _buildWorldMapScaffold
+      // (TechTreeView lands in T12). The header must still render.
+      expect(find.text('Orion Sector Map'), findsOneWidget);
+      expect(find.byTooltip('Tech Tree'), findsOneWidget);
+    },
+  );
+
   testWidgets('world map shows locked, unlocked, and cleared stages', (
     tester,
   ) async {
