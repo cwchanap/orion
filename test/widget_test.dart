@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/game_session.dart';
@@ -234,12 +235,15 @@ void main() {
   testWidgets('reset confirmation clears campaign progress', (tester) async {
     SharedPreferences.setMockInitialValues({
       'orion.campaign.progress': CampaignProgressCodec.encode(
-        _progressWithResults({
-          'outpost-alpha',
-          'nebula-relay',
-          'asteroid-foundry',
-          'aurora-gate',
-        }),
+        CampaignSave(
+          progress: _progressWithResults({
+            'outpost-alpha',
+            'nebula-relay',
+            'asteroid-foundry',
+            'aurora-gate',
+          }),
+          techTree: CampaignTechTree(),
+        ),
       ),
     });
 
@@ -1127,21 +1131,24 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
       await store.save(
-        CampaignProgress(
-          bestResultsByStageId: {
-            'outpost-alpha': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'nebula-relay': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'salvage-rift': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-          },
+        CampaignSave(
+          progress: CampaignProgress(
+            bestResultsByStageId: {
+              'outpost-alpha': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+              'nebula-relay': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+              'salvage-rift': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+            },
+          ),
+          techTree: CampaignTechTree(),
         ),
       );
 
@@ -1193,21 +1200,24 @@ void main() {
       knownStages: OrionCampaign.stages,
     );
     await store.save(
-      CampaignProgress(
-        bestResultsByStageId: {
-          'outpost-alpha': const StageResult(
-            medal: StageMedal.clear,
-            bestBaseHealth: 1,
-          ),
-          'nebula-relay': const StageResult(
-            medal: StageMedal.clear,
-            bestBaseHealth: 1,
-          ),
-          'salvage-rift': const StageResult(
-            medal: StageMedal.clear,
-            bestBaseHealth: 1,
-          ),
-        },
+      CampaignSave(
+        progress: CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'nebula-relay': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+            'salvage-rift': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
+            ),
+          },
+        ),
+        techTree: CampaignTechTree(),
       ),
     );
 
@@ -1227,33 +1237,36 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
       await store.save(
-        CampaignProgress(
-          bestResultsByStageId: {
-            'outpost-alpha': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'nebula-relay': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'asteroid-foundry': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'aurora-gate': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'salvage-rift': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'void-bastion': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-          },
+        CampaignSave(
+          progress: CampaignProgress(
+            bestResultsByStageId: {
+              'outpost-alpha': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+              'nebula-relay': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+              'asteroid-foundry': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+              'aurora-gate': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+              'salvage-rift': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+              'void-bastion': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 1,
+              ),
+            },
+          ),
+          techTree: CampaignTechTree(),
         ),
       );
 
@@ -1319,16 +1332,16 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
   int resetCalls = 0;
 
   @override
-  Future<CampaignProgress> load() async {
+  Future<CampaignSave> load() async {
     final error = loadError;
     if (error != null) {
       throw error;
     }
-    return progress;
+    return CampaignSave(progress: progress, techTree: CampaignTechTree());
   }
 
   @override
-  Future<void> save(CampaignProgress progress) async {
+  Future<void> save(CampaignSave save) async {
     saveCalls += 1;
 
     if (delaySaves) {
@@ -1342,7 +1355,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
       throw error;
     }
 
-    this.progress = progress;
+    progress = save.progress;
   }
 
   @override
