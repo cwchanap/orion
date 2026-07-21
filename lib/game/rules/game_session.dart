@@ -1,15 +1,21 @@
+import '../campaign/campaign_progress.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 import 'board_layout.dart';
 
 class GameSession {
-  GameSession.initial({StageDefinition? stage, int? gold, int? baseHealth})
-    : stage = stage ?? OrionCampaign.stageOne,
-      startingGold = gold ?? GameBalance.startingGold,
-      startingBaseHealth = baseHealth ?? GameBalance.initialBaseHealth,
-      _gold = gold ?? GameBalance.startingGold,
-      _baseHealth = baseHealth ?? GameBalance.initialBaseHealth {
+  GameSession.initial({
+    StageDefinition? stage,
+    CampaignModifiers modifiers = CampaignModifiers.empty,
+    int? gold,
+    int? baseHealth,
+  }) : stage = stage ?? OrionCampaign.stageOne,
+       startingGold = gold ?? modifiers.adjustedStartingGold,
+       startingBaseHealth = baseHealth ?? modifiers.adjustedStartingBaseHealth,
+       modifiers = modifiers,
+       _gold = gold ?? modifiers.adjustedStartingGold,
+       _baseHealth = baseHealth ?? modifiers.adjustedStartingBaseHealth {
     if (this.stage.waves.isEmpty) {
       throw ArgumentError.value(
         this.stage.id,
@@ -22,6 +28,7 @@ class GameSession {
   final StageDefinition stage;
   final int startingGold;
   final int startingBaseHealth;
+  final CampaignModifiers modifiers;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
   int _nextTowerId = 1;
   int _gold;
@@ -232,7 +239,8 @@ class GameSession {
       return;
     }
 
-    _gold += completedWave?.clearBonus ?? 0;
+    final waveBonus = completedWave?.clearBonus ?? 0;
+    _gold += (waveBonus * (1 + modifiers.clearBonusFraction)).round();
     _phase = GamePhase.build;
   }
 
