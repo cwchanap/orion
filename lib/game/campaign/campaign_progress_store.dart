@@ -4,74 +4,127 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'campaign_progress.dart';
 import 'stage_definition.dart';
+import 'tech_tree.dart';
+
+/// Aggregate of everything persisted under one SharedPreferences key.
+///
+/// `CampaignProgress` (stage results) and `CampaignTechTree` (purchased
+/// upgrades) are saved atomically — splitting them across two keys would
+/// invite save-tearing bugs and complicate the v2 → v3 migration. See HPA-100
+/// spec "Persistence" section.
+class CampaignSave {
+  const CampaignSave({required this.progress, required this.techTree});
+
+  final CampaignProgress progress;
+  final CampaignTechTree techTree;
+
+  // `static const` is impossible here because `CampaignProgress` and
+  // `CampaignTechTree` default constructors are non-`const` (they wrap their
+  // inputs in `Map.unmodifiable` / `Set.unmodifiable`, which are not const).
+  // `static final` preserves the "one shared empty instance" intent — both
+  // wrapped objects are deeply immutable.
+  static final CampaignSave empty = CampaignSave(
+    progress: CampaignProgress(),
+    techTree: CampaignTechTree(),
+  );
+}
 
 abstract class CampaignProgressStore {
-  Future<CampaignProgress> load();
-  Future<void> save(CampaignProgress progress);
+  Future<CampaignSave> load();
+  Future<void> save(CampaignSave save);
   Future<void> reset();
 }
 
 class CampaignProgressCodec {
   const CampaignProgressCodec._();
 
-  static String encode(CampaignProgress progress) {
-    final stageIds = progress.bestResultsByStageId.keys.toList()..sort();
+  static String encode(CampaignSave save) {
+    final stageIds = save.progress.bestResultsByStageId.keys.toList()..sort();
     final stageResults = <String, Object>{};
     for (final stageId in stageIds) {
-      stageResults[stageId] = progress.bestResultsByStageId[stageId]!.toJson();
+      stageResults[stageId] = save.progress.bestResultsByStageId[stageId]!
+          .toJson();
     }
 
-    return jsonEncode({'version': 2, 'stageResults': stageResults});
+    return jsonEncode({
+      'version': 3,
+      'stageResults': stageResults,
+      'techPurchases': save.techTree.toIdList(),
+    });
   }
 
-  static CampaignProgress decode(
+  static CampaignSave decode(
     String? source, {
     required Iterable<StageDefinition> knownStages,
   }) {
     if (source == null || source.isEmpty) {
-      return CampaignProgress();
+      return CampaignSave.empty;
     }
 
     try {
       final decoded = jsonDecode(source);
       if (decoded is! Map<String, Object?>) {
-        return CampaignProgress();
+        return CampaignSave.empty;
       }
 
       final version = decoded['version'];
       if (version == 1) {
-        return _decodeVersionOne(decoded, knownStages: knownStages);
+        return CampaignSave(
+          progress: _decodeVersionOne(decoded, knownStages: knownStages),
+          techTree: CampaignTechTree(),
+        );
       }
-      if (version != 2) {
-        return CampaignProgress();
+      if (version == 2) {
+        return CampaignSave(
+          progress: _decodeStageResults(decoded, knownStages: knownStages),
+          techTree: CampaignTechTree(),
+        );
       }
-
-      final rawResults = decoded['stageResults'];
-      if (rawResults is! Map<String, Object?>) {
-        return CampaignProgress();
-      }
-
-      final knownIds = knownStages.map((stage) => stage.id).toSet();
-      final results = <String, StageResult>{};
-      for (final entry in rawResults.entries) {
-        if (!knownIds.contains(entry.key)) {
-          continue;
-        }
-
-        final result = StageResult.fromJson(entry.value);
-        if (result == null) {
-          continue;
-        }
-
-        results[entry.key] = result;
+      if (version != 3) {
+        // Unknown future version: return empty save (existing policy).
+        return CampaignSave.empty;
       }
 
-      return CampaignProgress(bestResultsByStageId: results);
+      return CampaignSave(
+        progress: _decodeStageResults(decoded, knownStages: knownStages),
+        techTree: _decodeTechPurchases(decoded['techPurchases']),
+      );
     } on FormatException {
-      return CampaignProgress();
+      return CampaignSave.empty;
     } on TypeError {
+      return CampaignSave.empty;
+    }
+  }
+
+  static CampaignProgress _decodeStageResults(
+    Map<String, Object?> decoded, {
+    required Iterable<StageDefinition> knownStages,
+  }) {
+    final rawResults = decoded['stageResults'];
+    if (rawResults is! Map<String, Object?>) {
       return CampaignProgress();
     }
+    final knownIds = knownStages.map((stage) => stage.id).toSet();
+    final results = <String, StageResult>{};
+    for (final entry in rawResults.entries) {
+      if (!knownIds.contains(entry.key)) {
+        continue;
+      }
+      final result = StageResult.fromJson(entry.value);
+      if (result == null) {
+        continue;
+      }
+      results[entry.key] = result;
+    }
+    return CampaignProgress(bestResultsByStageId: results);
+  }
+
+  static CampaignTechTree _decodeTechPurchases(Object? raw) {
+    if (raw is! List) {
+      return CampaignTechTree();
+    }
+    final ids = raw.whereType<String>().toList();
+    return CampaignTechTree.fromIdList(ids);
   }
 
   static CampaignProgress _decodeVersionOne(
@@ -82,7 +135,6 @@ class CampaignProgressCodec {
     if (rawIds is! List) {
       return CampaignProgress();
     }
-
     final knownIds = knownStages.map((stage) => stage.id).toSet();
     final results = <String, StageResult>{};
     for (final id in rawIds.whereType<String>()) {
@@ -94,7 +146,6 @@ class CampaignProgressCodec {
         bestBaseHealth: 0,
       );
     }
-
     return CampaignProgress(bestResultsByStageId: results);
   }
 }
@@ -117,22 +168,21 @@ class SharedPreferencesCampaignProgressStore implements CampaignProgressStore {
   final String key;
 
   @override
-  Future<CampaignProgress> load() async {
+  Future<CampaignSave> load() async {
     final String? source;
     try {
       source = _preferences.getString(key);
     } on TypeError {
-      return CampaignProgress();
+      return CampaignSave.empty;
     }
-
     return CampaignProgressCodec.decode(source, knownStages: _knownStages);
   }
 
   @override
-  Future<void> save(CampaignProgress progress) async {
+  Future<void> save(CampaignSave save) async {
     final persisted = await _preferences.setString(
       key,
-      CampaignProgressCodec.encode(progress),
+      CampaignProgressCodec.encode(save),
     );
     if (!persisted) {
       throw StateError('Failed to save campaign progress.');
@@ -157,13 +207,13 @@ class InMemoryCampaignProgressStore implements CampaignProgressStore {
   String? _source;
 
   @override
-  Future<CampaignProgress> load() async {
+  Future<CampaignSave> load() async {
     return CampaignProgressCodec.decode(_source, knownStages: _knownStages);
   }
 
   @override
-  Future<void> save(CampaignProgress progress) async {
-    _source = CampaignProgressCodec.encode(progress);
+  Future<void> save(CampaignSave save) async {
+    _source = CampaignProgressCodec.encode(save);
   }
 
   @override

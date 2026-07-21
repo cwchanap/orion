@@ -24,42 +24,47 @@ void main() {
         },
       );
 
-      final encoded = CampaignProgressCodec.encode(progress);
+      final encoded = CampaignProgressCodec.encode(
+        CampaignSave(progress: progress, techTree: CampaignTechTree()),
+      );
       final decoded = CampaignProgressCodec.decode(
         encoded,
         knownStages: OrionCampaign.stages,
       );
 
       expect(
-        decoded.resultFor('outpost-alpha'),
+        decoded.progress.resultFor('outpost-alpha'),
         progress.resultFor('outpost-alpha'),
       );
       expect(
-        decoded.resultFor('nebula-relay'),
+        decoded.progress.resultFor('nebula-relay'),
         progress.resultFor('nebula-relay'),
       );
     });
 
-    test('encodes sorted version two stage result JSON', () {
+    test('encodes sorted stage result JSON at codec version three', () {
       final encoded = CampaignProgressCodec.encode(
-        CampaignProgress(
-          bestResultsByStageId: {
-            'nebula-relay': const StageResult(
-              medal: StageMedal.silver,
-              bestBaseHealth: 14,
-            ),
-            'outpost-alpha': const StageResult(
-              medal: StageMedal.gold,
-              bestBaseHealth: 20,
-            ),
-          },
+        CampaignSave(
+          progress: CampaignProgress(
+            bestResultsByStageId: {
+              'nebula-relay': const StageResult(
+                medal: StageMedal.silver,
+                bestBaseHealth: 14,
+              ),
+              'outpost-alpha': const StageResult(
+                medal: StageMedal.gold,
+                bestBaseHealth: 20,
+              ),
+            },
+          ),
+          techTree: CampaignTechTree(),
         ),
       );
 
       final decoded = jsonDecode(encoded) as Map<String, Object?>;
       final stageResults = decoded['stageResults'] as Map<String, Object?>;
 
-      expect(decoded['version'], 2);
+      expect(decoded['version'], 3);
       expect(stageResults.keys, ['nebula-relay', 'outpost-alpha']);
       expect(stageResults['outpost-alpha'], {
         'medal': 'gold',
@@ -92,21 +97,21 @@ void main() {
       // medals that no longer match what `bestBaseHealth` would derive under
       // the current threshold, but stored medals are trusted across tuning
       // changes.
-      expect(decoded.bestResultsByStageId.keys, {
+      expect(decoded.progress.bestResultsByStageId.keys, {
         'outpost-alpha',
         'salvage-rift',
         'aurora-gate',
       });
       expect(
-        decoded.resultFor('outpost-alpha'),
+        decoded.progress.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
       );
       expect(
-        decoded.resultFor('salvage-rift'),
+        decoded.progress.resultFor('salvage-rift'),
         const StageResult(medal: StageMedal.gold, bestBaseHealth: 1),
       );
       expect(
-        decoded.resultFor('aurora-gate'),
+        decoded.progress.resultFor('aurora-gate'),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 20),
       );
     });
@@ -117,9 +122,9 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
 
-      expect(decoded.bestResultsByStageId.keys, {'outpost-alpha'});
+      expect(decoded.progress.bestResultsByStageId.keys, {'outpost-alpha'});
       expect(
-        decoded.resultFor('outpost-alpha'),
+        decoded.progress.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 0),
       );
     });
@@ -130,7 +135,7 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
 
-      expect(decoded.bestResultsByStageId, isEmpty);
+      expect(decoded.progress.bestResultsByStageId, isEmpty);
     });
 
     test('in-memory store saves, loads, and resets progress', () async {
@@ -139,22 +144,25 @@ void main() {
       );
 
       await store.save(
-        CampaignProgress(
-          bestResultsByStageId: {
-            'outpost-alpha': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 4,
-            ),
-          },
+        CampaignSave(
+          progress: CampaignProgress(
+            bestResultsByStageId: {
+              'outpost-alpha': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 4,
+              ),
+            },
+          ),
+          techTree: CampaignTechTree(),
         ),
       );
       expect(
-        (await store.load()).resultFor('outpost-alpha'),
+        (await store.load()).progress.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 4),
       );
 
       await store.reset();
-      expect((await store.load()).bestResultsByStageId, isEmpty);
+      expect((await store.load()).progress.bestResultsByStageId, isEmpty);
     });
   });
 
@@ -174,19 +182,22 @@ void main() {
       );
 
       await store.save(
-        CampaignProgress(
-          bestResultsByStageId: {
-            'outpost-alpha': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 4,
-            ),
-          },
+        CampaignSave(
+          progress: CampaignProgress(
+            bestResultsByStageId: {
+              'outpost-alpha': const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 4,
+              ),
+            },
+          ),
+          techTree: CampaignTechTree(),
         ),
       );
 
       expect(preferences.getString(key), isNotNull);
       expect(
-        (await store.load()).resultFor('outpost-alpha'),
+        (await store.load()).progress.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 4),
       );
     });
@@ -194,13 +205,16 @@ void main() {
     test('reset clears progress', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         key: CampaignProgressCodec.encode(
-          CampaignProgress(
-            bestResultsByStageId: {
-              'outpost-alpha': const StageResult(
-                medal: StageMedal.clear,
-                bestBaseHealth: 4,
-              ),
-            },
+          CampaignSave(
+            progress: CampaignProgress(
+              bestResultsByStageId: {
+                'outpost-alpha': const StageResult(
+                  medal: StageMedal.clear,
+                  bestBaseHealth: 4,
+                ),
+              },
+            ),
+            techTree: CampaignTechTree(),
           ),
         ),
       });
@@ -214,7 +228,7 @@ void main() {
       await store.reset();
 
       expect(preferences.getString(key), isNull);
-      expect((await store.load()).bestResultsByStageId, isEmpty);
+      expect((await store.load()).progress.bestResultsByStageId, isEmpty);
     });
 
     test('malformed stored state falls back to empty progress', () async {
@@ -226,7 +240,7 @@ void main() {
         key: key,
       );
 
-      expect((await store.load()).bestResultsByStageId, isEmpty);
+      expect((await store.load()).progress.bestResultsByStageId, isEmpty);
     });
   });
 
@@ -259,11 +273,13 @@ void main() {
           },
         );
 
-        await store.save(progress);
+        await store.save(
+          CampaignSave(progress: progress, techTree: CampaignTechTree()),
+        );
 
         final loaded = await store.load();
         final modifiers = CampaignModifiers.fromProgress(
-          loaded,
+          loaded.progress,
           OrionCampaign.stages,
           CampaignTechTree(),
         );
@@ -273,5 +289,86 @@ void main() {
         expect(modifiers.hasChallengeBadge, isTrue);
       },
     );
+  });
+
+  group('CampaignSave codec v3', () {
+    test('round-trips progress + techTree', () {
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          'outpost-alpha': const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+        },
+      );
+      final techTree = CampaignTechTree(
+        purchased: {
+          CampaignTechUpgrade.solarCapacitors,
+          CampaignTechUpgrade.cryoCoolant,
+        },
+      );
+      final save = CampaignSave(progress: progress, techTree: techTree);
+
+      final encoded = CampaignProgressCodec.encode(save);
+      final decoded = CampaignProgressCodec.decode(
+        encoded,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.bestResultsByStageId.keys, ['outpost-alpha']);
+      expect(decoded.techTree.purchased, techTree.purchased);
+    });
+
+    test('techPurchases sorted deterministically', () {
+      final techTree = CampaignTechTree(
+        purchased: {
+          CampaignTechUpgrade.cryoCoolant,
+          CampaignTechUpgrade.solarCapacitors,
+        },
+      );
+      final encoded = CampaignProgressCodec.encode(
+        CampaignSave(progress: CampaignProgress(), techTree: techTree),
+      );
+      // Expect the JSON to contain the sorted id list.
+      expect(
+        encoded,
+        contains('"techPurchases":["cryo-coolant","solar-capacitors"]'),
+      );
+    });
+
+    test('unknown techPurchases ids are dropped on decode', () {
+      // Encode cannot produce an unknown id (the enum is closed), so decode
+      // raw JSON directly. See HPA-100 spec round-2 review issue #6.
+      const raw =
+          '{"version":3,"stageResults":{},'
+          '"techPurchases":["solar-capacitors","unknown-future-id"]}';
+      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
+      expect(decoded.techTree.purchased, {CampaignTechUpgrade.solarCapacitors});
+    });
+
+    test('missing techPurchases field on v3 returns empty tree', () {
+      const raw = '{"version":3,"stageResults":{}}';
+      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
+      expect(decoded.techTree.purchased, isEmpty);
+    });
+
+    test('v2 save decodes with empty tech tree', () {
+      const raw = '{"version":2,"stageResults":{}}';
+      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
+      expect(decoded.techTree.purchased, isEmpty);
+    });
+
+    test('v1 save decodes with empty tech tree', () {
+      const raw = '{"version":1,"clearedStageIds":["outpost-alpha"]}';
+      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
+      expect(decoded.techTree.purchased, isEmpty);
+    });
+
+    test('unknown codec version returns empty save', () {
+      const raw = '{"version":99,"stageResults":{}}';
+      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
+      expect(decoded.progress.bestResultsByStageId, isEmpty);
+      expect(decoded.techTree.purchased, isEmpty);
+    });
   });
 }

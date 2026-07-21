@@ -69,7 +69,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
       setState(() {
         _store = store;
-        _progress = progress;
+        _progress = progress.progress;
         _isLoading = false;
       });
     } catch (_) {
@@ -249,7 +249,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
 
       try {
-        await store.save(progress);
+        await store.save(
+          CampaignSave(progress: progress, techTree: CampaignTechTree()),
+        );
       } catch (_) {
         if (!mounted || saveGeneration != _progressGeneration) {
           return;
