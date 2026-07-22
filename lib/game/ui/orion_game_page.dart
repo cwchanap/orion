@@ -35,8 +35,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
   CampaignProgress _progress = CampaignProgress();
   CampaignTechTree _techTree = CampaignTechTree();
   CampaignProgressStore? _store;
-  // ignore: unused_field — tracked for future stage-context work (T11/T12).
-  StageDefinition? _activeStage;
   String? _mapFeedback;
   String? _techTreeFeedback;
   _ShellView _activeView = _ShellView.worldMap;
@@ -110,7 +108,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
           techTree: _techTree,
           feedback: _techTreeFeedback,
           onPurchase: _purchaseTech,
-          onBack: () async => _closeTechTree(),
+          onBack: _closeTechTree,
         );
       case _ShellView.stage:
         return _buildStageScaffold();
@@ -216,7 +214,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
     widget.onGameCreated?.call(game);
 
     setState(() {
-      _activeStage = stage;
       _mapFeedback = null;
       _game = game;
       _activeView = _ShellView.stage;
@@ -236,14 +233,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
-  // ignore: unused_element — wired up by TechTreeView's back button (T12).
-  void _closeTechTree() {
+  // Wired up by TechTreeView's back button.
+  Future<void> _closeTechTree() async {
     setState(() {
       _activeView = _ShellView.worldMap;
     });
   }
 
-  // ignore: unused_element — invoked by TechTreeView purchase buttons (T12).
+  // Invoked by TechTreeView purchase buttons.
   Future<void> _purchaseTech(CampaignTechUpgrade upgrade) async {
     if (_isSavingProgress) {
       return; // matches stage-launch guard
@@ -330,7 +327,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   void _returnToMap() {
     setState(() {
-      _activeStage = null;
       _game = null;
       _activeView = _ShellView.worldMap;
     });
@@ -395,7 +391,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
     setState(() {
       _progress = CampaignProgress();
       _techTree = CampaignTechTree();
-      _activeStage = null;
       _game = null;
       _activeView = _ShellView.worldMap;
       _mapFeedback = 'Campaign reset.';
