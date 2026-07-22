@@ -1757,6 +1757,8 @@ git commit -m "feat: thread modifiers to GameSession and TowerComponent (HPA-100
 
 This task is plumbing only — no new user-visible behavior. It sets up the state the later UI tasks consume.
 
+> **Implementation note:** The original plan kept `_activeStage` alongside the new `_activeView` field. The implementation dropped `_activeStage` entirely — `_activeView` fully covers shell routing (`worldMap` / `techTree` / `stage`), and no code reads `_activeStage` for any purpose other than routing. `_startStage` / `_returnToMap` / `_confirmResetCampaign` set `_activeView` only.
+
 **Files:**
 - Modify: `lib/game/ui/orion_game_page.dart` — add `_ShellView` enum; add `_techTree`, `_techTreeFeedback`; migrate `_loadProgress`; migrate `build()` routing; update `CampaignModifiers.fromProgress` callers to pass `_techTree`.
 

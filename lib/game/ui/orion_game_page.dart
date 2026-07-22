@@ -245,6 +245,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
     if (_isSavingProgress) {
       return; // matches stage-launch guard
     }
+    // Clear any prior failure feedback so a stale error doesn't persist
+    // after the next successful purchase (tech-tree-design.md:395).
+    if (_techTreeFeedback != null) {
+      setState(() {
+        _techTreeFeedback = null;
+      });
+    }
     final newTechTree = _techTree.purchase(upgrade, _progress);
     await _persistSave(nextTechTree: newTechTree);
   }
@@ -369,9 +376,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    // Bump the generation BEFORE the reset so any in-flight save that
+    // completes during the await sees saveGeneration != _progressGeneration
+    // and triggers the post-stale-save reset (tech-tree-design.md:357).
+    // Roll the bump back if the reset fails — a failed reset means the
+    // campaign was not wiped, so in-flight saves should complete normally.
+    final priorGeneration = _progressGeneration;
+    _progressGeneration++;
+
     try {
       await store.reset();
     } catch (_) {
+      _progressGeneration = priorGeneration;
       if (!mounted) {
         return;
       }
@@ -385,8 +401,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
     if (!mounted) {
       return;
     }
-
-    _progressGeneration++;
 
     setState(() {
       _progress = CampaignProgress();
