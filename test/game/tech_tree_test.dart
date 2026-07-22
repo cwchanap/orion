@@ -42,6 +42,19 @@ void main() {
       });
     });
 
+    test('fromIdList deduplicates duplicate ids', () {
+      final tree = CampaignTechTree.fromIdList(const [
+        'solar-capacitors',
+        'solar-capacitors',
+        'cryo-coolant',
+      ]);
+      expect(tree.purchased, hasLength(2));
+      expect(tree.purchased, {
+        CampaignTechUpgrade.solarCapacitors,
+        CampaignTechUpgrade.cryoCoolant,
+      });
+    });
+
     test('fromIdList on null returns empty tree', () {
       expect(CampaignTechTree.fromIdList(null).purchased, isEmpty);
     });
