@@ -6,6 +6,7 @@ import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
 import '../campaign/campaign_progress.dart';
 import '../models/game_models.dart';
+import '../rules/tower_stats_resolver.dart';
 import 'enemy_component.dart';
 
 typedef TargetAcquirer = EnemyComponent? Function(TowerComponent tower);
@@ -24,7 +25,7 @@ class TowerComponent extends CircleComponent {
     double radius = 15,
     super.priority,
   }) : placedTower = tower,
-       stats = _resolveStats(tower, modifiers),
+       stats = TowerStatsResolver.resolve(tower, modifiers),
        super(
          radius: radius,
          anchor: Anchor.center,
@@ -49,35 +50,8 @@ class TowerComponent extends CircleComponent {
 
   void updateTower(PlacedTower tower) {
     placedTower = tower;
-    stats = _resolveStats(tower, modifiers);
+    stats = TowerStatsResolver.resolve(tower, modifiers);
     paint.color = _towerColor(tower.type);
-  }
-
-  /// Resolves a tower's runtime [TowerStats] from [GameBalance], then applies
-  /// the laser/cryo tech-tree combat upgrades. Called from the constructor
-  /// and from [updateTower] so upgrades/specializations re-apply the bonus.
-  /// Pure: identical inputs yield identical outputs. The laser/cryo branches
-  /// are filtered by tower type so a non-matching tower is unaffected.
-  static TowerStats _resolveStats(
-    PlacedTower tower,
-    CampaignModifiers modifiers,
-  ) {
-    final base = GameBalance.towerStats(
-      tower.type,
-      level: tower.level,
-      specialization: tower.specialization,
-    );
-    if (tower.type == TowerType.laser && modifiers.laserDamageFraction > 0) {
-      return base.copyWith(
-        damage: base.damage * (1 + modifiers.laserDamageFraction),
-      );
-    }
-    if (tower.type == TowerType.cryo && modifiers.cryoSlowDurationBonus > 0) {
-      return base.copyWith(
-        slowDuration: base.slowDuration + modifiers.cryoSlowDurationBonus,
-      );
-    }
-    return base;
   }
 
   @override

@@ -394,6 +394,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _game = null;
       _activeView = _ShellView.worldMap;
       _mapFeedback = 'Campaign reset.';
+      _isSavingProgress = false;
     });
   }
 

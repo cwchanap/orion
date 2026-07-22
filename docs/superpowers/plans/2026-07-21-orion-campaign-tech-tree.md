@@ -54,7 +54,7 @@
 
 ## Task Dependency Graph
 
-```
+```text
 T1 (CampaignTechTree) ──┬─> T3 (CampaignModifiers) ──┬─> T6 (GameSession)  ──┐
                         │                            └─> T7 (TowerComponent)─┤
 T2 (GameBalance) ───────┴─> T4 (CampaignSave) ────────┬─> T8 (OrionDefenseGame)┐
@@ -953,7 +953,12 @@ class CampaignSave {
   final CampaignProgress progress;
   final CampaignTechTree techTree;
 
-  static const CampaignSave empty = CampaignSave(
+  // `static const` is impossible here because `CampaignProgress` and
+  // `CampaignTechTree` default constructors are non-`const` (they wrap their
+  // inputs in `Map.unmodifiable` / `Set.unmodifiable`, which are not const).
+  // `static final` preserves the "one shared empty instance" intent — both
+  // wrapped objects are deeply immutable.
+  static final CampaignSave empty = CampaignSave(
     progress: CampaignProgress(),
     techTree: CampaignTechTree(),
   );
