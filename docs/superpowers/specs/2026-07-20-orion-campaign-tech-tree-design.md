@@ -76,7 +76,7 @@ class CampaignTechTree {
 
 The bank is funded by **existing** `StageMedal.rank` values (clear=1, silver=2, gold=3), summed across all stored best results:
 
-```
+```text
 totalMedalRank(progress) = Σ progress.bestResultsByStageId.values.map((r) => r.medal.rank)
 ```
 
@@ -86,7 +86,7 @@ Range: 0 (no clears) to 21 (all seven stages gold-medaled). No new persistent st
 
 The unspent-points balance is **derived**, not stored:
 
-```
+```text
 unspentPoints(progress) = max(0, totalMedalRank(progress) − totalSpent)
 ```
 
@@ -204,7 +204,7 @@ Both application sites (starting gold/health, wave-clear bonus) read from this s
 
 `CombatEffects.resolveDamage` and `CombatEffects.mergeSlow` are **pure** and must stay pure. The damage path today is:
 
-```
+```text
 ProjectileComponent / GravityFieldComponent / DroneComponent
   → enemy.applyDamage(stats.damage) / applySlow(...)
   → CombatEffects.resolveDamage / mergeSlow
@@ -449,7 +449,7 @@ A full-screen panel reached from the world map. Layout:
 
 - **Header row:** "Campaign Tech Tree" title, medal-points bank readout, and a back button. The bank readout shows all three numbers so the derived-bank model (and the cost-tweak clamp) is legible:
 
-  ```
+  ```text
   Unspent: 9 · Earned: 12 · Spent: 3
   ```
 
