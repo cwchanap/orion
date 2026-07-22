@@ -765,10 +765,10 @@ void main() {
     });
 
     test('laser tower stats reflect laserDamageFraction from modifiers', () {
-      // TowerComponent resolves its stats through _resolveStats, which reads
-      // its modifiers field. If OrionDefenseGame fails to forward modifiers
-      // to _addTowerComponent, the placed tower uses CampaignModifiers.empty
-      // and the damage is unscaled.
+      // TowerComponent resolves its stats through TowerStatsResolver.resolve,
+      // which reads its modifiers field. If OrionDefenseGame fails to forward
+      // modifiers to _addTowerComponent, the placed tower uses
+      // CampaignModifiers.empty and the damage is unscaled.
       const mods = CampaignModifiers(laserDamageFraction: 0.10);
       final game = OrionDefenseGame(
         stage: _singleEnemyStage(),
@@ -783,6 +783,101 @@ void main() {
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
       expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
     });
+
+    test(
+      'upgrading a laser tower re-applies laserDamageFraction via updateTower',
+      () {
+        // Exercises the updateTower call site in upgradeSelectedTower.
+        // If updateTower fails to re-resolve stats through
+        // TowerStatsResolver.resolve, the upgraded tower uses the unmodified
+        // level-2 base damage (18) instead of the scaled value (19.8).
+        const mods = CampaignModifiers(laserDamageFraction: 0.10);
+        final game = OrionDefenseGame(
+          stage: _singleEnemyStage(),
+          modifiers: mods,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        _tapCell(game, const GridPosition(0, 1)); // select the placed tower
+        game.processLifecycleEvents();
+
+        game.upgradeSelectedTower();
+        game.processLifecycleEvents();
+
+        final component = game.children.whereType<TowerComponent>().single;
+        final base = GameBalance.towerStats(TowerType.laser, level: 2);
+        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
+      },
+    );
+
+    test(
+      'specializing a laser tower re-applies laserDamageFraction via updateTower',
+      () {
+        // Exercises the updateTower call site in specializeSelectedTower.
+        // bonusGold covers place(50) + upgrade(70) + specialize(120) = 240.
+        const mods = CampaignModifiers(
+          laserDamageFraction: 0.10,
+          bonusGold: 100,
+        );
+        final game = OrionDefenseGame(
+          stage: _singleEnemyStage(),
+          modifiers: mods,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        _tapCell(game, const GridPosition(0, 1)); // select the placed tower
+        game.processLifecycleEvents();
+
+        game.upgradeSelectedTower();
+        game.processLifecycleEvents();
+
+        game.specializeSelectedTower(TowerSpecialization.pulseLaser);
+        game.processLifecycleEvents();
+
+        final component = game.children.whereType<TowerComponent>().single;
+        final base = GameBalance.towerStats(
+          TowerType.laser,
+          level: 3,
+          specialization: TowerSpecialization.pulseLaser,
+        );
+        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
+      },
+    );
+
+    test(
+      'retargeting a laser tower preserves laserDamageFraction via updateTower',
+      () {
+        // Exercises the updateTower call site in setTargetingMode
+        // (orion_defense_game.dart:282). If updateTower fails to re-resolve
+        // stats, the targeting-mode change drops the damage multiplier.
+        const mods = CampaignModifiers(laserDamageFraction: 0.10);
+        final game = OrionDefenseGame(
+          stage: _singleEnemyStage(),
+          modifiers: mods,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        _tapCell(game, const GridPosition(0, 1)); // select the placed tower
+        game.processLifecycleEvents();
+
+        game.setTargetingMode(TowerTargetingMode.strongest);
+        game.processLifecycleEvents();
+
+        final component = game.children.whereType<TowerComponent>().single;
+        final base = GameBalance.towerStats(TowerType.laser, level: 1);
+        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
+        expect(
+          component.placedTower.targetingMode,
+          TowerTargetingMode.strongest,
+        );
+      },
+    );
 
     test('restart resets base health to modifier-adjusted starting value', () {
       // A session created with non-zero modifiers must reset back to the

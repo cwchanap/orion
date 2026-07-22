@@ -22,9 +22,8 @@ class TechTreeView extends StatelessWidget {
   /// Invoked when the user taps an affordable upgrade's Purchase button.
   final ValueChanged<CampaignTechUpgrade> onPurchase;
 
-  /// Invoked when the user taps the back button. Async because the parent
-  /// may need to await save rollback on a failure.
-  final Future<void> Function() onBack;
+  /// Invoked when the user taps the back button.
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
@@ -42,7 +41,7 @@ class TechTreeView extends StatelessWidget {
               children: [
                 IconButton(
                   tooltip: 'Back',
-                  onPressed: () => onBack(),
+                  onPressed: onBack,
                   icon: const Icon(Icons.arrow_back),
                 ),
                 Expanded(

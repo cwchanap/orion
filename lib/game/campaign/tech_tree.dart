@@ -14,35 +14,30 @@ enum CampaignTechUpgrade {
     cost: GameBalance.solarCapacitorsCost,
     label: 'Solar Capacitors',
     description: 'Start each mission with extra gold.',
-    effectLabel: '+15 Starting Gold',
   ),
   hardenedCore(
     id: 'hardened-core',
     cost: GameBalance.hardenedCoreCost,
     label: 'Hardened Core',
     description: 'Start each mission with extra base health.',
-    effectLabel: '+3 Starting Health',
   ),
   salvageCrew(
     id: 'salvage-crew',
     cost: GameBalance.salvageCrewCost,
     label: 'Salvage Crew',
     description: 'Earn more gold from wave clears.',
-    effectLabel: '+25% Wave Clear Gold',
   ),
   laserTuning(
     id: 'laser-tuning',
     cost: GameBalance.laserTuningCost,
     label: 'Laser Tuning',
     description: 'Laser towers deal more damage.',
-    effectLabel: '+10% Laser Damage',
   ),
   cryoCoolant(
     id: 'cryo-coolant',
     cost: GameBalance.cryoCoolantCost,
     label: 'Cryo Coolant',
     description: 'Cryo towers slow enemies longer.',
-    effectLabel: '+0.3s Cryo Slow',
   );
 
   const CampaignTechUpgrade({
@@ -50,7 +45,6 @@ enum CampaignTechUpgrade {
     required this.cost,
     required this.label,
     required this.description,
-    required this.effectLabel,
   });
 
   /// Stable identifier used in persistence. Never reuse an id after removing
@@ -60,7 +54,26 @@ enum CampaignTechUpgrade {
   final int cost;
   final String label;
   final String description;
-  final String effectLabel;
+
+  /// Human-readable effect summary, derived from [GameBalance] constants so
+  /// it stays in sync with the actual tuning values.
+  String get effectLabel {
+    switch (this) {
+      case CampaignTechUpgrade.solarCapacitors:
+        return '+${GameBalance.solarCapacitorsGoldBonus} Starting Gold';
+      case CampaignTechUpgrade.hardenedCore:
+        return '+${GameBalance.hardenedCoreHealthBonus} Starting Health';
+      case CampaignTechUpgrade.salvageCrew:
+        final percent = (GameBalance.salvageCrewClearBonusFraction * 100)
+            .round();
+        return '+$percent% Wave Clear Gold';
+      case CampaignTechUpgrade.laserTuning:
+        final percent = (GameBalance.laserTuningDamageFraction * 100).round();
+        return '+$percent% Laser Damage';
+      case CampaignTechUpgrade.cryoCoolant:
+        return '+${GameBalance.cryoCoolantSlowDurationBonus.toStringAsFixed(1)}s Cryo Slow';
+    }
+  }
 
   static CampaignTechUpgrade? fromId(String id) {
     for (final upgrade in CampaignTechUpgrade.values) {

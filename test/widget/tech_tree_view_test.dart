@@ -24,7 +24,7 @@ void main() {
     required CampaignTechTree techTree,
     String? feedback,
     required void Function(CampaignTechUpgrade) onPurchase,
-    required Future<void> Function() onBack,
+    required VoidCallback onBack,
   }) async {
     await tester.pumpWidget(
       MaterialApp(
