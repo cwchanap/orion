@@ -618,15 +618,15 @@ The migration is mechanical (wrap/unwrap `CampaignSave`) but high-touch; the imp
 
 ## Acceptance Criteria
 
-Mapped to the issue. These describe the end state after implementation; they are not yet satisfied today (the codec is still v2 at `campaign_progress_store.dart:24`, and the tech-tree files do not yet exist):
+Mapped to the issue. These describe the end state after implementation:
 
-- [ ] **Persistent campaign tech-tree state in progress storage** — codec v3 adds `techPurchases`.
-- [ ] **At least three purchasable upgrades** — five shipped.
-- [ ] **Upgrades visibly affect mission start or tower stats** — three at mission start (gold, health, clear-bonus multiplier) and two via resolved `TowerStats` (laser damage, cryo slow). Combat-upgrade visibility is satisfied by panel `effectLabel`s + combat-application tests; no in-mission HUD chip ships in MVP.
-- [ ] **The player can view purchased and locked upgrades from the campaign map** — full-screen `TechTreeView` reached via a world-map header button.
-- [ ] **Upgrade purchases persist across app restarts** — codec v3 + `InMemoryCampaignProgressStore` round-trip test.
-- [ ] **Existing saved progress remains loadable** — v2 → v3 migration defaults `techPurchases = []`.
-- [ ] **Tests cover purchase validation, persistence, and application to gameplay** — pure-logic, persistence, save-flow (including sibling stage/purchase saves and stale-save reset), session-application, combat-application, and widget tests specified above.
+- [x] **Persistent campaign tech-tree state in progress storage** — codec v3 adds `techPurchases`.
+- [x] **At least three purchasable upgrades** — five shipped.
+- [x] **Upgrades visibly affect mission start or tower stats** — three at mission start (gold, health, clear-bonus multiplier) and two via resolved `TowerStats` (laser damage, cryo slow). Combat-upgrade visibility is satisfied by panel `effectLabel`s + combat-application tests; no in-mission HUD chip ships in MVP.
+- [x] **The player can view purchased and locked upgrades from the campaign map** — full-screen `TechTreeView` reached via a world-map header button.
+- [x] **Upgrade purchases persist across app restarts** — codec v3 + `InMemoryCampaignProgressStore` round-trip test.
+- [x] **Existing saved progress remains loadable** — v2 → v3 migration defaults `techPurchases = []`.
+- [x] **Tests cover purchase validation, persistence, and application to gameplay** — pure-logic, persistence, save-flow (including sibling stage/purchase saves and stale-save reset), session-application, combat-application, and widget tests specified above.
 
 ## References
 

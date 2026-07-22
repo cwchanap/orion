@@ -38,7 +38,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // ignore: unused_field — tracked for future stage-context work (T11/T12).
   StageDefinition? _activeStage;
   String? _mapFeedback;
-  // ignore: unused_field — consumed by TechTreeView (T12).
   String? _techTreeFeedback;
   _ShellView _activeView = _ShellView.worldMap;
   bool _isLoading = true;

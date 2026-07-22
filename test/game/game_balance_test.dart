@@ -1092,6 +1092,14 @@ void main() {
       expect(costs.fold(0, (sum, c) => sum + c), 20);
     });
 
+    test('individual upgrade costs match design', () {
+      expect(GameBalance.solarCapacitorsCost, 3);
+      expect(GameBalance.hardenedCoreCost, 4);
+      expect(GameBalance.salvageCrewCost, 4);
+      expect(GameBalance.laserTuningCost, 4);
+      expect(GameBalance.cryoCoolantCost, 5);
+    });
+
     test('magnitudes match design', () {
       expect(GameBalance.solarCapacitorsGoldBonus, 15);
       expect(GameBalance.hardenedCoreHealthBonus, 3);
