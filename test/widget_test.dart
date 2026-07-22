@@ -758,6 +758,63 @@ void main() {
     );
   });
 
+  testWidgets('successful reset racing a pending save wipes stale disk data', (
+    tester,
+  ) async {
+    // tech-tree-design.md:579 — start a save, then trigger reset. The
+    // in-flight save writes pre-reset data to disk; the post-stale-save
+    // reset (triggered by the generation mismatch) must wipe the store so
+    // a reload returns empty progress and empty tech tree.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+      delaySaves: true,
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    // Queue a stage-completion save (delayed).
+    game!.onStageWon?.call(
+      StageCompletion(
+        stage: OrionCampaign.stageById('salvage-rift'),
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      ),
+    );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+    // Return to map and reset while the save is still pending.
+    game!.returnToMap();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reset Campaign'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Campaign reset.'), findsOneWidget);
+
+    // Complete the pending save — it writes pre-reset data to the store.
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    // The post-stale-save reset must have wiped the store. A reload would
+    // return empty progress and empty tech tree.
+    expect(store.resetCalls, 2); // original reset + post-stale-save reset
+    expect(store.progress.bestResultsByStageId, isEmpty);
+    expect(store.techTree.purchased, isEmpty);
+  });
+
   testWidgets('reset reports failure when no progress store is available', (
     tester,
   ) async {
@@ -888,6 +945,52 @@ void main() {
 
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
       expect(find.text('Orion Sector Map'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'successful purchase clears stale tech tree feedback from prior failure',
+    (tester) async {
+      // tech-tree-design.md:395 — _techTreeFeedback clears on the next
+      // successful purchase. A prior failure's error must not persist on
+      // screen after the retry succeeds.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+        }),
+        failOnSaveIndices: {0},
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: OrionGamePage(progressStore: store)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+
+      // First purchase attempt fails (save index 0).
+      await tester.tap(find.text('Purchase'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+      // Rollback: still purchasable.
+      expect(find.text('Purchase'), findsOneWidget);
+
+      // Second purchase attempt succeeds (save index 1).
+      await tester.tap(find.text('Purchase'));
+      await tester.pumpAndSettle();
+
+      // Stale feedback must be cleared.
+      expect(find.text('Could not save campaign progress.'), findsNothing);
+      // The upgrade is now purchased.
+      expect(find.text('Purchase'), findsNothing);
+      expect(
+        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
+        isTrue,
+      );
     },
   );
 
