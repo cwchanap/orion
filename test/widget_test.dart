@@ -779,6 +779,158 @@ void main() {
     expect(find.text('Campaign reset.'), findsNothing);
   });
 
+  testWidgets(
+    'failed stage save rolls back only progress, not a later tech purchase',
+    (tester) async {
+      // Field-scoped rollback (HPA-100): a failed stage-completion save must
+      // restore _progress to its prior value without clobbering the tech tree
+      // a subsequent purchase writes. The stage save (first) fails; the
+      // purchase save (second) succeeds and its techTree value survives.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+        }),
+        failOnSaveIndices: const {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Queue a stage-completion save (save 0) — it fails on persistence.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Field-scoped rollback: _progress restored to prior (no salvage-rift).
+      expect(store.progress.bestResultsByStageId.keys, {
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+      });
+      expect(store.progress.resultFor('salvage-rift'), isNull);
+
+      // Return to the map and open the tech tree to queue a purchase save.
+      game!.returnToMap();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+
+      // With 3 clear medals only Solar Capacitors (cost 3) is affordable, so
+      // exactly one "Purchase" button is present.
+      await tester.tap(find.text('Purchase'));
+      await tester.pumpAndSettle();
+
+      // The purchase save (save 1) succeeded; the techTree retains the new
+      // value despite the earlier stage save's failure path having run.
+      expect(store.saveCalls, 2);
+      expect(
+        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
+        isTrue,
+      );
+    },
+  );
+
+  testWidgets(
+    'failed purchase save sets feedback on both tech tree and map views',
+    (tester) async {
+      // Dual-targeting feedback routing (HPA-100): a purchase save that fails
+      // while on the tech tree view must set _techTreeFeedback (visible now)
+      // AND _mapFeedback (breadcrumb for when the player returns to the map).
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+        }),
+        saveError: StateError('save failed'),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: OrionGamePage(progressStore: store)),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Purchase'));
+      await tester.pumpAndSettle();
+
+      // _techTreeFeedback: the tech tree view shows the failure inline.
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+      // Rollback: Solar Capacitors is still purchasable (not "Purchased").
+      expect(find.text('Purchase'), findsOneWidget);
+
+      // _mapFeedback: return to the map and confirm the breadcrumb survives.
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+      expect(find.text('Orion Sector Map'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'null store shows persistence failure and does not throw on stage save',
+    (tester) async {
+      // Null-store guard (HPA-100): when _store is null, _persistSave must
+      // surface the persistence-failure feedback and return without throwing.
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStoreLoader: () async => throw StateError('no store'),
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Load failed → _store is null. Alpha is still unlocked and launchable.
+      expect(find.text('Could not load campaign progress.'), findsOneWidget);
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Fire onStageWon → _persistSave hits the null-store guard. No throw;
+      // the failure feedback is routed to the active game's HUD.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+    },
+  );
+
   test('snapshot exposes the current tower unlocks', () {
     final session = GameSession.initial();
 
@@ -1388,16 +1540,21 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     this.loadError,
     this.saveError,
     this.delaySaves = false,
+    this.failOnSaveIndices = const {},
     this.resetResults = const [],
     CampaignProgress? progress,
-  }) : progress = progress ?? CampaignProgress();
+    CampaignTechTree? techTree,
+  }) : progress = progress ?? CampaignProgress(),
+       techTree = techTree ?? CampaignTechTree();
 
   final Object? loadError;
   final Object? saveError;
   final bool delaySaves;
+  final Set<int> failOnSaveIndices;
   final List<Object?> resetResults;
   final List<Completer<void>> saveCompletions = [];
   CampaignProgress progress;
+  CampaignTechTree techTree;
   int saveCalls = 0;
   int resetCalls = 0;
 
@@ -1407,7 +1564,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     if (error != null) {
       throw error;
     }
-    return CampaignSave(progress: progress, techTree: CampaignTechTree());
+    return CampaignSave(progress: progress, techTree: techTree);
   }
 
   @override
@@ -1420,12 +1577,16 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
       await completer.future;
     }
 
+    if (failOnSaveIndices.contains(saveCalls - 1)) {
+      throw StateError('save ${saveCalls - 1} failed');
+    }
     final error = saveError;
     if (error != null) {
       throw error;
     }
 
     progress = save.progress;
+    techTree = save.techTree;
   }
 
   @override
@@ -1440,5 +1601,6 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     }
 
     progress = CampaignProgress();
+    techTree = CampaignTechTree();
   }
 }

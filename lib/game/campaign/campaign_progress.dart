@@ -254,6 +254,9 @@ class CampaignModifiers {
 
     final allSideStagesCleared =
         sideStageIds.isNotEmpty && sideStageIds.every(progress.isCleared);
+    final cryoCoolantPurchased = techTree.isPurchased(
+      CampaignTechUpgrade.cryoCoolant,
+    );
 
     return CampaignModifiers(
       bonusGold: bonusGold,
@@ -265,8 +268,7 @@ class CampaignModifiers {
       laserDamageFraction: techTree.isPurchased(CampaignTechUpgrade.laserTuning)
           ? GameBalance.laserTuningDamageFraction
           : 0,
-      cryoSlowDurationBonus:
-          techTree.isPurchased(CampaignTechUpgrade.cryoCoolant)
+      cryoSlowDurationBonus: cryoCoolantPurchased
           ? GameBalance.cryoCoolantSlowDurationBonus
           : 0,
     );
