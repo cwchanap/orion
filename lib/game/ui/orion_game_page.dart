@@ -234,8 +234,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   // Wired up by TechTreeView's back button.
-  Future<void> _closeTechTree() async {
+  void _closeTechTree() {
     setState(() {
+      _techTreeFeedback = null;
       _activeView = _ShellView.worldMap;
     });
   }
@@ -304,9 +305,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // a concurrent tech-purchase save's optimistic update.
       if (nextProgress != null) _progress = priorProgress;
       if (nextTechTree != null) _techTree = priorTechTree;
-      if (mounted) {
-        setState(() {});
-      }
       _showCampaignPersistenceFailure();
     } finally {
       if (saveGeneration == _progressGeneration) {
