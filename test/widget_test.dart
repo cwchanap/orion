@@ -865,7 +865,7 @@ void main() {
   });
 
   testWidgets(
-    'tapping Tech Tree button on OrionGamePage falls through to world map',
+    'tapping Tech Tree button opens TechTreeView and back returns to map',
     (tester) async {
       SharedPreferences.setMockInitialValues({});
 
@@ -878,10 +878,17 @@ void main() {
       await tester.tap(find.byTooltip('Tech Tree'));
       await tester.pumpAndSettle();
 
-      // _ShellView.techTree still falls through to _buildWorldMapScaffold
-      // (TechTreeView lands in T12). The header must still render.
+      // TechTreeView is now rendered (T12): its header appears and the
+      // world-map header is replaced.
+      expect(find.text('Campaign Tech Tree'), findsOneWidget);
+      expect(find.text('Orion Sector Map'), findsNothing);
+
+      // The back arrow returns the player to the world map.
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Orion Sector Map'), findsOneWidget);
-      expect(find.byTooltip('Tech Tree'), findsOneWidget);
+      expect(find.text('Campaign Tech Tree'), findsNothing);
     },
   );
 
