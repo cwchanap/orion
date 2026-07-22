@@ -9,6 +9,7 @@ import '../campaign/stage_definition.dart';
 import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
+import 'tech_tree_view.dart';
 import 'world_map_view.dart';
 
 enum _ShellView { worldMap, techTree, stage }
@@ -103,10 +104,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     switch (_activeView) {
       case _ShellView.worldMap:
-      case _ShellView.techTree:
-        // TODO(T12): TechTreeView gets its own scaffold; for now both non-stage
-        // views fall through to the world-map scaffold so the build stays green.
         return _buildWorldMapScaffold();
+      case _ShellView.techTree:
+        return TechTreeView(
+          progress: _progress,
+          techTree: _techTree,
+          feedback: _techTreeFeedback,
+          onPurchase: _purchaseTech,
+          onBack: () async => _closeTechTree(),
+        );
       case _ShellView.stage:
         return _buildStageScaffold();
     }
