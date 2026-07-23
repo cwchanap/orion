@@ -311,13 +311,18 @@ class _StageNode extends StatelessWidget {
   }
 
   VoidCallback? _onTap(bool isLocked) {
+    // isBusy takes precedence over isLocked so all stage nodes behave
+    // consistently while the world map is disabled during save/reset
+    // operations. Otherwise a locked node could fire onLockedStageSelected
+    // and replace the "Saving…/Resetting…" breadcrumb with a locked-stage
+    // message (round-5 review P3).
+    if (isBusy) {
+      return null;
+    }
+
     if (isLocked) {
       final callback = onLockedStageSelected;
       return callback == null ? null : () => callback(stage);
-    }
-
-    if (isBusy) {
-      return null;
     }
 
     return () => onStageSelected(stage);
