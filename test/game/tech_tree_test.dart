@@ -186,6 +186,34 @@ void main() {
     });
   });
 
+  group('withoutUpgrade (save-rollback helper)', () {
+    test('removes a single upgrade without touching others', () {
+      final tree = CampaignTechTree(
+        purchased: {
+          CampaignTechUpgrade.solarCapacitors,
+          CampaignTechUpgrade.hardenedCore,
+        },
+      );
+
+      final rolled = tree.withoutUpgrade(CampaignTechUpgrade.solarCapacitors);
+
+      expect(rolled.isPurchased(CampaignTechUpgrade.solarCapacitors), isFalse);
+      expect(rolled.isPurchased(CampaignTechUpgrade.hardenedCore), isTrue);
+      expect(rolled.purchased.length, 1);
+    });
+
+    test('returns same instance when upgrade is not present', () {
+      final tree = CampaignTechTree();
+      expect(
+        identical(
+          tree.withoutUpgrade(CampaignTechUpgrade.solarCapacitors),
+          tree,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('CampaignTechTree total cost across all upgrades', () {
     test('equals 20 (intentional 1-pt slack below 21 max)', () {
       final totalSpent = CampaignTechUpgrade.values.fold(

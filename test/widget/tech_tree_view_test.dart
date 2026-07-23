@@ -23,6 +23,7 @@ void main() {
     required CampaignProgress progress,
     required CampaignTechTree techTree,
     String? feedback,
+    bool isSavingProgress = false,
     required void Function(CampaignTechUpgrade) onPurchase,
     required VoidCallback onBack,
   }) async {
@@ -32,6 +33,7 @@ void main() {
           progress: progress,
           techTree: techTree,
           feedback: feedback,
+          isSavingProgress: isSavingProgress,
           onPurchase: onPurchase,
           onBack: onBack,
         ),
@@ -149,4 +151,34 @@ void main() {
     await tester.pump();
     expect(backInvoked, isTrue);
   });
+
+  testWidgets(
+    'affordable upgrade Purchase button is disabled while a save is in flight',
+    (tester) async {
+      // Round-3 review P3: the Purchase button must not present an enabled
+      // affordance that silently no-ops when _isSavingProgress is true.
+      final progress = progressWithRanks(const [3, 3, 3, 3]); // 12 earned
+      var tapped = 0;
+      await pumpTree(
+        tester,
+        progress: progress,
+        techTree: CampaignTechTree(),
+        isSavingProgress: true,
+        onPurchase: (_) => tapped++,
+        onBack: () async {},
+      );
+
+      // Solar Capacitors is affordable (cost 3, 12 earned) but the button
+      // must be disabled because a save is in flight.
+      final purchaseButton = find
+          .widgetWithText(FilledButton, 'Purchase')
+          .first;
+      final button = tester.widget<FilledButton>(purchaseButton);
+      expect(button.onPressed, isNull);
+
+      await tester.tap(purchaseButton, warnIfMissed: false);
+      await tester.pump();
+      expect(tapped, 0);
+    },
+  );
 }

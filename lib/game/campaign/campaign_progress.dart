@@ -186,6 +186,23 @@ class CampaignProgress {
       bestResultsByStageId: {..._bestResultsByStageId, stageId: result},
     );
   }
+
+  /// Returns a copy with [stageId]'s result set to [result], or removed when
+  /// [result] is null. Used by the save-rollback path to undo a single stage
+  /// result without clobbering concurrent optimistic updates to other stages.
+  CampaignProgress withResult(String stageId, StageResult? result) {
+    if (result == null) {
+      if (!_bestResultsByStageId.containsKey(stageId)) {
+        return this;
+      }
+      final updated = Map<String, StageResult>.from(_bestResultsByStageId);
+      updated.remove(stageId);
+      return CampaignProgress(bestResultsByStageId: updated);
+    }
+    return CampaignProgress(
+      bestResultsByStageId: {..._bestResultsByStageId, stageId: result},
+    );
+  }
 }
 
 class CampaignModifiers {

@@ -12,6 +12,7 @@ class WorldMapView extends StatelessWidget {
     this.modifiers,
     required this.feedback,
     this.isSavingProgress = false,
+    this.isResetting = false,
     required this.onStageSelected,
     this.onLockedStageSelected,
     required this.onResetCampaign,
@@ -23,10 +24,13 @@ class WorldMapView extends StatelessWidget {
   final CampaignModifiers? modifiers;
   final String? feedback;
   final bool isSavingProgress;
+  final bool isResetting;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
   final VoidCallback onResetCampaign;
   final VoidCallback? onOpenTechTree;
+
+  bool get _isBusy => isSavingProgress || isResetting;
 
   @override
   Widget build(BuildContext context) {
@@ -35,8 +39,10 @@ class WorldMapView extends StatelessWidget {
         .where((stage) => progress.isCleared(stage.id))
         .length;
     final total = stages.length;
-    final effectiveFeedback = isSavingProgress && feedback == null
-        ? 'Saving campaign progress…'
+    final effectiveFeedback = _isBusy && feedback == null
+        ? isResetting
+              ? 'Resetting campaign…'
+              : 'Saving campaign progress…'
         : feedback;
 
     return SafeArea(
@@ -58,12 +64,12 @@ class WorldMapView extends StatelessWidget {
                 if (onOpenTechTree != null)
                   IconButton(
                     tooltip: 'Tech Tree',
-                    onPressed: onOpenTechTree,
+                    onPressed: _isBusy ? null : onOpenTechTree,
                     icon: const Icon(Icons.account_tree),
                   ),
                 IconButton(
                   tooltip: 'Reset Campaign',
-                  onPressed: onResetCampaign,
+                  onPressed: _isBusy ? null : onResetCampaign,
                   icon: const Icon(Icons.restart_alt),
                 ),
               ],
@@ -111,7 +117,7 @@ class WorldMapView extends StatelessWidget {
               child: _StageMap(
                 stages: stages,
                 progress: progress,
-                isSavingProgress: isSavingProgress,
+                isBusy: _isBusy,
                 onStageSelected: onStageSelected,
                 onLockedStageSelected: onLockedStageSelected,
               ),
@@ -127,14 +133,14 @@ class _StageMap extends StatelessWidget {
   const _StageMap({
     required this.stages,
     required this.progress,
-    required this.isSavingProgress,
+    required this.isBusy,
     required this.onStageSelected,
     required this.onLockedStageSelected,
   });
 
   final List<StageDefinition> stages;
   final CampaignProgress progress;
-  final bool isSavingProgress;
+  final bool isBusy;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
@@ -192,7 +198,7 @@ class _StageMap extends StatelessWidget {
                       stage: stage,
                       status: progress.statusFor(stage),
                       result: progress.resultFor(stage.id),
-                      isSavingProgress: isSavingProgress,
+                      isBusy: isBusy,
                       onStageSelected: onStageSelected,
                       onLockedStageSelected: onLockedStageSelected,
                     ),
@@ -230,7 +236,7 @@ class _StageNode extends StatelessWidget {
     required this.stage,
     required this.status,
     required this.result,
-    required this.isSavingProgress,
+    required this.isBusy,
     required this.onStageSelected,
     required this.onLockedStageSelected,
   });
@@ -238,7 +244,7 @@ class _StageNode extends StatelessWidget {
   final StageDefinition stage;
   final StageProgressStatus status;
   final StageResult? result;
-  final bool isSavingProgress;
+  final bool isBusy;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
@@ -310,7 +316,7 @@ class _StageNode extends StatelessWidget {
       return callback == null ? null : () => callback(stage);
     }
 
-    if (isSavingProgress) {
+    if (isBusy) {
       return null;
     }
 

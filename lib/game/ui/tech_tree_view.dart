@@ -11,6 +11,7 @@ class TechTreeView extends StatelessWidget {
     required this.progress,
     required this.techTree,
     this.feedback,
+    this.isSavingProgress = false,
     required this.onPurchase,
     required this.onBack,
   });
@@ -18,6 +19,9 @@ class TechTreeView extends StatelessWidget {
   final CampaignProgress progress;
   final CampaignTechTree techTree;
   final String? feedback;
+
+  /// When true, purchase buttons are disabled (a save is in flight).
+  final bool isSavingProgress;
 
   /// Invoked when the user taps an affordable upgrade's Purchase button.
   final ValueChanged<CampaignTechUpgrade> onPurchase;
@@ -80,6 +84,7 @@ class TechTreeView extends StatelessWidget {
                       upgrade: upgrade,
                       progress: progress,
                       techTree: techTree,
+                      isSavingProgress: isSavingProgress,
                       onPurchase: onPurchase,
                     ),
                 ],
@@ -97,12 +102,14 @@ class _UpgradeRow extends StatelessWidget {
     required this.upgrade,
     required this.progress,
     required this.techTree,
+    required this.isSavingProgress,
     required this.onPurchase,
   });
 
   final CampaignTechUpgrade upgrade;
   final CampaignProgress progress;
   final CampaignTechTree techTree;
+  final bool isSavingProgress;
   final ValueChanged<CampaignTechUpgrade> onPurchase;
 
   @override
@@ -111,6 +118,9 @@ class _UpgradeRow extends StatelessWidget {
     final isPurchased = techTree.isPurchased(upgrade);
     final unspent = techTree.unspentPoints(progress);
     final canAfford = !isPurchased && unspent >= upgrade.cost;
+    // Purchases are disabled while a save is in flight so the button never
+    // presents an enabled affordance that silently no-ops (round-3 review P3).
+    final canPurchase = canAfford && !isSavingProgress;
 
     return Card(
       child: Padding(
@@ -145,7 +155,7 @@ class _UpgradeRow extends StatelessWidget {
                 ],
               ),
             ),
-            _buildAction(theme, isPurchased, canAfford, unspent),
+            _buildAction(theme, isPurchased, canPurchase, canAfford, unspent),
           ],
         ),
       ),
@@ -155,6 +165,7 @@ class _UpgradeRow extends StatelessWidget {
   Widget _buildAction(
     ThemeData theme,
     bool isPurchased,
+    bool canPurchase,
     bool canAfford,
     int unspent,
   ) {
@@ -167,9 +178,18 @@ class _UpgradeRow extends StatelessWidget {
         backgroundColor: theme.colorScheme.primaryContainer,
       );
     }
-    if (canAfford) {
+    if (canPurchase) {
       return FilledButton(
         onPressed: () => onPurchase(upgrade),
+        child: const Text('Purchase'),
+      );
+    }
+    // Affordable but a save is in flight — show a disabled Purchase button
+    // rather than the "Need N more points" label, so the user sees the
+    // correct reason (waiting on persistence, not lacking points).
+    if (canAfford) {
+      return FilledButton(
+        onPressed: null, // disabled while saving
         child: const Text('Purchase'),
       );
     }

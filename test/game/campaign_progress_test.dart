@@ -346,6 +346,70 @@ void main() {
       expect(progress.isUnlocked(dependentStage), isFalse);
       expect(progress.statusFor(dependentStage), StageProgressStatus.cleared);
     });
+
+    group('withResult (save-rollback helper)', () {
+      test('removes a stage result when passed null', () {
+        final progress = CampaignProgress(
+          bestResultsByStageId: {
+            'alpha': const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'relay': const StageResult(
+              medal: StageMedal.silver,
+              bestBaseHealth: 14,
+            ),
+          },
+        );
+
+        final rolled = progress.withResult('alpha', null);
+
+        expect(rolled.bestResultsByStageId.keys, {'relay'});
+        expect(rolled.resultFor('alpha'), isNull);
+        // Other stages are untouched.
+        expect(
+          rolled.resultFor('relay'),
+          const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+        );
+      });
+
+      test('restores a prior result without touching other stages', () {
+        final progress = CampaignProgress(
+          bestResultsByStageId: {
+            'alpha': const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'relay': const StageResult(
+              medal: StageMedal.silver,
+              bestBaseHealth: 14,
+            ),
+          },
+        );
+
+        final rolled = progress.withResult(
+          'alpha',
+          const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+        );
+
+        expect(
+          rolled.resultFor('alpha'),
+          const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+        );
+        expect(
+          rolled.resultFor('relay'),
+          const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+        );
+      });
+
+      test('returns same instance when removing a missing stage', () {
+        final progress = CampaignProgress();
+        expect(
+          identical(progress.withResult('absent', null), progress),
+          isTrue,
+        );
+      });
+    });
   });
 
   group('StageDefinition', () {
