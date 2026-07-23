@@ -351,7 +351,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
       } catch (_) {
         if (saveGeneration == _progressGeneration) {
           rollback();
-          _showCampaignPersistenceFailure();
+          // UI feedback is guarded by mounted: the rollback must still run
+          // after disposal (it only mutates in-memory state), but calling
+          // setState on a defunct State is a debug assertion violation
+          // (round-5 review P2).
+          if (mounted) {
+            _showCampaignPersistenceFailure();
+          }
         }
       } finally {
         _decrementPendingSaves();
@@ -387,8 +393,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
         // this one and owns its own rollback; unconditionally restoring the
         // prior value onto the aggregate would erase the later result from
         // the optimistic UI state (round-4 review P1 same-stage case).
+        //
+        // When the latest optimistic result fails, restore the committed
+        // disk state rather than the captured priorResult. priorResult was
+        // read from the optimistic _progress at queue time, so when two
+        // saves target the same stage and both fail, the second save's
+        // priorResult carries the first save's optimistic (never-committed)
+        // value — restoring it leaves a stale result in the UI that can
+        // unlock dependent stages and contribute medal points until reload.
+        // Since transactions execute serially, _committedProgress already
+        // represents the resolved outcome of every earlier transaction
+        // (round-5 review P2).
         if (_progress.resultFor(stageId) == completion.result) {
-          _progress = _progress.withResult(stageId, priorResult);
+          _progress = _progress.withResult(
+            stageId,
+            _committedProgress.resultFor(stageId),
+          );
         }
       },
     );

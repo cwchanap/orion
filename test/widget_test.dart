@@ -657,6 +657,66 @@ void main() {
     },
   );
 
+  testWidgets(
+    'failed queued save after disposal does not call setState on a defunct '
+    'State',
+    (tester) async {
+      // Round-5 review P2: the queued failure handler unconditionally called
+      // _showCampaignPersistenceFailure() (which calls setState) when the
+      // generation matched. If the page was disposed while a delayed save was
+      // in flight and that save then failed, setState fired on a defunct
+      // State. The rollback must still run (it only mutates in-memory state),
+      // but UI feedback must be guarded by mounted.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Queue a stage-completion save that will fail.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      // Dispose the page while the save is still pending.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpAndSettle();
+
+      // Complete (and fail) the save after disposal. Without the mounted
+      // guard this throws a "setState() called after dispose()" assertion.
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+
+      // The rollback still ran: salvage-rift is not in the in-memory store.
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        isNot(contains('salvage-rift')),
+      );
+      expect(store.saveCalls, 1);
+    },
+  );
+
   testWidgets('stage replay save does not downgrade an existing medal', (
     tester,
   ) async {
@@ -952,6 +1012,100 @@ void main() {
       expect(
         store.progress.resultFor('asteroid-foundry'),
         const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+    },
+  );
+
+  testWidgets(
+    'two failing same-stage saves leave no stale result in memory (round-5 P2)',
+    (tester) async {
+      // Round-5 review P2: when two saves target the SAME stage and both fail,
+      // the rollback previously restored the captured optimistic priorResult
+      // instead of the committed disk state. Save A optimistically records
+      // Clear; save B optimistically improves it to Gold. Save A fails — its
+      // rollback sees Gold (B's optimistic) and correctly does nothing. Save B
+      // fails — its rollback restores priorResult, which was Clear (captured
+      // from A's optimistic update). The UI then treated the stage as cleared
+      // even though nothing was committed to disk. The fix restores
+      // _committedProgress.resultFor(stageId) so the resolved outcome of every
+      // earlier transaction is the rollback target.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+        failOnSaveIndices: {0, 1},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Queue two saves for the same stage: Clear then Gold. Both will fail.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 10,
+          ),
+        ),
+      );
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        ),
+      );
+
+      // Complete save 0 (Clear) — it fails; rollback sees Gold and does
+      // nothing.
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions[0].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+
+      // Complete save 1 (Gold) — it fails; rollback must restore the
+      // committed value (null), not the stale optimistic Clear.
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      // Nothing was committed to disk for salvage-rift.
+      expect(store.saveCalls, 2);
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        isNot(contains('salvage-rift')),
+      );
+
+      // Return to the map and verify the in-memory optimistic state was
+      // fully rolled back — the Rift stage shows "Open", not a stale
+      // "Clear" or "Gold". Use a descendant finder so other stages' Clear
+      // medals (outpost-alpha, nebula-relay) don't produce false positives.
+      game!.returnToMap();
+      await tester.pumpAndSettle();
+
+      final riftNode = find.ancestor(
+        of: find.text('Rift'),
+        matching: find.byType(InkWell),
+      );
+      expect(
+        find.descendant(of: riftNode, matching: find.text('Clear')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: riftNode, matching: find.text('Gold')),
+        findsNothing,
+      );
+      expect(
+        find.descendant(of: riftNode, matching: find.text('Open')),
+        findsOneWidget,
       );
     },
   );
@@ -1452,6 +1606,44 @@ void main() {
     expect(coreInkWell.onTap, isNull);
     expect(alphaInkWell.onTap, isNotNull);
   });
+
+  testWidgets(
+    'locked stage node is disabled while a save or reset is in flight',
+    (tester) async {
+      // Round-5 review P3: _StageNode._onTap previously checked isLocked
+      // before isBusy, so a locked node remained tappable during save/reset
+      // operations and could overwrite the "Saving…/Resetting…" breadcrumb
+      // with a locked-stage message. isBusy must take precedence so every
+      // node behaves consistently while the world map is disabled.
+      final selected = <String>[];
+      final locked = <String>[];
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: WorldMapView(
+              stages: OrionCampaign.stages,
+              progress: CampaignProgress(),
+              feedback: null,
+              isSavingProgress: true,
+              onStageSelected: (stage) => selected.add(stage.id),
+              onLockedStageSelected: (stage) => locked.add(stage.id),
+              onResetCampaign: () {},
+            ),
+          ),
+        ),
+      );
+
+      // Tapping a locked stage while busy must not fire either callback.
+      await tester.tap(find.text('Core'));
+      expect(selected, isEmpty);
+      expect(locked, isEmpty);
+
+      // The busy breadcrumb is preserved, not replaced by a locked message.
+      expect(find.text('Saving campaign progress…'), findsOneWidget);
+      expect(find.text('Singularity Core is locked.'), findsNothing);
+    },
+  );
 
   testWidgets(
     'selected tower panel shows targeting chips reflecting the current mode',
