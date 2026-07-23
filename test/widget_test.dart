@@ -957,6 +957,91 @@ void main() {
   );
 
   testWidgets(
+    'successful earlier queued save does not persist a later failing save '
+    '(round-4 P1)',
+    (tester) async {
+      // Round-4 review P1: optimistic mutations are applied to the shared
+      // _progress aggregate before their queued saves run. Previously each
+      // queued save wrote CampaignSave(progress: _progress, ...) — the
+      // aggregate at execution time — so an EARLIER successful save would
+      // persist a LATER transaction's mutation, and when the later save then
+      // failed and rolled back in memory, the mutation remained on disk.
+      // Reopening the app resurrected a result whose save reported failure.
+      //
+      // This test covers the later-save-fails ordering (the inverse of the
+      // P2b test above): save 0 (salvage-rift) succeeds, save 1
+      // (asteroid-foundry) fails. The fix builds each save's payload from
+      // committed disk state plus that save's own delta, so save 0 writes
+      // only salvage-rift; asteroid-foundry never reaches disk.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+        failOnSaveIndices: {1},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Queue two stage-completion saves synchronously. Save 0 (salvage-rift)
+      // will succeed; save 1 (asteroid-foundry) will fail.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('asteroid-foundry'),
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        ),
+      );
+
+      // Complete save 0 — it persists salvage-rift only (not asteroid-foundry).
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions[0].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+
+      // Complete save 1 — it fails and rolls asteroid-foundry back in memory.
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 2);
+      // salvage-rift (successful save) is on disk.
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        contains('salvage-rift'),
+      );
+      expect(
+        store.progress.resultFor('salvage-rift'),
+        const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      // asteroid-foundry (failed save) is NOT on disk — the earlier
+      // successful save must not have persisted it via the shared aggregate.
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        isNot(contains('asteroid-foundry')),
+      );
+      // The failure is surfaced to the player.
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'failed stage save rolls back only progress, not a later tech purchase',
     (tester) async {
       // Field-scoped rollback (HPA-100): a failed stage-completion save must
@@ -1111,6 +1196,15 @@ void main() {
         store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
         isTrue,
       );
+
+      // Round-4 review P2: the failed purchase also wrote the breadcrumb into
+      // _mapFeedback. Returning to the world map after the successful retry
+      // must NOT still show the stale failure.
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Orion Sector Map'), findsOneWidget);
+      expect(find.text('Could not save campaign progress.'), findsNothing);
     },
   );
 

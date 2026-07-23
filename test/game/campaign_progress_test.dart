@@ -374,11 +374,16 @@ void main() {
       });
 
       test('restores a prior result without touching other stages', () {
+        // Round-4 review P3: exercise the actual rollback direction — start
+        // from the optimistic (new) result and restore the original (prior)
+        // result via withResult. The previous setup started from gold and
+        // replaced it with clear, which only verified ordinary replacement,
+        // not rollback restoration.
         final progress = CampaignProgress(
           bestResultsByStageId: {
             'alpha': const StageResult(
-              medal: StageMedal.gold,
-              bestBaseHealth: 20,
+              medal: StageMedal.clear,
+              bestBaseHealth: 1,
             ),
             'relay': const StageResult(
               medal: StageMedal.silver,
@@ -389,12 +394,12 @@ void main() {
 
         final rolled = progress.withResult(
           'alpha',
-          const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
         );
 
         expect(
           rolled.resultFor('alpha'),
-          const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
         );
         expect(
           rolled.resultFor('relay'),
