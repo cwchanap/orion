@@ -14,6 +14,11 @@ import 'world_map_view.dart';
 
 enum _ShellView { worldMap, techTree, stage }
 
+/// Persistence-failure breadcrumb surfaced on both the active view and the
+/// world map. Hoisted to a top-level constant so retry paths can match and
+/// clear the stale map breadcrumb without re-string-literalizing it.
+const String _persistenceFailureMessage = 'Could not save campaign progress.';
+
 class OrionGamePage extends StatefulWidget {
   const OrionGamePage({
     super.key,
@@ -34,6 +39,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
   OrionDefenseGame? _game;
   CampaignProgress _progress = CampaignProgress();
   CampaignTechTree _techTree = CampaignTechTree();
+  // Last-known committed disk state. Queued saves compose their payload from
+  // this rather than the shared optimistic `_progress`/`_techTree` aggregate,
+  // so a later transaction's mutation cannot be persisted under an earlier
+  // save that subsequently fails (round-4 review P1). Advanced inside the
+  // save queue on each successful write; reset to empty on a successful reset.
+  CampaignProgress _committedProgress = CampaignProgress();
+  CampaignTechTree _committedTechTree = CampaignTechTree();
   CampaignProgressStore? _store;
   String? _mapFeedback;
   String? _techTreeFeedback;
@@ -78,6 +90,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _store = store;
         _progress = save.progress;
         _techTree = save.techTree;
+        _committedProgress = save.progress;
+        _committedTechTree = save.techTree;
         _isLoading = false;
       });
     } catch (_) {
@@ -89,6 +103,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _store = store;
         _progress = CampaignProgress();
         _techTree = CampaignTechTree();
+        _committedProgress = CampaignProgress();
+        _committedTechTree = CampaignTechTree();
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
       });
@@ -259,9 +275,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _techTreeFeedback = null;
       });
     }
+    // P2 (round-4 review): also clear the matching map breadcrumb. A failed
+    // purchase writes the persistence-failure message into _mapFeedback; the
+    // retry previously cleared only _techTreeFeedback, so returning to the
+    // world map after a successful retry still showed the stale error.
+    if (_mapFeedback == _persistenceFailureMessage) {
+      setState(() {
+        _mapFeedback = null;
+      });
+    }
     final newTechTree = _techTree.purchase(upgrade, _progress);
     await _persistSave(
       nextTechTree: newTechTree,
+      buildSave: (committed) => CampaignSave(
+        progress: committed.progress,
+        techTree: committed.techTree.purchase(upgrade, committed.progress),
+      ),
       rollback: () => _techTree = _techTree.withoutUpgrade(upgrade),
     );
   }
@@ -269,6 +298,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   Future<void> _persistSave({
     CampaignProgress? nextProgress,
     CampaignTechTree? nextTechTree,
+    required CampaignSave Function(CampaignSave committed) buildSave,
     required VoidCallback rollback,
   }) async {
     final store = _store;
@@ -279,8 +309,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     final saveGeneration = _progressGeneration;
 
-    // Optimistic update: scoped to provided fields. Bare assignment when
-    // unmounted so queued saves derive from the latest state (HPA-94 700cef1).
+    // Optimistic update: scoped to provided fields. Applied immediately so
+    // the UI reflects the change without waiting for the queued save to run.
     if (nextProgress != null) _progress = nextProgress;
     if (nextTechTree != null) _techTree = nextTechTree;
     _pendingSaves++;
@@ -288,20 +318,36 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     // Queue the COMPLETE transaction — persistence, targeted rollback, and
     // saving-state reconciliation — so the next writer cannot start until
-    // this one has committed or rolled back. Previously _saveQueue covered
-    // only store.save, letting a later writer's optimistic update be
-    // clobbered by an earlier writer's full-snapshot rollback (round-3
-    // review P2b). The targeted [rollback] closure undoes only this save's
-    // mutation, preserving concurrent optimistic updates to other
-    // stages/upgrades.
+    // this one has committed or rolled back.
+    //
+    // The persisted payload is built from the last-known committed disk state
+    // (_committed*), NOT from the shared optimistic _progress/_techTree
+    // aggregate. Reading the aggregate let an earlier successful save persist
+    // a later transaction's mutation: if saves A and B were queued
+    // synchronously, save A wrote A+B (the aggregate already held both
+    // optimistic updates), then save B failed and rolled B back in memory
+    // while B remained on disk — reopening the app resurrected a result whose
+    // save reported failure (round-4 review P1). Building from _committed*
+    // scopes each save's payload to its own delta; on success _committed*
+    // advances so the next queued save composes on top of it. A per-call
+    // snapshot would not suffice, because a later snapshot could still carry
+    // an earlier mutation that eventually fails.
     final saveTask = _saveQueue.then((_) async {
       try {
         if (saveGeneration != _progressGeneration) {
           return; // a reset invalidated this save; the reset owns wiping
         }
-        await store.save(
-          CampaignSave(progress: _progress, techTree: _techTree),
+        final payload = buildSave(
+          CampaignSave(
+            progress: _committedProgress,
+            techTree: _committedTechTree,
+          ),
         );
+        await store.save(payload);
+        if (saveGeneration == _progressGeneration) {
+          _committedProgress = payload.progress;
+          _committedTechTree = payload.techTree;
+        }
       } catch (_) {
         if (saveGeneration == _progressGeneration) {
           rollback();
@@ -330,7 +376,21 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
     return _persistSave(
       nextProgress: newProgress,
-      rollback: () => _progress = _progress.withResult(stageId, priorResult),
+      buildSave: (committed) => CampaignSave(
+        progress: committed.progress.recordResult(stageId, completion.result),
+        techTree: committed.techTree,
+      ),
+      rollback: () {
+        // Conditional rollback: only undo this save's result if it is still
+        // the current optimistic value for the stage. A later concurrent
+        // completion for the same stage (e.g. clear then gold) supersedes
+        // this one and owns its own rollback; unconditionally restoring the
+        // prior value onto the aggregate would erase the later result from
+        // the optimistic UI state (round-4 review P1 same-stage case).
+        if (_progress.resultFor(stageId) == completion.result) {
+          _progress = _progress.withResult(stageId, priorResult);
+        }
+      },
     );
   }
 
@@ -412,6 +472,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
       setState(() {
         _progress = CampaignProgress();
         _techTree = CampaignTechTree();
+        _committedProgress = CampaignProgress();
+        _committedTechTree = CampaignTechTree();
         _game = null;
         _activeView = _ShellView.worldMap;
         _mapFeedback = 'Campaign reset.';
@@ -456,7 +518,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   void _showCampaignPersistenceFailure() {
-    const message = 'Could not save campaign progress.';
+    const message = _persistenceFailureMessage;
     final game = _game;
     setState(() {
       _mapFeedback = message; // always; preserves HPA-94 breadcrumb behavior
