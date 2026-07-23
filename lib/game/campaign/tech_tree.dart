@@ -137,6 +137,17 @@ class CampaignTechTree {
     return CampaignTechTree(purchased: {..._purchased, upgrade});
   }
 
+  /// Returns a copy without [upgrade]. Used by the save-rollback path to undo
+  /// a single purchase without clobbering concurrent optimistic purchases.
+  CampaignTechTree withoutUpgrade(CampaignTechUpgrade upgrade) {
+    if (!_purchased.contains(upgrade)) {
+      return this;
+    }
+    final updated = Set<CampaignTechUpgrade>.from(_purchased);
+    updated.remove(upgrade);
+    return CampaignTechTree(purchased: updated);
+  }
+
   /// Sorted list of purchased ids; stable across enum reordering. Used by the
   /// codec encoder.
   List<String> toIdList() {

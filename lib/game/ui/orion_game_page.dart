@@ -41,7 +41,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
   bool _isLoading = true;
   int _progressGeneration = 0;
   Future<void> _saveQueue = Future<void>.value();
+  int _pendingSaves = 0;
   bool _isSavingProgress = false;
+  bool _isResetting = false;
 
   @override
   void initState() {
@@ -107,6 +109,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
           progress: _progress,
           techTree: _techTree,
           feedback: _techTreeFeedback,
+          isSavingProgress: _isSavingProgress,
           onPurchase: _purchaseTech,
           onBack: _closeTechTree,
         );
@@ -127,6 +130,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         ),
         feedback: _mapFeedback,
         isSavingProgress: _isSavingProgress,
+        isResetting: _isResetting,
         onStageSelected: _startStage,
         onLockedStageSelected: _showLockedStageFeedback,
         onResetCampaign: _confirmResetCampaign,
@@ -188,9 +192,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   void _startStage(StageDefinition stage) {
-    if (_isSavingProgress) {
+    if (_isSavingProgress || _isResetting) {
       setState(() {
-        _mapFeedback = 'Saving campaign progress…';
+        _mapFeedback = _isResetting
+            ? 'Resetting campaign…'
+            : 'Saving campaign progress…';
       });
       return;
     }
@@ -243,8 +249,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   // Invoked by TechTreeView purchase buttons.
   Future<void> _purchaseTech(CampaignTechUpgrade upgrade) async {
-    if (_isSavingProgress) {
-      return; // matches stage-launch guard
+    if (_isSavingProgress || _isResetting) {
+      return; // matches stage-launch guard; UI also disables the button
     }
     // Clear any prior failure feedback so a stale error doesn't persist
     // after the next successful purchase (tech-tree-design.md:395).
@@ -254,12 +260,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
       });
     }
     final newTechTree = _techTree.purchase(upgrade, _progress);
-    await _persistSave(nextTechTree: newTechTree);
+    await _persistSave(
+      nextTechTree: newTechTree,
+      rollback: () => _techTree = _techTree.withoutUpgrade(upgrade),
+    );
   }
 
   Future<void> _persistSave({
     CampaignProgress? nextProgress,
     CampaignTechTree? nextTechTree,
+    required VoidCallback rollback,
   }) async {
     final store = _store;
     if (store == null) {
@@ -268,66 +278,60 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     final saveGeneration = _progressGeneration;
-    final priorProgress = _progress;
-    final priorTechTree = _techTree;
 
     // Optimistic update: scoped to provided fields. Bare assignment when
     // unmounted so queued saves derive from the latest state (HPA-94 700cef1).
     if (nextProgress != null) _progress = nextProgress;
     if (nextTechTree != null) _techTree = nextTechTree;
-    _isSavingProgress = true;
-    if (mounted) {
-      setState(() {});
-    }
+    _pendingSaves++;
+    _setSavingProgress(true);
 
+    // Queue the COMPLETE transaction — persistence, targeted rollback, and
+    // saving-state reconciliation — so the next writer cannot start until
+    // this one has committed or rolled back. Previously _saveQueue covered
+    // only store.save, letting a later writer's optimistic update be
+    // clobbered by an earlier writer's full-snapshot rollback (round-3
+    // review P2b). The targeted [rollback] closure undoes only this save's
+    // mutation, preserving concurrent optimistic updates to other
+    // stages/upgrades.
     final saveTask = _saveQueue.then((_) async {
-      if (saveGeneration != _progressGeneration) {
-        return;
+      try {
+        if (saveGeneration != _progressGeneration) {
+          return; // a reset invalidated this save; the reset owns wiping
+        }
+        await store.save(
+          CampaignSave(progress: _progress, techTree: _techTree),
+        );
+      } catch (_) {
+        if (saveGeneration == _progressGeneration) {
+          rollback();
+          _showCampaignPersistenceFailure();
+        }
+      } finally {
+        _decrementPendingSaves();
       }
-      await store.save(CampaignSave(progress: _progress, techTree: _techTree));
     });
     _saveQueue = saveTask.catchError((_) {});
-
-    try {
-      await saveTask;
-      // Post-stale-save reset: if a reset happened during the save, the disk
-      // write may have landed with pre-reset data. Wipe the store to match
-      // the post-reset in-memory state.
-      if (saveGeneration != _progressGeneration) {
-        await _resetStoreAfterStaleSave(store);
-      }
-    } catch (_) {
-      if (!mounted || saveGeneration != _progressGeneration) {
-        return;
-      }
-      // Field-scoped rollback (HPA-100 spec round-2 issue #4): only restore
-      // the field(s) this save touched, so a failed stage save can't clobber
-      // a concurrent tech-purchase save's optimistic update.
-      if (nextProgress != null) _progress = priorProgress;
-      if (nextTechTree != null) _techTree = priorTechTree;
-      _showCampaignPersistenceFailure();
-    } finally {
-      if (saveGeneration == _progressGeneration) {
-        _isSavingProgress = false;
-        if (mounted) setState(() {});
-      }
-    }
   }
 
   Future<void> _saveStageCompletion(StageCompletion completion) {
-    final priorResult = _progress.resultFor(completion.stage.id);
-    final newProgress = _progress.recordResult(
-      completion.stage.id,
-      completion.result,
-    );
+    if (_isResetting) {
+      return Future<void>.value();
+    }
+    final stageId = completion.stage.id;
+    final priorResult = _progress.resultFor(stageId);
+    final newProgress = _progress.recordResult(stageId, completion.result);
     // recordResult returns the same instance when the new result is not an
     // improvement; compare the stored result for the stage (via StageResult.==)
     // so this no-op check survives a future recordResult implementation that
     // always allocates a fresh CampaignProgress.
-    if (newProgress.resultFor(completion.stage.id) == priorResult) {
+    if (newProgress.resultFor(stageId) == priorResult) {
       return Future<void>.value();
     }
-    return _persistSave(nextProgress: newProgress);
+    return _persistSave(
+      nextProgress: newProgress,
+      rollback: () => _progress = _progress.withResult(stageId, priorResult),
+    );
   }
 
   void _returnToMap() {
@@ -338,6 +342,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   Future<void> _confirmResetCampaign() async {
+    // Single-flight: a second reset while one is already in flight is ignored.
+    if (_isResetting) {
+      return;
+    }
+
     final shouldReset = await showDialog<bool>(
       context: context,
       builder: (context) {
@@ -362,8 +371,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    _isResetting = true;
+    if (mounted) {
+      setState(() {});
+    }
+
     final store = _store;
     if (store == null) {
+      _isResetting = false;
       if (!mounted) {
         return;
       }
@@ -374,53 +389,69 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    // Bump the generation BEFORE the reset so any in-flight save that
-    // completes during the await sees saveGeneration != _progressGeneration
-    // and triggers the post-stale-save reset (tech-tree-design.md:357).
-    // Roll the bump back if the reset fails — a failed reset means the
-    // campaign was not wiped, so in-flight saves should complete normally.
-    final priorGeneration = _progressGeneration;
-    _progressGeneration++;
+    // Serialize the reset with the save queue: wait for all pending saves to
+    // drain, then perform exactly one reset as the next queued operation.
+    // No save can interleave because stage launches and tech purchases are
+    // disabled while _isResetting is true. Generation bumps monotonically
+    // inside the queue (never rolled back) so any save that somehow queues
+    // during the drain sees the mismatch and skips its write — and a failed
+    // reset leaves the bumped generation in place harmlessly, since all
+    // pre-reset saves already completed during the drain (round-3 review P1).
+    final resetTask = _saveQueue.then((_) async {
+      _progressGeneration++;
+      await store.reset();
+    });
+    _saveQueue = resetTask.catchError((_) {});
 
     try {
-      await store.reset();
-    } catch (_) {
-      _progressGeneration = priorGeneration;
+      await resetTask;
       if (!mounted) {
         return;
       }
 
       setState(() {
+        _progress = CampaignProgress();
+        _techTree = CampaignTechTree();
+        _game = null;
+        _activeView = _ShellView.worldMap;
+        _mapFeedback = 'Campaign reset.';
+        _pendingSaves = 0;
+        _isSavingProgress = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      // Generation stays bumped (monotonic). All pre-reset saves completed
+      // during the drain, so no save is skipped. New saves capture the new
+      // generation and persist normally.
+      setState(() {
         _mapFeedback = 'Could not reset campaign progress.';
       });
-      return;
+    } finally {
+      _isResetting = false;
+      if (mounted) {
+        setState(() {});
+      }
     }
-
-    if (!mounted) {
-      return;
-    }
-
-    setState(() {
-      _progress = CampaignProgress();
-      _techTree = CampaignTechTree();
-      _game = null;
-      _activeView = _ShellView.worldMap;
-      _mapFeedback = 'Campaign reset.';
-      _isSavingProgress = false;
-    });
   }
 
-  Future<void> _resetStoreAfterStaleSave(CampaignProgressStore store) async {
-    try {
-      await store.reset();
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
+  void _setSavingProgress(bool value) {
+    if (_isSavingProgress == value) {
+      return;
+    }
+    _isSavingProgress = value;
+    if (mounted) {
+      setState(() {});
+    }
+  }
 
-      setState(() {
-        _mapFeedback = 'Could not reset campaign progress.';
-      });
+  void _decrementPendingSaves() {
+    _pendingSaves--;
+    if (_pendingSaves <= 0) {
+      _pendingSaves = 0;
+      _setSavingProgress(false);
     }
   }
 

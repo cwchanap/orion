@@ -702,69 +702,78 @@ void main() {
     expect(find.text('Could not save campaign progress.'), findsNothing);
   });
 
-  testWidgets('failed reset does not let pending clear save reset progress', (
-    tester,
-  ) async {
-    final store = _TestCampaignProgressStore(
-      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
-      delaySaves: true,
-      resetResults: [StateError('reset failed'), null],
-    );
-    OrionDefenseGame? game;
+  testWidgets(
+    'failed reset retains progress after a pending save drains (serialized)',
+    (tester) async {
+      // Round-3 review P1/P2: the reset is serialized behind the save queue.
+      // The pending save completes first (persisting its result), then the
+      // reset runs and fails. Progress — including the just-saved result —
+      // is retained. The generation bump is monotonic and never rolled back.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+        resetResults: [StateError('reset failed')],
+      );
+      OrionDefenseGame? game;
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
 
-    game!.onStageWon?.call(
-      StageCompletion(
-        stage: OrionCampaign.stageById('salvage-rift'),
-        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-      ),
-    );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    game!.returnToMap();
-    await tester.pumpAndSettle();
+      game!.returnToMap();
+      await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
-    await tester.pumpAndSettle();
+      // The Reset button is disabled while the save is in flight. Drain the
+      // pending save first, then trigger the reset.
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
 
-    expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+      await tester.tap(find.byTooltip('Reset Campaign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
 
-    store.saveCompletions.single.complete();
-    await tester.pumpAndSettle();
+      expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+      expect(store.resetCalls, 1);
+      expect(store.progress.bestResultsByStageId.keys, {
+        'outpost-alpha',
+        'nebula-relay',
+        'salvage-rift',
+      });
+      expect(
+        store.progress.resultFor('salvage-rift'),
+        const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+    },
+  );
 
-    expect(store.resetCalls, 1);
-    expect(store.progress.bestResultsByStageId.keys, {
-      'outpost-alpha',
-      'nebula-relay',
-      'salvage-rift',
-    });
-    expect(
-      store.progress.resultFor('salvage-rift'),
-      const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-    );
-  });
-
-  testWidgets('successful reset racing a pending save wipes stale disk data', (
+  testWidgets('successful reset after a pending save drains wipes the store', (
     tester,
   ) async {
-    // tech-tree-design.md:579 — start a save, then trigger reset. The
-    // in-flight save writes pre-reset data to disk; the post-stale-save
-    // reset (triggered by the generation mismatch) must wipe the store so
-    // a reload returns empty progress and empty tech tree.
+    // Round-3 review P1/P2: the reset is serialized behind the save queue.
+    // The pending save completes first (writing its data), then the reset
+    // runs and wipes the store. No post-stale-save cleanup is needed
+    // because the reset runs after — not racing with — the save.
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
       delaySaves: true,
@@ -793,8 +802,12 @@ void main() {
     );
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    // Return to map and reset while the save is still pending.
     game!.returnToMap();
+    await tester.pumpAndSettle();
+
+    // Drain the pending save first; the Reset button is disabled while
+    // the save is in flight.
+    store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Reset Campaign'));
@@ -803,14 +816,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Campaign reset.'), findsOneWidget);
-
-    // Complete the pending save — it writes pre-reset data to the store.
-    store.saveCompletions.single.complete();
-    await tester.pumpAndSettle();
-
-    // The post-stale-save reset must have wiped the store. A reload would
-    // return empty progress and empty tech tree.
-    expect(store.resetCalls, 2); // original reset + post-stale-save reset
+    expect(store.resetCalls, 1);
     expect(store.progress.bestResultsByStageId, isEmpty);
     expect(store.techTree.purchased, isEmpty);
   });
@@ -835,6 +841,120 @@ void main() {
     expect(find.text('Could not reset campaign progress.'), findsOneWidget);
     expect(find.text('Campaign reset.'), findsNothing);
   });
+
+  testWidgets('reset is single-flight: a second reset is blocked', (
+    tester,
+  ) async {
+    // Round-3 review P1: concurrent resets could move the generation
+    // backwards and resurrect stale progress. The reset is now
+    // single-flight — the Reset button is disabled while a reset is in
+    // flight, and a second programmatic call is a no-op.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+      delayResets: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reset Campaign'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    // The reset is now in flight (delayed). The Reset button must be
+    // disabled, so tapping it does nothing.
+    expect(store.resetCalls, 1);
+    expect(store.resetCompletions, isNotEmpty);
+
+    final resetButton = find.byTooltip('Reset Campaign');
+    await tester.tap(resetButton);
+    await tester.pumpAndSettle();
+
+    // No second reset was triggered.
+    expect(store.resetCalls, 1);
+
+    // Complete the in-flight reset.
+    store.resetCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Campaign reset.'), findsOneWidget);
+    expect(store.resetCalls, 1);
+  });
+
+  testWidgets(
+    'failed first queued save does not clobber a later queued save (P2b)',
+    (tester) async {
+      // Round-3 review P2b: _saveQueue previously covered only store.save,
+      // so a failed first save's full-snapshot rollback could overwrite a
+      // later save's optimistic update. With targeted rollback, the first
+      // save's failure removes only its own stage result; the second save's
+      // result survives and is persisted.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+
+      // Queue two stage-completion saves. The first (salvage-rift) will
+      // fail; the second (asteroid-foundry) should succeed.
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('salvage-rift'),
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        ),
+      );
+      game!.onStageWon?.call(
+        StageCompletion(
+          stage: OrionCampaign.stageById('asteroid-foundry'),
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        ),
+      );
+
+      // Complete the first save — it throws and rolls back salvage-rift only.
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions[0].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+
+      // Complete the second save — it persists asteroid-foundry.
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 2);
+      // salvage-rift was rolled back; asteroid-foundry survives.
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        contains('asteroid-foundry'),
+      );
+      expect(
+        store.progress.bestResultsByStageId.keys,
+        isNot(contains('salvage-rift')),
+      );
+      expect(
+        store.progress.resultFor('asteroid-foundry'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+    },
+  );
 
   testWidgets(
     'failed stage save rolls back only progress, not a later tech purchase',
@@ -1643,6 +1763,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     this.loadError,
     this.saveError,
     this.delaySaves = false,
+    this.delayResets = false,
     this.failOnSaveIndices = const {},
     this.resetResults = const [],
     CampaignProgress? progress,
@@ -1653,9 +1774,11 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
   final Object? loadError;
   final Object? saveError;
   final bool delaySaves;
+  final bool delayResets;
   final Set<int> failOnSaveIndices;
   final List<Object?> resetResults;
   final List<Completer<void>> saveCompletions = [];
+  final List<Completer<void>> resetCompletions = [];
   CampaignProgress progress;
   CampaignTechTree techTree;
   int saveCalls = 0;
@@ -1694,11 +1817,17 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
 
   @override
   Future<void> reset() async {
-    final result = resetCalls < resetResults.length
-        ? resetResults[resetCalls]
-        : null;
     resetCalls += 1;
 
+    if (delayResets) {
+      final completer = Completer<void>();
+      resetCompletions.add(completer);
+      await completer.future;
+    }
+
+    final result = resetCalls - 1 < resetResults.length
+        ? resetResults[resetCalls - 1]
+        : null;
     if (result != null) {
       throw result;
     }
