@@ -266,6 +266,55 @@ class EnemyStats {
   bool hasTrait(EnemyTrait trait) => traits.contains(trait);
 }
 
+enum BossSprite {
+  relayBreaker,
+  shieldMatriarch,
+  swarmQueen,
+  armoredExcavator,
+  regenWarden,
+  siegeCarrier,
+  singularityCore,
+}
+
+class BossDefinition extends EnemyStats {
+  const BossDefinition({
+    required super.health,
+    required super.speed,
+    required super.baseDamage,
+    required super.goldReward,
+    super.traits,
+    super.shieldHealth,
+    super.armorReduction,
+    super.regenPerSecond,
+    required this.sprite,
+    required this.name,
+    this.summonMechanic,
+  });
+
+  final BossSprite sprite;
+  final String name;
+  final SummonMechanic? summonMechanic;
+}
+
+class SummonMechanic {
+  const SummonMechanic({
+    required this.interval,
+    required this.minionStats,
+    this.firstDelay = 3.0,
+    this.count = 3,
+    this.maxActive = 9,
+  }) : assert(interval > 0, 'interval must be positive'),
+       assert(firstDelay >= 0, 'firstDelay must be non-negative'),
+       assert(count > 0, 'count must be positive'),
+       assert(maxActive >= 0, 'maxActive must be non-negative');
+
+  final double interval;
+  final EnemyStats minionStats;
+  final double firstDelay;
+  final int count;
+  final int maxActive;
+}
+
 class WaveGroup {
   const WaveGroup({
     required this.enemyCount,
