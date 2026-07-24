@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:flame/components.dart';
 
+import '../assets/game_boss_sheet.dart';
 import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
@@ -17,16 +18,23 @@ typedef EnemyReachedBaseCallback = void Function(EnemyComponent enemy);
 class EnemyComponent extends CircleComponent {
   EnemyComponent({
     required this.enemyId,
-    required this.stats,
+    required EnemyStats stats,
     required List<Vector2> waypoints,
     required this.onKilled,
     required this.onReachedBase,
     this.spriteSheet,
     this.towerVarietySheet,
+    this.bossSheet,
+    this.onSummonMinions,
+    this.minionOf,
+    this.initialCompletedDistance = 0,
     double radius = 11,
     super.priority,
-  }) : waypoints = List.unmodifiable(waypoints.map((point) => point.clone())),
+  }) : stats = stats,
+       waypoints = List.unmodifiable(waypoints.map((point) => point.clone())),
        health = stats.health,
+       _completedDistance = initialCompletedDistance,
+       _summonRemaining = _initialSummonDelay(stats),
        assert(
          waypoints.length >= 2,
          'EnemyComponent requires at least two waypoints',
@@ -45,6 +53,10 @@ class EnemyComponent extends CircleComponent {
   final EnemyReachedBaseCallback onReachedBase;
   final GameSpriteSheet? spriteSheet;
   final GameTowerVarietySheet? towerVarietySheet;
+  final GameBossSheet? bossSheet;
+  final void Function(EnemyComponent source, int count)? onSummonMinions;
+  final int? minionOf;
+  final double initialCompletedDistance;
 
   double health;
   late double shield = stats.shieldHealth;
@@ -52,13 +64,22 @@ class EnemyComponent extends CircleComponent {
   bool _isInspected = false;
   bool _isResolved = false;
   int _targetWaypointIndex = 1;
-  double _completedDistance = 0;
+  double _completedDistance;
   double _segmentProgress = 0;
   double _slowMultiplier = 1;
   double _slowRemaining = 0;
   double _corrosionDamagePerSecond = 0;
   double _corrosionRemaining = 0;
   double _armorShred = 0;
+  double _summonRemaining;
+
+  static double _initialSummonDelay(EnemyStats stats) {
+    if (stats is BossDefinition) {
+      final mechanic = stats.summonMechanic;
+      if (mechanic != null) return mechanic.firstDelay;
+    }
+    return 0;
+  }
 
   EnemyOverlayState? _cachedOverlayState;
   bool _overlayDirty = true;
@@ -89,6 +110,7 @@ class EnemyComponent extends CircleComponent {
         traits: stats.traits,
         isSlowed: isSlowed,
         isCorroded: isCorroded,
+        isBoss: stats is BossDefinition,
       ),
     );
     _cachedOverlayState = state;
@@ -99,6 +121,11 @@ class EnemyComponent extends CircleComponent {
   double get pathProgress {
     return _completedDistance + _currentSegmentLength * _segmentProgress;
   }
+
+  List<Vector2> residualWaypointsFromHere() => [
+    position.clone(),
+    ...waypoints.sublist(_targetWaypointIndex),
+  ];
 
   TargetCandidate get targetCandidate {
     return TargetCandidate(
@@ -190,11 +217,18 @@ class EnemyComponent extends CircleComponent {
 
   @override
   void render(Canvas canvas) {
-    final spriteSheet = this.spriteSheet;
-    if (spriteSheet == null) {
-      super.render(canvas);
-    } else {
-      spriteSheet
+    final bossDef = stats is BossDefinition ? stats as BossDefinition : null;
+    if (bossDef != null && bossSheet != null) {
+      bossSheet!
+          .sprite(bossDef.sprite)
+          .render(
+            canvas,
+            position: Vector2(radius, radius),
+            size: Vector2.all(radius * 2.4),
+            anchor: Anchor.center,
+          );
+    } else if (spriteSheet != null) {
+      spriteSheet!
           .sprite(GameSpriteSheet.spriteForEnemy(stats))
           .render(
             canvas,
@@ -202,6 +236,8 @@ class EnemyComponent extends CircleComponent {
             size: Vector2.all(radius * 2.4),
             anchor: Anchor.center,
           );
+    } else {
+      super.render(canvas);
     }
 
     _overlayRenderer.render(
@@ -209,6 +245,7 @@ class EnemyComponent extends CircleComponent {
       state: overlayState,
       radius: radius,
       towerVarietySheet: towerVarietySheet,
+      name: bossDef?.name,
     );
   }
 
@@ -228,6 +265,16 @@ class EnemyComponent extends CircleComponent {
 
     _moveAlongPath(dt, movementSlowMultiplier);
     _tickSlow(dt);
+
+    final bossDef = stats is BossDefinition ? stats as BossDefinition : null;
+    final mechanic = bossDef?.summonMechanic;
+    if (mechanic != null && onSummonMinions != null) {
+      _summonRemaining -= dt;
+      while (_summonRemaining <= 0) {
+        _summonRemaining += mechanic.interval;
+        onSummonMinions!(this, mechanic.count);
+      }
+    }
   }
 
   double get _currentSegmentLength {
