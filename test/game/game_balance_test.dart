@@ -1216,6 +1216,21 @@ void main() {
         same(GameBalance.enemyArchetype(EnemyArchetype.basicDrone)),
       );
     });
+
+    test('wave preview labels a boss by name', () {
+      final preview = GameBalance.wavePreview(
+        wave: WaveDefinition(
+          groups: [
+            WaveGroup(enemyCount: 1, enemyStats: GameBalance.relayBreaker),
+          ],
+          clearBonus: 0,
+        ),
+        waveNumber: 8,
+        waveTotal: 8,
+        unlockedTowerTypes: const [],
+      );
+      expect(preview.groups.last.label, 'Relay Breaker');
+    });
   });
 }
 

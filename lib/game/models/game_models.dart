@@ -905,6 +905,7 @@ class GameBalance {
   }
 
   static String _enemyLabelForStats(EnemyStats stats) {
+    if (stats is BossDefinition) return stats.name;
     if (identical(stats, _basicDrone)) {
       return 'Drones';
     }
