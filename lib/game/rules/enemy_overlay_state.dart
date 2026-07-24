@@ -21,6 +21,7 @@ class EnemyOverlayData {
     required Set<EnemyTrait> traits,
     required bool isSlowed,
     required bool isCorroded,
+    bool isBoss = false,
   }) {
     return EnemyOverlayData._(
       isResolved: isResolved,
@@ -32,6 +33,7 @@ class EnemyOverlayData {
       traits: Set.unmodifiable(traits),
       isSlowed: isSlowed,
       isCorroded: isCorroded,
+      isBoss: isBoss,
     );
   }
 
@@ -45,6 +47,7 @@ class EnemyOverlayData {
     required this.traits,
     required this.isSlowed,
     required this.isCorroded,
+    required this.isBoss,
   });
 
   final bool isResolved;
@@ -56,6 +59,7 @@ class EnemyOverlayData {
   final Set<EnemyTrait> traits;
   final bool isSlowed;
   final bool isCorroded;
+  final bool isBoss;
 
   EnemyOverlayData copyWith({
     bool? isResolved,
@@ -67,6 +71,7 @@ class EnemyOverlayData {
     Set<EnemyTrait>? traits,
     bool? isSlowed,
     bool? isCorroded,
+    bool? isBoss,
   }) {
     return EnemyOverlayData(
       isResolved: isResolved ?? this.isResolved,
@@ -78,6 +83,7 @@ class EnemyOverlayData {
       traits: traits ?? this.traits,
       isSlowed: isSlowed ?? this.isSlowed,
       isCorroded: isCorroded ?? this.isCorroded,
+      isBoss: isBoss ?? this.isBoss,
     );
   }
 }
@@ -152,7 +158,7 @@ class EnemyOverlayState {
         hasHighSignalTrait ||
         data.isSlowed ||
         data.isCorroded;
-    final shouldRender = data.isInspected || isNotable;
+    final shouldRender = data.isBoss || data.isInspected || isNotable;
     final allBadges = shouldRender
         ? _orderedBadges(
             traits: data.traits,
@@ -169,7 +175,8 @@ class EnemyOverlayState {
       healthRatio: healthRatio,
       shieldRatio: shieldRatio,
       showHealthBar:
-          shouldRender && (data.isInspected || isDamaged || hasShieldState),
+          shouldRender &&
+          (data.isBoss || data.isInspected || isDamaged || hasShieldState),
       showShieldBar: shouldRender && hasShieldState,
       badges: List.unmodifiable(allBadges.take(badgeLimit)),
     );

@@ -626,6 +626,45 @@ void main() {
         expect(inspected.shouldRender, isTrue);
         expect(inspected.badges, [EnemyOverlayBadge.swarm]);
       });
+
+      test('boss overlay always shows health bar at full health', () {
+        final state = EnemyOverlayState.fromData(
+          EnemyOverlayData(
+            isResolved: false,
+            isInspected: false,
+            health: 100,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: const {},
+            isSlowed: false,
+            isCorroded: false,
+            isBoss: true,
+          ),
+        );
+        expect(state.shouldRender, isTrue);
+        expect(state.showHealthBar, isTrue);
+      });
+
+      test(
+        'non-boss overlay renders nothing at full health with no traits',
+        () {
+          final state = EnemyOverlayState.fromData(
+            EnemyOverlayData(
+              isResolved: false,
+              isInspected: false,
+              health: 100,
+              maxHealth: 100,
+              shield: 0,
+              maxShield: 0,
+              traits: const {},
+              isSlowed: false,
+              isCorroded: false,
+            ),
+          );
+          expect(state.shouldRender, isFalse);
+        },
+      );
     });
 
     group('EnemyOverlayRenderer', () {
