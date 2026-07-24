@@ -924,6 +924,66 @@ void main() {
       expect(game.snapshot.startingBaseHealth, adjustedStartingHealth);
       expect(game.snapshot.gold, adjustedStartingGold);
     });
+
+    test(
+      'boss summons minions that path from its position and block completion',
+      () {
+        final game = OrionDefenseGame(stage: _bossSummonStage());
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        // Spawn the boss. firstDelay (0.5s) has not elapsed, so no summon yet
+        // and no concurrent-modification risk on this tick.
+        game.update(0.01);
+        game.processLifecycleEvents();
+
+        final boss = game.children.whereType<EnemyComponent>().single;
+        expect(boss.stats, isA<BossDefinition>());
+
+        // Advance the boss directly past firstDelay to trigger the summon.
+        // Calling boss.update() outside game.update()'s tree iteration avoids
+        // a concurrent-modification error when add() fires inside an
+        // unmounted unit test (same workaround the drone bay sell test uses
+        // for tower.update()).
+        boss.update(0.5 + 0.01);
+        game.processLifecycleEvents();
+
+        final minions = game.children
+            .whereType<EnemyComponent>()
+            .where((e) => e.minionOf == boss.enemyId)
+            .toList();
+        // Boss requests count=3 per trigger but maxActive=2 caps the spawn.
+        expect(minions, hasLength(2));
+        for (final minion in minions) {
+          expect(minion.pathProgress, closeTo(boss.pathProgress, 1e-6));
+        }
+
+        // Killing the boss leaves minions alive, blocking wave completion.
+        boss.applyDamage(boss.maxHealth);
+        game.processLifecycleEvents();
+        game.update(0.01);
+        game.processLifecycleEvents();
+
+        expect(
+          game.children.whereType<EnemyComponent>().where(
+            (e) => e.minionOf != null,
+          ),
+          isNotEmpty,
+        );
+        expect(game.snapshot.phase, GamePhase.wave);
+
+        // Clearing the minions completes the wave.
+        for (final minion
+            in game.children.whereType<EnemyComponent>().toList()) {
+          minion.applyDamage(minion.maxHealth);
+        }
+        game.processLifecycleEvents();
+        game.update(0.01);
+        game.processLifecycleEvents();
+
+        expect(game.children.whereType<EnemyComponent>(), isEmpty);
+        expect(game.snapshot.phase, GamePhase.build);
+      },
+    );
   });
 }
 
@@ -1053,6 +1113,59 @@ StageDefinition _twoEnemyImmediateSpawnStage() {
         ],
         clearBonus: 0,
       ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _bossSummonStage() {
+  return StageDefinition(
+    id: 'boss-summon-stage',
+    name: 'Boss Summon Stage',
+    mapLabel: 'Boss',
+    description: 'Stage with a summoning boss for minion spawn tests',
+    pathCells: const [
+      GridPosition(0, 0),
+      GridPosition(1, 0),
+      GridPosition(2, 0),
+      GridPosition(3, 0),
+      GridPosition(4, 0),
+    ],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 1,
+            enemyStats: BossDefinition(
+              health: 5000,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 0,
+              sprite: BossSprite.swarmQueen,
+              name: 'Swarm Queen',
+              summonMechanic: SummonMechanic(
+                interval: 100,
+                firstDelay: 0.5,
+                count: 3,
+                maxActive: 2,
+                minionStats: EnemyStats(
+                  health: 50,
+                  speed: 10,
+                  baseDamage: 1,
+                  goldReward: 0,
+                ),
+              ),
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+      // A trailing empty wave so clearing the boss wave lands in build phase.
+      WaveDefinition(groups: [], clearBonus: 0),
     ],
     unlockDependencies: const [],
     isMainPath: true,

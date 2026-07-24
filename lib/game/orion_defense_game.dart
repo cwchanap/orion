@@ -6,6 +6,7 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
+import 'assets/game_boss_sheet.dart';
 import 'assets/game_path_tiles.dart';
 import 'assets/game_sprite_sheet.dart';
 import 'assets/game_tower_variety_sheet.dart';
@@ -84,6 +85,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   GamePathTiles? _pathTiles;
   GameSpriteSheet? _spriteSheet;
   GameTowerVarietySheet? _towerVarietySheet;
+  GameBossSheet? _bossSheet;
   Image? _terrainImage;
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
@@ -104,6 +106,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _pathTiles = await GamePathTiles.load(images);
     _spriteSheet = await GameSpriteSheet.load(images);
     _towerVarietySheet = await GameTowerVarietySheet.load(images);
+    _bossSheet = await GameBossSheet.load(images);
     _layoutBoard(size);
     _publishSnapshot();
   }
@@ -649,12 +652,48 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _spawnEnemy(EnemyStats stats) {
+    final bossDef = stats is BossDefinition ? stats : null;
     final enemy = EnemyComponent(
       enemyId: _nextEnemyId,
       stats: stats,
       waypoints: _pathWaypoints(),
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
+      bossSheet: _bossSheet,
+      onKilled: _handleEnemyKilled,
+      onReachedBase: _handleEnemyReachedBase,
+      onSummonMinions: bossDef == null ? null : _handleSummonMinions,
+      radius: bossDef == null ? 11 : 20,
+      priority: 20,
+    );
+    _nextEnemyId += 1;
+    _activeEnemyComponents[enemy.enemyId] = enemy;
+    add(enemy);
+  }
+
+  void _handleSummonMinions(EnemyComponent source, int count) {
+    final mechanic = (source.stats as BossDefinition).summonMechanic;
+    if (mechanic == null) return;
+    final active = _activeEnemyComponents.values
+        .where((e) => e.minionOf == source.enemyId && e.isAlive)
+        .length;
+    final toSpawn = math.max(0, math.min(count, mechanic.maxActive - active));
+    for (var i = 0; i < toSpawn; i++) {
+      _spawnMinion(source, mechanic.minionStats);
+    }
+  }
+
+  void _spawnMinion(EnemyComponent boss, EnemyStats stats) {
+    final residual = boss.residualWaypointsFromHere();
+    if (residual.length < 2) return; // boss effectively at base; skip
+    final enemy = EnemyComponent(
+      enemyId: _nextEnemyId,
+      stats: stats,
+      waypoints: residual,
+      initialCompletedDistance: boss.pathProgress,
+      spriteSheet: _spriteSheet,
+      towerVarietySheet: _towerVarietySheet,
+      minionOf: boss.enemyId,
       onKilled: _handleEnemyKilled,
       onReachedBase: _handleEnemyReachedBase,
       priority: 20,
