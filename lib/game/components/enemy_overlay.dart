@@ -1,6 +1,5 @@
-import 'dart:ui';
-
 import 'package:flame/components.dart';
+import 'package:flutter/painting.dart';
 
 import '../assets/game_tower_variety_sheet.dart';
 import '../rules/enemy_overlay_state.dart';
@@ -27,6 +26,7 @@ class EnemyOverlayRenderer {
     required EnemyOverlayState state,
     required double radius,
     GameTowerVarietySheet? towerVarietySheet,
+    String? name,
   }) {
     if (!state.shouldRender) {
       return;
@@ -73,6 +73,23 @@ class EnemyOverlayRenderer {
         height: layout.shieldBarHeight,
         ratio: state.shieldRatio,
         fillPaint: _shieldPaint,
+      );
+    }
+
+    final label = name;
+    if (label != null) {
+      final tp = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 12),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      // originY is component-local (negative = above center); draw the label
+      // just above the overlay's top edge.
+      tp.paint(
+        canvas,
+        Offset(radius - tp.width / 2, layout.originY - tp.height - 2),
       );
     }
   }
