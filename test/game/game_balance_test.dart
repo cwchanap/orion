@@ -1126,6 +1126,40 @@ void main() {
       expect(cooled.damage, base.damage);
     });
   });
+
+  group('SummonMechanic', () {
+    test('rejects non-positive interval', () {
+      expect(
+        () => SummonMechanic(
+          interval: 0,
+          minionStats: const EnemyStats(
+            health: 1,
+            speed: 1,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+        ),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+
+    test('rejects negative firstDelay and non-positive count', () {
+      const stats = EnemyStats(
+        health: 1,
+        speed: 1,
+        baseDamage: 1,
+        goldReward: 1,
+      );
+      expect(
+        () => SummonMechanic(interval: 1, minionStats: stats, firstDelay: -1),
+        throwsA(isA<AssertionError>()),
+      );
+      expect(
+        () => SummonMechanic(interval: 1, minionStats: stats, count: 0),
+        throwsA(isA<AssertionError>()),
+      );
+    });
+  });
 }
 
 class _ExpectedTowerCosts {
