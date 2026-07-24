@@ -1160,6 +1160,63 @@ void main() {
       );
     });
   });
+
+  group('BossDefinition constants', () {
+    test('defines seven bosses in stage order', () {
+      expect(GameBalance.bosses, hasLength(7));
+      expect(GameBalance.bosses.map((b) => b.sprite), BossSprite.values);
+    });
+
+    test('only Relay Breaker has a summon mechanic', () {
+      final summoners = GameBalance.bosses.where(
+        (b) => b.summonMechanic != null,
+      );
+      expect(summoners, hasLength(1));
+      expect(summoners.single.name, 'Relay Breaker');
+    });
+
+    test('Relay Breaker pairs shield and armor with their traits', () {
+      final boss = GameBalance.relayBreaker;
+      expect(boss.shieldHealth, greaterThan(0));
+      expect(boss.traits, contains(EnemyTrait.shielded));
+      expect(boss.traits, contains(EnemyTrait.armored));
+      expect(boss.traits, contains(EnemyTrait.heavy));
+    });
+
+    test('every defense is paired with its trait', () {
+      for (final boss in GameBalance.bosses) {
+        if (boss.shieldHealth > 0) {
+          expect(
+            boss.traits,
+            contains(EnemyTrait.shielded),
+            reason: '${boss.name} has shield without shielded trait',
+          );
+        }
+        if (boss.armorReduction > 0) {
+          expect(
+            boss.traits,
+            contains(EnemyTrait.armored),
+            reason: '${boss.name} has armor without armored trait',
+          );
+        }
+        if (boss.regenPerSecond > 0) {
+          expect(
+            boss.traits,
+            contains(EnemyTrait.regen),
+            reason: '${boss.name} has regen without regen trait',
+          );
+        }
+      }
+    });
+
+    test('Relay Breaker summons basic drones', () {
+      final minionStats = GameBalance.relayBreaker.summonMechanic!.minionStats;
+      expect(
+        minionStats,
+        same(GameBalance.enemyArchetype(EnemyArchetype.basicDrone)),
+      );
+    });
+  });
 }
 
 class _ExpectedTowerCosts {

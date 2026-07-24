@@ -589,6 +589,92 @@ class GameBalance {
     regenPerSecond: 3.0,
   );
 
+  static const BossDefinition relayBreaker = BossDefinition(
+    name: 'Relay Breaker',
+    sprite: BossSprite.relayBreaker,
+    health: 640,
+    speed: 46,
+    baseDamage: 4,
+    goldReward: 120,
+    traits: {EnemyTrait.armored, EnemyTrait.shielded, EnemyTrait.heavy},
+    armorReduction: 0.40,
+    shieldHealth: 100,
+    summonMechanic: SummonMechanic(
+      interval: 8.0,
+      firstDelay: 4.0,
+      count: 3,
+      maxActive: 9,
+      minionStats: _basicDrone,
+    ),
+  );
+  static const BossDefinition shieldMatriarch = BossDefinition(
+    name: 'Shield Matriarch',
+    sprite: BossSprite.shieldMatriarch,
+    health: 520,
+    speed: 50,
+    baseDamage: 4,
+    goldReward: 120,
+    traits: {EnemyTrait.shielded, EnemyTrait.heavy},
+    shieldHealth: 200,
+  );
+  static const BossDefinition swarmQueen = BossDefinition(
+    name: 'Swarm Queen',
+    sprite: BossSprite.swarmQueen,
+    health: 480,
+    speed: 52,
+    baseDamage: 3,
+    goldReward: 110,
+    traits: {EnemyTrait.swarm, EnemyTrait.regen},
+    regenPerSecond: 4.0,
+  );
+  static const BossDefinition armoredExcavator = BossDefinition(
+    name: 'Armored Excavator',
+    sprite: BossSprite.armoredExcavator,
+    health: 700,
+    speed: 44,
+    baseDamage: 4,
+    goldReward: 130,
+    traits: {EnemyTrait.armored, EnemyTrait.heavy},
+    armorReduction: 0.45,
+  );
+  static const BossDefinition regenWarden = BossDefinition(
+    name: 'Regen Warden',
+    sprite: BossSprite.regenWarden,
+    health: 560,
+    speed: 48,
+    baseDamage: 4,
+    goldReward: 120,
+    traits: {EnemyTrait.regen, EnemyTrait.heavy},
+    regenPerSecond: 6.0,
+  );
+  static const BossDefinition siegeCarrier = BossDefinition(
+    name: 'Siege Carrier',
+    sprite: BossSprite.siegeCarrier,
+    health: 800,
+    speed: 42,
+    baseDamage: 5,
+    goldReward: 140,
+    traits: {EnemyTrait.armored, EnemyTrait.heavy},
+    armorReduction: 0.35,
+  );
+  static const BossDefinition singularityCore = BossDefinition(
+    name: 'Singularity Core',
+    sprite: BossSprite.singularityCore,
+    health: 900,
+    speed: 40,
+    baseDamage: 5,
+    goldReward: 150,
+    traits: {
+      EnemyTrait.armored,
+      EnemyTrait.shielded,
+      EnemyTrait.regen,
+      EnemyTrait.heavy,
+    },
+    armorReduction: 0.40,
+    shieldHealth: 150,
+    regenPerSecond: 5.0,
+  );
+
   static const List<WaveDefinition> waves = [
     WaveDefinition(
       groups: [
@@ -758,6 +844,16 @@ class GameBalance {
       EnemyArchetype.regenHeavyDrone => _regenHeavyDrone,
     };
   }
+
+  static List<BossDefinition> get bosses => const [
+    relayBreaker,
+    shieldMatriarch,
+    swarmQueen,
+    armoredExcavator,
+    regenWarden,
+    siegeCarrier,
+    singularityCore,
+  ];
 
   static WavePreview wavePreview({
     required WaveDefinition wave,
