@@ -203,6 +203,28 @@ class OrionCampaign {
           errors.add('${stage.id} path is not continuous at index $index.');
         }
       }
+      final bossGroups = <int>[];
+      for (var w = 0; w < stage.waves.length; w++) {
+        for (final g in stage.waves[w].groups) {
+          if (g.enemyStats is BossDefinition) bossGroups.add(w);
+        }
+      }
+      if (bossGroups.length != 1) {
+        errors.add(
+          '${stage.id} must have exactly one boss group; found ${bossGroups.length}.',
+        );
+      } else if (bossGroups.single != stage.waves.length - 1) {
+        errors.add('${stage.id} boss must be in the final wave.');
+      } else {
+        final lastGroup = stage.waves.last.groups.last;
+        if (lastGroup.enemyStats is! BossDefinition) {
+          errors.add(
+            '${stage.id} boss must be the final group of the final wave.',
+          );
+        } else if (lastGroup.enemyCount != 1) {
+          errors.add('${stage.id} boss group must have enemyCount 1.');
+        }
+      }
     }
 
     return List.unmodifiable(errors);
@@ -413,7 +435,7 @@ final _nebulaRelayWaves = _waves([
   _group(10, EnemyArchetype.shieldedDrone),
   _group(8, EnemyArchetype.regenDrone),
   _group(6, EnemyArchetype.regenHeavyDrone),
-]);
+], finaleBoss: GameBalance.shieldMatriarch);
 
 final _asteroidFoundryWaves = _waves([
   _group(8, EnemyArchetype.basicDrone),
@@ -424,7 +446,7 @@ final _asteroidFoundryWaves = _waves([
   _group(10, EnemyArchetype.armoredDrone),
   _group(8, EnemyArchetype.armoredHeavyDrone),
   _group(10, EnemyArchetype.armoredHeavyDrone),
-]);
+], finaleBoss: GameBalance.armoredExcavator);
 
 final _auroraGateWaves = _waves([
   _group(8, EnemyArchetype.basicDrone),
@@ -435,7 +457,7 @@ final _auroraGateWaves = _waves([
   _group(8, EnemyArchetype.regenDrone),
   _group(8, EnemyArchetype.armoredHeavyDrone),
   _group(6, EnemyArchetype.regenHeavyDrone),
-]);
+], finaleBoss: GameBalance.regenWarden);
 
 final _singularityCoreWaves = _waves([
   _group(10, EnemyArchetype.basicDrone),
@@ -446,7 +468,7 @@ final _singularityCoreWaves = _waves([
   _group(8, EnemyArchetype.armoredHeavyDrone),
   _group(10, EnemyArchetype.shieldedDrone),
   _group(6, EnemyArchetype.regenHeavyDrone),
-]);
+], finaleBoss: GameBalance.singularityCore);
 
 final _salvageRiftWaves = _waves([
   _group(14, EnemyArchetype.swarmDrone),
@@ -457,7 +479,7 @@ final _salvageRiftWaves = _waves([
   _group(8, EnemyArchetype.regenDrone),
   _group(10, EnemyArchetype.swarmDrone),
   _group(6, EnemyArchetype.heavyDrone),
-]);
+], finaleBoss: GameBalance.swarmQueen);
 
 final _voidBastionWaves = _waves([
   _group(6, EnemyArchetype.armoredDrone),
@@ -468,14 +490,29 @@ final _voidBastionWaves = _waves([
   _group(6, EnemyArchetype.regenHeavyDrone),
   _group(10, EnemyArchetype.armoredHeavyDrone),
   _group(8, EnemyArchetype.regenHeavyDrone),
-]);
+], finaleBoss: GameBalance.siegeCarrier);
 
-List<WaveDefinition> _waves(List<WaveGroup> singleGroups) {
+List<WaveDefinition> _waves(
+  List<WaveGroup> singleGroups, {
+  BossDefinition? finaleBoss,
+  double bossInitialDelay = 2.5,
+}) {
   const clearBonuses = [30, 40, 50, 65, 80, 95, 115, 0];
   return List.unmodifiable([
     for (var index = 0; index < singleGroups.length; index += 1)
       WaveDefinition(
-        groups: List.unmodifiable([singleGroups[index]]),
+        groups: List.unmodifiable(
+          index == singleGroups.length - 1 && finaleBoss != null
+              ? [
+                  singleGroups[index],
+                  WaveGroup(
+                    enemyCount: 1,
+                    enemyStats: finaleBoss,
+                    initialDelay: bossInitialDelay,
+                  ),
+                ]
+              : [singleGroups[index]],
+        ),
         clearBonus: clearBonuses[index],
       ),
   ]);

@@ -707,7 +707,7 @@ void main() {
           _ExpectedWave(enemyCount: 24, clearBonus: 80),
           _ExpectedWave(enemyCount: 22, clearBonus: 95),
           _ExpectedWave(enemyCount: 28, clearBonus: 115),
-          _ExpectedWave(enemyCount: 46, clearBonus: 0),
+          _ExpectedWave(enemyCount: 47, clearBonus: 0),
         ];
 
         expect(GameBalance.waves, hasLength(expectedWaves.length));
@@ -756,6 +756,7 @@ void main() {
           _ExpectedWaveGroup(EnemyArchetype.armoredDrone, 8, 1.00),
           _ExpectedWaveGroup(EnemyArchetype.swarmDrone, 18, 0.35),
           _ExpectedWaveGroup(EnemyArchetype.regenHeavyDrone, 4, 1.30),
+          _ExpectedWaveGroup.boss(GameBalance.relayBreaker, 1, 2.5),
         ],
       ];
 
@@ -766,14 +767,19 @@ void main() {
         expect(wave.groups, hasLength(expectedGroups.length));
         for (final (groupIndex, expectedGroup) in expectedGroups.indexed) {
           final group = wave.groups[groupIndex];
-          final enemyStats = GameBalance.enemyArchetype(
-            expectedGroup.archetype,
-          );
 
           expect(group.enemyCount, expectedGroup.enemyCount);
-          expect(group.enemyStats, enemyStats);
-          expect(group.spawnInterval, expectedGroup.spawnInterval);
-          expect(group.initialDelay, 0);
+          if (expectedGroup.boss != null) {
+            expect(group.enemyStats, expectedGroup.boss);
+            expect(group.initialDelay, expectedGroup.initialDelay);
+          } else {
+            final enemyStats = GameBalance.enemyArchetype(
+              expectedGroup.archetype,
+            );
+            expect(group.enemyStats, enemyStats);
+            expect(group.spawnInterval, expectedGroup.spawnInterval);
+            expect(group.initialDelay, 0);
+          }
         }
       }
 
@@ -1350,9 +1356,17 @@ class _ExpectedWave {
 }
 
 class _ExpectedWaveGroup {
-  const _ExpectedWaveGroup(this.archetype, this.enemyCount, this.spawnInterval);
+  const _ExpectedWaveGroup(this.archetype, this.enemyCount, this.spawnInterval)
+    : boss = null,
+      initialDelay = 0;
+
+  const _ExpectedWaveGroup.boss(this.boss, this.enemyCount, this.initialDelay)
+    : archetype = EnemyArchetype.basicDrone,
+      spawnInterval = 0;
 
   final EnemyArchetype archetype;
+  final BossDefinition? boss;
   final int enemyCount;
   final double spawnInterval;
+  final double initialDelay;
 }
