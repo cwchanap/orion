@@ -788,6 +788,33 @@ void main() {
           }
         },
       );
+
+      test('EnemyOverlayRenderer.render accepts and draws a boss name', () {
+        final recorder = ui.PictureRecorder();
+        final canvas = ui.Canvas(recorder);
+        final renderer = EnemyOverlayRenderer();
+        final state = EnemyOverlayState.fromData(
+          EnemyOverlayData(
+            isResolved: false,
+            isBoss: true,
+            health: 100,
+            maxHealth: 100,
+            shield: 0,
+            maxShield: 0,
+            traits: const {},
+            isSlowed: false,
+            isCorroded: false,
+          ),
+        );
+        // Must not throw; the name is drawn above the layout origin.
+        renderer.render(
+          canvas,
+          state: state,
+          radius: 20,
+          name: 'Relay Breaker',
+        );
+        expect(recorder.endRecording(), isNotNull);
+      });
     });
 
     group('EnemyComponent.render', () {
