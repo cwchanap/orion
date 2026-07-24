@@ -108,6 +108,80 @@ void main() {
       );
     });
 
+    test('every stage wave 8 ends in a single boss with enemyCount 1', () {
+      for (final stage in OrionCampaign.stages) {
+        final wave = stage.waves.last;
+        expect(wave.groups, isNotEmpty);
+        final last = wave.groups.last;
+        expect(
+          last.enemyStats,
+          isA<BossDefinition>(),
+          reason: '${stage.id} wave 8 must end in a boss',
+        );
+        expect(
+          last.enemyCount,
+          1,
+          reason: '${stage.id} boss group must be count 1',
+        );
+        for (var i = 0; i < wave.groups.length - 1; i++) {
+          expect(
+            wave.groups[i].enemyStats,
+            isNot(isA<BossDefinition>()),
+            reason: '${stage.id} has a non-final boss group',
+          );
+        }
+        for (var w = 0; w < stage.waves.length - 1; w++) {
+          for (final g in stage.waves[w].groups) {
+            expect(
+              g.enemyStats,
+              isNot(isA<BossDefinition>()),
+              reason: '${stage.id} has a boss before wave 8',
+            );
+          }
+        }
+      }
+    });
+
+    test('validation rejects a stage whose final wave has no boss', () {
+      final bosslessWaves = List<WaveDefinition>.generate(
+        8,
+        (_) => WaveDefinition(
+          groups: [
+            WaveGroup(
+              enemyCount: 1,
+              enemyStats: GameBalance.enemyArchetype(EnemyArchetype.basicDrone),
+            ),
+          ],
+          clearBonus: 0,
+        ),
+      );
+
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5, waves: bosslessWaves),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(
+        errors,
+        contains('stage-5 must have exactly one boss group; found 0.'),
+      );
+    });
+
     test('validation returns no errors for shipped campaign data', () {
       expect(OrionCampaign.validate(), isEmpty);
     });
@@ -240,6 +314,7 @@ StageDefinition _stage({
   bool isMainPath = true,
   int? mainPathOrder,
   CampaignReward? reward,
+  List<WaveDefinition>? waves,
 }) {
   return StageDefinition(
     id: id,
@@ -247,7 +322,7 @@ StageDefinition _stage({
     mapLabel: id,
     description: id,
     pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
-    waves: GameBalance.waves,
+    waves: waves ?? GameBalance.waves,
     isMainPath: isMainPath,
     mainPathOrder: mainPathOrder,
     reward: reward,

@@ -778,6 +778,7 @@ class GameBalance {
           enemyStats: _regenHeavyDrone,
           spawnInterval: 1.30,
         ),
+        WaveGroup(enemyCount: 1, enemyStats: relayBreaker, initialDelay: 2.5),
       ],
       clearBonus: 0,
     ),
