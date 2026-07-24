@@ -344,6 +344,73 @@ void main() {
       expect(identical(enemy.overlayState, afterMutation), isTrue);
     });
 
+    test('summon callback fires after firstDelay then every interval', () {
+      final sources = <EnemyComponent>[];
+      final counts = <int>[];
+      final boss = EnemyComponent(
+        enemyId: 1,
+        stats: GameBalance.relayBreaker,
+        waypoints: [Vector2(0, 0), Vector2(10000, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+        onSummonMinions: (source, count) {
+          sources.add(source);
+          counts.add(count);
+        },
+      );
+      // firstDelay = 4.0
+      boss.update(4.0);
+      expect(counts, [3]);
+      boss.update(8.0);
+      expect(counts, [3, 3]);
+      expect(sources.first, same(boss));
+    });
+
+    test('data-slot boss never summons', () {
+      var fired = 0;
+      final boss = EnemyComponent(
+        enemyId: 1,
+        stats: GameBalance.shieldMatriarch,
+        waypoints: [Vector2(0, 0), Vector2(10000, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+        onSummonMinions: (_, _) => fired += 1,
+      );
+      boss.update(100);
+      expect(fired, 0);
+    });
+
+    test('residualWaypointsFromHere starts at current position', () {
+      final boss = EnemyComponent(
+        enemyId: 1,
+        stats: GameBalance.relayBreaker,
+        waypoints: [Vector2(0, 0), Vector2(10000, 0), Vector2(10000, 10)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+      boss.update(1.0); // moves ~46 units along x, clamped to path
+      final residual = boss.residualWaypointsFromHere();
+      expect(residual.first, equals(boss.position));
+      expect(residual.length, greaterThanOrEqualTo(2));
+    });
+
+    test('initialCompletedDistance seeds pathProgress', () {
+      final boss = EnemyComponent(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 10,
+          speed: 0,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        waypoints: [Vector2(0, 0), Vector2(100, 0)],
+        initialCompletedDistance: 50,
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+      expect(boss.pathProgress, closeTo(50, 0.001));
+    });
+
     group('EnemyOverlayState', () {
       test('overlay data defensively copies traits', () {
         final traits = {EnemyTrait.armored};
