@@ -142,6 +142,28 @@ void main() {
       }
     });
 
+    test('each stage wave-8 boss maps to its approved BossSprite', () {
+      const expected = <String, BossSprite>{
+        'outpost-alpha': BossSprite.relayBreaker,
+        'nebula-relay': BossSprite.shieldMatriarch,
+        'salvage-rift': BossSprite.swarmQueen,
+        'asteroid-foundry': BossSprite.armoredExcavator,
+        'aurora-gate': BossSprite.regenWarden,
+        'void-bastion': BossSprite.siegeCarrier,
+        'singularity-core': BossSprite.singularityCore,
+      };
+
+      for (final stage in OrionCampaign.stages) {
+        final boss = stage.waves.last.groups.last.enemyStats;
+        expect(boss, isA<BossDefinition>(), reason: stage.id);
+        expect(
+          (boss as BossDefinition).sprite,
+          expected[stage.id],
+          reason: '${stage.id} boss sprite mismatch',
+        );
+      }
+    });
+
     test('validation rejects a stage whose final wave has no boss', () {
       final bosslessWaves = List<WaveDefinition>.generate(
         8,
@@ -179,6 +201,124 @@ void main() {
       expect(
         errors,
         contains('stage-5 must have exactly one boss group; found 0.'),
+      );
+    });
+
+    test('validation rejects a boss that is not the final wave-8 group', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(
+          id: 'stage-5',
+          mainPathOrder: 5,
+          waves: _bossShapedWaves(bossLastInWave: false),
+        ),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(
+        errors,
+        contains('stage-5 boss must be the final group of the final wave.'),
+      );
+    });
+
+    test('validation rejects a boss placed before the final wave', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(
+          id: 'stage-5',
+          mainPathOrder: 5,
+          waves: _bossShapedWaves(bossWaveIndex: 6),
+        ),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(errors, contains('stage-5 boss must be in the final wave.'));
+    });
+
+    test('validation rejects a boss group whose enemyCount is not 1', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(
+          id: 'stage-5',
+          mainPathOrder: 5,
+          waves: _bossShapedWaves(bossEnemyCount: 2),
+        ),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(errors, contains('stage-5 boss group must have enemyCount 1.'));
+    });
+
+    test('validation rejects a wave-8 with more than one boss group', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(
+          id: 'stage-5',
+          mainPathOrder: 5,
+          waves: _bossShapedWaves(bossCount: 2),
+        ),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(
+        errors,
+        contains('stage-5 must have exactly one boss group; found 2.'),
       );
     });
 
@@ -329,4 +469,33 @@ StageDefinition _stage({
     mapColumn: mainPathOrder ?? 0,
     mapRow: isMainPath ? 1 : 0,
   );
+}
+
+List<WaveDefinition> _bossShapedWaves({
+  int bossWaveIndex = 7,
+  int bossEnemyCount = 1,
+  bool bossLastInWave = true,
+  int bossCount = 1,
+}) {
+  final normalStats = GameBalance.enemyArchetype(EnemyArchetype.basicDrone);
+  WaveGroup normalGroup() => WaveGroup(enemyCount: 4, enemyStats: normalStats);
+  WaveGroup bossGroup() => WaveGroup(
+    enemyCount: bossEnemyCount,
+    enemyStats: GameBalance.relayBreaker,
+  );
+  final waves = <WaveDefinition>[];
+  for (var w = 0; w < 8; w += 1) {
+    final groups = <WaveGroup>[normalGroup()];
+    if (w == bossWaveIndex) {
+      for (var i = 0; i < bossCount; i += 1) {
+        if (bossLastInWave) {
+          groups.add(bossGroup());
+        } else {
+          groups.insert(0, bossGroup());
+        }
+      }
+    }
+    waves.add(WaveDefinition(groups: List.unmodifiable(groups), clearBonus: 0));
+  }
+  return List.unmodifiable(waves);
 }
