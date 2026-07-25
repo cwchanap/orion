@@ -264,15 +264,31 @@ class EnemyComponent extends CircleComponent {
     }
 
     _moveAlongPath(dt, movementSlowMultiplier);
+    if (!isAlive) {
+      // Boss may have reached the base (or been resolved) during movement;
+      // do not run the summon timer on the frame it was resolved.
+      return;
+    }
     _tickSlow(dt);
 
     final bossDef = stats is BossDefinition ? stats as BossDefinition : null;
     final mechanic = bossDef?.summonMechanic;
-    if (mechanic != null && onSummonMinions != null) {
+    if (mechanic != null && onSummonMinions != null && mechanic.interval > 0) {
       _summonRemaining -= dt;
-      while (_summonRemaining <= 0) {
+      // Bound iterations per frame: a zero/negative interval is rejected above
+      // (release-safe; the assert in SummonMechanic is stripped in release),
+      // and an unusually large dt cannot spin the loop unboundedly.
+      const maxSummonsPerFrame = 16;
+      var summonsThisFrame = 0;
+      while (_summonRemaining <= 0 && summonsThisFrame < maxSummonsPerFrame) {
         _summonRemaining += mechanic.interval;
         onSummonMinions!(this, mechanic.count);
+        summonsThisFrame += 1;
+      }
+      if (_summonRemaining <= 0) {
+        // dt was unusually large; shed the accumulated debt instead of
+        // carrying it forward into the next frame.
+        _summonRemaining = mechanic.interval;
       }
     }
   }

@@ -672,6 +672,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _handleSummonMinions(EnemyComponent source, int count) {
+    // Defensive: the boss may have been resolved (reached base / killed) on
+    // the same frame its summon timer expired, or the wave may have ended
+    // already. Do not repopulate the board in those cases.
+    if (!source.isAlive) return;
+    if (_session.phase != GamePhase.wave) return;
     final mechanic = (source.stats as BossDefinition).summonMechanic;
     if (mechanic == null) return;
     final active = _activeEnemyComponents.values
