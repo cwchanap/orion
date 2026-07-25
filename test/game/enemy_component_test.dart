@@ -2,6 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/assets/game_boss_sheet.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/components/enemy_component.dart';
@@ -927,6 +928,47 @@ void main() {
 
         expect(() => _renderEnemyToCanvas(enemy), returnsNormally);
       });
+
+      test(
+        'render draws boss sprite and name overlay when boss sheet is provided',
+        () async {
+          final bossSheet = GameBossSheet.fromImage(
+            await _blankImage(400, 200),
+          );
+          final enemy = EnemyComponent(
+            enemyId: 1,
+            stats: GameBalance.relayBreaker,
+            waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+            onKilled: (_) {},
+            onReachedBase: (_) {},
+            bossSheet: bossSheet,
+            radius: 20,
+          );
+          enemy.setInspected(true);
+
+          expect(() => _renderEnemyToCanvas(enemy), returnsNormally);
+        },
+      );
+
+      test(
+        'render falls back to sprite sheet when boss stats lack a boss sheet',
+        () async {
+          final spriteSheet = GameSpriteSheet.fromImage(
+            await _blankImage(1024, 768),
+          );
+          final enemy = EnemyComponent(
+            enemyId: 1,
+            stats: GameBalance.relayBreaker,
+            waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+            onKilled: (_) {},
+            onReachedBase: (_) {},
+            spriteSheet: spriteSheet,
+          );
+          enemy.setInspected(true);
+
+          expect(() => _renderEnemyToCanvas(enemy), returnsNormally);
+        },
+      );
     });
   });
 }
