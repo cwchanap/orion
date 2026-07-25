@@ -15,12 +15,23 @@ import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('OrionDefenseGame', () {
     test('defaults to campaign stage one', () {
       final game = OrionDefenseGame();
 
       expect(game.stage, OrionCampaign.stageOne);
       expect(game.snapshot.stageName, 'Outpost Alpha');
+    });
+
+    test('onLoad loads all sprite sheets including the boss sheet', () async {
+      final game = OrionDefenseGame();
+      game.onGameResize(Vector2(800, 1200));
+      await game.onLoad();
+
+      expect(game.snapshot.phase, GamePhase.build);
+      expect(game.hasLayout, isTrue);
     });
 
     test('can be constructed for another stage', () {
