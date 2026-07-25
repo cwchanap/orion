@@ -381,6 +381,48 @@ void main() {
       expect(fired, 0);
     });
 
+    test(
+      'boss does not summon on the frame its summon becomes due as it reaches the base',
+      () {
+        // relayBreaker: speed=46, firstDelay=4.0. Path length == speed *
+        // firstDelay so the boss reaches the base on the same update that its
+        // first summon timer would fire.
+        var summons = 0;
+        var reachedBase = 0;
+        final boss = EnemyComponent(
+          enemyId: 1,
+          stats: GameBalance.relayBreaker,
+          waypoints: [Vector2(0, 0), Vector2(46 * 4.0, 0)],
+          onKilled: (_) {},
+          onReachedBase: (_) => reachedBase += 1,
+          onSummonMinions: (_, _) => summons += 1,
+        );
+        boss.update(4.0);
+        expect(reachedBase, 1);
+        expect(summons, 0);
+        expect(boss.isResolved, isTrue);
+      },
+    );
+
+    test('summon loop is bounded when dt is unusually large', () {
+      // A stalled frame producing a huge dt must not spin the summon loop
+      // unboundedly; it should fire a bounded number of times and shed the
+      // remaining debt.
+      var summons = 0;
+      final boss = EnemyComponent(
+        enemyId: 1,
+        stats: GameBalance.relayBreaker,
+        waypoints: [Vector2(0, 0), Vector2(1e9, 0)],
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+        onSummonMinions: (_, _) => summons += 1,
+      );
+      boss.update(1000.0);
+      // maxSummonsPerFrame cap in the implementation.
+      expect(summons, lessThanOrEqualTo(16));
+      expect(summons, greaterThan(0));
+    });
+
     test('residualWaypointsFromHere starts at current position', () {
       final boss = EnemyComponent(
         enemyId: 1,
