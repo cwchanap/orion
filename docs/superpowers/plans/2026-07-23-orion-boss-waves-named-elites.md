@@ -1061,7 +1061,7 @@ git commit -m "feat: EnemyComponent boss fields, summon timer, name render (HPA-
 
 ---
 
-### Task 9: OrionDefenseGame wiring (_bossSheet, _spawnMinion, summon callback)
+### Task 9: OrionDefenseGame wiring (`_bossSheet`, `_spawnMinion`, summon callback)
 
 **Files:**
 - Modify: `lib/game/orion_defense_game.dart` — `onLoad`, `_spawnEnemy` (~line 651), new `_spawnMinion`, summon callback, fields
