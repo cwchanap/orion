@@ -25,7 +25,6 @@ class EnemyComponent extends CircleComponent {
     this.towerVarietySheet,
     this.bossSheet,
     this.minionOf,
-    this.onSummonMinionsFn,
     double radius = 11,
     super.priority,
   }) : super(
@@ -44,7 +43,6 @@ class EnemyComponent extends CircleComponent {
   final GameTowerVarietySheet? towerVarietySheet;
   final GameBossSheet? bossSheet;
   final int? minionOf;
-  final void Function(EnemyComponent source, int count)? onSummonMinionsFn;
 
   bool _isInspected = false;
   bool _resolutionDispatched = false;
@@ -203,27 +201,4 @@ class EnemyComponent extends CircleComponent {
   }
 
   void markOverlayDirty() => _overlayDirty = true;
-
-  // temporary (removed in Task 7): component still ticks during super.update
-  @override
-  void update(double dt) {
-    super.update(dt);
-    if (!isAlive) return;
-    final result = logic.tick(dt); // dt is already Flame-time-scaled
-    syncRender();
-    if (result.overlayDirty) markOverlayDirty();
-    if (result.reachedBase) {
-      resolveReachedBase();
-    } else if (result.diedByCorrosion) {
-      resolveKilled();
-    } else {
-      final bossDef = stats is BossDefinition ? stats as BossDefinition : null;
-      final mechanic = bossDef?.summonMechanic;
-      if (mechanic != null) {
-        for (var i = 0; i < result.summonsDue; i++) {
-          onSummonMinionsFn?.call(this, mechanic.count);
-        }
-      }
-    }
-  }
 }
