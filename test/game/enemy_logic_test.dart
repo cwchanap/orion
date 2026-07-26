@@ -68,6 +68,64 @@ void main() {
       expect(residual, hasLength(3)); // current pos + 2 remaining waypoints
     });
   });
+
+  group('EnemyLogic combat', () {
+    EnemyLogic make({
+      double health = 100,
+      double shield = 0,
+      double armorReduction = 0,
+    }) => EnemyLogic(
+      enemyId: 1,
+      stats: EnemyStats(
+        health: health,
+        speed: 10,
+        baseDamage: 1,
+        goldReward: 1,
+        shieldHealth: shield,
+        armorReduction: armorReduction,
+      ),
+      waypoints: const [Offset(0, 0), Offset(1000, 0)],
+    );
+
+    test('shield absorbs damage before health', () {
+      final logic = make(health: 50, shield: 20);
+      final outcome = logic.applyDamage(15);
+      expect(logic.health, 50);
+      expect(logic.shield, 5);
+      expect(outcome.died, isFalse);
+      expect(logic.isAlive, isTrue);
+    });
+
+    test('lethal damage marks resolved and reports died', () {
+      final logic = make(health: 10);
+      final outcome = logic.applyDamage(10);
+      expect(logic.health, 0);
+      expect(outcome.died, isTrue);
+      expect(logic.isResolved, isTrue);
+      expect(logic.isAlive, isFalse);
+    });
+
+    test('applySlow merges and exposes isSlowed', () {
+      final logic = make();
+      logic.applySlow(multiplier: 0.5, duration: 1);
+      expect(logic.isSlowed, isTrue);
+      expect(logic.slowMultiplier, closeTo(0.5, 0.001));
+    });
+
+    test('applyCorrosion stacks dps/duration/shred and exposes isCorroded', () {
+      final logic = make();
+      logic.applyCorrosion(damagePerSecond: 5, duration: 2, armorShred: 0.1);
+      expect(logic.isCorroded, isTrue);
+      expect(logic.corrosionDamagePerSecond, 5);
+      expect(logic.armorShred, closeTo(0.1, 0.001));
+    });
+
+    test('armorReduction clamps after shred', () {
+      final logic = make(armorReduction: 0.4);
+      logic.applyCorrosion(damagePerSecond: 5, duration: 2, armorShred: 0.1);
+      expect(logic.armorReduction, closeTo(0.3, 0.001));
+    });
+  });
 }
 
 Matcher closeToOffset(Offset value) => predicate<Offset>(
