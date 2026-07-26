@@ -372,24 +372,52 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       _removeInactiveEnemyReferences();
       return;
     }
+    final scaledDt = dt * _speedMultiplier;
 
     super.update(dt);
     _removeInactiveEnemyReferences();
 
-    final scaledDt = dt * _speedMultiplier;
-    if (scaledDt > 0 && _tickAutoStartCountdown(scaledDt)) {
-      return;
-    }
+    if (scaledDt > 0 && _tickAutoStartCountdown(scaledDt)) return;
+    if (_session.phase != GamePhase.wave) return;
 
-    if (_session.phase != GamePhase.wave) {
-      return;
+    if (scaledDt > 0) {
+      _tickEnemyLogic(scaledDt);
     }
-
+    _removeInactiveEnemyReferences();
     if (scaledDt > 0) {
       _spawnWaveEnemies(scaledDt);
     }
     _removeInactiveEnemyReferences();
     _finishWaveIfComplete();
+  }
+
+  void _tickEnemyLogic(double dt) {
+    for (final enemy in _activeEnemyComponents.values.toList()) {
+      if (_session.phase != GamePhase.wave) break; // defeat/win ended combat
+      if (!_activeEnemyComponents.containsKey(enemy.enemyId)) {
+        continue; // cleared this loop
+      }
+      final logic = enemy.logic;
+      if (!logic.isAlive) continue;
+      final result = logic.tick(dt);
+      enemy.syncRender();
+      if (result.overlayDirty) enemy.markOverlayDirty();
+      if (result.reachedBase) {
+        enemy.resolveReachedBase();
+      } else if (result.diedByCorrosion) {
+        enemy.resolveKilled();
+      } else {
+        final bossDef = logic.stats is BossDefinition
+            ? logic.stats as BossDefinition
+            : null;
+        final mechanic = bossDef?.summonMechanic;
+        if (mechanic != null) {
+          for (var i = 0; i < result.summonsDue; i++) {
+            _handleSummonMinions(enemy, mechanic.count);
+          }
+        }
+      }
+    }
   }
 
   void _layoutBoard(Vector2 gameSize) {
@@ -673,7 +701,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       bossSheet: _bossSheet,
       onKilled: _handleEnemyKilled,
       onReachedBase: _handleEnemyReachedBase,
-      onSummonMinionsFn: bossDef == null ? null : _handleSummonMinions,
       radius: bossDef == null ? 11 : 20,
       priority: 20,
     );

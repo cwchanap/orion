@@ -13,6 +13,7 @@ import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
+import 'package:orion/game/rules/enemy_overlay_state.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -389,7 +390,7 @@ void main() {
 
       expect(game.inspectedEnemyId, enemy.enemyId);
 
-      enemy.update(100);
+      game.update(100);
       game.processLifecycleEvents();
 
       expect(game.inspectedEnemyId, isNull);
@@ -470,9 +471,9 @@ void main() {
       game.startWave();
       game.onGameResize(Vector2(800, 1200));
       game.update(0.01);
-      final enemy = game.children.whereType<EnemyComponent>().single;
 
-      enemy.update(1);
+      game.update(1);
+      game.processLifecycleEvents();
 
       expect(game.snapshot.phase, GamePhase.lost);
       expect(game.snapshot.isPaused, isFalse);
@@ -917,8 +918,7 @@ void main() {
       game.startWave();
       game.update(0.01);
       game.processLifecycleEvents();
-      final enemy = game.children.whereType<EnemyComponent>().single;
-      enemy.update(1);
+      game.update(1);
       game.processLifecycleEvents();
 
       expect(
@@ -951,11 +951,7 @@ void main() {
         expect(boss.stats, isA<BossDefinition>());
 
         // Advance the boss directly past firstDelay to trigger the summon.
-        // Calling boss.update() outside game.update()'s tree iteration avoids
-        // a concurrent-modification error when add() fires inside an
-        // unmounted unit test (same workaround the drone bay sell test uses
-        // for tower.update()).
-        boss.update(0.5 + 0.01);
+        game.update(0.5 + 0.01);
         game.processLifecycleEvents();
 
         final minions = game.children
@@ -993,6 +989,92 @@ void main() {
 
         expect(game.children.whereType<EnemyComponent>(), isEmpty);
         expect(game.snapshot.phase, GamePhase.build);
+      },
+    );
+
+    test(
+      'corrosion applied by a projectile ticks damage same frame (large dt)',
+      () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        // Simulate a nanite hit applying corrosion mid-super.update, then a large tick.
+        enemy.applyCorrosion(
+          damagePerSecond: enemy.maxHealth,
+          duration: 10,
+          armorShred: 0,
+        );
+        game.update(1);
+        game.processLifecycleEvents();
+        expect(enemy.isResolved, isTrue); // corrosion killed it this frame
+      },
+    );
+
+    test('defeat mid-tick stops ticking remaining enemies', () {
+      final game = OrionDefenseGame(stage: _twoEnemyDefeatStage());
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+      final goldBefore = game.snapshot.gold;
+      // Advance: the lead enemy reaches base and defeats the player.
+      // The loop must break so the trailing enemy is NOT dispatched as killed.
+      game.update(60);
+      game.processLifecycleEvents();
+      expect(game.snapshot.phase, GamePhase.lost);
+      // reach-base never rewards gold; a spurious onKilled for the trailing
+      // enemy would have called rewardKill and increased gold.
+      expect(game.snapshot.gold, goldBefore);
+    });
+
+    test(
+      'onKilled fires exactly once when lethal damage lands on a would-overrun frame',
+      () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        final goldBefore = game.snapshot.gold;
+        // Lethal projectile damage during super.update frame, before the enemy's tick.
+        enemy.applyDamage(enemy.maxHealth);
+        game.update(0.01);
+        game.processLifecycleEvents();
+        // onKilled -> rewardKill adds goldReward exactly once.
+        expect(game.snapshot.gold, goldBefore + enemy.stats.goldReward);
+        enemy.applyDamage(
+          enemy.maxHealth,
+        ); // second lethal hit must not re-reward
+        game.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.snapshot.gold, goldBefore + enemy.stats.goldReward);
+      },
+    );
+
+    test(
+      'overlay drops slow/corrosion on tick expiry without an external apply',
+      () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        enemy.applySlow(multiplier: 0.5, duration: 1);
+        enemy.applyCorrosion(damagePerSecond: 1, duration: 1, armorShred: 0);
+        expect(enemy.overlayState.badges, contains(EnemyOverlayBadge.slowed));
+        game.update(1);
+        game.processLifecycleEvents(); // both expire via tick
+        expect(enemy.isSlowed, isFalse);
+        expect(enemy.isCorroded, isFalse);
+        expect(
+          enemy.overlayState.badges,
+          isNot(contains(EnemyOverlayBadge.slowed)),
+        );
       },
     );
   });
@@ -1203,6 +1285,68 @@ StageDefinition _lethalSingleEnemyStage() {
               speed: 1000,
               baseDamage: GameBalance.initialBaseHealth,
               goldReward: 0,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _oneEnemyStage() {
+  return StageDefinition(
+    id: 'one-enemy-stage',
+    name: 'One Enemy Stage',
+    mapLabel: 'One',
+    description: 'Stage with one enemy for orchestrator ticking tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 1,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 1,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _twoEnemyDefeatStage() {
+  return StageDefinition(
+    id: 'two-enemy-defeat-stage',
+    name: 'Two Enemy Defeat Stage',
+    mapLabel: 'Defeat',
+    description: 'Stage with two lethal enemies for defeat-mid-tick tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 2,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 10,
+              baseDamage: GameBalance.initialBaseHealth,
+              goldReward: 50,
             ),
           ),
         ],
