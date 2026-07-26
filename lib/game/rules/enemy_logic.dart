@@ -194,7 +194,7 @@ class EnemyLogic {
       }
     }
 
-    // 4. Summon — filled in Task 4 (returns 0 for now).
+    // 4. Summon.
     final summonsDue = _tickSummon(dt);
 
     return EnemyTickResult(
