@@ -126,6 +126,86 @@ void main() {
       expect(logic.armorReduction, closeTo(0.3, 0.001));
     });
   });
+
+  group('EnemyLogic tick status', () {
+    test('regen restores health while corrosion pauses regen', () {
+      final logic = EnemyLogic(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+          traits: {EnemyTrait.regen},
+          regenPerSecond: 10,
+        ),
+        waypoints: const [Offset(0, 0), Offset(1000, 0)],
+      );
+      logic.applyDamage(30);
+      logic.tick(1);
+      expect(logic.health, 80);
+      logic.applyCorrosion(damagePerSecond: 5, duration: 2, armorShred: 0.1);
+      final r = logic.tick(1);
+      expect(logic.health, 75); // corrosion dmg 5, no regen
+      expect(logic.isCorroded, isTrue);
+      expect(r.overlayDirty, isTrue);
+    });
+
+    test('regen stays paused during corrosion expiry tick', () {
+      final logic = EnemyLogic(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+          traits: {EnemyTrait.regen},
+          regenPerSecond: 10,
+        ),
+        waypoints: const [Offset(0, 0), Offset(1000, 0)],
+      );
+      logic.applyDamage(50);
+      logic.applyCorrosion(damagePerSecond: 5, duration: 1, armorShred: 0.1);
+      logic.tick(1); // corrosion expires this tick, regen still paused
+      expect(logic.isCorroded, isFalse);
+      expect(logic.health, closeTo(45, 0.001)); // 50 - 5 corrosion, no regen
+    });
+
+    test('slow movement and expiry', () {
+      final logic = EnemyLogic(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        waypoints: const [Offset(0, 0), Offset(100, 0)],
+      );
+      logic.applySlow(multiplier: 0.5, duration: 1);
+      logic.tick(1); // moves 5 units
+      expect(logic.position.dx, closeTo(5, 0.001));
+      expect(logic.isSlowed, isFalse);
+    });
+
+    test(
+      'overlayDirty is false when only position changes (no status/health)',
+      () {
+        final logic = EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        );
+        final r = logic.tick(1); // pure movement, no status
+        expect(r.overlayDirty, isFalse);
+      },
+    );
+  });
 }
 
 Matcher closeToOffset(Offset value) => predicate<Offset>(
