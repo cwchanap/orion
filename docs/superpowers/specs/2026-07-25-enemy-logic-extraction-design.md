@@ -24,13 +24,13 @@ Move all per-enemy game logic out of `EnemyComponent` into a new pure, determini
 - `TowerComponent`, `ProjectileComponent`, `DroneComponent`, `GravityFieldComponent` — these keep calling the unchanged `applyDamage`/`applySlow`/`applyCorrosion` forwarders and are otherwise untouched. No call-site changes outside `enemy_component.dart` and `orion_defense_game.dart`.
 - The partial single-timer move proposed in the original review (move only the summon timer). It is explicitly rejected: it breaks 3 tests, duplicates per-boss state in the orchestrator, and contradicts the boss-waves plan (`docs/superpowers/plans/2026-07-23-orion-boss-waves-named-elites.md` Task 8) without achieving a coherent boundary.
 - Changing `CombatEffects`, `TowerTargeting`, `BoardLayout`, or `GameSession`.
-- Changing enemy balance or behavior. This refactor must be observably behavior-preserving; the existing rule/behavior tests are the regression net.
+- Changing enemy balance. This refactor preserves enemy *behavior* (same status math, same summon timing, same death/reach-base outcomes) with two accepted, imperceptible frame-level shifts documented below under [Intra-frame ordering and movement model](#intra-frame-ordering-and-movement-model). It is **not** bit-identical per-frame ordering. The existing rule/behavior tests (plus the ported `enemy_logic_test.dart`) are the regression net.
 
 ## Architecture
 
 ### New pure class: `rules/enemy_logic.dart`
 
-`EnemyLogic` is a Flame-free class that owns all per-enemy mutable game state and the tick/apply math. It imports only `dart:math` and `../models/game_models.dart` (for `EnemyStats`, `BossDefinition`, `SummonMechanic`). It never imports `package:flame` and never touches pixel coordinates.
+`EnemyLogic` is a Flame-free class that owns all per-enemy mutable game state and the tick/apply math. It imports only `dart:math`, `../models/game_models.dart` (for `EnemyStats`, `BossDefinition`, `SummonMechanic`), and `combat_effects.dart` (for `resolveDamage`/`mergeSlow`/`applyRegen` — a sibling pure module; `CombatEffects` itself is unchanged). It never imports `package:flame` and never touches pixel coordinates.
 
 **Immutable inputs (constructor):**
 
@@ -55,7 +55,7 @@ Combat: `health`, `shield`, `maxHealth` (final, from `stats.health`), `armorShre
 
 Path bookkeeping (plain doubles): `targetWaypointIndex` (starts at 1), `completedDistance`, `segmentProgress`.
 
-Resolution: `isResolved` (bool).
+Resolution: `isResolved` (bool) — the **terminal-state marker**. Set by `applyDamage` when health reaches 0 and by `tick` on corrosion-death or path overrun. It drives `isAlive`. It is *not* the dispatch guard for the component's side effects (see Resolution contract below).
 
 **Derived getters:** `isAlive` (`!isResolved && health > 0`), `isSlowed`, `isCorroded`, `armorReduction` (the clamped `stats.armorReduction - armorShred`), `pathProgress` (`completedDistance + currentSegmentLength * segmentProgress`).
 
@@ -75,7 +75,7 @@ EnemyTickResult tick(double dt);
 1. Corrosion/regen (`_tickCorrosionAndRegen`): decrement `_corrosionRemaining`, apply `_corrosionDamagePerSecond * tick` as bypass-armor damage via `CombatEffects.resolveDamage`, clear shred when corrosion expires, then `CombatEffects.applyRegen` gated on `wasCorrodedAtTickStart`. If health hits 0, set `isResolved` and return `diedByCorrosion: true`.
 2. Movement (the `_moveAlongPath` loop): advance `targetWaypointIndex`/`completedDistance`/`segmentProgress` against `segmentLengths` using `stats.speed * movementSlowMultiplier * dt`. If it runs off the end, set `isResolved` and return `reachedBase: true`.
 3. Slow decay (`_tickSlow`): decrement `_slowRemaining`, reset `_slowMultiplier` to 1 at expiry.
-4. Summon timer (boss-only): decrement `_summonRemaining`, accumulate triggers with the existing `maxSummonsPerFrame = 16` bound and debt-shed (`_summonRemaining = interval` on overflow). Return `summonsDue: <count>`. This step is skipped entirely if a resolution occurred in steps 1-2 — preserving the "no summon on the resolve frame" guard.
+4. Summon timer (boss-only): only when `stats is BossDefinition` with a `summonMechanic` whose `interval > 0` (porting the full `mechanic != null && mechanic.interval > 0` guard from today; the `onSummonMinions != null` half is gone since the orchestrator always supplies the handler). Decrement `_summonRemaining`, accumulate triggers with the existing `maxSummonsPerFrame = 16` bound and debt-shed (`_summonRemaining = interval` on overflow). Return `summonsDue: <count>`. This step is skipped entirely if a resolution occurred in steps 1-2 — preserving the "no summon on the resolve frame" guard.
 
 `tick` never calls back into the world; it reports events. `movementSlowMultiplier` uses `isSlowed ? slowMultiplier : 1.0` exactly as today (captured before step 3 mutates slow).
 
@@ -98,8 +98,9 @@ These carry the existing guard clauses and delegate the merge math to `CombatEff
 
 ```dart
 class _ActiveEnemy {
-  EnemyLogic logic;
-  EnemyComponent component;
+  final EnemyLogic logic;
+  final EnemyComponent component;
+  _ActiveEnemy(this.logic, this.component);
 }
 final Map<int, _ActiveEnemy> _activeEnemies = {};
 ```
@@ -109,7 +110,7 @@ A private `_registerEnemy(EnemyLogic, EnemyComponent)` and `_unregisterEnemy(int
 - **Readers** become `entry.component`/`entry.logic` accesses: `_handleSummonMinions` (counts `entry.component.minionOf`), `_spawnEnemy`/`_spawnMinion` (construct logic + component, call `_registerEnemy`), `_removeInactiveEnemyReferences` (sweeps by `entry.component.isResolved`, now a read-through getter to `logic.isResolved`).
 - **Mutators** route through `_unregisterEnemy`: `_handleEnemyKilled`, `_handleEnemyReachedBase` (currently `_activeEnemyComponents.remove(id)`), and `_clearCombatComponents` (currently `.clear()` plus `removeFromParent` on each value — iterate `entry.component`).
 
-`EnemyComponent` receives `EnemyLogic logic` as a required constructor field and keeps it as `final` — the back-reference for forwarders, render sync, and read-through getters.
+`EnemyComponent` receives `EnemyLogic logic` as a required constructor field and keeps it as `final` — the back-reference for forwarders, render sync, and read-through getters. `stats` and `enemyId` are **not** duplicated state: the component retains them as the public identity API, and the logic holds the same immutable references (passed through at construction) so pure tests can construct a logic standalone. One source of truth, two handles.
 
 ### New tick flow in `OrionDefenseGame.update()`
 
@@ -176,22 +177,48 @@ void _tickEnemyLogic(double dt) {
 **External damage** (projectile/drone/gravity → `enemy.applyDamage`): the forwarder mutates logic and resolves death synchronously so the existing `isResolved` sweep and test intent are preserved:
 
 ```dart
-DamageOutcome applyDamage(...) {           // forwarder on EnemyComponent
+void applyDamage(...) {                      // forwarder on EnemyComponent — stays void (zero API churn)
   if (!isAlive || amount <= 0) return;
-  final outcome = logic.applyDamage(...);  // mutates logic.health/shield
+  final outcome = logic.applyDamage(...);    // mutates logic.health/shield, sets logic.isResolved, returns {died}
   _overlayDirty = true;
-  if (outcome.died) _resolve(onKilled);    // synchronous
+  if (outcome.died) _resolve(onKilled);      // synchronous
 }
 void applySlow(...)      { logic.applySlow(...);      _overlayDirty = true; }
 void applyCorrosion(...) { logic.applyCorrosion(...); _overlayDirty = true; }
 ```
 
-`_resolve` stays on the component (it owns `removeFromParent`), exposed via two thin public methods so the orchestrator can drive resolution from `_tickEnemyLogic`:
+The forwarder stays `void` to keep the 5 external call sites unchanged; only `EnemyLogic.applyDamage` returns `DamageOutcome` (it needs to tell the forwarder whether to resolve). `applySlow`/`applyCorrosion` cannot kill, so they need no outcome.
+
+### Resolution contract
+
+`logic.isResolved` (terminal marker) and the component's side-effect dispatch are **separate concerns** with a single shared dispatch rule, so callbacks fire exactly once whether death arrives via the external-damage forwarder or via `_tickEnemyLogic`:
+
+- `logic.isResolved` — set by `applyDamage` (health→0) and by `tick` (corrosion death, path overrun). Drives `isAlive`. Pure state.
+- `component._resolutionDispatched` — a **new** once-guard, distinct from `logic.isResolved`, owned by the component. Guards `_resolve`'s side effects only.
+
+`_resolve` is rewritten to guard on `_resolutionDispatched`, **not** on `logic.isResolved` (guarding on `logic.isResolved` would drop the callback, since `tick`/`applyDamage` set it before `_resolve` runs):
+
+```dart
+void _resolve(void Function(EnemyComponent) callback) {
+  if (_resolutionDispatched) return;
+  _resolutionDispatched = true;
+  _overlayDirty = true;
+  callback(this);          // onKilled / onReachedBase -> orchestrator handler
+  removeFromParent();
+}
+```
+
+Exposed via two thin public methods so the orchestrator drives resolution from `_tickEnemyLogic`:
 
 - `void resolveKilled()` → `_resolve(onKilled)`
 - `void resolveReachedBase()` → `_resolve(onReachedBase)`
 
-Death-by-external-damage resolves synchronously inside the forwarder (during `super.update`); death-by-corrosion and reach-base resolve from `_tickEnemyLogic`. Both funnel through the same `_resolve` → callback → orchestrator handler path.
+Sequences (both share the one dispatch):
+
+- **External damage:** `logic.applyDamage` sets `logic.isResolved` + returns `died` → forwarder calls `_resolve(onKilled)` → dispatches once + removes. (During `super.update`.)
+- **Tick-driven:** `tick` sets `logic.isResolved` + returns `reachedBase`/`diedByCorrosion` → orchestrator calls `resolveReachedBase()`/`resolveKilled()` → dispatches once + removes. (During `_tickEnemyLogic`.)
+
+`onKilled`/`onReachedBase` each fire exactly once per enemy. The component's public `isResolved` getter delegates to `logic.isResolved` (for `_removeInactiveEnemyReferences` and tests).
 
 ## `EnemyComponent` surface after refactor
 
@@ -205,6 +232,7 @@ Death-by-external-damage resolves synchronously inside the forwarder (during `su
 
 ```dart
 void syncRender() {
+  _overlayDirty = true; // tick-driven slow/corrosion/regen changes don't dirty; recompute each tick
   if (logic.targetWaypointIndex >= waypoints.length) return; // resolved; position frozen
   final start = waypoints[logic.targetWaypointIndex - 1];
   final end = waypoints[logic.targetWaypointIndex];
@@ -212,7 +240,16 @@ void syncRender() {
 }
 ```
 
+`syncRender()` is called every ticked frame from `_tickEnemyLogic`, so it unconditionally marks the overlay dirty. This is required because tick-internal state changes (slow expiry, corrosion clear/expiry, regen, corrosion damage) happen inside `logic.tick` and have no path to the component's `_overlayDirty`; without this, a slow ring or corrosion badge would stick until the next external `apply*` call. The cache still pays off in non-ticked frames (build phase, paused). (`apply*` forwarders also set `_overlayDirty` so external damage between ticks refreshes immediately.)
+
 `residualWaypointsFromHere()` and `targetCandidate` derive from the synced `position` plus logic fields (`logic.targetWaypointIndex`, `logic.pathProgress`, `logic.health`, `logic.shield`), preserving minion-seeding and targeting behavior.
+
+### Intra-frame ordering and movement model
+
+Two accepted, intentional departures from the current per-frame execution, both imperceptible at 60fps and standard for tower-defense loops:
+
+1. **Enemy tick batching (one-frame hit/position shift).** Today Flame updates components in priority order — Tower(10) → Enemy(20) → GravityField(25) → Projectile(30) → Drone(35) — so enemies move/status *before* projectiles and drones update, and hits land against post-move positions. After extraction, all enemy status/movement advances in a single `_tickEnemyLogic` batch *after* `super.update`, so this frame's hits land against the previous tick's positions (one-frame shift), and towers fire before enemies move. There is no way to keep the per-priority interleaving while centralizing enemy ticks; the shift is inherent to the boundary move. Speed/path/summon/rate behavior is unaffected because per-frame advancement is unchanged. Tests assert outcomes via pump-and-check (not bit-exact frame ordering).
+2. **Parametric movement (intentional semantic cleanup).** The current `_moveAlongPath` advances a live `Vector2 position` using `distanceToTarget` each frame; the new logic advances pure `segmentLengths`/`segmentProgress`, and `syncRender` derives position as `start + (end-start)*segmentProgress`. This is mathematically equivalent but a different FP code path, so corner-crossing can differ in the last digits. Movement assertions (existing and new) use `closeTo` tolerances, not exact equality — the current tests already do.
 
 ## Testing
 
@@ -220,7 +257,8 @@ void syncRender() {
 |---|---|
 | `test/game/enemy_component_test.dart` (~1052 lines; logic tested through the component) | **`test/game/enemy_logic_test.dart`** (new, pure, no Flame): movement/waypoint-crossing over `segmentLengths`, shield-absorb, regen-vs-corrosion pause, slow movement + expiry, regen-stays-paused-during-corrosion-expiry, lethal-damage resolution, summon `summonsDue` count + bounded-loop + reach-base-skips-summon + data-slot-boss-never-summons. All assertions run against `EnemyLogic` with plain doubles. |
 | | **`test/game/enemy_component_test.dart`** (slimmed): construction + `syncRender` position derivation, `targetCandidate` reflects logic state, forwarder delegates + synchronous death resolution, `residualWaypointsFromHere`, overlay cache invalidation on logic mutation. |
-| `test/game/orion_defense_game_test.dart:940` (calls `boss.update(0.5 + 0.01)` directly to trigger summon) | Rewritten to pump `game.update(0.5 + 0.01)`. Summon now fires inside `_tickEnemyLogic`; the "call `boss.update()` directly to avoid concurrent-modification" workaround is obsolete because summon `add()`s happen in the orchestrator's map loop, not during Flame's tree iteration. |
+| `test/game/orion_defense_game_test.dart` (multiple sites call `enemy.update(...)`/`boss.update(...)` directly to drive resolution) | **All** direct enemy/boss `.update()` sites rewrite to pump `game.update(...)`, since component `update()` becomes a no-op after step 3. Verified sites: line 392 (`enemy.update(100)` → clears inspected enemy), line 475 (`enemy.update(1)` → lost + pacing reset), line 921 (`enemy.update(1)` → base damage before restart), line 958 (`boss.update(0.5+0.01)` → summon). The line-958 "call `boss.update()` directly to avoid concurrent-modification" workaround is obsolete: summon `add()`s now happen in the orchestrator's map loop, not during Flame's tree iteration. |
+| `test/game/enemy_component_test.dart` (~16 `enemy.update`/`boss.update` sites: lines 31, 34, 80, 84, 105, 129, 134, 158, 291, 316, 363, 365, 380, 400, 420, 434) | These drive logic through the component. The logic-behavioral ones (movement, status, summon, death) move to `enemy_logic_test.dart` and call `logic.tick(dt)` directly with plain doubles. Any that remain in the slimmed component test call `logic.tick(dt)` + `component.syncRender()` (not `component.update()`) to advance. |
 | `test/game/game_balance_test.dart` `SummonMechanic` group (line 1136) | **Unchanged** — it tests the data type, not the tick. |
 
 New tests are written test-first, before each production step (see Migration).
@@ -230,9 +268,9 @@ New tests are written test-first, before each production step (see Migration).
 Each step leaves `flutter analyze` and `flutter test` green.
 
 1. **Add `EnemyLogic` + `enemy_logic_test.dart`.** Introduce the pure class with all state/tick/apply methods and the `_initialSummonDelay`/`maxSummonsPerFrame`/debt-shed logic. Port the behavioral assertions from the component test as pure-logic tests. No production wiring yet; the new file stands alone and its tests pass.
-2. **Make `EnemyComponent` delegate.** Add `final EnemyLogic logic`, route `applyDamage`/`applySlow`/`applyCorrosion` and a (temporary) `update()` through it, swap the mutable fields for read-through getters, and precompute `segmentLengths` for the logic. Existing `enemy_component_test.dart` stays green (it now exercises the component+logic delegation).
-3. **Relocate ticking to the orchestrator.** Introduce `_ActiveEnemy`/`_activeEnemies` + `_registerEnemy`/`_unregisterEnemy`, add `_tickEnemyLogic`, replace `_activeEnemyComponents` references, and add `syncRender()`/`resolveKilled()`/`resolveReachedBase()`. Drop the `EnemyComponent.update()` override and remove `onSummonMinions`. Rewrite the orchestrator summon test (line 940) and slim/rewrite `enemy_component_test.dart` per the table above.
-4. **Cleanup pass.** Remove any dead fields, run `flutter analyze` and the full `flutter test` suite, and confirm the four affected test areas (`enemy_component_test.dart`, `orion_defense_game_test.dart:940`, `game_balance_test.dart:1136` unchanged) behave as specified.
+2. **Make `EnemyComponent` delegate.** Add `final EnemyLogic logic`, route `applyDamage`/`applySlow`/`applyCorrosion` and a (temporary) `update()` through it, swap the mutable fields for read-through getters, and precompute `segmentLengths` for the logic. Existing `enemy_component_test.dart` stays green (it now exercises the component+logic delegation). **Speed handling:** the temporary `update(dt)` receives Flame's already-time-scaled `dt` (since `OrionDefenseGame` sets `timeScale = _speedMultiplier`) and must pass that `dt` straight to `logic.tick` — do *not* multiply by `_speedMultiplier` again, or speed double-applies. Only step 3 switches to the orchestrator's explicit `scaledDt`.
+3. **Relocate ticking to the orchestrator.** Introduce `_ActiveEnemy`/`_activeEnemies` + `_registerEnemy`/`_unregisterEnemy`, add `_tickEnemyLogic`, replace `_activeEnemyComponents` references, and add `syncRender()`/`resolveKilled()`/`resolveReachedBase()` + the `_resolutionDispatched` once-guard. Drop the `EnemyComponent.update()` override and remove `onSummonMinions`. Rewrite **all** direct enemy/boss `.update()` test sites (orchestrator test lines 392/475/921/958 and the ~16 component-test sites) per the testing table, and slim `enemy_component_test.dart`.
+4. **Cleanup pass.** Remove any dead fields, run `flutter analyze` and the full `flutter test` suite, and confirm the affected test areas (`enemy_component_test.dart`, `enemy_logic_test.dart`, `orion_defense_game_test.dart`, `game_balance_test.dart:1136` unchanged) behave as specified.
 
 ## References
 
@@ -246,7 +284,10 @@ Each step leaves `flutter analyze` and `flutter test` green.
 ## Acceptance criteria
 
 - `EnemyComponent` contains no per-enemy game logic: no status timers, no movement advance, no summon timing, no mutable combat state. It only renders, forwards combat inputs, syncs render state from `logic`, and resolves.
-- `rules/enemy_logic.dart` is Flame-free (`flutter analyze` clean; no `package:flame` import) and fully unit-testable with plain doubles.
+- `rules/enemy_logic.dart` is Flame-free (`flutter analyze` clean; no `package:flame` import; imports only `dart:math`, `game_models.dart`, `combat_effects.dart`) and fully unit-testable with plain doubles.
 - `OrionDefenseGame` owns the logic instances and ticks them in `_tickEnemyLogic`; the `_ActiveEnemy` holder is the single source of truth for the logic↔component pairing.
 - The 5 external call sites in `ProjectileComponent`/`DroneComponent`/`GravityFieldComponent` are unchanged (they still call `applyDamage`/`applySlow`/`applyCorrosion`).
-- Behavior is preserved: the ported `enemy_logic_test.dart`, the rewritten component/orchestrator tests, and the rest of the suite pass; `game_balance_test.dart` `SummonMechanic` group is untouched.
+- No remaining production path or game-level test depends on a direct `EnemyComponent.update()` call to advance logic.
+- `onKilled` and `onReachedBase` each fire **exactly once** per enemy, whether death arrives via external damage, corrosion, or reach-base (single `_resolutionDispatched` guard).
+- The overlay reflects slow/corrosion expiry and regen on the tick they occur, with no need for a subsequent external `apply*` call.
+- Behavior is preserved within the two accepted frame-level shifts (documented above): the ported `enemy_logic_test.dart`, the rewritten component/orchestrator tests, and the rest of the suite pass; `game_balance_test.dart` `SummonMechanic` group is untouched.
