@@ -1,6 +1,5 @@
 import 'dart:ui' as ui;
 
-import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_boss_sheet.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
@@ -8,6 +7,7 @@ import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/enemy_overlay.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/enemy_logic.dart';
 import 'package:orion/game/rules/enemy_overlay_state.dart';
 
 void main() {
@@ -23,7 +23,16 @@ void main() {
             baseDamage: 1,
             goldReward: 1,
           ),
-          waypoints: [Vector2(0, 0), Vector2(10, 0), Vector2(10, 10)],
+          logic: EnemyLogic(
+            enemyId: 1,
+            stats: const EnemyStats(
+              health: 10,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 1,
+            ),
+            waypoints: const [Offset(0, 0), Offset(10, 0), Offset(10, 10)],
+          ),
           onKilled: (_) {},
           onReachedBase: (_) {},
         );
@@ -48,7 +57,17 @@ void main() {
           goldReward: 1,
           shieldHealth: 20,
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 50,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+            shieldHealth: 20,
+          ),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -61,17 +80,22 @@ void main() {
     });
 
     test('regen restores health while corrosion pauses regen', () {
+      const stats = EnemyStats(
+        health: 100,
+        speed: 10,
+        baseDamage: 1,
+        goldReward: 1,
+        traits: {EnemyTrait.regen},
+        regenPerSecond: 10,
+      );
       final enemy = EnemyComponent(
         enemyId: 1,
-        stats: const EnemyStats(
-          health: 100,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
-          traits: {EnemyTrait.regen},
-          regenPerSecond: 10,
+        stats: stats,
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: stats,
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -96,7 +120,16 @@ void main() {
           baseDamage: 1,
           goldReward: 1,
         ),
-        waypoints: [Vector2(0, 0), Vector2(100, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(100, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -109,17 +142,22 @@ void main() {
     });
 
     test('regen stays paused during corrosion expiry tick', () {
+      const stats = EnemyStats(
+        health: 100,
+        speed: 10,
+        baseDamage: 1,
+        goldReward: 1,
+        traits: {EnemyTrait.regen},
+        regenPerSecond: 10,
+      );
       final enemy = EnemyComponent(
         enemyId: 1,
-        stats: const EnemyStats(
-          health: 100,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
-          traits: {EnemyTrait.regen},
-          regenPerSecond: 10,
+        stats: stats,
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: stats,
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -146,7 +184,18 @@ void main() {
           traits: {EnemyTrait.armored},
           armorReduction: 0.50,
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+            traits: {EnemyTrait.armored},
+            armorReduction: 0.50,
+          ),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -174,7 +223,19 @@ void main() {
             traits: {EnemyTrait.shielded, EnemyTrait.regen},
             regenPerSecond: 10,
           ),
-          waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+          logic: EnemyLogic(
+            enemyId: 1,
+            stats: const EnemyStats(
+              health: 100,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 1,
+              shieldHealth: 40,
+              traits: {EnemyTrait.shielded, EnemyTrait.regen},
+              regenPerSecond: 10,
+            ),
+            waypoints: const [Offset(0, 0), Offset(1000, 0)],
+          ),
           onKilled: (_) {},
           onReachedBase: (_) {},
         );
@@ -198,15 +259,20 @@ void main() {
     );
 
     test('component inspection expands the overlay state', () {
+      const stats = EnemyStats(
+        health: 100,
+        speed: 10,
+        baseDamage: 1,
+        goldReward: 1,
+      );
       final enemy = EnemyComponent(
         enemyId: 1,
-        stats: const EnemyStats(
-          health: 100,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
+        stats: stats,
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: stats,
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -233,7 +299,18 @@ void main() {
           shieldHealth: 40,
           traits: {EnemyTrait.shielded, EnemyTrait.armored},
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+            shieldHealth: 40,
+            traits: {EnemyTrait.shielded, EnemyTrait.armored},
+          ),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -259,7 +336,16 @@ void main() {
           baseDamage: 1,
           goldReward: 1,
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        logic: EnemyLogic(
+          enemyId: 2,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -281,7 +367,16 @@ void main() {
           baseDamage: 1,
           goldReward: 1,
         ),
-        waypoints: [Vector2(0, 0), Vector2(5, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(5, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {
           reachedBase = true;
@@ -305,7 +400,16 @@ void main() {
           baseDamage: 1,
           goldReward: 1,
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 10,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        ),
         onKilled: (_) {
           killed = true;
         },
@@ -329,7 +433,16 @@ void main() {
           baseDamage: 1,
           goldReward: 1,
         ),
-        waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -351,10 +464,14 @@ void main() {
       final boss = EnemyComponent(
         enemyId: 1,
         stats: GameBalance.relayBreaker,
-        waypoints: [Vector2(0, 0), Vector2(10000, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: GameBalance.relayBreaker,
+          waypoints: const [Offset(0, 0), Offset(10000, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
-        onSummonMinions: (source, count) {
+        onSummonMinionsFn: (source, count) {
           sources.add(source);
           counts.add(count);
         },
@@ -372,10 +489,14 @@ void main() {
       final boss = EnemyComponent(
         enemyId: 1,
         stats: GameBalance.shieldMatriarch,
-        waypoints: [Vector2(0, 0), Vector2(10000, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: GameBalance.shieldMatriarch,
+          waypoints: const [Offset(0, 0), Offset(10000, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
-        onSummonMinions: (_, _) => fired += 1,
+        onSummonMinionsFn: (_, _) => fired += 1,
       );
       boss.update(100);
       expect(fired, 0);
@@ -392,10 +513,14 @@ void main() {
         final boss = EnemyComponent(
           enemyId: 1,
           stats: GameBalance.relayBreaker,
-          waypoints: [Vector2(0, 0), Vector2(46 * 4.0, 0)],
+          logic: EnemyLogic(
+            enemyId: 1,
+            stats: GameBalance.relayBreaker,
+            waypoints: const [Offset(0, 0), Offset(46 * 4.0, 0)],
+          ),
           onKilled: (_) {},
           onReachedBase: (_) => reachedBase += 1,
-          onSummonMinions: (_, _) => summons += 1,
+          onSummonMinionsFn: (_, _) => summons += 1,
         );
         boss.update(4.0);
         expect(reachedBase, 1);
@@ -412,10 +537,14 @@ void main() {
       final boss = EnemyComponent(
         enemyId: 1,
         stats: GameBalance.relayBreaker,
-        waypoints: [Vector2(0, 0), Vector2(1e9, 0)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: GameBalance.relayBreaker,
+          waypoints: const [Offset(0, 0), Offset(1e9, 0)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
-        onSummonMinions: (_, _) => summons += 1,
+        onSummonMinionsFn: (_, _) => summons += 1,
       );
       boss.update(1000.0);
       // maxSummonsPerFrame cap in the implementation.
@@ -427,7 +556,11 @@ void main() {
       final boss = EnemyComponent(
         enemyId: 1,
         stats: GameBalance.relayBreaker,
-        waypoints: [Vector2(0, 0), Vector2(10000, 0), Vector2(10000, 10)],
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: GameBalance.relayBreaker,
+          waypoints: const [Offset(0, 0), Offset(10000, 0), Offset(10000, 10)],
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
@@ -446,13 +579,54 @@ void main() {
           baseDamage: 1,
           goldReward: 1,
         ),
-        waypoints: [Vector2(0, 0), Vector2(100, 0)],
-        initialCompletedDistance: 50,
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 10,
+            speed: 0,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(100, 0)],
+          initialCompletedDistance: 50,
+        ),
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
       expect(boss.pathProgress, closeTo(50, 0.001));
     });
+
+    test(
+      'applyDamage lethal fires onKilled exactly once via the new guard',
+      () {
+        var killed = 0;
+        const stats = EnemyStats(
+          health: 10,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        );
+        final logic = EnemyLogic(
+          enemyId: 1,
+          stats: stats,
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        );
+        final enemy = EnemyComponent(
+          enemyId: 1,
+          stats: stats,
+          logic: logic,
+          onKilled: (_) => killed += 1,
+          onReachedBase: (_) {},
+        );
+        enemy.applyDamage(10);
+        expect(killed, 1);
+        expect(logic.isResolved, isTrue);
+        // A second lethal hit must not re-fire (guard holds even with logic
+        // already resolved).
+        enemy.applyDamage(10);
+        expect(killed, 1);
+      },
+    );
 
     group('EnemyOverlayState', () {
       test('overlay data defensively copies traits', () {
@@ -942,7 +1116,16 @@ void main() {
               baseDamage: 1,
               goldReward: 1,
             ),
-            waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+            logic: EnemyLogic(
+              enemyId: 1,
+              stats: const EnemyStats(
+                health: 100,
+                speed: 10,
+                baseDamage: 1,
+                goldReward: 1,
+              ),
+              waypoints: const [Offset(0, 0), Offset(1000, 0)],
+            ),
             onKilled: (_) {},
             onReachedBase: (_) {},
             spriteSheet: spriteSheet,
@@ -954,15 +1137,20 @@ void main() {
       );
 
       test('render draws fallback circle and overlay without sprite sheet', () {
+        const stats = EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        );
         final enemy = EnemyComponent(
           enemyId: 1,
-          stats: const EnemyStats(
-            health: 100,
-            speed: 10,
-            baseDamage: 1,
-            goldReward: 1,
+          stats: stats,
+          logic: EnemyLogic(
+            enemyId: 1,
+            stats: stats,
+            waypoints: const [Offset(0, 0), Offset(1000, 0)],
           ),
-          waypoints: [Vector2(0, 0), Vector2(1000, 0)],
           onKilled: (_) {},
           onReachedBase: (_) {},
         );
@@ -980,7 +1168,11 @@ void main() {
           final enemy = EnemyComponent(
             enemyId: 1,
             stats: GameBalance.relayBreaker,
-            waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+            logic: EnemyLogic(
+              enemyId: 1,
+              stats: GameBalance.relayBreaker,
+              waypoints: const [Offset(0, 0), Offset(1000, 0)],
+            ),
             onKilled: (_) {},
             onReachedBase: (_) {},
             bossSheet: bossSheet,
@@ -1001,7 +1193,11 @@ void main() {
           final enemy = EnemyComponent(
             enemyId: 1,
             stats: GameBalance.relayBreaker,
-            waypoints: [Vector2(0, 0), Vector2(1000, 0)],
+            logic: EnemyLogic(
+              enemyId: 1,
+              stats: GameBalance.relayBreaker,
+              waypoints: const [Offset(0, 0), Offset(1000, 0)],
+            ),
             onKilled: (_) {},
             onReachedBase: (_) {},
             spriteSheet: spriteSheet,

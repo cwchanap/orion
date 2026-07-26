@@ -23,6 +23,7 @@ import 'components/tower_component.dart';
 import 'models/game_models.dart';
 import 'rules/board_layout.dart';
 import 'rules/combat_effects.dart';
+import 'rules/enemy_logic.dart';
 import 'rules/game_session.dart';
 import 'rules/tower_targeting.dart';
 
@@ -651,18 +652,28 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     }
   }
 
+  List<Offset> _offsetWaypoints(List<Vector2> v) => [
+    for (final p in v) Offset(p.x, p.y),
+  ];
+
   void _spawnEnemy(EnemyStats stats) {
     final bossDef = stats is BossDefinition ? stats : null;
+    final waypoints = _pathWaypoints();
+    final logic = EnemyLogic(
+      enemyId: _nextEnemyId,
+      stats: stats,
+      waypoints: _offsetWaypoints(waypoints),
+    );
     final enemy = EnemyComponent(
       enemyId: _nextEnemyId,
       stats: stats,
-      waypoints: _pathWaypoints(),
+      logic: logic,
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
       bossSheet: _bossSheet,
       onKilled: _handleEnemyKilled,
       onReachedBase: _handleEnemyReachedBase,
-      onSummonMinions: bossDef == null ? null : _handleSummonMinions,
+      onSummonMinionsFn: bossDef == null ? null : _handleSummonMinions,
       radius: bossDef == null ? 11 : 20,
       priority: 20,
     );
@@ -689,13 +700,18 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _spawnMinion(EnemyComponent boss, EnemyStats stats) {
-    final residual = boss.residualWaypointsFromHere();
-    if (residual.length < 2) return; // boss effectively at base; skip
+    final residualOffsets = boss.logic.residualWaypointsFromHere();
+    if (residualOffsets.length < 2) return; // boss effectively at base; skip
+    final logic = EnemyLogic(
+      enemyId: _nextEnemyId,
+      stats: stats,
+      waypoints: residualOffsets,
+      initialCompletedDistance: boss.logic.pathProgress,
+    );
     final enemy = EnemyComponent(
       enemyId: _nextEnemyId,
       stats: stats,
-      waypoints: residual,
-      initialCompletedDistance: boss.pathProgress,
+      logic: logic,
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
       minionOf: boss.enemyId,
