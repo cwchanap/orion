@@ -88,8 +88,12 @@ class EnemyLogic {
         }
         _segmentProgress = 0;
       } else {
-        final scale = distanceRemaining / distanceToTarget;
-        position = position + Offset(toTarget.dx * scale, toTarget.dy * scale);
+        position =
+            position +
+            Offset(
+              (toTarget.dx / distanceToTarget) * distanceRemaining,
+              (toTarget.dy / distanceToTarget) * distanceRemaining,
+            );
         _segmentProgress =
             1 -
             ((distanceToTarget - distanceRemaining) / _currentSegmentLength);
