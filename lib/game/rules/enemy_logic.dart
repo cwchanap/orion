@@ -16,6 +16,7 @@ class EnemyLogic {
        maxHealth = stats.health,
        shield = stats.shieldHealth,
        _completedDistance = initialCompletedDistance,
+       _summonRemaining = _initialSummonDelay(stats),
        assert(
          waypoints.length >= 2,
          'EnemyLogic requires at least two waypoints',
@@ -41,6 +42,15 @@ class EnemyLogic {
   int _targetWaypointIndex = 1;
   double _completedDistance;
   double _segmentProgress = 0;
+  double _summonRemaining;
+
+  static double _initialSummonDelay(EnemyStats stats) {
+    if (stats is BossDefinition) {
+      final mechanic = stats.summonMechanic;
+      if (mechanic != null) return mechanic.firstDelay;
+    }
+    return 0;
+  }
 
   bool get isResolved => _isResolved;
   int get targetWaypointIndex => _targetWaypointIndex;
@@ -195,7 +205,23 @@ class EnemyLogic {
     );
   }
 
-  int _tickSummon(double dt) => 0; // Task 4 fills this in
+  int _tickSummon(double dt) {
+    final bossDef = stats is BossDefinition ? stats as BossDefinition : null;
+    final mechanic = bossDef?.summonMechanic;
+    if (mechanic == null || mechanic.interval <= 0) return 0;
+    _summonRemaining -= dt;
+    const maxSummonsPerFrame = 16;
+    var summons = 0;
+    while (_summonRemaining <= 0 && summons < maxSummonsPerFrame) {
+      _summonRemaining += mechanic.interval;
+      summons += 1;
+    }
+    if (_summonRemaining <= 0) {
+      // Unusually large dt: shed the debt instead of carrying it forward.
+      _summonRemaining = mechanic.interval;
+    }
+    return summons;
+  }
 
   void _moveAlongPath(double dt, double slowMultiplier) {
     var distanceRemaining = stats.speed * slowMultiplier * dt;
