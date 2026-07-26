@@ -206,6 +206,53 @@ void main() {
       },
     );
   });
+
+  group('EnemyLogic summon', () {
+    test('summonsDue fires after firstDelay then every interval', () {
+      final boss = EnemyLogic(
+        enemyId: 1,
+        stats: GameBalance.relayBreaker, // firstDelay 4, interval 8, count 3
+        waypoints: const [Offset(0, 0), Offset(10000, 0)],
+      );
+      expect(boss.tick(4.0).summonsDue, 1);
+      expect(boss.tick(8.0).summonsDue, 1);
+      expect(boss.tick(7.9).summonsDue, 0);
+    });
+
+    test('data-slot boss never summons', () {
+      final boss = EnemyLogic(
+        enemyId: 1,
+        stats: GameBalance.shieldMatriarch, // no summonMechanic
+        waypoints: const [Offset(0, 0), Offset(10000, 0)],
+      );
+      expect(boss.tick(100).summonsDue, 0);
+    });
+
+    test('summon loop is bounded when dt is unusually large', () {
+      final boss = EnemyLogic(
+        enemyId: 1,
+        stats: GameBalance.relayBreaker,
+        waypoints: const [Offset(0, 0), Offset(100000, 0)],
+      );
+      // Huge dt must not spin unboundedly; result is bounded and debt is shed.
+      final due = boss.tick(1000).summonsDue;
+      expect(due, lessThanOrEqualTo(16));
+      expect(due, greaterThan(0));
+    });
+
+    test('reach-base frame produces no summons', () {
+      // relayBreaker speed 46; path length 46*4 so it reaches base at t=4
+      // (same frame firstDelay would fire).
+      final boss = EnemyLogic(
+        enemyId: 1,
+        stats: GameBalance.relayBreaker,
+        waypoints: const [Offset(0, 0), Offset(46 * 4, 0)],
+      );
+      final r = boss.tick(4.0);
+      expect(r.reachedBase, isTrue);
+      expect(r.summonsDue, 0);
+    });
+  });
 }
 
 Matcher closeToOffset(Offset value) => predicate<Offset>(
