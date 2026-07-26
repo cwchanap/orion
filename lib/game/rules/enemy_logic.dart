@@ -123,16 +123,79 @@ class EnemyLogic {
   }
 
   EnemyTickResult tick(double dt) {
-    // Task 1: movement only. Combat/summon filled in later tasks.
-    final slowMultiplier = 1.0;
-    _moveAlongPath(dt, slowMultiplier);
+    var overlayDirty = false;
+    final movementSlowMultiplier = isSlowed ? slowMultiplier : 1.0;
+    final wasCorrodedAtTickStart = isCorroded;
+
+    // 1. Corrosion + regen
+    if (corrosionRemaining > 0) {
+      final tick = math.min(math.max(0, dt), corrosionRemaining);
+      corrosionRemaining = math.max(0, corrosionRemaining - tick);
+      final healthBeforeCorrosion = health;
+      final shieldBeforeCorrosion = shield;
+      final dmg = applyDamage(
+        corrosionDamagePerSecond * tick,
+        bypassArmor: true,
+      );
+      if (health != healthBeforeCorrosion || shield != shieldBeforeCorrosion) {
+        overlayDirty = true;
+      }
+      if (corrosionRemaining == 0) {
+        corrosionDamagePerSecond = 0;
+        armorShred = 0;
+        overlayDirty = true;
+      }
+      if (dmg.died) {
+        return EnemyTickResult(
+          reachedBase: false,
+          diedByCorrosion: true,
+          summonsDue: 0,
+          overlayDirty: true,
+        );
+      }
+    }
+    final previousHealth = health;
+    health = CombatEffects.applyRegen(
+      health: health,
+      maxHealth: maxHealth,
+      regenPerSecond: stats.regenPerSecond,
+      dt: dt,
+      isCorroded: wasCorrodedAtTickStart,
+    );
+    if (health != previousHealth) overlayDirty = true;
+
+    // 2. Movement
+    _moveAlongPath(dt, movementSlowMultiplier);
+    if (_isResolved) {
+      return EnemyTickResult(
+        reachedBase: true,
+        diedByCorrosion: false,
+        summonsDue: 0,
+        overlayDirty: true,
+      );
+    }
+
+    // 3. Slow decay
+    if (slowRemaining > 0) {
+      slowRemaining = math.max(0, slowRemaining - dt);
+      if (slowRemaining == 0) {
+        slowMultiplier = 1;
+        overlayDirty = true;
+      }
+    }
+
+    // 4. Summon — filled in Task 4 (returns 0 for now).
+    final summonsDue = _tickSummon(dt);
+
     return EnemyTickResult(
-      reachedBase: _isResolved,
+      reachedBase: false,
       diedByCorrosion: false,
-      summonsDue: 0,
-      overlayDirty: false,
+      summonsDue: summonsDue,
+      overlayDirty: overlayDirty,
     );
   }
+
+  int _tickSummon(double dt) => 0; // Task 4 fills this in
 
   void _moveAlongPath(double dt, double slowMultiplier) {
     var distanceRemaining = stats.speed * slowMultiplier * dt;
