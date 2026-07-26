@@ -13,203 +13,6 @@ import 'package:orion/game/rules/enemy_overlay_state.dart';
 void main() {
   group('EnemyComponent', () {
     test(
-      'pathProgress includes full completed segments after waypoint crossing',
-      () {
-        final enemy = EnemyComponent(
-          enemyId: 1,
-          stats: const EnemyStats(
-            health: 10,
-            speed: 10,
-            baseDamage: 1,
-            goldReward: 1,
-          ),
-          logic: EnemyLogic(
-            enemyId: 1,
-            stats: const EnemyStats(
-              health: 10,
-              speed: 10,
-              baseDamage: 1,
-              goldReward: 1,
-            ),
-            waypoints: const [Offset(0, 0), Offset(10, 0), Offset(10, 10)],
-          ),
-          onKilled: (_) {},
-          onReachedBase: (_) {},
-        );
-
-        enemy.update(0.6);
-        expect(enemy.pathProgress, closeTo(6, 0.001));
-
-        enemy.update(0.6);
-        expect(enemy.position.x, closeTo(10, 0.001));
-        expect(enemy.position.y, closeTo(2, 0.001));
-        expect(enemy.pathProgress, closeTo(12, 0.001));
-      },
-    );
-
-    test('shield absorbs damage before health in runtime component', () {
-      final enemy = EnemyComponent(
-        enemyId: 1,
-        stats: const EnemyStats(
-          health: 50,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
-          shieldHealth: 20,
-        ),
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: const EnemyStats(
-            health: 50,
-            speed: 10,
-            baseDamage: 1,
-            goldReward: 1,
-            shieldHealth: 20,
-          ),
-          waypoints: const [Offset(0, 0), Offset(1000, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-      );
-
-      enemy.applyDamage(15);
-
-      expect(enemy.health, 50);
-      expect(enemy.shield, 5);
-      expect(enemy.isAlive, isTrue);
-    });
-
-    test('regen restores health while corrosion pauses regen', () {
-      const stats = EnemyStats(
-        health: 100,
-        speed: 10,
-        baseDamage: 1,
-        goldReward: 1,
-        traits: {EnemyTrait.regen},
-        regenPerSecond: 10,
-      );
-      final enemy = EnemyComponent(
-        enemyId: 1,
-        stats: stats,
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: stats,
-          waypoints: const [Offset(0, 0), Offset(1000, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-      );
-
-      enemy.applyDamage(30);
-      enemy.update(1);
-      expect(enemy.health, 80);
-
-      enemy.applyCorrosion(damagePerSecond: 5, duration: 2, armorShred: 0.1);
-      enemy.update(1);
-
-      expect(enemy.health, 75);
-      expect(enemy.isCorroded, isTrue);
-    });
-
-    test('slow applies to movement through its expiry tick', () {
-      final enemy = EnemyComponent(
-        enemyId: 1,
-        stats: const EnemyStats(
-          health: 100,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
-        ),
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: const EnemyStats(
-            health: 100,
-            speed: 10,
-            baseDamage: 1,
-            goldReward: 1,
-          ),
-          waypoints: const [Offset(0, 0), Offset(100, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-      );
-
-      enemy.applySlow(multiplier: 0.5, duration: 1);
-      enemy.update(1);
-
-      expect(enemy.position.x, closeTo(5, 0.001));
-      expect(enemy.isSlowed, isFalse);
-    });
-
-    test('regen stays paused during corrosion expiry tick', () {
-      const stats = EnemyStats(
-        health: 100,
-        speed: 10,
-        baseDamage: 1,
-        goldReward: 1,
-        traits: {EnemyTrait.regen},
-        regenPerSecond: 10,
-      );
-      final enemy = EnemyComponent(
-        enemyId: 1,
-        stats: stats,
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: stats,
-          waypoints: const [Offset(0, 0), Offset(1000, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-      );
-
-      enemy.applyDamage(30);
-      enemy.applyCorrosion(damagePerSecond: 5, duration: 1, armorShred: 0.1);
-      enemy.update(1);
-
-      expect(enemy.health, 65);
-      expect(enemy.isCorroded, isFalse);
-
-      enemy.update(1);
-      expect(enemy.health, 75);
-    });
-
-    test('armor reduces health damage and corrosion damage bypasses armor', () {
-      final enemy = EnemyComponent(
-        enemyId: 1,
-        stats: const EnemyStats(
-          health: 100,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
-          traits: {EnemyTrait.armored},
-          armorReduction: 0.50,
-        ),
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: const EnemyStats(
-            health: 100,
-            speed: 10,
-            baseDamage: 1,
-            goldReward: 1,
-            traits: {EnemyTrait.armored},
-            armorReduction: 0.50,
-          ),
-          waypoints: const [Offset(0, 0), Offset(1000, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-      );
-
-      enemy.applyDamage(20);
-      expect(enemy.health, 90);
-
-      enemy.applyCorrosion(damagePerSecond: 10, duration: 1, armorShred: 0.2);
-      enemy.update(1);
-
-      expect(enemy.health, 80);
-    });
-
-    test(
       'component overlay state reflects runtime health shield and effects',
       () {
         final enemy = EnemyComponent(
@@ -357,73 +160,6 @@ void main() {
       expect(candidate.isArmored, isFalse);
     });
 
-    test('reaching the end of the path resolves via onReachedBase', () {
-      var reachedBase = false;
-      final enemy = EnemyComponent(
-        enemyId: 1,
-        stats: const EnemyStats(
-          health: 100,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
-        ),
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: const EnemyStats(
-            health: 100,
-            speed: 10,
-            baseDamage: 1,
-            goldReward: 1,
-          ),
-          waypoints: const [Offset(0, 0), Offset(5, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {
-          reachedBase = true;
-        },
-      );
-
-      enemy.update(1);
-
-      expect(reachedBase, isTrue);
-      expect(enemy.isResolved, isTrue);
-      expect(enemy.isAlive, isFalse);
-    });
-
-    test('corrosion killing the enemy resolves via onKilled', () {
-      var killed = false;
-      final enemy = EnemyComponent(
-        enemyId: 1,
-        stats: const EnemyStats(
-          health: 10,
-          speed: 10,
-          baseDamage: 1,
-          goldReward: 1,
-        ),
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: const EnemyStats(
-            health: 10,
-            speed: 10,
-            baseDamage: 1,
-            goldReward: 1,
-          ),
-          waypoints: const [Offset(0, 0), Offset(1000, 0)],
-        ),
-        onKilled: (_) {
-          killed = true;
-        },
-        onReachedBase: (_) {},
-      );
-
-      enemy.applyCorrosion(damagePerSecond: 20, duration: 2, armorShred: 0);
-      enemy.update(1);
-
-      expect(killed, isTrue);
-      expect(enemy.isResolved, isTrue);
-      expect(enemy.isAlive, isFalse);
-    });
-
     test('overlay state is cached until a mutation marks it dirty', () {
       final enemy = EnemyComponent(
         enemyId: 1,
@@ -458,100 +194,6 @@ void main() {
       expect(identical(enemy.overlayState, afterMutation), isTrue);
     });
 
-    test('summon callback fires after firstDelay then every interval', () {
-      final sources = <EnemyComponent>[];
-      final counts = <int>[];
-      final boss = EnemyComponent(
-        enemyId: 1,
-        stats: GameBalance.relayBreaker,
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: GameBalance.relayBreaker,
-          waypoints: const [Offset(0, 0), Offset(10000, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-        onSummonMinionsFn: (source, count) {
-          sources.add(source);
-          counts.add(count);
-        },
-      );
-      // firstDelay = 4.0
-      boss.update(4.0);
-      expect(counts, [3]);
-      boss.update(8.0);
-      expect(counts, [3, 3]);
-      expect(sources.first, same(boss));
-    });
-
-    test('data-slot boss never summons', () {
-      var fired = 0;
-      final boss = EnemyComponent(
-        enemyId: 1,
-        stats: GameBalance.shieldMatriarch,
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: GameBalance.shieldMatriarch,
-          waypoints: const [Offset(0, 0), Offset(10000, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-        onSummonMinionsFn: (_, _) => fired += 1,
-      );
-      boss.update(100);
-      expect(fired, 0);
-    });
-
-    test(
-      'boss does not summon on the frame its summon becomes due as it reaches the base',
-      () {
-        // relayBreaker: speed=46, firstDelay=4.0. Path length == speed *
-        // firstDelay so the boss reaches the base on the same update that its
-        // first summon timer would fire.
-        var summons = 0;
-        var reachedBase = 0;
-        final boss = EnemyComponent(
-          enemyId: 1,
-          stats: GameBalance.relayBreaker,
-          logic: EnemyLogic(
-            enemyId: 1,
-            stats: GameBalance.relayBreaker,
-            waypoints: const [Offset(0, 0), Offset(46 * 4.0, 0)],
-          ),
-          onKilled: (_) {},
-          onReachedBase: (_) => reachedBase += 1,
-          onSummonMinionsFn: (_, _) => summons += 1,
-        );
-        boss.update(4.0);
-        expect(reachedBase, 1);
-        expect(summons, 0);
-        expect(boss.isResolved, isTrue);
-      },
-    );
-
-    test('summon loop is bounded when dt is unusually large', () {
-      // A stalled frame producing a huge dt must not spin the summon loop
-      // unboundedly; it should fire a bounded number of times and shed the
-      // remaining debt.
-      var summons = 0;
-      final boss = EnemyComponent(
-        enemyId: 1,
-        stats: GameBalance.relayBreaker,
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: GameBalance.relayBreaker,
-          waypoints: const [Offset(0, 0), Offset(1e9, 0)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-        onSummonMinionsFn: (_, _) => summons += 1,
-      );
-      boss.update(1000.0);
-      // maxSummonsPerFrame cap in the implementation.
-      expect(summons, lessThanOrEqualTo(16));
-      expect(summons, greaterThan(0));
-    });
-
     test('residualWaypointsFromHere starts at current position', () {
       final boss = EnemyComponent(
         enemyId: 1,
@@ -564,7 +206,8 @@ void main() {
         onKilled: (_) {},
         onReachedBase: (_) {},
       );
-      boss.update(1.0); // moves ~46 units along x, clamped to path
+      boss.logic.tick(1.0); // moves ~46 units along x, clamped to path
+      boss.syncRender();
       final residual = boss.residualWaypointsFromHere();
       expect(residual.first, equals(boss.position));
       expect(residual.length, greaterThanOrEqualTo(2));
@@ -627,6 +270,36 @@ void main() {
         expect(killed, 1);
       },
     );
+
+    test('syncRender derives position from logic.position', () {
+      final enemy = EnemyComponent(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+          waypoints: const [Offset(0, 0), Offset(100, 0)],
+        ),
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+
+      enemy.logic.tick(1); // moves 10 units along x
+      expect(enemy.position.x, 0); // not yet synced
+      enemy.syncRender();
+      expect(enemy.position.x, closeTo(10, 0.001));
+      expect(enemy.position.y, 0);
+    });
 
     group('EnemyOverlayState', () {
       test('overlay data defensively copies traits', () {

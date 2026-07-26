@@ -198,14 +198,20 @@ class EnemyComponent extends CircleComponent {
     );
   }
 
+  void syncRender() {
+    position.setValues(logic.position.dx, logic.position.dy);
+  }
+
+  void markOverlayDirty() => _overlayDirty = true;
+
   // temporary (removed in Task 7): component still ticks during super.update
   @override
   void update(double dt) {
     super.update(dt);
     if (!isAlive) return;
     final result = logic.tick(dt); // dt is already Flame-time-scaled
-    position.setValues(logic.position.dx, logic.position.dy);
-    if (result.overlayDirty) _overlayDirty = true;
+    syncRender();
+    if (result.overlayDirty) markOverlayDirty();
     if (result.reachedBase) {
       resolveReachedBase();
     } else if (result.diedByCorrosion) {
