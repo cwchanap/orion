@@ -1019,6 +1019,13 @@ void main() {
       game.startWave();
       game.update(0.01);
       game.processLifecycleEvents();
+      // With spawnInterval=0, both enemies are already on the board before the
+      // lethal update — the trailing one must NOT be dispatched as killed or
+      // reach-base, and no fresh enemy may be spawned after defeat.
+      final enemiesBeforeLethal = game.children
+          .whereType<EnemyComponent>()
+          .toList();
+      expect(enemiesBeforeLethal, hasLength(2));
       final goldBefore = game.snapshot.gold;
       // Advance: the lead enemy reaches base and defeats the player.
       // The loop must break so the trailing enemy is NOT dispatched as killed.
@@ -1028,6 +1035,10 @@ void main() {
       // reach-base never rewards gold; a spurious onKilled for the trailing
       // enemy would have called rewardKill and increased gold.
       expect(game.snapshot.gold, goldBefore);
+      // _handleEnemyReachedBase runs _clearCombatComponents on defeat, and the
+      // post-tick phase guard prevents _spawnWaveEnemies from repopulating the
+      // board. No remainder enemy may survive or be freshly spawned.
+      expect(game.children.whereType<EnemyComponent>(), isEmpty);
     });
 
     test(
@@ -1342,6 +1353,9 @@ StageDefinition _twoEnemyDefeatStage() {
         groups: [
           WaveGroup(
             enemyCount: 2,
+            // spawnInterval=0 so both enemies are alive in the same tick,
+            // exercising the mid-tick defeat break in _tickEnemyLogic.
+            spawnInterval: 0,
             enemyStats: EnemyStats(
               health: 100,
               speed: 10,
