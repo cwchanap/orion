@@ -271,6 +271,76 @@ void main() {
       },
     );
 
+    test(
+      'resolveKilled then resolveReachedBase dispatches only the first callback',
+      () {
+        // This directly exercises the _resolutionDispatched guard in _resolve:
+        // a competing kill and reach-base dispatch must fire only the first.
+        // Unlike applyDamage-then-applyDamage (which returns at !isAlive
+        // before reaching _resolve), both resolveKilled() and
+        // resolveReachedBase() go straight to _resolve, so removing the guard
+        // makes this test fail with reachedBase == 1.
+        var killed = 0;
+        var reachedBase = 0;
+        const stats = EnemyStats(
+          health: 10,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        );
+        final enemy = EnemyComponent(
+          enemyId: 1,
+          stats: stats,
+          logic: EnemyLogic(
+            enemyId: 1,
+            stats: stats,
+            waypoints: const [Offset(0, 0), Offset(1000, 0)],
+          ),
+          onKilled: (_) => killed += 1,
+          onReachedBase: (_) => reachedBase += 1,
+        );
+        enemy.resolveKilled();
+        expect(killed, 1);
+        expect(reachedBase, 0);
+        enemy.resolveReachedBase();
+        expect(killed, 1);
+        expect(reachedBase, 0);
+      },
+    );
+
+    test(
+      'resolveReachedBase then resolveKilled dispatches only the first callback',
+      () {
+        // Symmetric ordering: reach-base wins, the later kill dispatch is
+        // suppressed by _resolutionDispatched.
+        var killed = 0;
+        var reachedBase = 0;
+        const stats = EnemyStats(
+          health: 10,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        );
+        final enemy = EnemyComponent(
+          enemyId: 1,
+          stats: stats,
+          logic: EnemyLogic(
+            enemyId: 1,
+            stats: stats,
+            waypoints: const [Offset(0, 0), Offset(1000, 0)],
+          ),
+          onKilled: (_) => killed += 1,
+          onReachedBase: (_) => reachedBase += 1,
+        );
+        enemy.resolveReachedBase();
+        expect(reachedBase, 1);
+        expect(killed, 0);
+        enemy.resolveKilled();
+        expect(reachedBase, 1);
+        expect(killed, 0);
+      },
+    );
+
     test('syncRender derives position from logic.position', () {
       final enemy = EnemyComponent(
         enemyId: 1,

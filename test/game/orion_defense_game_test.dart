@@ -993,23 +993,77 @@ void main() {
     );
 
     test(
-      'corrosion applied by a projectile ticks damage same frame (large dt)',
-      () {
+      'corrosion applied by a projectile during super.update ticks lethal same frame',
+      () async {
         final game = OrionDefenseGame(stage: _oneEnemyStage());
         game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // FlameGame is never mounted in unit tests (no GameWidget drives the
+        // lifecycle), so removeFromParent() during super.update modifies the
+        // children set immediately instead of enqueueing — causing concurrent
+        // modification when the projectile lands and removes itself mid-
+        // iteration. setMounted() puts the game into the mounted state so
+        // removals enqueue.
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
         game.startWave();
         game.update(0.01);
         game.processLifecycleEvents();
         final enemy = game.children.whereType<EnemyComponent>().single;
-        // Simulate a nanite hit applying corrosion mid-super.update, then a large tick.
-        enemy.applyCorrosion(
-          damagePerSecond: enemy.maxHealth,
-          duration: 10,
+        // Corrosion is NOT yet active before the projectile lands — this is
+        // what makes the test prove the projectile-to-tick ordering: the
+        // corrosion must be applied during super.update and then consumed by
+        // _tickEnemyLogic later in the SAME frame.
+        expect(enemy.isCorroded, isFalse);
+        // Mount a real nanite projectile 50 units from the enemy. With
+        // projectileSpeed=100 it does NOT land on update(0) (50 > max(0, 11))
+        // but DOES land on update(1) (50 <= 100) during super.update, applying
+        // corrosion. _tickEnemyLogic then runs in the same frame and ticks 1s
+        // of corrosion → lethal. damage=10 is non-lethal so the corrosion tick
+        // (not the projectile hit) must be the killer.
+        final projectileStats = const TowerStats(
+          type: TowerType.nanite,
+          level: 1,
+          cost: 0,
+          upgradeCost: 0,
+          specializationCost: 0,
+          range: 100,
+          damage: 10,
+          fireInterval: 1,
+          projectileSpeed: 100,
+          splashRadius: 0,
+          slowMultiplier: 1,
+          slowDuration: 0,
+          corrosionDamagePerSecond: 1000,
+          corrosionDuration: 10,
           armorShred: 0,
         );
+        game.add(
+          ProjectileComponent(
+            stats: projectileStats,
+            target: enemy,
+            startPosition: enemy.position + Vector2(50, 0),
+            enemiesProvider: () => game.children.whereType<EnemyComponent>(),
+            priority: 30,
+          ),
+        );
+        // update(0) mounts the projectile without it landing (scaledDt=0,
+        // 50 > max(0, radius=11)).
+        game.update(0);
+        game.processLifecycleEvents();
+        expect(
+          enemy.isCorroded,
+          isFalse,
+          reason: 'projectile must not land on the mount frame',
+        );
+        // dt=1: the projectile lands during super.update applying corrosion;
+        // _tickEnemyLogic then ticks 1s of corrosion → lethal. If enemy
+        // ticking moved before super.update, or projectile-applied effects
+        // were delayed until next frame, the enemy would NOT die this frame.
         game.update(1);
         game.processLifecycleEvents();
         expect(enemy.isResolved, isTrue); // corrosion killed it this frame
+        expect(game.children.whereType<EnemyComponent>(), isEmpty);
       },
     );
 
