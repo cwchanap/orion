@@ -384,6 +384,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       _tickEnemyLogic(scaledDt);
     }
     _removeInactiveEnemyReferences();
+    // A reach-base defeat or combat-triggered loss inside _tickEnemyLogic can
+    // flip the phase out of wave. Don't spawn or finish-wave after that —
+    // _handleEnemyReachedBase already cleaned up combat components and reset
+    // spawn state. Spawning here would repopulate the board post-defeat.
+    if (_session.phase != GamePhase.wave) return;
     if (scaledDt > 0) {
       _spawnWaveEnemies(scaledDt);
     }
