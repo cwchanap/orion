@@ -132,13 +132,6 @@ class EnemyComponent extends CircleComponent {
     _overlayDirty = true;
   }
 
-  // NOTE: logic.residualWaypointsFromHere() already returns [position, ...rest],
-  // so we convert without re-prepending the component position (Correction 1).
-  List<Vector2> residualWaypointsFromHere() => logic
-      .residualWaypointsFromHere()
-      .map((o) => Vector2(o.dx, o.dy))
-      .toList();
-
   TargetCandidate get targetCandidate => TargetCandidate(
     id: enemyId,
     x: position.x,

@@ -161,6 +161,8 @@ class EnemyLogic {
         corrosionDamagePerSecond * tick,
         bypassArmor: true,
       );
+      // Only mark dirty if corrosion actually changed state — a zero-magnitude
+      // tick (e.g. rounded-down damage) would otherwise force a needless redraw.
       if (health != healthBeforeCorrosion || shield != shieldBeforeCorrosion) {
         overlayDirty = true;
       }

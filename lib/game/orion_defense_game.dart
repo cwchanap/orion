@@ -392,7 +392,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (scaledDt > 0) {
       _spawnWaveEnemies(scaledDt);
     }
-    _removeInactiveEnemyReferences();
     _finishWaveIfComplete();
   }
 
