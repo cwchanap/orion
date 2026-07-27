@@ -1043,26 +1043,78 @@ void main() {
 
     test(
       'onKilled fires exactly once when lethal damage lands on a would-overrun frame',
-      () {
+      () async {
         final game = OrionDefenseGame(stage: _oneEnemyStage());
         game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // FlameGame is never mounted in unit tests (no GameWidget drives the
+        // lifecycle), so removeFromParent() during super.update modifies the
+        // children set immediately instead of enqueueing — causing concurrent
+        // modification when a projectile lands and removes itself mid-iteration.
+        // setMounted() puts the game into the mounted state so removals enqueue.
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
         game.startWave();
         game.update(0.01);
         game.processLifecycleEvents();
         final enemy = game.children.whereType<EnemyComponent>().single;
+        // _oneEnemyStage path is [(50,50),(150,50)] (length 100); speed 10.
+        // Advance until the enemy is 1 unit from the base so the next tick
+        // would overrun it.
+        game.update(9.9);
+        game.processLifecycleEvents();
+        expect(enemy.isAlive, isTrue);
+        expect(enemy.position.x, closeTo(149, 0.5));
         final goldBefore = game.snapshot.gold;
-        // Lethal projectile damage during super.update frame, before the enemy's tick.
-        enemy.applyDamage(enemy.maxHealth);
-        game.update(0.01);
+        final baseHealthBefore = game.snapshot.baseHealth;
+        // Mount a real lethal projectile 50 units from the enemy so it does NOT
+        // land on update(0) (50 > target.radius 11) but DOES land on update(1)
+        // (50 <= projectileSpeed*1 = 100). This makes the kill and the would-be
+        // overrun compete on the same frame.
+        final projectileStats = const TowerStats(
+          type: TowerType.laser,
+          level: 1,
+          cost: 0,
+          upgradeCost: 0,
+          specializationCost: 0,
+          range: 100,
+          damage: 100,
+          fireInterval: 1,
+          projectileSpeed: 100,
+          splashRadius: 0,
+          slowMultiplier: 1,
+          slowDuration: 0,
+        );
+        game.add(
+          ProjectileComponent(
+            stats: projectileStats,
+            target: enemy,
+            startPosition: enemy.position + Vector2(50, 0),
+            enemiesProvider: () => game.children.whereType<EnemyComponent>(),
+            priority: 30,
+          ),
+        );
+        // update(0) mounts the projectile without it landing (scaledDt=0,
+        // 50 > max(0, radius=11)) and without advancing the enemy.
+        game.update(0);
         game.processLifecycleEvents();
-        // onKilled -> rewardKill adds goldReward exactly once.
-        expect(game.snapshot.gold, goldBefore + enemy.stats.goldReward);
-        enemy.applyDamage(
-          enemy.maxHealth,
-        ); // second lethal hit must not re-reward
-        game.update(0.01);
+        expect(
+          game.snapshot.gold,
+          goldBefore,
+          reason: 'projectile must not land on the mount frame',
+        );
+        // dt=1: the projectile lands (50 <= 100) during super.update, killing
+        // the enemy and dispatching onKilled. _tickEnemyLogic then runs but the
+        // enemy is already removed from _activeEnemyComponents — the would-be
+        // overrun is preempted by the kill.
+        game.update(1);
         game.processLifecycleEvents();
+        // Only the kill callback path wins: gold awarded exactly once.
         expect(game.snapshot.gold, goldBefore + enemy.stats.goldReward);
+        // Base health unchanged — reach-base was preempted by the kill.
+        expect(game.snapshot.baseHealth, baseHealthBefore);
+        // The enemy is gone; no duplicate resolution is possible.
+        expect(game.children.whereType<EnemyComponent>(), isEmpty);
       },
     );
 
