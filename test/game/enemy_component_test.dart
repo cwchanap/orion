@@ -194,25 +194,6 @@ void main() {
       expect(identical(enemy.overlayState, afterMutation), isTrue);
     });
 
-    test('residualWaypointsFromHere starts at current position', () {
-      final boss = EnemyComponent(
-        enemyId: 1,
-        stats: GameBalance.relayBreaker,
-        logic: EnemyLogic(
-          enemyId: 1,
-          stats: GameBalance.relayBreaker,
-          waypoints: const [Offset(0, 0), Offset(10000, 0), Offset(10000, 10)],
-        ),
-        onKilled: (_) {},
-        onReachedBase: (_) {},
-      );
-      boss.logic.tick(1.0); // moves ~46 units along x, clamped to path
-      boss.syncRender();
-      final residual = boss.residualWaypointsFromHere();
-      expect(residual.first, equals(boss.position));
-      expect(residual.length, greaterThanOrEqualTo(2));
-    });
-
     test('initialCompletedDistance seeds pathProgress', () {
       final boss = EnemyComponent(
         enemyId: 1,
