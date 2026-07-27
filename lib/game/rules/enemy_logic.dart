@@ -133,6 +133,20 @@ class EnemyLogic {
   }
 
   EnemyTickResult tick(double dt) {
+    // Terminal-state invariant: a resolved enemy (killed or reached base) must
+    // not be reclassified by a later tick. Without this guard, regen could
+    // push health back above zero on a lethally-damaged regen enemy, the
+    // movement loop would skip (_isResolved stays true), and the post-movement
+    // `if (_isResolved) return reachedBase: true` would misclassify the kill as
+    // a base-reach. Return a neutral no-op so the original resolution stands.
+    if (!isAlive) {
+      return const EnemyTickResult(
+        reachedBase: false,
+        diedByCorrosion: false,
+        summonsDue: 0,
+        overlayDirty: false,
+      );
+    }
     var overlayDirty = false;
     final movementSlowMultiplier = isSlowed ? slowMultiplier : 1.0;
     final wasCorrodedAtTickStart = isCorroded;

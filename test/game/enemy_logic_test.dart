@@ -105,6 +105,46 @@ void main() {
       expect(logic.isAlive, isFalse);
     });
 
+    test(
+      'tick on a lethally-damaged regen enemy stays resolved and does not reach base',
+      () {
+        // Reproduces the terminal-state invariant: applyDamage(lethal) sets
+        // _isResolved, then a subsequent tick() must NOT regenerate health,
+        // move, or reclassify the enemy as having reached the base.
+        final logic = EnemyLogic(
+          enemyId: 1,
+          stats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+            traits: {EnemyTrait.regen},
+            regenPerSecond: 50,
+          ),
+          // Short path so an unguarded tick would overrun and report
+          // reachedBase via the post-movement _isResolved branch.
+          waypoints: const [Offset(0, 0), Offset(5, 0)],
+        );
+        final outcome = logic.applyDamage(100);
+        expect(outcome.died, isTrue);
+        expect(logic.isAlive, isFalse);
+        expect(logic.isResolved, isTrue);
+
+        final result = logic.tick(1);
+        expect(
+          result.reachedBase,
+          isFalse,
+          reason: 'killed enemy must not be reclassified as reach-base',
+        );
+        expect(result.diedByCorrosion, isFalse);
+        expect(result.summonsDue, 0);
+        // Health must not regen back above zero on a resolved enemy.
+        expect(logic.health, 0);
+        expect(logic.isAlive, isFalse);
+        expect(logic.isResolved, isTrue);
+      },
+    );
+
     test('applySlow merges and exposes isSlowed', () {
       final logic = make();
       logic.applySlow(multiplier: 0.5, duration: 1);
