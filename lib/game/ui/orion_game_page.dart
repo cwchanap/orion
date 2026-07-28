@@ -139,7 +139,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       body: WorldMapView(
         stages: OrionCampaign.stages,
         progress: _progress,
-        modifiers: CampaignModifiers.fromProgress(
+        campaignModifiers: CampaignModifiers.fromProgress(
           _progress,
           OrionCampaign.stages,
           _techTree,
@@ -222,14 +222,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    final modifiers = CampaignModifiers.fromProgress(
+    final campaignModifiers = CampaignModifiers.fromProgress(
       _progress,
       OrionCampaign.stages,
       _techTree,
     );
     final game = OrionDefenseGame(
       stage: stage,
-      modifiers: modifiers,
+      campaignModifiers: campaignModifiers,
       onStageWon: _saveStageCompletion,
       onReturnToMap: _returnToMap,
     );

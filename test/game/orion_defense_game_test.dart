@@ -726,7 +726,10 @@ void main() {
     test('applies campaign modifiers to session starting values', () {
       final game = OrionDefenseGame(
         stage: _emptyWaveStage(),
-        modifiers: const CampaignModifiers(bonusGold: 30, bonusHealth: 5),
+        campaignModifiers: const CampaignModifiers(
+          bonusGold: 30,
+          bonusHealth: 5,
+        ),
       );
 
       expect(game.snapshot.gold, GameBalance.startingGold + 30);
@@ -737,7 +740,7 @@ void main() {
       );
     });
 
-    test('defaults to no modifiers and baseline economy', () {
+    test('defaults to no campaign modifiers and baseline economy', () {
       final game = OrionDefenseGame(stage: _emptyWaveStage());
 
       expect(game.snapshot.gold, GameBalance.startingGold);
@@ -746,12 +749,13 @@ void main() {
 
     test('clearBonusFraction amplifies the wave-clear gold bonus when set', () {
       // Wave-clear bonus resolution lives in GameSession.finishActiveWave,
-      // which reads session.modifiers.clearBonusFraction. If OrionDefenseGame
-      // fails to forward its modifiers to GameSession.initial, the fraction
+      // which reads session.campaignModifiers.clearBonusFraction. If
+      // OrionDefenseGame fails to forward its campaignModifiers to
+      // GameSession.initial, the fraction
       // stays 0 and the bonus is unscaled.
       final game = OrionDefenseGame(
         stage: _clearBonusStage(clearBonus: 100),
-        modifiers: const CampaignModifiers(clearBonusFraction: 0.5),
+        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.5),
       );
       game.onGameResize(Vector2(800, 1200));
 
@@ -764,37 +768,43 @@ void main() {
       expect(game.snapshot.gold, goldBefore + 150);
     });
 
-    test('wave-clear gold bonus is unscaled when modifiers are absent', () {
-      final game = OrionDefenseGame(stage: _clearBonusStage(clearBonus: 100));
-      game.onGameResize(Vector2(800, 1200));
+    test(
+      'wave-clear gold bonus is unscaled when campaign modifiers are absent',
+      () {
+        final game = OrionDefenseGame(stage: _clearBonusStage(clearBonus: 100));
+        game.onGameResize(Vector2(800, 1200));
 
-      final goldBefore = game.snapshot.gold;
-      game.startWave();
-      game.update(0);
+        final goldBefore = game.snapshot.gold;
+        game.startWave();
+        game.update(0);
 
-      expect(game.snapshot.phase, GamePhase.build);
-      expect(game.snapshot.gold, goldBefore + 100);
-    });
+        expect(game.snapshot.phase, GamePhase.build);
+        expect(game.snapshot.gold, goldBefore + 100);
+      },
+    );
 
-    test('laser tower stats reflect laserDamageFraction from modifiers', () {
-      // TowerComponent resolves its stats through TowerStatsResolver.resolve,
-      // which reads its modifiers field. If OrionDefenseGame fails to forward
-      // modifiers to _addTowerComponent, the placed tower uses
-      // CampaignModifiers.empty and the damage is unscaled.
-      const mods = CampaignModifiers(laserDamageFraction: 0.10);
-      final game = OrionDefenseGame(
-        stage: _singleEnemyStage(),
-        modifiers: mods,
-      );
-      game.onGameResize(Vector2(800, 1200));
-      _tapCell(game, const GridPosition(0, 1));
-      game.placeTower(TowerType.laser);
-      game.processLifecycleEvents();
+    test(
+      'laser tower stats reflect laserDamageFraction from campaign modifiers',
+      () {
+        // TowerComponent resolves its stats through TowerStatsResolver.resolve,
+        // which reads its campaignModifiers field. If OrionDefenseGame fails to
+        // forward campaignModifiers to _addTowerComponent, the placed tower uses
+        // CampaignModifiers.empty and the damage is unscaled.
+        const mods = CampaignModifiers(laserDamageFraction: 0.10);
+        final game = OrionDefenseGame(
+          stage: _singleEnemyStage(),
+          campaignModifiers: mods,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
 
-      final component = game.children.whereType<TowerComponent>().single;
-      final base = GameBalance.towerStats(TowerType.laser, level: 1);
-      expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
-    });
+        final component = game.children.whereType<TowerComponent>().single;
+        final base = GameBalance.towerStats(TowerType.laser, level: 1);
+        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
+      },
+    );
 
     test(
       'upgrading a laser tower re-applies laserDamageFraction via updateTower',
@@ -806,7 +816,7 @@ void main() {
         const mods = CampaignModifiers(laserDamageFraction: 0.10);
         final game = OrionDefenseGame(
           stage: _singleEnemyStage(),
-          modifiers: mods,
+          campaignModifiers: mods,
         );
         game.onGameResize(Vector2(800, 1200));
         _tapCell(game, const GridPosition(0, 1));
@@ -835,7 +845,7 @@ void main() {
         );
         final game = OrionDefenseGame(
           stage: _singleEnemyStage(),
-          modifiers: mods,
+          campaignModifiers: mods,
         );
         game.onGameResize(Vector2(800, 1200));
         _tapCell(game, const GridPosition(0, 1));
@@ -869,7 +879,7 @@ void main() {
         const mods = CampaignModifiers(laserDamageFraction: 0.10);
         final game = OrionDefenseGame(
           stage: _singleEnemyStage(),
-          modifiers: mods,
+          campaignModifiers: mods,
         );
         game.onGameResize(Vector2(800, 1200));
         _tapCell(game, const GridPosition(0, 1));
@@ -891,50 +901,53 @@ void main() {
       },
     );
 
-    test('restart resets base health to modifier-adjusted starting value', () {
-      // A session created with non-zero modifiers must reset back to the
-      // adjusted starting values (not the unmodified baseline, and not the
-      // damaged mid-wave value) after restart.
-      const bonusHealth = 5;
-      const bonusGold = 30;
-      const adjustedStartingHealth =
-          GameBalance.initialBaseHealth + bonusHealth;
-      const adjustedStartingGold = GameBalance.startingGold + bonusGold;
-      final game = OrionDefenseGame(
-        stage: _lethalSingleEnemyStage(),
-        modifiers: const CampaignModifiers(
-          bonusGold: bonusGold,
-          bonusHealth: bonusHealth,
-        ),
-      );
+    test(
+      'restart resets base health to campaign-modifier-adjusted starting value',
+      () {
+        // A session created with non-zero campaign modifiers must reset back to the
+        // adjusted starting values (not the unmodified baseline, and not the
+        // damaged mid-wave value) after restart.
+        const bonusHealth = 5;
+        const bonusGold = 30;
+        const adjustedStartingHealth =
+            GameBalance.initialBaseHealth + bonusHealth;
+        const adjustedStartingGold = GameBalance.startingGold + bonusGold;
+        final game = OrionDefenseGame(
+          stage: _lethalSingleEnemyStage(),
+          campaignModifiers: const CampaignModifiers(
+            bonusGold: bonusGold,
+            bonusHealth: bonusHealth,
+          ),
+        );
 
-      expect(game.snapshot.gold, adjustedStartingGold);
-      expect(game.snapshot.baseHealth, adjustedStartingHealth);
-      expect(game.snapshot.startingBaseHealth, adjustedStartingHealth);
+        expect(game.snapshot.gold, adjustedStartingGold);
+        expect(game.snapshot.baseHealth, adjustedStartingHealth);
+        expect(game.snapshot.startingBaseHealth, adjustedStartingHealth);
 
-      // Damage the base: the lethal enemy deals initialBaseHealth damage,
-      // which the bonus health absorbs so the base survives but is hurt.
-      game.onGameResize(Vector2(800, 1200));
-      game.startWave();
-      game.update(0.01);
-      game.processLifecycleEvents();
-      game.update(1);
-      game.processLifecycleEvents();
+        // Damage the base: the lethal enemy deals initialBaseHealth damage,
+        // which the bonus health absorbs so the base survives but is hurt.
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        game.update(1);
+        game.processLifecycleEvents();
 
-      expect(
-        game.snapshot.baseHealth,
-        lessThan(adjustedStartingHealth),
-        reason: 'base should be damaged before restart',
-      );
-      expect(game.snapshot.baseHealth, greaterThan(0));
+        expect(
+          game.snapshot.baseHealth,
+          lessThan(adjustedStartingHealth),
+          reason: 'base should be damaged before restart',
+        );
+        expect(game.snapshot.baseHealth, greaterThan(0));
 
-      game.restart();
+        game.restart();
 
-      expect(game.snapshot.phase, GamePhase.build);
-      expect(game.snapshot.baseHealth, adjustedStartingHealth);
-      expect(game.snapshot.startingBaseHealth, adjustedStartingHealth);
-      expect(game.snapshot.gold, adjustedStartingGold);
-    });
+        expect(game.snapshot.phase, GamePhase.build);
+        expect(game.snapshot.baseHealth, adjustedStartingHealth);
+        expect(game.snapshot.startingBaseHealth, adjustedStartingHealth);
+        expect(game.snapshot.gold, adjustedStartingGold);
+      },
+    );
 
     test(
       'boss summons minions that path from its position and block completion',

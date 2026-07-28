@@ -12,7 +12,10 @@ void main() {
   group('TowerStatsResolver.resolve', () {
     test('laser damage multiplied by (1 + laserDamageFraction)', () {
       const mods = CampaignModifiers(laserDamageFraction: 0.10);
-      final stats = TowerStatsResolver.resolve(tower(TowerType.laser), mods);
+      final stats = TowerStatsResolver.resolve(
+        tower(TowerType.laser),
+        campaignModifiers: mods,
+      );
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
       expect(stats.damage, closeTo(base.damage * 1.10, 1e-9));
     });
@@ -20,7 +23,7 @@ void main() {
     test('laser damage unchanged when laserDamageFraction is 0', () {
       final stats = TowerStatsResolver.resolve(
         tower(TowerType.laser),
-        CampaignModifiers.empty,
+        campaignModifiers: CampaignModifiers.empty,
       );
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
       expect(stats.damage, base.damage);
@@ -28,7 +31,10 @@ void main() {
 
     test('cryo slowDuration extended by cryoSlowDurationBonus', () {
       const mods = CampaignModifiers(cryoSlowDurationBonus: 0.30);
-      final stats = TowerStatsResolver.resolve(tower(TowerType.cryo), mods);
+      final stats = TowerStatsResolver.resolve(
+        tower(TowerType.cryo),
+        campaignModifiers: mods,
+      );
       final base = GameBalance.towerStats(TowerType.cryo, level: 1);
       expect(stats.slowDuration, closeTo(base.slowDuration + 0.30, 1e-9));
     });
@@ -38,7 +44,10 @@ void main() {
         laserDamageFraction: 0.10,
         cryoSlowDurationBonus: 0.30,
       );
-      final stats = TowerStatsResolver.resolve(tower(TowerType.rocket), mods);
+      final stats = TowerStatsResolver.resolve(
+        tower(TowerType.rocket),
+        campaignModifiers: mods,
+      );
       final base = GameBalance.towerStats(TowerType.rocket, level: 1);
       expect(stats.damage, base.damage);
       expect(stats.slowDuration, base.slowDuration);
@@ -47,7 +56,10 @@ void main() {
     test('re-applies multiplier on upgraded laser', () {
       const mods = CampaignModifiers(laserDamageFraction: 0.10);
       final upgraded = tower(TowerType.laser).upgraded();
-      final stats = TowerStatsResolver.resolve(upgraded, mods);
+      final stats = TowerStatsResolver.resolve(
+        upgraded,
+        campaignModifiers: mods,
+      );
       final baseL2 = GameBalance.towerStats(TowerType.laser, level: 2);
       expect(stats.damage, closeTo(baseL2.damage * 1.10, 1e-9));
     });
@@ -58,7 +70,10 @@ void main() {
       final specialized = tower(
         TowerType.cryo,
       ).upgraded().specialized(TowerSpecialization.deepFreeze);
-      final stats = TowerStatsResolver.resolve(specialized, mods);
+      final stats = TowerStatsResolver.resolve(
+        specialized,
+        campaignModifiers: mods,
+      );
       final baseL3DeepFreeze = GameBalance.towerStats(
         TowerType.cryo,
         level: 3,
