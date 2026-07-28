@@ -16,9 +16,11 @@ class StageDefinition {
     this.reward,
     required this.mapColumn,
     required this.mapRow,
+    List<StageModifier> modifiers = const [],
   }) : pathCells = List.unmodifiable(pathCells),
        waves = List.unmodifiable(waves),
-       unlockDependencies = List.unmodifiable(unlockDependencies);
+       unlockDependencies = List.unmodifiable(unlockDependencies),
+       modifiers = List.unmodifiable(modifiers);
 
   final String id;
   final String name;
@@ -32,4 +34,5 @@ class StageDefinition {
   final CampaignReward? reward;
   final int mapColumn;
   final int mapRow;
+  final List<StageModifier> modifiers;
 }
