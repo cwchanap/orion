@@ -874,33 +874,33 @@ void main() {
     );
   });
 
-  group('GameSession tech-tree modifiers', () {
-    test('modifiers default to empty when omitted', () {
+  group('GameSession campaign modifiers', () {
+    test('defaults to empty when omitted', () {
       final session = GameSession.initial();
-      expect(session.modifiers, CampaignModifiers.empty);
+      expect(session.campaignModifiers, CampaignModifiers.empty);
     });
 
-    test('modifiers are stored on the session', () {
+    test('are stored on the session', () {
       const mods = CampaignModifiers(
         bonusGold: 30,
         bonusHealth: 5,
         clearBonusFraction: 0.25,
       );
-      final session = GameSession.initial(modifiers: mods);
-      expect(session.modifiers, mods);
+      final session = GameSession.initial(campaignModifiers: mods);
+      expect(session.campaignModifiers, mods);
     });
 
-    test('starting gold/health reflect modifiers when no overrides', () {
+    test('starting gold/health reflect them when no overrides', () {
       const mods = CampaignModifiers(bonusGold: 30, bonusHealth: 5);
-      final session = GameSession.initial(modifiers: mods);
+      final session = GameSession.initial(campaignModifiers: mods);
       expect(session.startingGold, GameBalance.startingGold + 30);
       expect(session.startingBaseHealth, GameBalance.initialBaseHealth + 5);
     });
 
-    test('explicit gold/baseHealth overrides still win over modifiers', () {
+    test('explicit gold/baseHealth overrides still win over them', () {
       const mods = CampaignModifiers(bonusGold: 30);
       final session = GameSession.initial(
-        modifiers: mods,
+        campaignModifiers: mods,
         gold: 999,
         baseHealth: 999,
       );
@@ -910,7 +910,7 @@ void main() {
 
     test('wave-clear bonus scales by (1 + clearBonusFraction)', () {
       const mods = CampaignModifiers(clearBonusFraction: 0.25);
-      final session = GameSession.initial(modifiers: mods);
+      final session = GameSession.initial(campaignModifiers: mods);
 
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
@@ -926,10 +926,10 @@ void main() {
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
 
-      // Default modifiers: clearBonusFraction is 0, so clearBonus stays 30.
+      // Default campaign modifiers have clearBonusFraction 0, so clearBonus stays 30.
       expect(session.phase, GamePhase.build);
       expect(session.gold, GameBalance.startingGold + 30);
-      expect(session.modifiers.clearBonusFraction, 0);
+      expect(session.campaignModifiers.clearBonusFraction, 0);
     });
   });
 }

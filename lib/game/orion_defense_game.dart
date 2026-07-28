@@ -37,21 +37,19 @@ class StageCompletion {
 class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
-    this.modifiers,
+    this.campaignModifiers = CampaignModifiers.empty,
     this.onStageWon,
     this.onReturnToMap,
   }) : stage = stage ?? OrionCampaign.stageOne,
        _session = GameSession.initial(
          stage: stage ?? OrionCampaign.stageOne,
-         modifiers: modifiers ?? CampaignModifiers.empty,
-         gold: modifiers?.adjustedStartingGold,
-         baseHealth: modifiers?.adjustedStartingBaseHealth,
+         campaignModifiers: campaignModifiers,
        ) {
     _resetPacing();
   }
 
   final StageDefinition stage;
-  final CampaignModifiers? modifiers;
+  final CampaignModifiers campaignModifiers;
   final ValueChanged<StageCompletion>? onStageWon;
   final VoidCallback? onReturnToMap;
   final GameSession _session;
@@ -469,7 +467,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       launchProjectile: _launchProjectile,
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
-      modifiers: modifiers ?? CampaignModifiers.empty,
+      campaignModifiers: campaignModifiers,
       priority: 10,
     );
     _towerComponents[tower.id] = component;

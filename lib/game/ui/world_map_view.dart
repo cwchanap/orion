@@ -9,7 +9,7 @@ class WorldMapView extends StatelessWidget {
     super.key,
     required this.stages,
     required this.progress,
-    this.modifiers,
+    this.campaignModifiers,
     required this.feedback,
     this.isSavingProgress = false,
     this.isResetting = false,
@@ -21,7 +21,7 @@ class WorldMapView extends StatelessWidget {
 
   final List<StageDefinition> stages;
   final CampaignProgress progress;
-  final CampaignModifiers? modifiers;
+  final CampaignModifiers? campaignModifiers;
   final String? feedback;
   final bool isSavingProgress;
   final bool isResetting;
@@ -102,7 +102,7 @@ class WorldMapView extends StatelessWidget {
                 ),
               ),
             ],
-            if (modifiers?.hasChallengeBadge == true) ...[
+            if (campaignModifiers?.hasChallengeBadge == true) ...[
               const SizedBox(height: 8),
               Text(
                 'Challenge Badge Earned - All side stages cleared',

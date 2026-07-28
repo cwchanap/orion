@@ -7,15 +7,17 @@ import 'board_layout.dart';
 class GameSession {
   GameSession.initial({
     StageDefinition? stage,
-    CampaignModifiers modifiers = CampaignModifiers.empty,
+    CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     int? gold,
     int? baseHealth,
   }) : stage = stage ?? OrionCampaign.stageOne,
-       startingGold = gold ?? modifiers.adjustedStartingGold,
-       startingBaseHealth = baseHealth ?? modifiers.adjustedStartingBaseHealth,
-       modifiers = modifiers,
-       _gold = gold ?? modifiers.adjustedStartingGold,
-       _baseHealth = baseHealth ?? modifiers.adjustedStartingBaseHealth {
+       startingGold = gold ?? campaignModifiers.adjustedStartingGold,
+       startingBaseHealth =
+           baseHealth ?? campaignModifiers.adjustedStartingBaseHealth,
+       campaignModifiers = campaignModifiers,
+       _gold = gold ?? campaignModifiers.adjustedStartingGold,
+       _baseHealth =
+           baseHealth ?? campaignModifiers.adjustedStartingBaseHealth {
     if (this.stage.waves.isEmpty) {
       throw ArgumentError.value(
         this.stage.id,
@@ -28,7 +30,7 @@ class GameSession {
   final StageDefinition stage;
   final int startingGold;
   final int startingBaseHealth;
-  final CampaignModifiers modifiers;
+  final CampaignModifiers campaignModifiers;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
   int _nextTowerId = 1;
   int _gold;
@@ -240,7 +242,7 @@ class GameSession {
     }
 
     final waveBonus = completedWave?.clearBonus ?? 0;
-    _gold += (waveBonus * (1 + modifiers.clearBonusFraction)).round();
+    _gold += (waveBonus * (1 + campaignModifiers.clearBonusFraction)).round();
     _phase = GamePhase.build;
   }
 

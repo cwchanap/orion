@@ -21,11 +21,14 @@ class TowerComponent extends CircleComponent {
     required this.launchProjectile,
     this.spriteSheet,
     this.towerVarietySheet,
-    this.modifiers = CampaignModifiers.empty,
+    this.campaignModifiers = CampaignModifiers.empty,
     double radius = 15,
     super.priority,
   }) : placedTower = tower,
-       stats = TowerStatsResolver.resolve(tower, modifiers),
+       stats = TowerStatsResolver.resolve(
+         tower,
+         campaignModifiers: campaignModifiers,
+       ),
        super(
          radius: radius,
          anchor: Anchor.center,
@@ -35,7 +38,7 @@ class TowerComponent extends CircleComponent {
 
   PlacedTower placedTower;
   TowerStats stats;
-  final CampaignModifiers modifiers;
+  final CampaignModifiers campaignModifiers;
   final TargetAcquirer acquireTarget;
   final ProjectileLauncher launchProjectile;
   final GameSpriteSheet? spriteSheet;
@@ -50,7 +53,10 @@ class TowerComponent extends CircleComponent {
 
   void updateTower(PlacedTower tower) {
     placedTower = tower;
-    stats = TowerStatsResolver.resolve(tower, modifiers);
+    stats = TowerStatsResolver.resolve(
+      tower,
+      campaignModifiers: campaignModifiers,
+    );
     paint.color = _towerColor(tower.type);
   }
 

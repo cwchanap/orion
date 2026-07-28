@@ -6,20 +6,26 @@ import '../models/game_models.dart';
 /// identical outputs. The laser/cryo branches are filtered by tower type so
 /// a non-matching tower is unaffected.
 class TowerStatsResolver {
-  static TowerStats resolve(PlacedTower tower, CampaignModifiers modifiers) {
+  static TowerStats resolve(
+    PlacedTower tower, {
+    CampaignModifiers campaignModifiers = CampaignModifiers.empty,
+  }) {
     final base = GameBalance.towerStats(
       tower.type,
       level: tower.level,
       specialization: tower.specialization,
     );
-    if (tower.type == TowerType.laser && modifiers.laserDamageFraction > 0) {
+    if (tower.type == TowerType.laser &&
+        campaignModifiers.laserDamageFraction > 0) {
       return base.copyWith(
-        damage: base.damage * (1 + modifiers.laserDamageFraction),
+        damage: base.damage * (1 + campaignModifiers.laserDamageFraction),
       );
     }
-    if (tower.type == TowerType.cryo && modifiers.cryoSlowDurationBonus > 0) {
+    if (tower.type == TowerType.cryo &&
+        campaignModifiers.cryoSlowDurationBonus > 0) {
       return base.copyWith(
-        slowDuration: base.slowDuration + modifiers.cryoSlowDurationBonus,
+        slowDuration:
+            base.slowDuration + campaignModifiers.cryoSlowDurationBonus,
       );
     }
     return base;
