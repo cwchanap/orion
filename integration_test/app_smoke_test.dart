@@ -24,6 +24,8 @@ void main() {
     expect(find.text('Outpost Alpha'), findsOneWidget);
     expect(find.text('Standard Conditions'), findsOneWidget);
     expect(find.text('No environmental modifiers'), findsOneWidget);
+    await tester.ensureVisible(find.text('Start Mission'));
+    await tester.pump();
     await tester.tap(find.text('Start Mission'));
     await _pumpUntil(tester, () => tester.any(find.text('Build')));
     expect(find.text('Build'), findsOneWidget);
