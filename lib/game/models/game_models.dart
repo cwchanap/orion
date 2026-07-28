@@ -39,6 +39,17 @@ enum TowerSpecialization {
 
 enum EnemyTrait { armored, shielded, swarm, regen, heavy }
 
+enum StageModifier {
+  shieldRecharge,
+  swarmBounty,
+  reinforcedArmor,
+  regenPressurePulses,
+  reducedStartingHealth,
+  enhancedClearBonus,
+  enemySpeedSurge,
+  amplifiedGravityWells,
+}
+
 enum EnemyArchetype {
   basicDrone,
   basicEliteDrone,
@@ -503,6 +514,19 @@ class GameBalance {
   static const int salvageRiftGoldBonus = 30;
   // Bonus starting base health granted by clearing the Void Bastion side stage.
   static const int voidBastionHealthBonus = 5;
+
+  static const double shieldRechargeDelay = 3.0;
+  static const double shieldRechargeRatePerSecond = 0.10;
+  static const double swarmBountyMultiplier = 1.50;
+  static const double reinforcedArmorBonus = 0.10;
+  static const int regenPulseBurstSize = 3;
+  static const double regenPulseInterval = 0.20;
+  static const double regenPulseGap = 2.0;
+  static const int reducedStartingHealthPenalty = 5;
+  static const double enhancedClearBonusMultiplier = 1.50;
+  static const double enemySpeedSurgeMultiplier = 1.15;
+  static const double amplifiedGravityWellRadiusMultiplier = 1.20;
+  static const double amplifiedGravityWellDurationMultiplier = 1.25;
 
   // Campaign tech-tree upgrade costs. Total is 20 (intentional 1-pt slack
   // below the 21-pt max medal rank: 7 stages × 3 rank). Tests assert this.

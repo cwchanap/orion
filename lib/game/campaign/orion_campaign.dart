@@ -33,6 +33,7 @@ class OrionCampaign {
       mainPathOrder: 2,
       mapColumn: 1,
       mapRow: 1,
+      modifiers: const [StageModifier.shieldRecharge],
     ),
     StageDefinition(
       id: 'salvage-rift',
@@ -47,6 +48,7 @@ class OrionCampaign {
       reward: CampaignReward.bonusGold,
       mapColumn: 2,
       mapRow: 0,
+      modifiers: const [StageModifier.swarmBounty],
     ),
     StageDefinition(
       id: 'asteroid-foundry',
@@ -60,6 +62,7 @@ class OrionCampaign {
       mainPathOrder: 3,
       mapColumn: 2,
       mapRow: 1,
+      modifiers: const [StageModifier.reinforcedArmor],
     ),
     StageDefinition(
       id: 'aurora-gate',
@@ -73,6 +76,7 @@ class OrionCampaign {
       mainPathOrder: 4,
       mapColumn: 3,
       mapRow: 1,
+      modifiers: const [StageModifier.regenPressurePulses],
     ),
     StageDefinition(
       id: 'void-bastion',
@@ -87,6 +91,10 @@ class OrionCampaign {
       reward: CampaignReward.bonusHealth,
       mapColumn: 4,
       mapRow: 2,
+      modifiers: const [
+        StageModifier.reducedStartingHealth,
+        StageModifier.enhancedClearBonus,
+      ],
     ),
     StageDefinition(
       id: 'singularity-core',
@@ -100,6 +108,10 @@ class OrionCampaign {
       mainPathOrder: 5,
       mapColumn: 4,
       mapRow: 1,
+      modifiers: const [
+        StageModifier.enemySpeedSurge,
+        StageModifier.amplifiedGravityWells,
+      ],
     ),
   ]);
 
@@ -181,6 +193,14 @@ class OrionCampaign {
     }
 
     for (final stage in stageList) {
+      final seenModifiers = <StageModifier>{};
+      for (final modifier in stage.modifiers) {
+        if (!seenModifiers.add(modifier)) {
+          errors.add(
+            '${stage.id} contains duplicate modifier: ${modifier.name}.',
+          );
+        }
+      }
       for (final dependency in stage.unlockDependencies) {
         if (!ids.contains(dependency)) {
           errors.add('${stage.id} depends on unknown stage $dependency.');

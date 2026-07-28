@@ -10,6 +10,21 @@ void main() {
       expect(GameBalance.voidBastionHealthBonus, 5);
     });
 
+    test('environmental modifier tuning matches the approved design', () {
+      expect(GameBalance.shieldRechargeDelay, 3.0);
+      expect(GameBalance.shieldRechargeRatePerSecond, 0.10);
+      expect(GameBalance.swarmBountyMultiplier, 1.50);
+      expect(GameBalance.reinforcedArmorBonus, 0.10);
+      expect(GameBalance.regenPulseBurstSize, 3);
+      expect(GameBalance.regenPulseInterval, 0.20);
+      expect(GameBalance.regenPulseGap, 2.0);
+      expect(GameBalance.reducedStartingHealthPenalty, 5);
+      expect(GameBalance.enhancedClearBonusMultiplier, 1.50);
+      expect(GameBalance.enemySpeedSurgeMultiplier, 1.15);
+      expect(GameBalance.amplifiedGravityWellRadiusMultiplier, 1.20);
+      expect(GameBalance.amplifiedGravityWellDurationMultiplier, 1.25);
+    });
+
     test('defines tower order and unlock waves', () {
       expect(TowerType.values, [
         TowerType.laser,

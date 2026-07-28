@@ -35,6 +35,82 @@ void main() {
       ]);
     });
 
+    test('modifier lists are immutable', () {
+      final stage = StageDefinition(
+        id: 'test',
+        name: 'Test',
+        mapLabel: 'Test',
+        description: 'Test stage',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [],
+        modifiers: const [StageModifier.shieldRecharge],
+        mapColumn: 0,
+        mapRow: 0,
+      );
+
+      expect(
+        () => stage.modifiers.add(StageModifier.swarmBounty),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('campaign assigns exact environmental modifiers', () {
+      expect(OrionCampaign.stageById('outpost-alpha').modifiers, isEmpty);
+      expect(OrionCampaign.stageById('nebula-relay').modifiers, [
+        StageModifier.shieldRecharge,
+      ]);
+      expect(OrionCampaign.stageById('salvage-rift').modifiers, [
+        StageModifier.swarmBounty,
+      ]);
+      expect(OrionCampaign.stageById('asteroid-foundry').modifiers, [
+        StageModifier.reinforcedArmor,
+      ]);
+      expect(OrionCampaign.stageById('aurora-gate').modifiers, [
+        StageModifier.regenPressurePulses,
+      ]);
+      expect(OrionCampaign.stageById('void-bastion').modifiers, [
+        StageModifier.reducedStartingHealth,
+        StageModifier.enhancedClearBonus,
+      ]);
+      expect(OrionCampaign.stageById('singularity-core').modifiers, [
+        StageModifier.enemySpeedSurge,
+        StageModifier.amplifiedGravityWells,
+      ]);
+    });
+
+    test(
+      'validation rejects duplicate modifiers without campaign-specific rules',
+      () {
+        final source = OrionCampaign.stageOne;
+        final duplicateStage = StageDefinition(
+          id: source.id,
+          name: source.name,
+          mapLabel: source.mapLabel,
+          description: source.description,
+          pathCells: source.pathCells,
+          waves: source.waves,
+          unlockDependencies: source.unlockDependencies,
+          isMainPath: source.isMainPath,
+          mainPathOrder: source.mainPathOrder,
+          reward: source.reward,
+          mapColumn: source.mapColumn,
+          mapRow: source.mapRow,
+          modifiers: const [
+            StageModifier.shieldRecharge,
+            StageModifier.shieldRecharge,
+          ],
+        );
+        final stages = [duplicateStage, ...OrionCampaign.stages.skip(1)];
+
+        expect(
+          OrionCampaign.validateStages(stages),
+          contains(
+            'outpost-alpha contains duplicate modifier: shieldRecharge.',
+          ),
+        );
+      },
+    );
+
     test('each stage has eight waves and in-bounds continuous path cells', () {
       for (final stage in OrionCampaign.stages) {
         expect(stage.waves, hasLength(8), reason: stage.id);
