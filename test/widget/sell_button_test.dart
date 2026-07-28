@@ -140,6 +140,9 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Alpha'));
   await tester.pumpAndSettle();
+  expect(find.text('Start Mission'), findsOneWidget);
+  await tester.tap(find.text('Start Mission'));
+  await tester.pump();
 
   final snapshot = game!.stateNotifier.value;
   game!.stateNotifier.value = GameSnapshot(

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
@@ -14,6 +15,33 @@ import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:orion/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+Future<void> startStageFromBriefing(
+  WidgetTester tester, {
+  String mapLabel = 'Alpha',
+  String actionLabel = 'Start Mission',
+}) async {
+  await tester.tap(find.text(mapLabel));
+  await tester.pumpAndSettle();
+  expect(find.text(actionLabel), findsOneWidget);
+  await tester.tap(find.text(actionLabel));
+  await tester.pump();
+}
+
+Future<InMemoryCampaignProgressStore> storeWithResults(
+  Map<String, StageResult> results,
+) async {
+  final store = InMemoryCampaignProgressStore(
+    knownStages: OrionCampaign.stages,
+  );
+  await store.save(
+    CampaignSave(
+      progress: CampaignProgress(bestResultsByStageId: results),
+      techTree: CampaignTechTree(),
+    ),
+  );
+  return store;
+}
 
 void main() {
   testWidgets('boots into the Orion world map first', (tester) async {
@@ -27,13 +55,166 @@ void main() {
     expect(find.text('Start Wave'), findsNothing);
   });
 
+  testWidgets('unlocked stage opens briefing before game creation', (
+    tester,
+  ) async {
+    OrionDefenseGame? createdGame;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: InMemoryCampaignProgressStore(
+            knownStages: OrionCampaign.stages,
+          ),
+          onGameCreated: (game) => createdGame = game,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(find.text('Standard Conditions'), findsOneWidget);
+    expect(find.text('No environmental modifiers'), findsOneWidget);
+    expect(createdGame, isNull);
+
+    await tester.tap(find.text('Start Mission'));
+    await tester.pump();
+    expect(createdGame?.stage.id, 'outpost-alpha');
+  });
+
+  testWidgets('dismiss does not launch and replay shows best result', (
+    tester,
+  ) async {
+    final store = await storeWithResults({
+      'outpost-alpha': const StageResult(
+        medal: StageMedal.silver,
+        bestBaseHealth: 14,
+      ),
+    });
+    OrionDefenseGame? createdGame;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (game) => createdGame = game,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Replay Mission'), findsOneWidget);
+    expect(find.text('Best: Silver • 14 base health'), findsOneWidget);
+    await tester.tap(find.text('Dismiss'));
+    await tester.pumpAndSettle();
+    expect(createdGame, isNull);
+  });
+
+  testWidgets('every modified stage shows its accepted briefing copy', (
+    tester,
+  ) async {
+    final results = {
+      for (final stage in OrionCampaign.stages)
+        stage.id: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
+    };
+    final store = await storeWithResults(results);
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    for (final stage in OrionCampaign.stages.skip(1)) {
+      await tester.tap(find.text(stage.mapLabel));
+      await tester.pumpAndSettle();
+      for (final modifier in stage.modifiers) {
+        final metadata = StageModifierMetadata.forModifier(modifier);
+        expect(find.text(metadata.title), findsOneWidget);
+        expect(find.text(metadata.description), findsOneWidget);
+      }
+      if (stage.id == 'salvage-rift') {
+        expect(
+          find.text(
+            'Completion reward: +${GameBalance.salvageRiftGoldBonus} Gold',
+          ),
+          findsOneWidget,
+        );
+      }
+      if (stage.id == 'void-bastion') {
+        expect(
+          find.text(
+            'Completion reward: +${GameBalance.voidBastionHealthBonus} HP',
+          ),
+          findsOneWidget,
+        );
+      }
+      await tester.tap(find.text('Dismiss'));
+      await tester.pumpAndSettle();
+    }
+  });
+
+  testWidgets('briefing scrolls on a compact portrait surface', (tester) async {
+    tester.view.physicalSize = const Size(390, 480);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final store = await storeWithResults({
+      for (final stage in OrionCampaign.stages)
+        stage.id: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
+    });
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Core'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Replay Mission'));
+    await tester.pump();
+
+    expect(find.text('Replay Mission'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('build intel shows snapshot modifier titles and hides in wave', (
+    tester,
+  ) async {
+    final store = await storeWithResults({
+      for (final stage in OrionCampaign.stages)
+        stage.id: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
+    });
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (value) => game = value,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Core'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replay Mission'));
+    await tester.pump();
+
+    expect(
+      find.text('Environment: Temporal Surge, Amplified Wells'),
+      findsOneWidget,
+    );
+    game!.startWave();
+    await tester.pump();
+    expect(find.textContaining('Environment:'), findsNothing);
+  });
+
   testWidgets('starts an unlocked stage from the world map', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
     await tester.pumpWidget(const OrionApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
+    await startStageFromBriefing(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('Outpost Alpha'), findsOneWidget);
@@ -54,8 +235,7 @@ void main() {
     await tester.pumpWidget(const OrionApp());
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
 
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
@@ -78,8 +258,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
 
     final snapshot = game!.stateNotifier.value;
     game!.stateNotifier.value = GameSnapshot(
@@ -107,6 +286,7 @@ void main() {
 
     expect(find.text('Victory'), findsOneWidget);
     expect(find.text('Silver medal - Base 14/20'), findsOneWidget);
+    expect(find.textContaining('Environment:'), findsNothing);
   });
 
   testWidgets(
@@ -122,8 +302,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
 
       expect(find.text('Next Wave 1/8'), findsOneWidget);
       expect(find.text('8 Drones'), findsOneWidget);
@@ -173,8 +352,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
 
     final snapshot = game!.stateNotifier.value;
     game!.stateNotifier.value = GameSnapshot(
@@ -223,8 +401,13 @@ void main() {
     tester,
   ) async {
     SharedPreferences.setMockInitialValues({});
+    OrionDefenseGame? createdGame;
 
-    await tester.pumpWidget(const OrionApp());
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(onGameCreated: (game) => createdGame = game),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Core'));
@@ -232,6 +415,9 @@ void main() {
 
     expect(find.text('Singularity Core is locked.'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
+    expect(find.text('Start Mission'), findsNothing);
+    expect(find.text('Replay Mission'), findsNothing);
+    expect(createdGame, isNull);
   });
 
   testWidgets('reset confirmation clears campaign progress', (tester) async {
@@ -310,8 +496,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       game!.onStageWon?.call(
         StageCompletion(
@@ -351,8 +536,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       game!.onStageWon?.call(
         StageCompletion(
@@ -405,8 +589,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Start a stage, then fire onStageWon for salvage-rift (bonus gold).
-      await tester.tap(find.text('Foundry'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, mapLabel: 'Foundry');
 
       game!.onStageWon?.call(
         StageCompletion(
@@ -422,6 +605,7 @@ void main() {
       // Return to map while the save is still pending.
       game!.returnToMap();
       await tester.pumpAndSettle();
+      game = null;
 
       // Tapping another stage must not launch it while the save is in flight.
       await tester.tap(find.text('Relay'));
@@ -429,6 +613,9 @@ void main() {
 
       expect(find.text('Orion Sector Map'), findsOneWidget);
       expect(find.text('Start Wave'), findsNothing);
+      expect(find.text('Start Mission'), findsNothing);
+      expect(find.text('Replay Mission'), findsNothing);
+      expect(game, isNull);
 
       // Complete the save → it throws → progress rolls back.
       store.saveCompletions.single.complete();
@@ -436,8 +623,11 @@ void main() {
 
       // Now the stage can be started, and it must NOT carry the bonus gold
       // from the reverted salvage-rift clear.
-      await tester.tap(find.text('Relay'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Relay',
+        actionLabel: 'Replay Mission',
+      );
 
       expect(find.text('Start Wave'), findsOneWidget);
       expect(find.text('Gold 150'), findsOneWidget);
@@ -464,8 +654,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
     game!.onStageWon?.call(
       StageCompletion(
@@ -527,8 +716,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       // Queue two saves; the first is delayed so the second waits in _saveQueue.
       game!.onStageWon?.call(
@@ -598,8 +786,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       // Prior save keeps _saveQueue pending so the next two saves queue behind
       // it and only run after disposal.
@@ -686,8 +873,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       // Queue a stage-completion save that will fail.
       game!.onStageWon?.call(
@@ -745,8 +931,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
     game!.onStageWon?.call(
       StageCompletion(
@@ -788,8 +973,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       game!.onStageWon?.call(
         StageCompletion(
@@ -852,8 +1036,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
     // Queue a stage-completion save (delayed).
     game!.onStageWon?.call(
@@ -915,9 +1098,15 @@ void main() {
       progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
       delayResets: true,
     );
+    OrionDefenseGame? createdGame;
 
     await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (game) => createdGame = game,
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -930,6 +1119,12 @@ void main() {
     // disabled, so tapping it does nothing.
     expect(store.resetCalls, 1);
     expect(store.resetCompletions, isNotEmpty);
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Start Mission'), findsNothing);
+    expect(find.text('Replay Mission'), findsNothing);
+    expect(createdGame, isNull);
 
     final resetButton = find.byTooltip('Reset Campaign');
     await tester.tap(resetButton);
@@ -971,8 +1166,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       // Queue two stage-completion saves. The first (salvage-rift) will
       // fail; the second (asteroid-foundry) should succeed.
@@ -1048,8 +1242,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       // Queue two saves for the same stage: Clear then Gold. Both will fail.
       game!.onStageWon?.call(
@@ -1146,8 +1339,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       // Queue two stage-completion saves synchronously. Save 0 (salvage-rift)
       // will succeed; save 1 (asteroid-foundry) will fail.
@@ -1224,8 +1416,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
       // Queue a stage-completion save (save 0) — it fails on persistence.
       game!.onStageWon?.call(
@@ -1384,8 +1575,7 @@ void main() {
       // Load failed → _store is null. Alpha is still unlocked and launchable.
       expect(find.text('Could not load campaign progress.'), findsOneWidget);
 
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
 
       // Fire onStageWon → _persistSave hits the null-store guard. No throw;
       // the failure feedback is routed to the active game's HUD.
@@ -1659,8 +1849,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Alpha'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
 
       final snapshot = game!.stateNotifier.value;
       const selectedTower = PlacedTower(
@@ -1715,8 +1904,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
 
     final snapshot = game!.stateNotifier.value;
     const selectedTower = PlacedTower(
@@ -1765,8 +1953,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
 
     final snapshot = game!.stateNotifier.value;
     const selectedTower = PlacedTower(
@@ -1822,8 +2009,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Alpha'));
-    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
 
     final snapshot = game!.stateNotifier.value;
     const selectedTower = PlacedTower(
@@ -1901,8 +2087,11 @@ void main() {
       await tester.pumpAndSettle();
 
       // Tap the salvage-rift stage node (it should be unlocked).
-      await tester.tap(find.text('Rift'));
-      await tester.pumpAndSettle();
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Rift',
+        actionLabel: 'Replay Mission',
+      );
 
       expect(game, isNotNull);
       expect(

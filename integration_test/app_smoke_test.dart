@@ -20,8 +20,11 @@ void main() {
 
     // 2. Enter the first stage.
     await tester.tap(find.text('Alpha'));
-    await _pumpUntil(tester, () => tester.any(find.text('Outpost Alpha')));
+    await _pumpUntil(tester, () => tester.any(find.text('Start Mission')));
     expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(find.text('Standard Conditions'), findsOneWidget);
+    await tester.tap(find.text('Start Mission'));
+    await _pumpUntil(tester, () => tester.any(find.text('Build')));
     expect(find.text('Build'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
 

@@ -6,6 +6,7 @@ import '../campaign/campaign_progress.dart';
 import '../campaign/campaign_progress_store.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
+import '../campaign/stage_modifier_metadata.dart';
 import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
@@ -147,7 +148,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         feedback: _mapFeedback,
         isSavingProgress: _isSavingProgress,
         isResetting: _isResetting,
-        onStageSelected: _startStage,
+        onStageSelected: _showStageBriefing,
         onLockedStageSelected: _showLockedStageFeedback,
         onResetCampaign: _confirmResetCampaign,
         onOpenTechTree: _openTechTree,
@@ -183,7 +184,23 @@ class _OrionGamePageState extends State<OrionGamePage> {
                         _Hud(snapshot: snapshot),
                         if (snapshot.nextWavePreview != null) ...[
                           const SizedBox(height: 8),
-                          _NextWavePanel(preview: snapshot.nextWavePreview!),
+                          _NextWavePanel(
+                            preview: snapshot.nextWavePreview!,
+                            modifierTitles: snapshot.stageModifiers.isEmpty
+                                ? [
+                                    StageModifierMetadata
+                                        .standardConditions
+                                        .title,
+                                  ]
+                                : snapshot.stageModifiers
+                                      .map(
+                                        (modifier) =>
+                                            StageModifierMetadata.forModifier(
+                                              modifier,
+                                            ).title,
+                                      )
+                                      .toList(growable: false),
+                          ),
                         ],
                       ],
                     ),
@@ -205,6 +222,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
         ),
       ),
     );
+  }
+
+  Future<void> _showStageBriefing(StageDefinition stage) async {
+    final shouldStart = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => _StageBriefingSheet(
+        stage: stage,
+        result: _progress.resultFor(stage.id),
+      ),
+    );
+
+    if (shouldStart == true && mounted) {
+      _startStage(stage);
+    }
   }
 
   void _startStage(StageDefinition stage) {
@@ -614,10 +647,78 @@ class _Hud extends StatelessWidget {
   }
 }
 
+class _StageBriefingSheet extends StatelessWidget {
+  const _StageBriefingSheet({required this.stage, required this.result});
+
+  final StageDefinition stage;
+  final StageResult? result;
+
+  @override
+  Widget build(BuildContext context) {
+    final metadata = stage.modifiers.isEmpty
+        ? [StageModifierMetadata.standardConditions]
+        : stage.modifiers
+              .map(StageModifierMetadata.forModifier)
+              .toList(growable: false);
+    final actionLabel = result == null ? 'Start Mission' : 'Replay Mission';
+
+    return SingleChildScrollView(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        24,
+        24,
+        24 + MediaQuery.viewInsetsOf(context).bottom,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(stage.name, style: Theme.of(context).textTheme.headlineSmall),
+          const SizedBox(height: 8),
+          Text(stage.description),
+          const SizedBox(height: 16),
+          for (final entry in metadata) ...[
+            Text(entry.title, style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(entry.description),
+            const SizedBox(height: 12),
+          ],
+          if (stage.reward != null) Text(_briefingRewardLabel(stage.reward!)),
+          if (result != null)
+            Text(
+              'Best: ${result!.medal.label} • '
+              '${result!.bestBaseHealth} base health',
+            ),
+          const SizedBox(height: 16),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(actionLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Dismiss'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _briefingRewardLabel(CampaignReward reward) {
+  return switch (reward) {
+    CampaignReward.bonusGold =>
+      'Completion reward: +${GameBalance.salvageRiftGoldBonus} Gold',
+    CampaignReward.bonusHealth =>
+      'Completion reward: +${GameBalance.voidBastionHealthBonus} HP',
+    CampaignReward.challengeBadge => 'Completion reward: Challenge Badge',
+  };
+}
+
 class _NextWavePanel extends StatelessWidget {
-  const _NextWavePanel({required this.preview});
+  const _NextWavePanel({required this.preview, required this.modifierTitles});
 
   final WavePreview preview;
+  final List<String> modifierTitles;
 
   @override
   Widget build(BuildContext context) {
@@ -668,6 +769,11 @@ class _NextWavePanel extends StatelessWidget {
                 ],
               ),
             ],
+            const SizedBox(height: 8),
+            Text(
+              'Environment: ${modifierTitles.join(', ')}',
+              style: theme.textTheme.bodyMedium,
+            ),
             if (recommendations.isNotEmpty) ...[
               const SizedBox(height: 8),
               Text(
