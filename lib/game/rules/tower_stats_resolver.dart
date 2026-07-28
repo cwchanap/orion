@@ -1,5 +1,6 @@
 import '../campaign/campaign_progress.dart';
 import '../models/game_models.dart';
+import 'stage_modifier_rules.dart';
 
 /// Resolves a tower's runtime [TowerStats] from [GameBalance], then applies
 /// the laser/cryo tech-tree combat upgrades. Pure: identical inputs yield
@@ -9,25 +10,29 @@ class TowerStatsResolver {
   static TowerStats resolve(
     PlacedTower tower, {
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
+    Iterable<StageModifier> stageModifiers = const [],
   }) {
     final base = GameBalance.towerStats(
       tower.type,
       level: tower.level,
       specialization: tower.specialization,
     );
+    var campaignAdjusted = base;
     if (tower.type == TowerType.laser &&
         campaignModifiers.laserDamageFraction > 0) {
-      return base.copyWith(
+      campaignAdjusted = base.copyWith(
         damage: base.damage * (1 + campaignModifiers.laserDamageFraction),
       );
-    }
-    if (tower.type == TowerType.cryo &&
+    } else if (tower.type == TowerType.cryo &&
         campaignModifiers.cryoSlowDurationBonus > 0) {
-      return base.copyWith(
+      campaignAdjusted = base.copyWith(
         slowDuration:
             base.slowDuration + campaignModifiers.cryoSlowDurationBonus,
       );
     }
-    return base;
+    return StageModifierRules.effectiveTowerStats(
+      resolvedStats: campaignAdjusted,
+      stageModifiers: stageModifiers,
+    );
   }
 }

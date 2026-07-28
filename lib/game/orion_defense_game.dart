@@ -469,6 +469,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
       campaignModifiers: campaignModifiers,
+      stageModifiers: stage.modifiers,
       priority: 10,
     );
     _towerComponents[tower.id] = component;
