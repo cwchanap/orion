@@ -137,7 +137,7 @@ void main() {
       if (stage.id == 'salvage-rift') {
         expect(
           find.text(
-            'Completion reward: +${GameBalance.salvageRiftGoldBonus} Gold',
+            'Reward earned: +${GameBalance.salvageRiftGoldBonus} Gold',
           ),
           findsOneWidget,
         );
@@ -145,7 +145,7 @@ void main() {
       if (stage.id == 'void-bastion') {
         expect(
           find.text(
-            'Completion reward: +${GameBalance.voidBastionHealthBonus} HP',
+            'Reward earned: +${GameBalance.voidBastionHealthBonus} HP',
           ),
           findsOneWidget,
         );

@@ -635,6 +635,48 @@ void main() {
       expect(enemy.logic.modifierProfile.shieldRecharge, isNull);
     });
 
+    test('shieldRecharge stage modifier recharges a damaged shield via game.update', () {
+      // End-to-end coverage for the StageDefinition -> OrionDefenseGame ->
+      // EnemyModifierProfile -> EnemyLogic.tick shield-recharge bridge.
+      // The pure EnemyLogic tests cover the arithmetic; this test guards the
+      // wiring through the game's update loop.
+      const enemyStats = EnemyStats(
+        health: 100,
+        speed: 0, // stationary so the enemy survives past the recharge delay
+        baseDamage: 1,
+        goldReward: 1,
+        shieldHealth: 200,
+        traits: {EnemyTrait.shielded},
+      );
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.shieldRecharge],
+          enemyStats: enemyStats,
+        ),
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(double.minPositive);
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      expect(enemy.logic.modifierProfile.shieldRecharge?.delay, 3);
+      expect(enemy.logic.modifierProfile.shieldRecharge?.ratePerSecond, 0.10);
+      expect(enemy.shield, 200);
+
+      // Damage the shield; the recharge delay restarts from zero.
+      enemy.applyDamage(100);
+      expect(enemy.shield, 100);
+
+      // Advancing within the delay must not recharge.
+      game.update(2.9);
+      expect(enemy.shield, 100);
+
+      // Crossing the delay boundary recharges the shield for the overshoot.
+      // 200 max * 0.10/s * 1.0s of overshoot = 20.
+      game.update(1.1);
+      expect(enemy.shield, 120);
+    });
+
     for (final firstGroupCount in [1, 3]) {
       test(
         'next-group initialDelay wins after $firstGroupCount regen enemies',
