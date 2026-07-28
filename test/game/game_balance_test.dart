@@ -1146,6 +1146,21 @@ void main() {
       expect(cooled.slowDuration, closeTo(base.slowDuration + 0.30, 1e-9));
       expect(cooled.damage, base.damage);
     });
+
+    test('overrides gravity field dimensions only', () {
+      final base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+      final amplified = base.copyWith(
+        fieldRadius: base.fieldRadius * 1.20,
+        fieldDuration: base.fieldDuration * 1.25,
+      );
+
+      expect(amplified.fieldRadius, closeTo(base.fieldRadius * 1.20, 1e-9));
+      expect(amplified.fieldDuration, closeTo(base.fieldDuration * 1.25, 1e-9));
+      expect(amplified.fieldTickInterval, base.fieldTickInterval);
+      expect(amplified.range, base.range);
+      expect(amplified.damage, base.damage);
+      expect(amplified.slowDuration, base.slowDuration);
+    });
   });
 
   group('SummonMechanic', () {

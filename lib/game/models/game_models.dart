@@ -208,7 +208,12 @@ class TowerStats {
   /// Returns a copy with overridden fields. Only the fields the tech-tree
   /// combat upgrades touch are exposed; everything else copies from `this`.
   /// Kept narrow on purpose — extend only if another feature needs it.
-  TowerStats copyWith({double? damage, double? slowDuration}) {
+  TowerStats copyWith({
+    double? damage,
+    double? slowDuration,
+    double? fieldRadius,
+    double? fieldDuration,
+  }) {
     return TowerStats(
       type: type,
       level: level,
@@ -231,8 +236,8 @@ class TowerStats {
       corrosionDamagePerSecond: corrosionDamagePerSecond,
       corrosionDuration: corrosionDuration,
       armorShred: armorShred,
-      fieldRadius: fieldRadius,
-      fieldDuration: fieldDuration,
+      fieldRadius: fieldRadius ?? this.fieldRadius,
+      fieldDuration: fieldDuration ?? this.fieldDuration,
       fieldTickInterval: fieldTickInterval,
       droneCount: droneCount,
       droneLifetime: droneLifetime,
