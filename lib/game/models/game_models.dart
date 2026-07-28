@@ -205,9 +205,11 @@ class TowerStats {
   bool get canUpgrade => level == 1;
   bool get canSpecialize => level == 2;
 
-  /// Returns a copy with overridden fields. Only the fields the tech-tree
-  /// combat upgrades touch are exposed; everything else copies from `this`.
-  /// Kept narrow on purpose — extend only if another feature needs it.
+  /// Returns a copy with overridden fields. Exposes the fields runtime stat
+  /// resolvers need to mutate: `damage` and `slowDuration` for campaign tech
+  /// upgrades, and `fieldRadius` and `fieldDuration` for stage environmental
+  /// modifiers (e.g. amplified gravity wells). Everything else copies from
+  /// `this`. Kept narrow on purpose — extend only if another feature needs it.
   TowerStats copyWith({
     double? damage,
     double? slowDuration,

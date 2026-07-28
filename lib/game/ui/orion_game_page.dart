@@ -683,7 +683,8 @@ class _StageBriefingSheet extends StatelessWidget {
             Text(entry.description),
             const SizedBox(height: 12),
           ],
-          if (stage.reward != null) Text(_briefingRewardLabel(stage.reward!)),
+          if (stage.reward != null)
+            Text(_briefingRewardLabel(stage.reward!, earned: result != null)),
           if (result != null)
             Text(
               'Best: ${result!.medal.label} • '
@@ -704,13 +705,18 @@ class _StageBriefingSheet extends StatelessWidget {
   }
 }
 
-String _briefingRewardLabel(CampaignReward reward) {
+String _briefingRewardLabel(CampaignReward reward, {required bool earned}) {
+  // Persistent campaign rewards are granted once per stage when it is first
+  // cleared (CampaignModifiers.fromProgress keys off isCleared); replays do
+  // not stack the reward. The label reflects whether it has already been
+  // granted so the Replay Mission sheet doesn't imply a fresh payout.
+  final prefix = earned ? 'Reward earned:' : 'Completion reward:';
   return switch (reward) {
     CampaignReward.bonusGold =>
-      'Completion reward: +${GameBalance.salvageRiftGoldBonus} Gold',
+      '$prefix +${GameBalance.salvageRiftGoldBonus} Gold',
     CampaignReward.bonusHealth =>
-      'Completion reward: +${GameBalance.voidBastionHealthBonus} HP',
-    CampaignReward.challengeBadge => 'Completion reward: Challenge Badge',
+      '$prefix +${GameBalance.voidBastionHealthBonus} HP',
+    CampaignReward.challengeBadge => '$prefix Challenge Badge',
   };
 }
 
