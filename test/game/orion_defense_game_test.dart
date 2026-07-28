@@ -44,6 +44,16 @@ void main() {
       expect(game.snapshot.waveTotal, 8);
     });
 
+    test('overrideFeedback republishes the active stage modifiers', () {
+      final stage = OrionCampaign.stageById('singularity-core');
+      final game = OrionDefenseGame(stage: stage);
+
+      game.overrideFeedback('Modifier check');
+
+      expect(game.snapshot.feedback, 'Modifier check');
+      expect(game.snapshot.stageModifiers, stage.modifiers);
+    });
+
     test('defaults to unpaused 1x pacing with auto-start disabled', () {
       final game = OrionDefenseGame();
 

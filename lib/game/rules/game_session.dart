@@ -3,24 +3,41 @@ import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 import 'board_layout.dart';
+import 'stage_modifier_rules.dart';
 
 class GameSession {
-  GameSession.initial({
+  factory GameSession.initial({
     StageDefinition? stage,
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     int? gold,
     int? baseHealth,
-  }) : stage = stage ?? OrionCampaign.stageOne,
-       startingGold = gold ?? campaignModifiers.adjustedStartingGold,
-       startingBaseHealth =
-           baseHealth ?? campaignModifiers.adjustedStartingBaseHealth,
-       campaignModifiers = campaignModifiers,
-       _gold = gold ?? campaignModifiers.adjustedStartingGold,
-       _baseHealth =
-           baseHealth ?? campaignModifiers.adjustedStartingBaseHealth {
-    if (this.stage.waves.isEmpty) {
+  }) {
+    final resolvedStage = stage ?? OrionCampaign.stageOne;
+    final resolvedGold = gold ?? campaignModifiers.adjustedStartingGold;
+    final campaignAdjustedBaseHealth =
+        baseHealth ?? campaignModifiers.adjustedStartingBaseHealth;
+    final resolvedBaseHealth = StageModifierRules.effectiveStartingBaseHealth(
+      campaignAdjustedBaseHealth: campaignAdjustedBaseHealth,
+      stageModifiers: resolvedStage.modifiers,
+    );
+    return GameSession._(
+      stage: resolvedStage,
+      campaignModifiers: campaignModifiers,
+      startingGold: resolvedGold,
+      startingBaseHealth: resolvedBaseHealth,
+    );
+  }
+
+  GameSession._({
+    required this.stage,
+    required this.campaignModifiers,
+    required this.startingGold,
+    required this.startingBaseHealth,
+  }) : _gold = startingGold,
+       _baseHealth = startingBaseHealth {
+    if (stage.waves.isEmpty) {
       throw ArgumentError.value(
-        this.stage.id,
+        stage.id,
         'stage',
         'Stage must define at least one wave',
       );
@@ -78,6 +95,7 @@ class GameSession {
             waveNumber: waveNumber,
             waveTotal: stage.waves.length,
             unlockedTowerTypes: unlockedTypes,
+            effectiveClearBonus: _effectiveClearBonus(wave.clearBonus),
           )
         : null;
 
@@ -92,6 +110,7 @@ class GameSession {
       stageName: stage.name,
       stageLabel: stage.mapLabel,
       unlockedTowerTypes: unlockedTypes,
+      stageModifiers: stage.modifiers,
       nextWavePreview: nextWavePreview,
       selectedCell: selectedCell,
       selectedTower: selectedTower,
@@ -241,8 +260,7 @@ class GameSession {
       return;
     }
 
-    final waveBonus = completedWave?.clearBonus ?? 0;
-    _gold += (waveBonus * (1 + campaignModifiers.clearBonusFraction)).round();
+    _gold += _effectiveClearBonus(completedWave?.clearBonus ?? 0);
     _phase = GamePhase.build;
   }
 
@@ -272,6 +290,15 @@ class GameSession {
     _baseHealth = startingBaseHealth;
     _waveIndex = 0;
     _phase = GamePhase.build;
+  }
+
+  int _effectiveClearBonus(int baseClearBonus) {
+    final campaignAdjusted =
+        (baseClearBonus * (1 + campaignModifiers.clearBonusFraction)).round();
+    return StageModifierRules.effectiveClearBonus(
+      campaignAdjustedClearBonus: campaignAdjusted,
+      stageModifiers: stage.modifiers,
+    );
   }
 
   MapEntry<GridPosition, PlacedTower>? _findTowerEntry(int towerId) {
