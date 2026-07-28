@@ -3,7 +3,9 @@ import '../models/game_models.dart';
 import 'stage_modifier_rules.dart';
 
 /// Resolves a tower's runtime [TowerStats] from [GameBalance], then applies
-/// the laser/cryo tech-tree combat upgrades. Pure: identical inputs yield
+/// the laser/cryo tech-tree combat upgrades, then applies the stage
+/// environmental modifiers via [StageModifierRules.effectiveTowerStats].
+/// Pipeline order: base → campaign → stage. Pure: identical inputs yield
 /// identical outputs. The laser/cryo branches are filtered by tower type so
 /// a non-matching tower is unaffected.
 class TowerStatsResolver {
