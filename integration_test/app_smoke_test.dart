@@ -23,10 +23,12 @@ void main() {
     await _pumpUntil(tester, () => tester.any(find.text('Start Mission')));
     expect(find.text('Outpost Alpha'), findsOneWidget);
     expect(find.text('Standard Conditions'), findsOneWidget);
+    expect(find.text('No environmental modifiers'), findsOneWidget);
     await tester.tap(find.text('Start Mission'));
     await _pumpUntil(tester, () => tester.any(find.text('Build')));
     expect(find.text('Build'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.text('Environment: Standard Conditions'), findsOneWidget);
 
     final startingGold = GameBalance.startingGold;
     final laserCost = GameBalance.towerStats(TowerType.laser, level: 1).cost;
@@ -62,6 +64,7 @@ void main() {
     await _pumpUntil(tester, () => tester.any(find.text('Wave Active')));
     expect(find.text('Wave Active'), findsOneWidget);
     expect(find.text('Build'), findsNothing);
+    expect(find.textContaining('Environment:'), findsNothing);
   });
 }
 

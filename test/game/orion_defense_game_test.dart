@@ -1005,6 +1005,46 @@ void main() {
       expect(game.children.whereType<TowerComponent>(), isEmpty);
     });
 
+    test(
+      'gravity field safely resolves multiple enemies in one tick',
+      () async {
+        final game = OrionDefenseGame(stage: _lethalGravityFieldStage());
+        game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+
+        for (var wave = 0; wave < 4; wave += 1) {
+          game.startWave();
+          game.update(0);
+          game.processLifecycleEvents();
+        }
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.gravityWell);
+        game.processLifecycleEvents();
+
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<EnemyComponent>(), hasLength(2));
+
+        // Fire directly so both targets are still co-located when the field
+        // receives its first tick.
+        game.children.whereType<TowerComponent>().single.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<GravityFieldComponent>(), isNotEmpty);
+
+        // Both enemies are inside the same lethal field. Resolving the first
+        // removes it from the provider's backing map, so the field must iterate
+        // a stable snapshot before continuing to the second.
+        game.update(0.01);
+        game.processLifecycleEvents();
+
+        expect(game.children.whereType<EnemyComponent>(), isEmpty);
+        expect(game.snapshot.phase, GamePhase.build);
+      },
+    );
+
     test('applies campaign modifiers to session starting values', () {
       final game = OrionDefenseGame(
         stage: _emptyWaveStage(),
@@ -1944,6 +1984,41 @@ StageDefinition _gravityWellUnlockStage({
     mapColumn: 0,
     mapRow: 0,
     modifiers: modifiers,
+  );
+}
+
+StageDefinition _lethalGravityFieldStage() {
+  return StageDefinition(
+    id: 'lethal-gravity-field-stage',
+    name: 'Lethal Gravity Field Stage',
+    mapLabel: 'Gravity',
+    description: 'Two enemies share one lethal gravity field',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: [
+      for (var wave = 0; wave < 4; wave += 1)
+        const WaveDefinition(groups: [], clearBonus: 0),
+      const WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 2,
+            enemyStats: EnemyStats(
+              health: 1,
+              speed: 0,
+              baseDamage: 1,
+              goldReward: 0,
+            ),
+            spawnInterval: 0,
+          ),
+        ],
+        clearBonus: 0,
+      ),
+      const WaveDefinition(groups: [], clearBonus: 0),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
   );
 }
 

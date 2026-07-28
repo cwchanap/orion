@@ -1418,7 +1418,7 @@ test('reinforced armor getter and damage input agree after shred', () {
   );
   expect(logic.armorReduction, closeTo(0.6, 0.001));
   logic.applyDamage(100);
-  expect(logic.health, closeTo(40, 0.001));
+  expect(logic.health, closeTo(60, 0.001));
 });
 
 test('speed surge composes with slow state', () {
