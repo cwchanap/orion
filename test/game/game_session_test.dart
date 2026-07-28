@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/game_session.dart';
@@ -49,6 +50,17 @@ void main() {
       expect(snapshot.speedMultiplier, 2);
       expect(snapshot.autoStartEnabled, isTrue);
       expect(snapshot.autoStartCountdownRemaining, 1.5);
+    });
+
+    test('snapshot stage modifier list cannot be mutated', () {
+      final snapshot = GameSession.initial(
+        stage: OrionCampaign.stageById('singularity-core'),
+      ).snapshot();
+
+      expect(
+        () => snapshot.stageModifiers.add(StageModifier.shieldRecharge),
+        throwsUnsupportedError,
+      );
     });
 
     test('snapshot exposes next wave preview only during build phase', () {
@@ -872,6 +884,87 @@ void main() {
         expect(session.phase, GamePhase.build);
       },
     );
+
+    test('Void Bastion resolves campaign health then stage penalty', () {
+      final session = GameSession.initial(
+        stage: OrionCampaign.stageById('void-bastion'),
+        campaignModifiers: const CampaignModifiers(bonusHealth: 5),
+      );
+
+      expect(session.startingBaseHealth, 20);
+      expect(session.baseHealth, 20);
+      session.startWave();
+      session.damageBase(3);
+      session.restart();
+      expect(session.baseHealth, 20);
+    });
+
+    test('Void Bastion applies the stage penalty to an explicit override', () {
+      final session = GameSession.initial(
+        stage: OrionCampaign.stageById('void-bastion'),
+        baseHealth: 4,
+      );
+      expect(session.startingBaseHealth, 1);
+    });
+
+    test(
+      'Void medal thresholds use resolved health and absolute Silver floor',
+      () {
+        final session = GameSession.initial(
+          stage: OrionCampaign.stageById('void-bastion'),
+          campaignModifiers: const CampaignModifiers(bonusHealth: 5),
+        );
+        expect(session.startingBaseHealth, 20);
+        expect(
+          StageResult.fromVictoryBaseHealth(
+            20,
+            startingBaseHealth: session.startingBaseHealth,
+          ).medal,
+          StageMedal.gold,
+        );
+        expect(
+          StageResult.fromVictoryBaseHealth(
+            10,
+            startingBaseHealth: session.startingBaseHealth,
+          ).medal,
+          StageMedal.silver,
+        );
+        expect(
+          StageResult.fromVictoryBaseHealth(
+            9,
+            startingBaseHealth: session.startingBaseHealth,
+          ).medal,
+          StageMedal.clear,
+        );
+      },
+    );
+
+    test('snapshot and payout share tech then stage clear bonus', () {
+      final stage = StageDefinition(
+        id: 'clear-bonus-stage',
+        name: 'Clear Bonus Stage',
+        mapLabel: 'Bonus',
+        description: 'Two empty waves',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [
+          WaveDefinition(groups: [], clearBonus: 30),
+          WaveDefinition(groups: [], clearBonus: 0),
+        ],
+        modifiers: const [StageModifier.enhancedClearBonus],
+        mapColumn: 0,
+        mapRow: 0,
+      );
+      final session = GameSession.initial(
+        stage: stage,
+        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.25),
+      );
+
+      expect(session.snapshot().nextWavePreview?.clearBonus, 57);
+      final before = session.gold;
+      session.startWave();
+      session.finishActiveWave();
+      expect(session.gold - before, 57);
+    });
   });
 
   group('GameSession campaign modifiers', () {
@@ -930,6 +1023,19 @@ void main() {
       expect(session.phase, GamePhase.build);
       expect(session.gold, GameBalance.startingGold + 30);
       expect(session.campaignModifiers.clearBonusFraction, 0);
+    });
+
+    test('Salvage Crew preview is corrected on unmodified Outpost Alpha', () {
+      final session = GameSession.initial(
+        stage: OrionCampaign.stageOne,
+        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.25),
+      );
+      final base = OrionCampaign.stageOne.waves.first.clearBonus;
+
+      expect(
+        session.snapshot().nextWavePreview?.clearBonus,
+        (base * 1.25).round(),
+      );
     });
   });
 }

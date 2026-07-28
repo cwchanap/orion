@@ -807,8 +807,9 @@ void main() {
     });
 
     test('builds a preview for a multi-group baseline wave', () {
+      final wave = GameBalance.waves[4];
       final preview = GameBalance.wavePreview(
-        wave: GameBalance.waves[4],
+        wave: wave,
         waveNumber: 5,
         waveTotal: 8,
         unlockedTowerTypes: const [
@@ -820,6 +821,7 @@ void main() {
           TowerType.nanite,
           TowerType.gravityWell,
         ],
+        effectiveClearBonus: wave.clearBonus,
       );
 
       expect(preview.waveNumber, 5);
@@ -838,11 +840,13 @@ void main() {
     });
 
     test('filters wave preview recommendations to unlocked towers', () {
+      final wave = GameBalance.waves[4];
       final preview = GameBalance.wavePreview(
-        wave: GameBalance.waves[4],
+        wave: wave,
         waveNumber: 5,
         waveTotal: 8,
         unlockedTowerTypes: const [TowerType.laser, TowerType.rocket],
+        effectiveClearBonus: wave.clearBonus,
       );
 
       expect(preview.recommendedTowerTypes, [TowerType.rocket]);
@@ -862,19 +866,21 @@ void main() {
       };
 
       for (final entry in expectedLabels.entries) {
+        final wave = WaveDefinition(
+          groups: [
+            WaveGroup(
+              enemyCount: 1,
+              enemyStats: GameBalance.enemyArchetype(entry.key),
+            ),
+          ],
+          clearBonus: 0,
+        );
         final preview = GameBalance.wavePreview(
-          wave: WaveDefinition(
-            groups: [
-              WaveGroup(
-                enemyCount: 1,
-                enemyStats: GameBalance.enemyArchetype(entry.key),
-              ),
-            ],
-            clearBonus: 0,
-          ),
+          wave: wave,
           waveNumber: 1,
           waveTotal: 1,
           unlockedTowerTypes: const [],
+          effectiveClearBonus: wave.clearBonus,
         );
 
         expect(preview.groups.single.label, entry.value);
@@ -882,27 +888,29 @@ void main() {
     });
 
     test('uses trait fallback labels for custom enemy stats', () {
-      final preview = GameBalance.wavePreview(
-        wave: const WaveDefinition(
-          groups: [
-            WaveGroup(
-              enemyCount: 3,
-              enemyStats: EnemyStats(
-                health: 111,
-                speed: 42,
-                baseDamage: 2,
-                goldReward: 9,
-                traits: {EnemyTrait.shielded, EnemyTrait.armored},
-                shieldHealth: 10,
-                armorReduction: 0.1,
-              ),
+      const wave = WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 3,
+            enemyStats: EnemyStats(
+              health: 111,
+              speed: 42,
+              baseDamage: 2,
+              goldReward: 9,
+              traits: {EnemyTrait.shielded, EnemyTrait.armored},
+              shieldHealth: 10,
+              armorReduction: 0.1,
             ),
-          ],
-          clearBonus: 12,
-        ),
+          ),
+        ],
+        clearBonus: 12,
+      );
+      final preview = GameBalance.wavePreview(
+        wave: wave,
         waveNumber: 1,
         waveTotal: 1,
         unlockedTowerTypes: const [],
+        effectiveClearBonus: wave.clearBonus,
       );
 
       expect(preview.groups.single.label, 'Armored Shielded Drones');
@@ -918,11 +926,13 @@ void main() {
     });
 
     test('builds an empty wave preview without filler text data', () {
+      const wave = WaveDefinition(groups: [], clearBonus: 0);
       final preview = GameBalance.wavePreview(
-        wave: const WaveDefinition(groups: [], clearBonus: 0),
+        wave: wave,
         waveNumber: 1,
         waveTotal: 1,
         unlockedTowerTypes: const [TowerType.laser],
+        effectiveClearBonus: wave.clearBonus,
       );
 
       expect(preview.groups, isEmpty);
@@ -932,11 +942,13 @@ void main() {
     });
 
     test('wave preview collections cannot be mutated', () {
+      final wave = GameBalance.waves.first;
       final preview = GameBalance.wavePreview(
-        wave: GameBalance.waves.first,
+        wave: wave,
         waveNumber: 1,
         waveTotal: 8,
         unlockedTowerTypes: const [TowerType.laser],
+        effectiveClearBonus: wave.clearBonus,
       );
 
       expect(
@@ -1254,16 +1266,18 @@ void main() {
     });
 
     test('wave preview labels a boss by name', () {
+      final wave = WaveDefinition(
+        groups: [
+          WaveGroup(enemyCount: 1, enemyStats: GameBalance.relayBreaker),
+        ],
+        clearBonus: 0,
+      );
       final preview = GameBalance.wavePreview(
-        wave: WaveDefinition(
-          groups: [
-            WaveGroup(enemyCount: 1, enemyStats: GameBalance.relayBreaker),
-          ],
-          clearBonus: 0,
-        ),
+        wave: wave,
         waveNumber: 8,
         waveTotal: 8,
         unlockedTowerTypes: const [],
+        effectiveClearBonus: wave.clearBonus,
       );
       expect(preview.groups.last.label, 'Relay Breaker');
     });

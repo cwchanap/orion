@@ -475,6 +475,7 @@ class GameSnapshot {
     required this.stageName,
     required this.stageLabel,
     required List<TowerType> unlockedTowerTypes,
+    required List<StageModifier> stageModifiers,
     this.nextWavePreview,
     required this.selectedCell,
     required this.selectedTower,
@@ -483,7 +484,8 @@ class GameSnapshot {
     required this.speedMultiplier,
     required this.autoStartEnabled,
     required this.autoStartCountdownRemaining,
-  }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes);
+  }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes),
+       stageModifiers = List.unmodifiable(stageModifiers);
 
   final GamePhase phase;
   final int gold;
@@ -495,6 +497,7 @@ class GameSnapshot {
   final String stageName;
   final String stageLabel;
   final List<TowerType> unlockedTowerTypes;
+  final List<StageModifier> stageModifiers;
   final WavePreview? nextWavePreview;
   final GridPosition? selectedCell;
   final PlacedTower? selectedTower;
@@ -890,6 +893,7 @@ class GameBalance {
     required int waveNumber,
     required int waveTotal,
     required List<TowerType> unlockedTowerTypes,
+    required int effectiveClearBonus,
   }) {
     final groups = [
       for (final group in wave.groups)
@@ -906,7 +910,7 @@ class GameBalance {
       waveTotal: waveTotal,
       groups: groups,
       traits: traits,
-      clearBonus: wave.clearBonus,
+      clearBonus: effectiveClearBonus,
       recommendedTowerTypes: _recommendedTowerTypes(wave, unlockedTowerTypes),
     );
   }
