@@ -1183,6 +1183,63 @@ void main() {
       },
     );
 
+    for (final specialization in [
+      TowerSpecialization.singularityWell,
+      TowerSpecialization.crushWell,
+    ]) {
+      test(
+        'tower component retains amplified stats through ${specialization.label}',
+        () {
+          final game = OrionDefenseGame(
+            stage: _gravityWellUnlockStage(
+              modifiers: const [StageModifier.amplifiedGravityWells],
+            ),
+            campaignModifiers: const CampaignModifiers(bonusGold: 1000),
+          );
+          game.onGameResize(Vector2(800, 1200));
+          for (var wave = 0; wave < 4; wave += 1) {
+            game.startWave();
+            game.update(0);
+          }
+          _tapCell(game, const GridPosition(0, 1));
+          game.placeTower(TowerType.gravityWell);
+          game.processLifecycleEvents();
+
+          var component = game.children.whereType<TowerComponent>().single;
+          var base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+          expect(
+            component.stats.fieldRadius,
+            closeTo(base.fieldRadius * 1.20, 0.001),
+          );
+
+          _tapCell(game, const GridPosition(0, 1));
+          game.upgradeSelectedTower();
+          component = game.children.whereType<TowerComponent>().single;
+          base = GameBalance.towerStats(TowerType.gravityWell, level: 2);
+          expect(
+            component.stats.fieldDuration,
+            closeTo(base.fieldDuration * 1.25, 0.001),
+          );
+
+          game.specializeSelectedTower(specialization);
+          component = game.children.whereType<TowerComponent>().single;
+          base = GameBalance.towerStats(
+            TowerType.gravityWell,
+            level: 3,
+            specialization: specialization,
+          );
+          expect(
+            component.stats.fieldRadius,
+            closeTo(base.fieldRadius * 1.20, 0.001),
+          );
+          expect(
+            component.stats.fieldDuration,
+            closeTo(base.fieldDuration * 1.25, 0.001),
+          );
+        },
+      );
+    }
+
     test(
       'restart resets base health to campaign-modifier-adjusted starting value',
       () {
@@ -1851,7 +1908,9 @@ StageDefinition _droneBayUnlockStage() {
 
 /// Stage whose first 4 waves are empty (to unlock the wave-5 gravity well) and
 /// whose 5th wave spawns a single durable enemy for gravity-field tests.
-StageDefinition _gravityWellUnlockStage() {
+StageDefinition _gravityWellUnlockStage({
+  List<StageModifier> modifiers = const [],
+}) {
   return StageDefinition(
     id: 'gravity-well-unlock-stage',
     name: 'Gravity Well Unlock Stage',
@@ -1884,6 +1943,7 @@ StageDefinition _gravityWellUnlockStage() {
     mainPathOrder: 1,
     mapColumn: 0,
     mapRow: 0,
+    modifiers: modifiers,
   );
 }
 

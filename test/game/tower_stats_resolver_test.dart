@@ -84,5 +84,52 @@ void main() {
         closeTo(baseL3DeepFreeze.slowDuration + 0.30, 1e-9),
       );
     });
+
+    test(
+      'amplifies Gravity Well radius and duration after base resolution',
+      () {
+        const tower = PlacedTower(
+          id: 1,
+          type: TowerType.gravityWell,
+          position: GridPosition(0, 0),
+        );
+        final base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+
+        final resolved = TowerStatsResolver.resolve(
+          tower,
+          stageModifiers: const [StageModifier.amplifiedGravityWells],
+        );
+
+        expect(resolved.fieldRadius, closeTo(base.fieldRadius * 1.20, 0.001));
+        expect(
+          resolved.fieldDuration,
+          closeTo(base.fieldDuration * 1.25, 0.001),
+        );
+        expect(resolved.damage, base.damage);
+        expect(resolved.range, base.range);
+      },
+    );
+
+    test('amplified wells leave every other tower type unchanged', () {
+      for (final type in TowerType.values.where(
+        (type) => type != TowerType.gravityWell,
+      )) {
+        final tower = PlacedTower(
+          id: type.index,
+          type: type,
+          position: const GridPosition(0, 0),
+        );
+        final base = GameBalance.towerStats(type, level: 1);
+        final resolved = TowerStatsResolver.resolve(
+          tower,
+          stageModifiers: const [StageModifier.amplifiedGravityWells],
+        );
+
+        expect(resolved.fieldRadius, base.fieldRadius);
+        expect(resolved.fieldDuration, base.fieldDuration);
+        expect(resolved.damage, base.damage);
+        expect(resolved.range, base.range);
+      }
+    });
   });
 }
