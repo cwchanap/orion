@@ -123,6 +123,7 @@ void main() {
             ],
             clearBonus: 42,
           ),
+          WaveDefinition(groups: [], clearBonus: 0),
         ],
         unlockDependencies: [],
         isMainPath: true,
@@ -137,7 +138,7 @@ void main() {
 
       expect(preview, isNotNull);
       expect(preview!.waveNumber, 1);
-      expect(preview.waveTotal, 1);
+      expect(preview.waveTotal, 2);
       expect(preview.groups.single.enemyCount, 3);
       expect(preview.groups.single.label, 'Regen Drones');
       expect(preview.clearBonus, 42);
@@ -158,6 +159,33 @@ void main() {
       expect(preview!.waveNumber, 8);
       expect(preview.waveTotal, 8);
       expect(preview.clearBonus, 0);
+    });
+
+    test('custom final wave previews and pays zero despite authored bonus', () {
+      final stage = StageDefinition(
+        id: 'final-bonus-stage',
+        name: 'Final Bonus Stage',
+        mapLabel: 'Final',
+        description: 'One final wave with an authored clear bonus',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [WaveDefinition(groups: [], clearBonus: 30)],
+        modifiers: const [StageModifier.enhancedClearBonus],
+        mapColumn: 0,
+        mapRow: 0,
+      );
+      final session = GameSession.initial(
+        stage: stage,
+        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.25),
+      );
+      final startingGold = session.gold;
+
+      expect(session.snapshot().nextWavePreview?.clearBonus, 0);
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+
+      expect(session.phase, GamePhase.won);
+      expect(session.waveIndex, 1);
+      expect(session.gold, startingGold);
     });
 
     test('snapshot hides next wave preview after win and loss', () {

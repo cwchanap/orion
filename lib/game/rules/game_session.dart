@@ -254,13 +254,14 @@ class GameSession {
     }
 
     final completedWave = activeWave;
+    final clearBonus = _effectiveClearBonus(completedWave?.clearBonus ?? 0);
     _waveIndex += 1;
+    _gold += clearBonus;
     if (_waveIndex >= stage.waves.length) {
       _phase = GamePhase.won;
       return;
     }
 
-    _gold += _effectiveClearBonus(completedWave?.clearBonus ?? 0);
     _phase = GamePhase.build;
   }
 
@@ -293,6 +294,9 @@ class GameSession {
   }
 
   int _effectiveClearBonus(int baseClearBonus) {
+    if (_waveIndex >= stage.waves.length - 1) {
+      return 0;
+    }
     final campaignAdjusted =
         (baseClearBonus * (1 + campaignModifiers.clearBonusFraction)).round();
     return StageModifierRules.effectiveClearBonus(
