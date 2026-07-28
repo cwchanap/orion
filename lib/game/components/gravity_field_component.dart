@@ -45,7 +45,7 @@ class GravityFieldComponent extends CircleComponent {
     }
 
     _tickRemaining = stats.fieldTickInterval;
-    for (final enemy in enemiesProvider()) {
+    for (final enemy in enemiesProvider().toList()) {
       if (!enemy.isAlive || enemy.position.distanceTo(position) > radius) {
         continue;
       }
