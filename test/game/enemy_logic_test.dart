@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/enemy_logic.dart';
+import 'package:orion/game/rules/stage_modifier_rules.dart';
 
 void main() {
   group('EnemyLogic movement', () {
@@ -165,6 +166,28 @@ void main() {
       logic.applyCorrosion(damagePerSecond: 5, duration: 2, armorShred: 0.1);
       expect(logic.armorReduction, closeTo(0.3, 0.001));
     });
+
+    test('reinforced armor getter and damage input agree after shred', () {
+      final logic = EnemyLogic(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 100,
+          speed: 1,
+          baseDamage: 1,
+          goldReward: 1,
+          armorReduction: 0.7,
+          traits: {EnemyTrait.armored},
+        ),
+        modifierProfile: const EnemyModifierProfile(armorReductionBonus: 0.1),
+        waypoints: const [Offset(0, 0), Offset(100, 0)],
+      );
+
+      expect(logic.armorReduction, 0.75);
+      logic.applyCorrosion(damagePerSecond: 1, duration: 5, armorShred: 0.2);
+      expect(logic.armorReduction, closeTo(0.6, 0.001));
+      logic.applyDamage(100);
+      expect(logic.health, closeTo(60, 0.001));
+    });
   });
 
   group('EnemyLogic tick status', () {
@@ -226,6 +249,92 @@ void main() {
       logic.tick(1); // moves 5 units
       expect(logic.position.dx, closeTo(5, 0.001));
       expect(logic.isSlowed, isFalse);
+    });
+
+    test('speed surge composes with slow state', () {
+      final logic = EnemyLogic(
+        enemyId: 1,
+        stats: const EnemyStats(
+          health: 10,
+          speed: 10,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        modifierProfile: const EnemyModifierProfile(speedMultiplier: 1.15),
+        waypoints: const [Offset(0, 0), Offset(100, 0)],
+      );
+      logic.applySlow(multiplier: 0.5, duration: 2);
+      logic.tick(1);
+      expect(logic.position.dx, closeTo(5.75, 0.001));
+    });
+
+    test('shield recharge applies only after crossed delay portion', () {
+      final logic = shieldLogic(maxShield: 200);
+      logic.applyDamage(100);
+      expect(logic.shield, 100);
+
+      expect(logic.tick(2.5).overlayDirty, isFalse);
+      final result = logic.tick(1);
+
+      expect(logic.shield, closeTo(110, 0.001));
+      expect(result.overlayDirty, isTrue);
+    });
+
+    test('successful direct damage restarts the recharge delay', () {
+      final logic = shieldLogic(maxShield: 200);
+      logic.applyDamage(50);
+      logic.tick(2.9);
+      logic.applyDamage(10);
+      logic.tick(0.2);
+      expect(logic.shield, 140);
+    });
+
+    test('corrosion damage cannot recharge shield in the same tick', () {
+      final logic = shieldLogic(maxShield: 200);
+      logic.applyDamage(100);
+      logic.applyCorrosion(damagePerSecond: 10, duration: 5, armorShred: 0.1);
+      logic.tick(4);
+      expect(logic.shield, 60);
+    });
+
+    test('Shield Matriarch profile recharges 20 per second and clamps', () {
+      final profile = StageModifierRules.enemyProfile(
+        stats: GameBalance.shieldMatriarch,
+        stageModifiers: const [StageModifier.shieldRecharge],
+      );
+      final logic = EnemyLogic(
+        enemyId: 1,
+        stats: GameBalance.shieldMatriarch,
+        modifierProfile: profile,
+        waypoints: const [Offset(0, 0), Offset(1000, 0)],
+      );
+      logic.applyDamage(100);
+      logic.tick(4);
+      expect(logic.shield, 120);
+      logic.tick(10);
+      expect(logic.shield, GameBalance.shieldMatriarch.shieldHealth);
+    });
+
+    test('full-shield and resolved enemies do not over-recharge', () {
+      final full = shieldLogic(maxShield: 100);
+      expect(full.tick(10).overlayDirty, isFalse);
+      expect(full.shield, 100);
+
+      final resolved = EnemyLogic(
+        enemyId: 2,
+        stats: const EnemyStats(
+          health: 10,
+          speed: 1,
+          baseDamage: 1,
+          goldReward: 1,
+        ),
+        modifierProfile: const EnemyModifierProfile(
+          shieldRecharge: ShieldRechargePolicy(delay: 3, ratePerSecond: 0.10),
+        ),
+        waypoints: const [Offset(0, 0), Offset(100, 0)],
+      );
+      resolved.applyDamage(10);
+      expect(resolved.tick(10).overlayDirty, isFalse);
     });
 
     test(
@@ -293,6 +402,24 @@ void main() {
       expect(r.summonsDue, 0);
     });
   });
+}
+
+EnemyLogic shieldLogic({required double maxShield}) {
+  return EnemyLogic(
+    enemyId: 1,
+    stats: EnemyStats(
+      health: 100,
+      speed: 1,
+      baseDamage: 1,
+      goldReward: 1,
+      shieldHealth: maxShield,
+      traits: const {EnemyTrait.shielded},
+    ),
+    modifierProfile: const EnemyModifierProfile(
+      shieldRecharge: ShieldRechargePolicy(delay: 3, ratePerSecond: 0.10),
+    ),
+    waypoints: const [Offset(0, 0), Offset(100, 0)],
+  );
 }
 
 Matcher closeToOffset(Offset value) => predicate<Offset>(

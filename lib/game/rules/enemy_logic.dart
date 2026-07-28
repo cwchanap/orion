@@ -3,12 +3,14 @@ import 'dart:ui';
 
 import '../models/game_models.dart';
 import 'combat_effects.dart';
+import 'stage_modifier_rules.dart';
 
 class EnemyLogic {
   EnemyLogic({
     required this.enemyId,
     required this.stats,
     required List<Offset> waypoints,
+    this.modifierProfile = EnemyModifierProfile.identity,
     double initialCompletedDistance = 0,
   }) : waypoints = List<Offset>.unmodifiable(waypoints),
        position = waypoints.first,
@@ -25,6 +27,7 @@ class EnemyLogic {
   final int enemyId;
   final EnemyStats stats;
   final List<Offset> waypoints;
+  final EnemyModifierProfile modifierProfile;
 
   Offset position;
   double health;
@@ -43,6 +46,7 @@ class EnemyLogic {
   double _completedDistance;
   double _segmentProgress = 0;
   double _summonRemaining;
+  double _timeSinceDamage = 0;
 
   static double _initialSummonDelay(EnemyStats stats) {
     if (stats is BossDefinition) {
@@ -58,8 +62,10 @@ class EnemyLogic {
 
   bool get isSlowed => slowRemaining > 0 && slowMultiplier < 1;
   bool get isCorroded => corrosionRemaining > 0;
+  double get _stageAdjustedBaseArmor =>
+      stats.armorReduction + modifierProfile.armorReductionBonus;
   double get armorReduction =>
-      (stats.armorReduction - armorShred).clamp(0, 0.75).toDouble();
+      (_stageAdjustedBaseArmor - armorShred).clamp(0, 0.75).toDouble();
 
   double get _currentSegmentLength {
     if (_targetWaypointIndex >= waypoints.length) return 0;
@@ -84,13 +90,15 @@ class EnemyLogic {
     bool bypassArmor = false,
   }) {
     if (!isAlive || amount <= 0) return const DamageOutcome(died: false);
+    final previousHealth = health;
+    final previousShield = shield;
     final result = CombatEffects.resolveDamage(
       DamageInput(
         health: health,
         maxHealth: maxHealth,
         shield: shield,
         damage: amount,
-        armorReduction: stats.armorReduction,
+        armorReduction: _stageAdjustedBaseArmor,
         armorShred: math.max(this.armorShred, armorShred),
         shieldDamageMultiplier: shieldDamageMultiplier,
         armorDamageMultiplier: armorDamageMultiplier,
@@ -99,6 +107,9 @@ class EnemyLogic {
     );
     health = result.health;
     shield = result.shield;
+    if (health != previousHealth || shield != previousShield) {
+      _timeSinceDamage = 0;
+    }
     if (health == 0) {
       _isResolved = true;
       return const DamageOutcome(died: true);
@@ -150,6 +161,9 @@ class EnemyLogic {
     var overlayDirty = false;
     final movementSlowMultiplier = isSlowed ? slowMultiplier : 1.0;
     final wasCorrodedAtTickStart = isCorroded;
+    final elapsedBeforeTick = _timeSinceDamage;
+    _timeSinceDamage += math.max(0, dt);
+    var corrosionChangedState = false;
 
     // 1. Corrosion + regen
     if (corrosionRemaining > 0) {
@@ -165,6 +179,7 @@ class EnemyLogic {
       // tick (e.g. rounded-down damage) would otherwise force a needless redraw.
       if (health != healthBeforeCorrosion || shield != shieldBeforeCorrosion) {
         overlayDirty = true;
+        corrosionChangedState = true;
       }
       if (corrosionRemaining == 0) {
         corrosionDamagePerSecond = 0;
@@ -189,6 +204,25 @@ class EnemyLogic {
       isCorroded: wasCorrodedAtTickStart,
     );
     if (health != previousHealth) overlayDirty = true;
+
+    final policy = modifierProfile.shieldRecharge;
+    if (policy != null &&
+        !corrosionChangedState &&
+        shield < stats.shieldHealth) {
+      final rechargeDuration =
+          math.max(0, _timeSinceDamage - policy.delay) -
+          math.max(0, elapsedBeforeTick - policy.delay);
+      if (rechargeDuration > 0) {
+        final previousShield = shield;
+        shield = math.min(
+          stats.shieldHealth,
+          shield + stats.shieldHealth * policy.ratePerSecond * rechargeDuration,
+        );
+        if (shield != previousShield) {
+          overlayDirty = true;
+        }
+      }
+    }
 
     // 2. Movement
     _moveAlongPath(dt, movementSlowMultiplier);
@@ -240,7 +274,8 @@ class EnemyLogic {
   }
 
   void _moveAlongPath(double dt, double slowMultiplier) {
-    var distanceRemaining = stats.speed * slowMultiplier * dt;
+    var distanceRemaining =
+        stats.speed * modifierProfile.speedMultiplier * slowMultiplier * dt;
     while (distanceRemaining > 0 && !_isResolved) {
       if (_targetWaypointIndex >= waypoints.length) {
         _isResolved = true;
