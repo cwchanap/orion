@@ -25,6 +25,7 @@ import 'rules/board_layout.dart';
 import 'rules/combat_effects.dart';
 import 'rules/enemy_logic.dart';
 import 'rules/game_session.dart';
+import 'rules/stage_modifier_rules.dart';
 import 'rules/tower_targeting.dart';
 
 class StageCompletion {
@@ -677,7 +678,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         }
         _spawnTimer += wave.groups[_activeGroupIndex].initialDelay;
       } else {
-        _spawnTimer += group.spawnInterval;
+        _spawnTimer += StageModifierRules.nextSpawnDelay(
+          stats: group.enemyStats,
+          spawnedInGroup: _spawnedInGroup,
+          baseSpawnInterval: group.spawnInterval,
+          stageModifiers: stage.modifiers,
+        );
       }
     }
   }
@@ -686,6 +692,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     for (final p in v) Offset(p.x, p.y),
   ];
 
+  EnemyModifierProfile _enemyModifierProfile(EnemyStats stats) {
+    return StageModifierRules.enemyProfile(
+      stats: stats,
+      stageModifiers: stage.modifiers,
+    );
+  }
+
   void _spawnEnemy(EnemyStats stats) {
     final bossDef = stats is BossDefinition ? stats : null;
     final waypoints = _pathWaypoints();
@@ -693,6 +706,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       enemyId: _nextEnemyId,
       stats: stats,
       waypoints: _offsetWaypoints(waypoints),
+      modifierProfile: _enemyModifierProfile(stats),
     );
     final enemy = EnemyComponent(
       enemyId: _nextEnemyId,
@@ -736,6 +750,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       stats: stats,
       waypoints: residualOffsets,
       initialCompletedDistance: boss.logic.pathProgress,
+      modifierProfile: _enemyModifierProfile(stats),
     );
     final enemy = EnemyComponent(
       enemyId: _nextEnemyId,
@@ -758,7 +773,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       _setInspectedEnemy(null);
     }
     _activeEnemyComponents.remove(enemy.enemyId);
-    _session.rewardKill(enemy.stats.goldReward);
+    _session.rewardKill(
+      StageModifierRules.effectiveKillReward(
+        stats: enemy.stats,
+        stageModifiers: stage.modifiers,
+      ),
+    );
     _publishSnapshot();
   }
 
