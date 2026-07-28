@@ -136,17 +136,13 @@ void main() {
       }
       if (stage.id == 'salvage-rift') {
         expect(
-          find.text(
-            'Reward earned: +${GameBalance.salvageRiftGoldBonus} Gold',
-          ),
+          find.text('Reward earned: +${GameBalance.salvageRiftGoldBonus} Gold'),
           findsOneWidget,
         );
       }
       if (stage.id == 'void-bastion') {
         expect(
-          find.text(
-            'Reward earned: +${GameBalance.voidBastionHealthBonus} HP',
-          ),
+          find.text('Reward earned: +${GameBalance.voidBastionHealthBonus} HP'),
           findsOneWidget,
         );
       }
