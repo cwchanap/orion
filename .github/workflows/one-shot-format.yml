@@ -1,0 +1,44 @@
+name: One-shot Dart formatter
+
+on:
+  push:
+    branches:
+      - codex/hpa-101-stage-environmental-modifiers
+    paths:
+      - .github/workflows/one-shot-format.yml
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: codex/hpa-101-stage-environmental-modifiers
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          channel: stable
+          cache: true
+          pub-cache: true
+
+      - name: Apply Dart formatter
+        run: dart format .
+
+      - name: Commit formatter output
+        run: |
+          if git diff --quiet -- '*.dart'; then
+            echo 'Dart formatter produced no changes.'
+            exit 1
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -u -- '*.dart'
+          git commit -m 'style: apply Dart formatting (HPA-101)'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
