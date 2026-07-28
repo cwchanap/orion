@@ -438,6 +438,278 @@ void main() {
       expect(threeXProgress, closeTo(oneXProgress * 3, 0.001));
     });
 
+    test('normal enemy receives selected stage profile', () {
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.enemySpeedSurge],
+          enemyStats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+        ),
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(double.minPositive);
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      expect(enemy.logic.modifierProfile.speedMultiplier, 1.15);
+    });
+
+    test('enemy speed surge composes with the player 3x time scale', () {
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.enemySpeedSurge],
+          enemyStats: const EnemyStats(
+            health: 100,
+            speed: 10,
+            baseDamage: 1,
+            goldReward: 1,
+          ),
+        ),
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.setSpeedMultiplier(3);
+      game.startWave();
+      game.update(double.minPositive);
+      game.update(1);
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      expect(enemy.pathProgress, closeTo(34.5, 0.001));
+    });
+
+    test('swarm kill callback awards rounded stage bounty', () {
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.swarmBounty],
+          enemyStats: const EnemyStats(
+            health: 10,
+            speed: 1,
+            baseDamage: 1,
+            goldReward: 5,
+            traits: {EnemyTrait.swarm},
+          ),
+        ),
+      );
+      final startingGold = game.snapshot.gold;
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(double.minPositive);
+      game.children.whereType<EnemyComponent>().single.applyDamage(999);
+
+      expect(game.snapshot.gold, startingGold + 8);
+    });
+
+    test('regen pressure pulses spawn at the accepted six-enemy cadence', () {
+      const regen = EnemyStats(
+        health: 1000,
+        speed: 0,
+        baseDamage: 1,
+        goldReward: 1,
+        traits: {EnemyTrait.regen},
+      );
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.regenPressurePulses],
+          enemyStats: regen,
+          enemyCount: 6,
+        ),
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+
+      game.update(double.minPositive);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(1));
+      game.update(0.201);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(2));
+      game.update(0.201);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(3));
+      game.update(1.997);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(3));
+      game.update(0.002);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(4));
+      game.update(0.201);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(5));
+      game.update(0.201);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(6));
+    });
+
+    test('large dt crosses intra-burst intervals and one pulse gap', () {
+      const regen = EnemyStats(
+        health: 1000,
+        speed: 0,
+        baseDamage: 1,
+        goldReward: 1,
+        traits: {EnemyTrait.regen},
+      );
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.regenPressurePulses],
+          enemyStats: regen,
+          enemyCount: 6,
+        ),
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(double.minPositive);
+      game.update(2.601);
+
+      expect(game.children.whereType<EnemyComponent>(), hasLength(5));
+    });
+
+    test('non-regen groups retain their base interval', () {
+      const normal = EnemyStats(
+        health: 1000,
+        speed: 0,
+        baseDamage: 1,
+        goldReward: 1,
+      );
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.regenPressurePulses],
+          enemyStats: normal,
+          enemyCount: 2,
+          spawnInterval: 1,
+        ),
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(double.minPositive);
+      game.update(0.5);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(1));
+      game.update(0.501);
+      expect(game.children.whereType<EnemyComponent>(), hasLength(2));
+    });
+
+    test('summoned minions inherit the synthetic stage profile', () {
+      const minion = EnemyStats(
+        health: 100,
+        speed: 1,
+        baseDamage: 1,
+        goldReward: 1,
+      );
+      const boss = BossDefinition(
+        health: 1000,
+        speed: 0,
+        baseDamage: 1,
+        goldReward: 1,
+        sprite: BossSprite.relayBreaker,
+        name: 'Synthetic Summoner',
+        summonMechanic: SummonMechanic(
+          interval: 100,
+          firstDelay: 0.1,
+          count: 1,
+          maxActive: 1,
+          minionStats: minion,
+        ),
+      );
+      final game = OrionDefenseGame(
+        stage: _modifierStage(
+          modifiers: const [StageModifier.enemySpeedSurge],
+          enemyStats: boss,
+        ),
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(double.minPositive);
+      game.update(0.101);
+      game.update(0);
+
+      final minionComponent = game.children
+          .whereType<EnemyComponent>()
+          .singleWhere((enemy) => enemy.minionOf != null);
+      expect(minionComponent.logic.modifierProfile.speedMultiplier, 1.15);
+    });
+
+    test('Outpost Alpha keeps identity enemy profile', () {
+      final game = OrionDefenseGame(stage: OrionCampaign.stageOne);
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(double.minPositive);
+
+      final enemy = game.children.whereType<EnemyComponent>().single;
+      expect(enemy.logic.modifierProfile.speedMultiplier, 1);
+      expect(enemy.logic.modifierProfile.armorReductionBonus, 0);
+      expect(enemy.logic.modifierProfile.shieldRecharge, isNull);
+    });
+
+    for (final firstGroupCount in [1, 3]) {
+      test(
+        'next-group initialDelay wins after $firstGroupCount regen enemies',
+        () {
+          const regen = EnemyStats(
+            health: 1000,
+            speed: 0,
+            baseDamage: 1,
+            goldReward: 1,
+            traits: {EnemyTrait.regen},
+          );
+          const normal = EnemyStats(
+            health: 1000,
+            speed: 0,
+            baseDamage: 1,
+            goldReward: 1,
+          );
+          final stage = StageDefinition(
+            id: 'group-transition',
+            name: 'Group Transition',
+            mapLabel: 'Transition',
+            description: 'Synthetic group transition stage',
+            pathCells: const [
+              GridPosition(0, 0),
+              GridPosition(1, 0),
+              GridPosition(2, 0),
+            ],
+            waves: [
+              WaveDefinition(
+                groups: [
+                  WaveGroup(
+                    enemyCount: firstGroupCount,
+                    enemyStats: regen,
+                    spawnInterval: 1,
+                  ),
+                  const WaveGroup(
+                    enemyCount: 1,
+                    enemyStats: normal,
+                    initialDelay: 5,
+                  ),
+                ],
+                clearBonus: 0,
+              ),
+            ],
+            modifiers: const [StageModifier.regenPressurePulses],
+            mapColumn: 0,
+            mapRow: 0,
+          );
+          final game = OrionDefenseGame(stage: stage);
+          game.onGameResize(Vector2(800, 1200));
+          game.startWave();
+          game.update(double.minPositive);
+          if (firstGroupCount == 3) {
+            game.update(0.201);
+            game.update(0.201);
+          }
+
+          expect(
+            game.children.whereType<EnemyComponent>(),
+            hasLength(firstGroupCount),
+          );
+          game.update(4.996);
+          expect(
+            game.children.whereType<EnemyComponent>(),
+            hasLength(firstGroupCount),
+          );
+          game.update(0.005);
+          expect(
+            game.children.whereType<EnemyComponent>(),
+            hasLength(firstGroupCount + 1),
+          );
+        },
+      );
+    }
+
     test('restart resets pacing state', () {
       final game = OrionDefenseGame(stage: _emptyWaveStage());
 
@@ -1218,6 +1490,41 @@ void main() {
       },
     );
   });
+}
+
+StageDefinition _modifierStage({
+  required List<StageModifier> modifiers,
+  required EnemyStats enemyStats,
+  int enemyCount = 1,
+  double spawnInterval = 1,
+}) {
+  return StageDefinition(
+    id: 'modifier-stage',
+    name: 'Modifier Stage',
+    mapLabel: 'Modifier',
+    description: 'Synthetic modifier integration stage',
+    pathCells: const [
+      GridPosition(0, 0),
+      GridPosition(1, 0),
+      GridPosition(2, 0),
+      GridPosition(3, 0),
+    ],
+    waves: [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: enemyCount,
+            enemyStats: enemyStats,
+            spawnInterval: spawnInterval,
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    modifiers: modifiers,
+    mapColumn: 0,
+    mapRow: 0,
+  );
 }
 
 StageDefinition _emptyWaveStage({int waveCount = 2}) {
