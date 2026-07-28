@@ -289,6 +289,50 @@ void main() {
     expect(find.textContaining('Environment:'), findsNothing);
   });
 
+  testWidgets('loss panel hides the environment reminder', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await startStageFromBriefing(tester);
+
+    final snapshot = game!.stateNotifier.value;
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.lost,
+      gold: snapshot.gold,
+      baseHealth: 0,
+      startingBaseHealth: snapshot.startingBaseHealth,
+      waveNumber: snapshot.waveNumber,
+      waveTotal: snapshot.waveTotal,
+      stageId: snapshot.stageId,
+      stageName: snapshot.stageName,
+      stageLabel: snapshot.stageLabel,
+      unlockedTowerTypes: snapshot.unlockedTowerTypes,
+      stageModifiers: const [
+        StageModifier.enemySpeedSurge,
+        StageModifier.amplifiedGravityWells,
+      ],
+      nextWavePreview: null,
+      selectedCell: snapshot.selectedCell,
+      selectedTower: snapshot.selectedTower,
+      feedback: snapshot.feedback,
+      isPaused: snapshot.isPaused,
+      speedMultiplier: snapshot.speedMultiplier,
+      autoStartEnabled: snapshot.autoStartEnabled,
+      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    );
+    await tester.pump();
+
+    expect(find.text('Base Lost'), findsOneWidget);
+    expect(find.textContaining('Environment:'), findsNothing);
+  });
+
   testWidgets(
     'next wave panel stays visible while planning and hides in wave',
     (tester) async {
