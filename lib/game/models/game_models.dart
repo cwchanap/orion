@@ -3,14 +3,17 @@ import 'dart:math' as math;
 enum GamePhase { build, wave, won, lost }
 
 enum TowerType {
-  laser,
-  rocket,
-  cryo,
-  railgun,
-  ionChain,
-  nanite,
-  gravityWell,
-  droneBay,
+  laser('Laser'),
+  rocket('Rocket'),
+  cryo('Cryo'),
+  railgun('Railgun'),
+  ionChain('Ion Chain'),
+  nanite('Nanite'),
+  gravityWell('Gravity Well'),
+  droneBay('Drone Bay');
+
+  const TowerType(this.label);
+  final String label;
 }
 
 enum TowerSpecialization {
@@ -37,7 +40,16 @@ enum TowerSpecialization {
   final String label;
 }
 
-enum EnemyTrait { armored, shielded, swarm, regen, heavy }
+enum EnemyTrait {
+  armored('Armored'),
+  shielded('Shielded'),
+  swarm('Swarm'),
+  regen('Regen'),
+  heavy('Heavy');
+
+  const EnemyTrait(this.label);
+  final String label;
+}
 
 enum StageModifier {
   shieldRecharge,
@@ -51,15 +63,18 @@ enum StageModifier {
 }
 
 enum EnemyArchetype {
-  basicDrone,
-  basicEliteDrone,
-  armoredDrone,
-  shieldedDrone,
-  swarmDrone,
-  regenDrone,
-  heavyDrone,
-  armoredHeavyDrone,
-  regenHeavyDrone,
+  basicDrone('Drones'),
+  basicEliteDrone('Elite Drones'),
+  armoredDrone('Armored Drones'),
+  shieldedDrone('Shielded Drones'),
+  swarmDrone('Swarm Drones'),
+  regenDrone('Regen Drones'),
+  heavyDrone('Heavy Drones'),
+  armoredHeavyDrone('Armored Heavy Drones'),
+  regenHeavyDrone('Regen Heavy Drones');
+
+  const EnemyArchetype(this.label);
+  final String label;
 }
 
 enum PlacementFailure {
@@ -943,31 +958,31 @@ class GameBalance {
   static String _enemyLabelForStats(EnemyStats stats) {
     if (stats is BossDefinition) return stats.name;
     if (identical(stats, _basicDrone)) {
-      return 'Drones';
+      return EnemyArchetype.basicDrone.label;
     }
     if (identical(stats, _basicEliteDrone)) {
-      return 'Elite Drones';
+      return EnemyArchetype.basicEliteDrone.label;
     }
     if (identical(stats, _armoredDrone)) {
-      return 'Armored Drones';
+      return EnemyArchetype.armoredDrone.label;
     }
     if (identical(stats, _shieldedDrone)) {
-      return 'Shielded Drones';
+      return EnemyArchetype.shieldedDrone.label;
     }
     if (identical(stats, _swarmDrone)) {
-      return 'Swarm Drones';
+      return EnemyArchetype.swarmDrone.label;
     }
     if (identical(stats, _regenDrone)) {
-      return 'Regen Drones';
+      return EnemyArchetype.regenDrone.label;
     }
     if (identical(stats, _heavyDrone)) {
-      return 'Heavy Drones';
+      return EnemyArchetype.heavyDrone.label;
     }
     if (identical(stats, _armoredHeavyDrone)) {
-      return 'Armored Heavy Drones';
+      return EnemyArchetype.armoredHeavyDrone.label;
     }
     if (identical(stats, _regenHeavyDrone)) {
-      return 'Regen Heavy Drones';
+      return EnemyArchetype.regenHeavyDrone.label;
     }
 
     final adjectives = [
@@ -981,13 +996,7 @@ class GameBalance {
   }
 
   static String _traitAdjective(EnemyTrait trait) {
-    return switch (trait) {
-      EnemyTrait.armored => 'Armored',
-      EnemyTrait.shielded => 'Shielded',
-      EnemyTrait.swarm => 'Swarm',
-      EnemyTrait.regen => 'Regen',
-      EnemyTrait.heavy => 'Heavy',
-    };
+    return trait.label;
   }
 
   static List<TowerType> _recommendedTowerTypes(
