@@ -10,11 +10,12 @@ import '../campaign/stage_modifier_metadata.dart';
 import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
+import 'codex_view.dart';
 import 'tech_tree_view.dart';
 import 'tower_icons.dart';
 import 'world_map_view.dart';
 
-enum _ShellView { worldMap, techTree, stage }
+enum _ShellView { worldMap, codex, techTree, stage }
 
 /// Persistence-failure breadcrumb surfaced on both the active view and the
 /// world map. Hoisted to a top-level constant so retry paths can match and
@@ -131,6 +132,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
           onPurchase: _purchaseTech,
           onBack: _closeTechTree,
         );
+      case _ShellView.codex:
+        return CodexView(progress: _progress, onBack: _closeCodex);
       case _ShellView.stage:
         return _buildStageScaffold();
     }
@@ -153,6 +156,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         onLockedStageSelected: _showLockedStageFeedback,
         onResetCampaign: _confirmResetCampaign,
         onOpenTechTree: _openTechTree,
+        onOpenCodex: _openCodex,
       ),
     );
   }
@@ -293,6 +297,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
   void _closeTechTree() {
     setState(() {
       _techTreeFeedback = null;
+      _activeView = _ShellView.worldMap;
+    });
+  }
+
+  void _openCodex() {
+    setState(() {
+      _activeView = _ShellView.codex;
+    });
+  }
+
+  void _closeCodex() {
+    setState(() {
       _activeView = _ShellView.worldMap;
     });
   }
