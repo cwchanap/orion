@@ -1,4 +1,5 @@
 import '../models/game_models.dart';
+import '../util/format.dart';
 
 class StageModifierMetadata {
   const StageModifierMetadata({required this.title, required this.description});
@@ -17,15 +18,15 @@ class StageModifierMetadata {
         title: 'Shield Recharge',
         description:
             'Shielded enemies recharge '
-            '${_percent(GameBalance.shieldRechargeRatePerSecond)} max shields '
+            '${percent(GameBalance.shieldRechargeRatePerSecond)} max shields '
             'per second after '
-            '${_number(GameBalance.shieldRechargeDelay)} seconds without damage.',
+            '${number(GameBalance.shieldRechargeDelay)} seconds without damage.',
       ),
       StageModifier.swarmBounty => StageModifierMetadata(
         title: 'Swarm Bounty',
         description:
             'Swarm enemies grant '
-            '${_percent(GameBalance.swarmBountyMultiplier - 1)} more kill gold, '
+            '${percent(GameBalance.swarmBountyMultiplier - 1)} more kill gold, '
             'rounded to whole gold.',
       ),
       StageModifier.reinforcedArmor => StageModifierMetadata(
@@ -50,31 +51,23 @@ class StageModifierMetadata {
         title: 'Salvage Reserves',
         description:
             'Wave clear bonuses are increased by '
-            '${_percent(GameBalance.enhancedClearBonusMultiplier - 1)}.',
+            '${percent(GameBalance.enhancedClearBonusMultiplier - 1)}.',
       ),
       StageModifier.enemySpeedSurge => StageModifierMetadata(
         title: 'Temporal Surge',
         description:
             'Enemies move '
-            '${_percent(GameBalance.enemySpeedSurgeMultiplier - 1)} faster.',
+            '${percent(GameBalance.enemySpeedSurgeMultiplier - 1)} faster.',
       ),
       StageModifier.amplifiedGravityWells => StageModifierMetadata(
         title: 'Amplified Wells',
         description:
             'Gravity Well fields gain '
-            '${_percent(GameBalance.amplifiedGravityWellRadiusMultiplier - 1)} '
+            '${percent(GameBalance.amplifiedGravityWellRadiusMultiplier - 1)} '
             'radius and '
-            '${_percent(GameBalance.amplifiedGravityWellDurationMultiplier - 1)} '
+            '${percent(GameBalance.amplifiedGravityWellDurationMultiplier - 1)} '
             'duration.',
       ),
     };
-  }
-
-  static String _percent(double value) => '${(value * 100).round()}%';
-
-  static String _number(double value) {
-    return value == value.roundToDouble()
-        ? value.toInt().toString()
-        : value.toStringAsFixed(1);
   }
 }
