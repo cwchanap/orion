@@ -7,6 +7,16 @@ class StageModifierMetadata {
   final String title;
   final String description;
 
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is StageModifierMetadata &&
+          title == other.title &&
+          description == other.description;
+
+  @override
+  int get hashCode => Object.hash(title, description);
+
   static const standardConditions = StageModifierMetadata(
     title: 'Standard Conditions',
     description: 'No environmental modifiers',
