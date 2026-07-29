@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
 import '../campaign/stage_definition.dart';
-import '../models/game_models.dart';
+import '../campaign/stage_reward_label.dart';
 
 class WorldMapView extends StatelessWidget {
   const WorldMapView({
@@ -212,25 +212,6 @@ class _StageMap extends StatelessWidget {
   }
 }
 
-String? _rewardLabel(StageDefinition stage, bool isCleared) {
-  final reward = stage.reward;
-  if (reward == null) {
-    return null;
-  }
-
-  final amount = switch (reward) {
-    CampaignReward.bonusGold => '+${GameBalance.salvageRiftGoldBonus} Gold',
-    CampaignReward.bonusHealth => '+${GameBalance.voidBastionHealthBonus} HP',
-    CampaignReward.challengeBadge => null,
-  };
-
-  if (amount == null) {
-    return null;
-  }
-
-  return isCleared ? amount : 'Reward: $amount';
-}
-
 class _StageNode extends StatelessWidget {
   const _StageNode({
     required this.stage,
@@ -253,9 +234,9 @@ class _StageNode extends StatelessWidget {
     final theme = Theme.of(context);
     final isLocked = status == StageProgressStatus.locked;
     final colors = _stageColors(theme.colorScheme, status, result);
-    final rewardLabel = _rewardLabel(
+    final rewardLabel = stageRewardLabel(
       stage,
-      status == StageProgressStatus.cleared,
+      isCleared: status == StageProgressStatus.cleared,
     );
 
     return Material(
