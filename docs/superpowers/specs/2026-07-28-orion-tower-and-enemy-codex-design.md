@@ -48,7 +48,7 @@ mission state.
 | Stage gating | All 7 stages shown in full, each with a Locked/Unlocked/Cleared badge | A reference tool's job is to teach; full detail aids planning. Conditional rendering is limited to the status badge. |
 | Architecture | Mirror the existing `StageModifierMetadata` pattern | Pure data classes + static factories reading `GameBalance`, fully unit-testable, zero duplicated constants. |
 | Navigation | In-place `_ShellView` swap (matches Tech Tree), **not** `Navigator.push` | `TechTreeView` is rendered in `OrionGamePage`'s build switch with an `onBack` callback; an `AppBar` default back button would pop the whole `OrionGamePage` route. |
-| Label home | Enhanced-enum `label` on `TowerType` / `EnemyTrait` (idiomatic) | Matches existing enhanced-enum precedent (`TowerSpecialization.label`, `TowerTargetingMode.label`). Only Flutter-dependent `towerIcon` stays a UI helper. |
+| Label home | Enhanced-enum `label` on `TowerType` / `EnemyTrait` / `EnemyArchetype` (idiomatic) | Matches existing enhanced-enum precedent (`TowerSpecialization.label`, `TowerTargetingMode.label`). `EnemyArchetype.label` becomes the single source for the names wave previews already show. Only Flutter-dependent `towerIcon` stays a UI helper. |
 | Bosses | Excluded from v1 | Spoilers; see Non-goals. |
 
 ## 5. Architecture
@@ -60,11 +60,11 @@ New code lives under `lib/game/codex/` (pure presentation model — no Flutter) 
 
 ```
 lib/game/
-  models/game_models.dart     [edit]  add `label` to TowerType + EnemyTrait (enhanced enums)
+  models/game_models.dart     [edit]  add `label` to TowerType + EnemyTrait + EnemyArchetype (enhanced enums); delegate _enemyLabelForStats to EnemyArchetype.label
   ui/tower_icons.dart         [new]   IconData towerIcon(TowerType) — moved from orion_game_page._towerIcon
   codex/codex_data.dart       [new]   PURE presentation value types + CodexData façade (reads GameBalance)
   util/format.dart            [new]   shared neutral percent/number formatters (promoted from StageModifierMetadata._percent/_number)
-  campaign/stage_reward_label.dart [new] shared pure stageRewardLabel(stage, isCleared) — used by CodexStageEntry + world_map_view
+  campaign/stage_reward_label.dart [new] shared pure stageRewardLabel(stage, {required bool isCleared}) — used by CodexStageEntry + world_map_view
   ui/codex_view.dart          [new]   Flutter widget: full-screen codex page (in-place, not pushed)
   ui/orion_game_page.dart     [edit]  drop _towerLabel/_enemyTraitLabel/_towerIcon; add _ShellView.codex + _openCodex/_closeCodex
   ui/world_map_view.dart      [edit]  add onOpenCodex callback + IconButton; drop private _rewardLabel (use shared helper)
@@ -94,8 +94,10 @@ The pure / Flame-free boundary the repo deliberately maintains is preserved:
 
 ## 6. Data model (`codex/codex_data.dart`)
 
-All types are `const` and immutable. Numbers are pulled from `GameBalance` /
-enums at construction time; prose fields are authored strings.
+All classes have `const` constructors and immutable fields; instances are built
+at runtime from `GameBalance` / enums, so they are **not** `const` values (e.g.
+`StageDefinition`'s constructor is not `const`, and `towerStats` / `enemyArchetype`
+are runtime calls). Prose fields are authored strings.
 
 ### 6.1 Value types
 
@@ -106,20 +108,20 @@ class CodexTowerEntry {
   final int unlockWave;               // GameBalance.towerUnlockWave(type)
   final TowerStats baseStats;         // GameBalance.towerStats(type, level: 1)
   final int upgradeCost;              // baseStats.upgradeCost (1 -> 2)
+  final int specializationCost;       // GameBalance.towerStats(type, level: 2).specializationCost — per-type (from _TowerCosts), hoisted here because it is identical for both specializations
   final List<CodexSpecializationEntry> specializations; // exactly 2
 }
 
 class CodexSpecializationEntry {
   final TowerSpecialization specialization;
   final String label;                 // specialization.label (enum)
-  final int specializationCost;       // GameBalance.towerStats(type, level: 2).specializationCost (2 -> 3)
   final TowerStats specializedStats;  // GameBalance.towerStats(type, level: 3, specialization: spec)
   final String description;           // authored one-line blurb
 }
 
 class CodexEnemyEntry {
   final EnemyArchetype archetype;
-  final String label;                 // authored (e.g. "Armored Drone")
+  final String label;                 // archetype.label (see §6.3 — single source, matches wave-briefing text)
   final EnemyStats stats;             // GameBalance.enemyArchetype(archetype)
   final List<EnemyTrait> traits;      // EnemyTrait.values.where(stats.traits.contains).toList() — sorted to enum order (the Set is insertion-ordered, not enum-ordered)
   final String roleDescription;       // authored one-line blurb
@@ -183,12 +185,25 @@ uncleared side stage → `'Reward: +X …'`; cleared side stage → `'+X …'`. 
 `GameBalance.salvageRiftGoldBonus` (gold) and
 `GameBalance.voidBastionHealthBonus` (HP). Pure.
 
+**Enemy labels — `EnemyArchetype.label`.** Player-facing enemy names already
+exist as literals in `GameBalance._enemyLabelForStats` ("Armored Drones",
+"Regen Heavy Drones", …) and are what wave previews show. To avoid a parallel
+set that would drift from the briefing text, give `EnemyArchetype` an
+enhanced-enum `label` (plural, matching today's `_enemyLabelForStats` output
+**exactly**) as the single source, and refactor `_enemyLabelForStats`'s nine
+archetype branches to return the matching `EnemyArchetype.x.label` (boss
+branch unchanged — wave-preview output must not change). `CodexEnemyEntry.label`
+then reads `archetype.label`.
+
 ## 7. Label & helper extraction
 
-- **`TowerType`** and **`EnemyTrait`** become enhanced enums with a `const`
-  constructor and a `final String label` field, mirroring
+- **`TowerType`**, **`EnemyTrait`**, and **`EnemyArchetype`** become enhanced
+  enums with a `const` constructor and a `final String label` field, mirroring
   `TowerSpecialization`/`TowerTargetingMode` (both enhanced enums). All existing enum
-  member references (`TowerType.laser`, etc.) remain valid.
+  member references (`TowerType.laser`, etc.) remain valid. `EnemyArchetype.label`
+  holds the plural player-facing names; `GameBalance._enemyLabelForStats` is
+  refactored to return `EnemyArchetype.x.label` for the nine archetypes (§6.3),
+  removing its duplicated string literals without changing preview output.
 - `towerLabel(TowerType)` / `enemyTraitLabel(EnemyTrait)` are removed from
   `orion_game_page.dart`; call sites use `type.label` / `trait.label`.
 - `IconData towerIcon(TowerType)` stays Flutter-dependent, so it moves to
@@ -206,29 +221,40 @@ mission** (the wave at which the tower type becomes buildable), not campaign
 progression; word it as e.g. `"Available from wave N"` so it is not mistaken
 for campaign-stage gating.
 
-**Base stats** (from `towerStats(type, level: 1)`), always shown:
-- Damage (`damage`), Range (`range`), Fire interval (`fireInterval`, seconds),
-  Cost (`cost`), Upgrade cost (`upgradeCost`).
+**Base stats** (from `towerStats(type, level: 1)`):
+- Always shown: Range (`range`), Cost (`cost`), Upgrade cost (`upgradeCost`).
+- Damage (`damage`) and Fire interval (`fireInterval`) are shown **only when
+  meaningful** — gated on `damage > 0`. Drone Bay has `damage: 0` (it deals
+  damage via drones, not a projectile), so its card suppresses both rows and
+  shows the drone output below instead of a misleading "Damage 0".
 
 **Specialty stats** (shown only when non-zero / non-default, to keep cards
-focused; the "e.g." towers are illustrative — display is driven by the stat
-value, not the family):
+focused; display is driven by the stat value, not the family):
 - Splash radius (`splashRadius`) — e.g. rocket.
-- Slow: `(1 - slowMultiplier)` as a %, for `slowDuration` seconds — e.g. cryo, gravity well.
+- Slow: `(1 - slowMultiplier)` as a %, for `slowDuration` seconds — cryo at
+  base; gravity well **only once specialized** (its level-1/2 `slowMultiplier`
+  defaults to 1, so this row never appears on the base card).
 - Pierce (`pierceCount`) — e.g. railgun.
 - Chain (`chainCount` + `chainRange`) — e.g. ion chain.
 - Corrosion (`corrosionDamagePerSecond` + `corrosionDuration`) — e.g. nanite.
 - Armor shred (`armorShred`) — e.g. nanite.
-- Field radius / duration (`fieldRadius` + `fieldDuration`) — e.g. gravity well.
-- Drones (`droneCount` + `maxActiveDrones`) — e.g. drone bay.
+- Field: radius (`fieldRadius`), duration (`fieldDuration`), **and tick interval
+  (`fieldTickInterval`)** — e.g. gravity well. All three are shown so the card
+  conveys the field's real damage cadence (a damage tick every
+  `fieldTickInterval` for `fieldDuration`), not just its footprint.
+- Drones: count (`droneCount`), active cap (`maxActiveDrones`), drone damage
+  (`droneDamage`), attack interval (`droneAttackInterval`), and lifetime
+  (`droneLifetime`) — e.g. drone bay. The three drone-damage stats are the
+  tower's actual output and must appear; they replace the suppressed
+  "Damage / Fire interval" base rows.
 - Shield bonus (`shieldDamageMultiplier` when `!= 1`), Armor bonus
   (`armorDamageMultiplier` when `!= 1`), Slowed bonus (`slowedDamageMultiplier`
   when `!= 1`).
 - Prism split (`prismSplitDamageMultiplier`), Cluster burst
   (`clusterBurstCount`) — surfaced on the relevant specialization cards.
 
-**Specialization cards** (exactly 2 per tower, 16 total): `label`,
-`specializationCost`, authored one-line `description`, and the defining number
+**Specialization cards** (exactly 2 per tower, 16 total): `label`, authored
+one-line `description`, and the defining number
 from `specializedStats` (format sketch only — e.g. *"Prism Laser — splits to N
 targets at X% damage"*; do **not** hardcode magnitudes in the spec, read them
 from `specializedStats` at render time so they track live tuning).
@@ -307,7 +333,9 @@ same pattern exactly:
 
 - Add `VoidCallback? onOpenCodex` to `WorldMapView`.
 - Render an `Icons.menu_book` `IconButton` (tooltip `'Codex'`) in the header
-  `Row`, immediately before the Tech Tree button.
+  `Row`, immediately before the Tech Tree button, wrapped in
+  `if (onOpenCodex != null)` — exactly like the Tech Tree button's
+  `if (onOpenTechTree != null)` guard (`world_map_view.dart`).
 - Gate it with `_isBusy` identically to the other header buttons.
 - In `OrionGamePage` (the parent that builds `WorldMapView`), mirror the
   `_ShellView.techTree` plumbing exactly:
@@ -324,21 +352,32 @@ existing Tech Tree path.
 
 ### 9.2 `CodexView`
 
-- `StatefulWidget` (holds a `ScrollController` for section-jump only).
-- Rendered **in-place** by `OrionGamePage`'s build switch (`case
-  _ShellView.codex`), exactly like `TechTreeView` — **not** pushed onto the
-  `Navigator`. `CodexView` must therefore **not** rely on an `AppBar` default
-  back button, which would pop the entire `OrionGamePage` route.
+- `StatefulWidget` (holds the selected section index + a per-section
+  `ScrollController`).
+- Returns its own `Scaffold` + `SafeArea` (mirroring `TechTreeView`), rendered
+  **in-place** by `OrionGamePage`'s build switch (`case _ShellView.codex`) —
+  **not** pushed onto the `Navigator`. `CodexView` must therefore **not** rely
+  on an `AppBar` default back button, which would pop the entire
+  `OrionGamePage` route.
 - Header: a `Row` + back `IconButton` wired to a required `VoidCallback onBack`
   (mirroring `TechTreeView`'s header), with title text `'Codex'`.
 - Constructor: `CodexView({required CampaignProgress progress, required
   VoidCallback onBack})`. `progress` is the only data input.
-- Body: a sticky chip bar (`Towers` / `Enemies` / `Effects` / `Stages`) above a
-  single lazy `CustomScrollView` of `Card`s. Tapping a chip scrolls to that
-  section.
+- Body: a sticky chip bar (`Towers` / `Enemies` / `Effects` / `Stages`) that
+  **selects the active section** (filter), above a scrollable list of that
+  section's `Card`s. Tapping a chip swaps which section is rendered — it does
+  **not** scroll-jump inside one lazy list, because off-screen slivers in a
+  lazy `CustomScrollView` are not built and `Scrollable.ensureVisible` would
+  have no target. Filter-per-section also keeps each view short for mobile;
+  default selection = Towers.
 - Each entry renders as a `Card`; stat rows use a `LayoutBuilder` with the
   width threshold `< 420` (the same idiom `_StageMap` already uses) so
   multi-column stat grids collapse to a single column on narrow widths.
+- `CodexView` intentionally takes **no feedback slot**. A campaign save that
+  fails while the codex is open sets `_mapFeedback` (see
+  `_showCampaignPersistenceFailure`, which branches on `_activeView`); the
+  message surfaces when the player backs out to the map. This is acceptable —
+  the codex is read-only and triggers no saves itself.
 - No async, no network. Empty `progress` ⇒ Outpost Alpha shows **Unlocked**
   (its `unlockDependencies` is empty, so `CampaignProgress.isUnlocked` is
   true) and every other stage shows **Locked** — this is the correct
@@ -371,8 +410,11 @@ This is the headline coverage required by the issue.
   default-state claim).
 - `relatedSpecializations` per effect is non-empty exactly for the
   specialization values whose level-3 `specializedStats` expose the effect's
-  signal field (see §8.3 derivation); assert at least `slow`, `chain`,
-  `splash`, `drones`, `gravityField` each resolve to ≥ 1 specialization.
+  signal field (see §8.3 derivation). Today all 9 effects resolve to ≥ 1
+  specialization (e.g. `shieldDamage` → `overloadRelay`; `corrosion` /
+  `armorShred` → both nanite specs; `pierce` → both railgun specs) — assert
+  all 9 are non-empty (the derivation keeps this self-maintaining as balance
+  evolves).
 
 ### 10.2 Shared formatters — folded into `codex_data_test.dart`
 
