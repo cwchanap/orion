@@ -17,6 +17,7 @@ class WorldMapView extends StatelessWidget {
     this.onLockedStageSelected,
     required this.onResetCampaign,
     this.onOpenTechTree,
+    this.onOpenCodex,
   });
 
   final List<StageDefinition> stages;
@@ -29,6 +30,7 @@ class WorldMapView extends StatelessWidget {
   final ValueChanged<StageDefinition>? onLockedStageSelected;
   final VoidCallback onResetCampaign;
   final VoidCallback? onOpenTechTree;
+  final VoidCallback? onOpenCodex;
 
   bool get _isBusy => isSavingProgress || isResetting;
 
@@ -61,6 +63,12 @@ class WorldMapView extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (onOpenCodex != null)
+                  IconButton(
+                    tooltip: 'Codex',
+                    onPressed: _isBusy ? null : onOpenCodex,
+                    icon: const Icon(Icons.menu_book),
+                  ),
                 if (onOpenTechTree != null)
                   IconButton(
                     tooltip: 'Tech Tree',

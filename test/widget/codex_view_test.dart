@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/codex_view.dart';
+import 'package:orion/game/ui/world_map_view.dart';
 
 void main() {
   testWidgets('renders the four section chips and Towers content by default', (
@@ -43,6 +45,30 @@ void main() {
       ),
     );
     await tester.tap(find.byTooltip('Back'));
+    expect(pressed, isTrue);
+  });
+
+  testWidgets('world map shows a Codex button that fires onOpenCodex', (
+    tester,
+  ) async {
+    var pressed = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: WorldMapView(
+            stages: OrionCampaign.stages,
+            progress: CampaignProgress(),
+            feedback: null,
+            onStageSelected: (_) {},
+            onResetCampaign: () {},
+            onOpenTechTree: () {},
+            onOpenCodex: () => pressed = true,
+          ),
+        ),
+      ),
+    );
+    expect(find.byTooltip('Codex'), findsOneWidget);
+    await tester.tap(find.byTooltip('Codex'));
     expect(pressed, isTrue);
   });
 }
