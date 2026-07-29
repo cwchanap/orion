@@ -48,7 +48,7 @@ mission state.
 | Stage gating | All 7 stages shown in full, each with a Locked/Unlocked/Cleared badge | A reference tool's job is to teach; full detail aids planning. Conditional rendering is limited to the status badge. |
 | Architecture | Mirror the existing `StageModifierMetadata` pattern | Pure data classes + static factories reading `GameBalance`, fully unit-testable, zero duplicated constants. |
 | Navigation | In-place `_ShellView` swap (matches Tech Tree), **not** `Navigator.push` | `TechTreeView` is rendered in `OrionGamePage`'s build switch with an `onBack` callback; an `AppBar` default back button would pop the whole `OrionGamePage` route. |
-| Label home | Enhanced-enum `label` on `TowerType` / `EnemyTrait` (idiomatic) | Matches existing precedent (`TowerSpecialization.label`, `TowerTargetingMode.label`, `StageMedal.label`). Only Flutter-dependent `towerIcon` stays a UI helper. |
+| Label home | Enhanced-enum `label` on `TowerType` / `EnemyTrait` (idiomatic) | Matches existing enhanced-enum precedent (`TowerSpecialization.label`, `TowerTargetingMode.label`). Only Flutter-dependent `towerIcon` stays a UI helper. |
 | Bosses | Excluded from v1 | Spoilers; see Non-goals. |
 
 ## 5. Architecture
@@ -63,7 +63,7 @@ lib/game/
   models/game_models.dart     [edit]  add `label` to TowerType + EnemyTrait (enhanced enums)
   ui/tower_icons.dart         [new]   IconData towerIcon(TowerType) — moved from orion_game_page._towerIcon
   codex/codex_data.dart       [new]   PURE presentation value types + CodexData façade (reads GameBalance)
-  codex/codex_format.dart     [new]   shared percent/number formatters (promoted from StageModifierMetadata._percent/_number)
+  util/format.dart            [new]   shared neutral percent/number formatters (promoted from StageModifierMetadata._percent/_number)
   campaign/stage_reward_label.dart [new] shared pure stageRewardLabel(stage, isCleared) — used by CodexStageEntry + world_map_view
   ui/codex_view.dart          [new]   Flutter widget: full-screen codex page (in-place, not pushed)
   ui/orion_game_page.dart     [edit]  drop _towerLabel/_enemyTraitLabel/_towerIcon; add _ShellView.codex + _openCodex/_closeCodex
@@ -87,8 +87,10 @@ ui/world_map_view.dart  (campaign map header button)
 
 The pure / Flame-free boundary the repo deliberately maintains is preserved:
 `codex_data.dart` imports only `game_models.dart`, `campaign_progress.dart`,
-`stage_definition.dart`, `stage_modifier_metadata.dart`, and `codex_format.dart`.
-No `package:flutter`, no `package:flame`.
+`stage_definition.dart`, `stage_modifier_metadata.dart`,
+`campaign/stage_reward_label.dart`, and `util/format.dart`. No
+`package:flutter`, no `package:flame`. Shared formatters live in the neutral
+`util/format.dart` so `campaign` never depends on `codex`.
 
 ## 6. Data model (`codex/codex_data.dart`)
 
@@ -162,19 +164,30 @@ class CodexData {
 `stagesFor` is the only builder that takes an argument — stage status is runtime
 state. It is still pure: identical `progress` input yields identical output.
 
-### 6.3 Shared formatters (`codex/codex_format.dart`)
+### 6.3 Shared helpers
 
-Promote the private `_percent` / `_number` helpers currently inside
-`StageModifierMetadata` into `codex_format.dart` so both
-`StageModifierMetadata` and `CodexEffectEntry` share one formatting path.
-`StageModifierMetadata` is updated to call the shared helpers (behaviour
-unchanged; its existing test guards this).
+**Formatters — `util/format.dart` (neutral).** Promote the private `_percent`
+/ `_number` helpers currently inside `StageModifierMetadata` into a new neutral
+`lib/game/util/format.dart`, so both `campaign/stage_modifier_metadata.dart`
+and `codex/codex_data.dart` import them. This keeps the dependency direction
+correct — campaign and codex both depend on a neutral util; **campaign never
+depends on codex**. `StageModifierMetadata` is updated to call the shared
+helpers (behaviour unchanged; its existing test guards this).
+
+**`stageRewardLabel(stage, {required bool isCleared})` —
+`campaign/stage_reward_label.dart`.** Extracted from world_map_view's private
+`_rewardLabel` so both `world_map_view` and `CodexStageEntry` share one
+implementation. Contract: main stages / no reward → `null`;
+`CampaignReward.challengeBadge` → `null` (compound-derived, not shown here);
+uncleared side stage → `'Reward: +X …'`; cleared side stage → `'+X …'`. Reads
+`GameBalance.salvageRiftGoldBonus` (gold) and
+`GameBalance.voidBastionHealthBonus` (HP). Pure.
 
 ## 7. Label & helper extraction
 
 - **`TowerType`** and **`EnemyTrait`** become enhanced enums with a `const`
   constructor and a `final String label` field, mirroring
-  `TowerSpecialization`/`TowerTargetingMode`/`StageMedal`. All existing enum
+  `TowerSpecialization`/`TowerTargetingMode` (both enhanced enums). All existing enum
   member references (`TowerType.laser`, etc.) remain valid.
 - `towerLabel(TowerType)` / `enemyTraitLabel(EnemyTrait)` are removed from
   `orion_game_page.dart`; call sites use `type.label` / `trait.label`.
@@ -187,8 +200,11 @@ unchanged; its existing test guards this).
 
 ### 8.1 Towers (8 entries)
 
-Per `TowerType`, header: `towerIcon(type)` + `type.label` + `"Unlocks wave
-${towerUnlockWave(type)}"`.
+Per `TowerType`, header: `towerIcon(type)` + `type.label` + an in-mission
+availability line. `towerUnlockWave(type)` is **wave gating within a single
+mission** (the wave at which the tower type becomes buildable), not campaign
+progression; word it as e.g. `"Available from wave N"` so it is not mistaken
+for campaign-stage gating.
 
 **Base stats** (from `towerStats(type, level: 1)`), always shown:
 - Damage (`damage`), Range (`range`), Fire interval (`fireInterval`, seconds),
@@ -213,8 +229,14 @@ value, not the family):
 
 **Specialization cards** (exactly 2 per tower, 16 total): `label`,
 `specializationCost`, authored one-line `description`, and the defining number
-from `specializedStats` (e.g. "Prism Laser — splits to 2 extra targets at 60%
-damage").
+from `specializedStats` (format sketch only — e.g. *"Prism Laser — splits to N
+targets at X% damage"*; do **not** hardcode magnitudes in the spec, read them
+from `specializedStats` at render time so they track live tuning).
+
+**Scope cut (intentional):** level-2 intermediate combat stats are **not**
+shown. A tower card covers the level-1 base, the cost to upgrade, and the
+level-3 specialized end-state; level 2 is a transient step. Players asking
+"what does the first upgrade buy?" see its cost, not a full second stat block.
 
 ### 8.2 Enemies (9 archetypes + trait reference)
 
@@ -246,6 +268,16 @@ specialization tie — the entry still renders. Note: the
 explained inline on their specialization cards and deliberately have **no**
 glossary entry, matching the issue's fixed 9-effect list.
 
+**`relatedSpecializations` derivation (durable, not a static table).** For each
+effect id, derive the set by scanning every `TowerSpecialization.values`'
+level-3 `specializedStats` for the field(s) that signal that effect, collected
+when non-default — e.g. `slow` ⇔ `slowMultiplier < 1` (cryo + gravity specs),
+`corrosion` ⇔ `corrosionDamagePerSecond > 0`, `armorShred` ⇔ `armorShred > 0`,
+`shieldDamage` ⇔ `shieldDamageMultiplier != 1`, `pierce` ⇔ `pierceCount > 0`,
+`chain` ⇔ `chainCount > 0`, `splash` ⇔ `splashRadius > 0`, `drones` ⇔
+`droneCount > 0`, `gravityField` ⇔ `fieldRadius > 0`. Deriving (rather than
+tabulating) keeps the cross-refs correct as balance evolves.
+
 ### 8.4 Stages (7 entries, full detail)
 
 Per `OrionCampaign.stages`: `name`, `mapLabel`, `description`, status badge
@@ -255,6 +287,15 @@ stage has no modifiers — e.g. Outpost Alpha — render a single
 `StageModifierMetadata.standardConditions` card, matching the existing
 next-wave-panel fallback in `orion_game_page.dart`),
 `waveCount` (8), side-stage `rewardLabel`, and a main / side marker.
+
+### 8.5 Stat semantics
+
+The codex shows **catalog / base values** read directly from
+`GameBalance.towerStats` / `enemyArchetype` — **not** tech-tree-adjusted or
+stage-modifier-adjusted effective values. Do **not** wire `TowerStatsResolver`
+or `CampaignModifiers` into the codex; it is a stable reference of the base
+tuning, intentionally independent of a player's current upgrades or the stage
+being played.
 
 ## 9. Entry point & UI
 
@@ -298,8 +339,10 @@ existing Tech Tree path.
 - Each entry renders as a `Card`; stat rows use a `LayoutBuilder` with the
   width threshold `< 420` (the same idiom `_StageMap` already uses) so
   multi-column stat grids collapse to a single column on narrow widths.
-- No async, no network. Empty `progress` ⇒ every stage shows **Locked** (the
-  correct default, not an error state).
+- No async, no network. Empty `progress` ⇒ Outpost Alpha shows **Unlocked**
+  (its `unlockDependencies` is empty, so `CampaignProgress.isUnlocked` is
+  true) and every other stage shows **Locked** — this is the correct
+  `statusFor` result, not a special case.
 
 ## 10. Testing
 
@@ -319,8 +362,17 @@ This is the headline coverage required by the issue.
 - `CodexData.effects` has exactly the 9 expected ids in the fixed order.
 - `CodexData.stagesFor(progress)` over `OrionCampaign.stages`: each entry's
   `status` equals `progress.statusFor(stage)` for locked / unlocked / cleared
-  samples; `waveCount == 8`; `modifiers` equals
-  `[for (final m in stage.modifiers) StageModifierMetadata.forModifier(m)]`.
+  samples; `waveCount == stage.waves.length` (not a bare `8`, so it fails
+  cleanly if a stage ever diverges); `modifiers` equals
+  `[for (final m in stage.modifiers) StageModifierMetadata.forModifier(m)]`,
+  and a no-modifier stage yields `[StageModifierMetadata.standardConditions]`.
+- Empty-progress invariant: `stagesFor(CampaignProgress())` marks **Outpost
+  Alpha as `unlocked`** and every other stage `locked` (guards the §9.2
+  default-state claim).
+- `relatedSpecializations` per effect is non-empty exactly for the
+  specialization values whose level-3 `specializedStats` expose the effect's
+  signal field (see §8.3 derivation); assert at least `slow`, `chain`,
+  `splash`, `drones`, `gravityField` each resolve to ≥ 1 specialization.
 
 ### 10.2 Shared formatters — folded into `codex_data_test.dart`
 
