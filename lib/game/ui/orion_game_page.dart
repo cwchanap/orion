@@ -11,6 +11,7 @@ import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
 import 'tech_tree_view.dart';
+import 'tower_icons.dart';
 import 'world_map_view.dart';
 
 enum _ShellView { worldMap, techTree, stage }
@@ -730,7 +731,7 @@ class _NextWavePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final recommendations = preview.recommendedTowerTypes
-        .map(_towerLabel)
+        .map((type) => type.label)
         .join(', ');
 
     return DecoratedBox(
@@ -769,7 +770,7 @@ class _NextWavePanel extends StatelessWidget {
                 runSpacing: 8,
                 children: [
                   for (final trait in preview.traits)
-                    _StatusChip(label: _enemyTraitLabel(trait)),
+                    _StatusChip(label: trait.label),
                   if (preview.clearBonus > 0)
                     _StatusChip(label: 'Clear bonus ${preview.clearBonus}'),
                 ],
@@ -984,8 +985,8 @@ class _TowerPicker extends StatelessWidget {
           children: [
             for (final type in unlockedTypes)
               _TowerButton(
-                label: _towerLabel(type),
-                icon: _towerIcon(type),
+                label: type.label,
+                icon: towerIcon(type),
                 stats: GameBalance.towerStats(type, level: 1),
                 phase: phase,
                 gold: gold,
@@ -1041,7 +1042,7 @@ class _UpgradePanel extends StatelessWidget {
       level: tower.level,
       specialization: tower.specialization,
     );
-    final towerName = _towerLabel(tower.type);
+    final towerName = tower.type.label;
     final canUpgrade =
         snapshot.phase == GamePhase.build &&
         tower.canUpgrade &&
@@ -1325,41 +1326,5 @@ String _phaseLabel(GamePhase phase) {
     GamePhase.wave => 'Wave Active',
     GamePhase.won => 'Won',
     GamePhase.lost => 'Lost',
-  };
-}
-
-String _towerLabel(TowerType type) {
-  return switch (type) {
-    TowerType.laser => 'Laser',
-    TowerType.rocket => 'Rocket',
-    TowerType.cryo => 'Cryo',
-    TowerType.railgun => 'Railgun',
-    TowerType.ionChain => 'Ion Chain',
-    TowerType.nanite => 'Nanite',
-    TowerType.gravityWell => 'Gravity Well',
-    TowerType.droneBay => 'Drone Bay',
-  };
-}
-
-String _enemyTraitLabel(EnemyTrait trait) {
-  return switch (trait) {
-    EnemyTrait.armored => 'Armored',
-    EnemyTrait.shielded => 'Shielded',
-    EnemyTrait.swarm => 'Swarm',
-    EnemyTrait.regen => 'Regen',
-    EnemyTrait.heavy => 'Heavy',
-  };
-}
-
-IconData _towerIcon(TowerType type) {
-  return switch (type) {
-    TowerType.laser => Icons.bolt,
-    TowerType.rocket => Icons.rocket_launch,
-    TowerType.cryo => Icons.ac_unit,
-    TowerType.railgun => Icons.linear_scale,
-    TowerType.ionChain => Icons.electrical_services,
-    TowerType.nanite => Icons.bubble_chart,
-    TowerType.gravityWell => Icons.blur_circular,
-    TowerType.droneBay => Icons.hub,
   };
 }
