@@ -47,6 +47,7 @@ mission state.
 | Effects presentation | Standalone mechanics glossary **plus** a short blurb on each specialization | The issue lists Effects as its own section; a glossary teaches vocabulary while per-spec blurbs stay specific. |
 | Stage gating | All 7 stages shown in full, each with a Locked/Unlocked/Cleared badge | A reference tool's job is to teach; full detail aids planning. Conditional rendering is limited to the status badge. |
 | Architecture | Mirror the existing `StageModifierMetadata` pattern | Pure data classes + static factories reading `GameBalance`, fully unit-testable, zero duplicated constants. |
+| Navigation | In-place `_ShellView` swap (matches Tech Tree), **not** `Navigator.push` | `TechTreeView` is rendered in `OrionGamePage`'s build switch with an `onBack` callback; an `AppBar` default back button would pop the whole `OrionGamePage` route. |
 | Label home | Enhanced-enum `label` on `TowerType` / `EnemyTrait` (idiomatic) | Matches existing precedent (`TowerSpecialization.label`, `TowerTargetingMode.label`, `StageMedal.label`). Only Flutter-dependent `towerIcon` stays a UI helper. |
 | Bosses | Excluded from v1 | Spoilers; see Non-goals. |
 
@@ -63,9 +64,10 @@ lib/game/
   ui/tower_icons.dart         [new]   IconData towerIcon(TowerType) — moved from orion_game_page._towerIcon
   codex/codex_data.dart       [new]   PURE presentation value types + CodexData façade (reads GameBalance)
   codex/codex_format.dart     [new]   shared percent/number formatters (promoted from StageModifierMetadata._percent/_number)
-  ui/codex_view.dart          [new]   Flutter widget: full-screen codex page
-  ui/orion_game_page.dart     [edit]  drop _towerLabel/_enemyTraitLabel/_towerIcon; use enum.label + towerIcon
-  ui/world_map_view.dart      [edit]  add onOpenCodex callback + IconButton in the header row
+  campaign/stage_reward_label.dart [new] shared pure stageRewardLabel(stage, isCleared) — used by CodexStageEntry + world_map_view
+  ui/codex_view.dart          [new]   Flutter widget: full-screen codex page (in-place, not pushed)
+  ui/orion_game_page.dart     [edit]  drop _towerLabel/_enemyTraitLabel/_towerIcon; add _ShellView.codex + _openCodex/_closeCodex
+  ui/world_map_view.dart      [edit]  add onOpenCodex callback + IconButton; drop private _rewardLabel (use shared helper)
 ```
 
 ### 5.2 Layering
@@ -117,7 +119,7 @@ class CodexEnemyEntry {
   final EnemyArchetype archetype;
   final String label;                 // authored (e.g. "Armored Drone")
   final EnemyStats stats;             // GameBalance.enemyArchetype(archetype)
-  final List<EnemyTrait> traits;      // stats.traits, deterministic order (enum order)
+  final List<EnemyTrait> traits;      // EnemyTrait.values.where(stats.traits.contains).toList() — sorted to enum order (the Set is insertion-ordered, not enum-ordered)
   final String roleDescription;       // authored one-line blurb
 }
 
@@ -140,7 +142,7 @@ class CodexStageEntry {
   final StageProgressStatus status;   // progress.statusFor(stage)
   final List<StageModifierMetadata> modifiers; // StageModifierMetadata.forModifier per stage.modifiers
   final int waveCount;                // stage.waves.length (8)
-  final String? rewardLabel;          // side-stage reward, mirrors world_map_view._rewardLabel
+  final String? rewardLabel;          // via shared stageRewardLabel(stage, isCleared) — see §5.1; not duplicated from world_map_view
 }
 ```
 
@@ -193,15 +195,16 @@ ${towerUnlockWave(type)}"`.
   Cost (`cost`), Upgrade cost (`upgradeCost`).
 
 **Specialty stats** (shown only when non-zero / non-default, to keep cards
-focused):
-- Splash radius (`splashRadius`) — rocket family.
-- Slow: `(1 - slowMultiplier)` as a %, for `slowDuration` seconds — cryo family.
-- Pierce (`pierceCount`) — railgun family.
-- Chain (`chainCount` + `chainRange`) — ion chain family.
-- Corrosion (`corrosionDamagePerSecond` + `corrosionDuration`) — nanite family.
-- Armor shred (`armorShred`) — nanite family.
-- Field radius / duration (`fieldRadius` + `fieldDuration`) — gravity well.
-- Drones (`droneCount` + `maxActiveDrones`) — drone bay.
+focused; the "e.g." towers are illustrative — display is driven by the stat
+value, not the family):
+- Splash radius (`splashRadius`) — e.g. rocket.
+- Slow: `(1 - slowMultiplier)` as a %, for `slowDuration` seconds — e.g. cryo, gravity well.
+- Pierce (`pierceCount`) — e.g. railgun.
+- Chain (`chainCount` + `chainRange`) — e.g. ion chain.
+- Corrosion (`corrosionDamagePerSecond` + `corrosionDuration`) — e.g. nanite.
+- Armor shred (`armorShred`) — e.g. nanite.
+- Field radius / duration (`fieldRadius` + `fieldDuration`) — e.g. gravity well.
+- Drones (`droneCount` + `maxActiveDrones`) — e.g. drone bay.
 - Shield bonus (`shieldDamageMultiplier` when `!= 1`), Armor bonus
   (`armorDamageMultiplier` when `!= 1`), Slowed bonus (`slowedDamageMultiplier`
   when `!= 1`).
@@ -233,11 +236,24 @@ cross-reference. The glossary describes **mechanics**, not per-tower magnitudes
 tuning changes. Where a genuinely global rule exists it may reference a
 `GameBalance` constant via the shared formatters.
 
+**Glossary vs. specialization-card split (one rule):** a *base/shared mechanic*
+that a tower family produces (splash, slow, chain, pierce, corrosion, drones,
+the gravity field) gets a glossary entry; a *spec-only amplifier* (prism split,
+cluster burst) is explained only on its specialization card (§8.1). An entry's
+`relatedSpecializations` may be empty for a future mechanic with no
+specialization tie — the entry still renders. Note: the
+`armorDamageMultiplier` / `slowedDamageMultiplier` bonus stats (§8.1) are
+explained inline on their specialization cards and deliberately have **no**
+glossary entry, matching the issue's fixed 9-effect list.
+
 ### 8.4 Stages (7 entries, full detail)
 
 Per `OrionCampaign.stages`: `name`, `mapLabel`, `description`, status badge
 (Locked / Unlocked / Cleared from `progress.statusFor(stage)`), modifier cards
-(reusing `StageModifierMetadata.forModifier` for each `stage.modifiers`),
+(reusing `StageModifierMetadata.forModifier` for each `stage.modifiers`; if a
+stage has no modifiers — e.g. Outpost Alpha — render a single
+`StageModifierMetadata.standardConditions` card, matching the existing
+next-wave-panel fallback in `orion_game_page.dart`),
 `waveCount` (8), side-stage `rewardLabel`, and a main / side marker.
 
 ## 9. Entry point & UI
@@ -252,19 +268,30 @@ same pattern exactly:
 - Render an `Icons.menu_book` `IconButton` (tooltip `'Codex'`) in the header
   `Row`, immediately before the Tech Tree button.
 - Gate it with `_isBusy` identically to the other header buttons.
-- The parent that builds `WorldMapView` wires `onOpenCodex` to open
-  `CodexView`, using the same navigation mechanism it already uses for
-  `onOpenTechTree`.
+- In `OrionGamePage` (the parent that builds `WorldMapView`), mirror the
+  `_ShellView.techTree` plumbing exactly:
+  - add `_ShellView.codex` to the `_ShellView` enum;
+  - add `_openCodex()` / `_closeCodex()` that swap `_activeView` (copying
+    `_openTechTree` / `_closeTechTree`);
+  - add `case _ShellView.codex:` to the build switch returning `CodexView(
+    progress: _progress, onBack: _closeCodex)`;
+  - wire `onOpenCodex: _openCodex` into the `WorldMapView` in
+    `_buildWorldMapScaffold()`, beside `onOpenTechTree: _openTechTree`.
 
-No new navigation mechanism is introduced.
+No `Navigator.push` is involved — the view swap is in-place, identical to the
+existing Tech Tree path.
 
 ### 9.2 `CodexView`
 
 - `StatefulWidget` (holds a `ScrollController` for section-jump only).
-- `Scaffold` + `AppBar(title: const Text('Codex'))` with the default back
-  button.
-- Constructor: `CodexView({required CampaignProgress progress})`. `progress` is
-  the only runtime input.
+- Rendered **in-place** by `OrionGamePage`'s build switch (`case
+  _ShellView.codex`), exactly like `TechTreeView` — **not** pushed onto the
+  `Navigator`. `CodexView` must therefore **not** rely on an `AppBar` default
+  back button, which would pop the entire `OrionGamePage` route.
+- Header: a `Row` + back `IconButton` wired to a required `VoidCallback onBack`
+  (mirroring `TechTreeView`'s header), with title text `'Codex'`.
+- Constructor: `CodexView({required CampaignProgress progress, required
+  VoidCallback onBack})`. `progress` is the only data input.
 - Body: a sticky chip bar (`Towers` / `Enemies` / `Effects` / `Stages`) above a
   single lazy `CustomScrollView` of `Card`s. Tapping a chip scrolls to that
   section.
@@ -310,11 +337,18 @@ the helper promotion (its existing test continues to guard this).
 
 ### 10.4 Label migration
 
-Update any test that referenced the removed private
-`_towerLabel` / `_enemyTraitLabel` / `_towerIcon` to use `type.label` /
-`trait.label` / `towerIcon(type)`. (No public API change is expected to break
-otherwise; enhanced-enum conversion is source-compatible for existing member
-references.)
+The removed `_towerLabel` / `_enemyTraitLabel` / `_towerIcon` are file-private
+top-level functions in `orion_game_page.dart`, so no test outside that file can
+reference them (and none inside it do). Verify no test references these symbols
+(none are expected); update in-file call sites to `type.label` / `trait.label`
+/ `towerIcon(type)`. Enhanced-enum conversion is source-compatible for existing
+member references.
+
+### 10.5 Static analysis
+
+Run `flutter analyze` and `dart format .` (per `AGENTS.md`) before landing.
+Required for the enhanced-enum conversion, the formatter/helper promotion, and
+the label migration to be clean.
 
 ## 11. Acceptance-criteria trace
 
