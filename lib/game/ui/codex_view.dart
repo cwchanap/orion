@@ -179,7 +179,9 @@ class _CodexViewState extends State<CodexView> {
                 style: theme.textTheme.titleSmall,
               ),
               Text(spec.description, style: theme.textTheme.bodyMedium),
-              for (final (k, v) in _specializationCoreLines(spec.specializedStats))
+              for (final (k, v) in _specializationCoreLines(
+                spec.specializedStats,
+              ))
                 _line(theme, k, v),
               for (final (k, v) in _specialtyLines(spec.specializedStats))
                 _line(theme, k, v),
@@ -240,10 +242,10 @@ class _CodexViewState extends State<CodexView> {
       ));
     }
     if (s.shieldDamageMultiplier != 1) {
-      out.add(('vs Shield', 'x${number(s.shieldDamageMultiplier)}'));
+      out.add(('vs Shield', 'x${decimal(s.shieldDamageMultiplier)}'));
     }
     if (s.armorDamageMultiplier != 1) {
-      out.add(('vs Armored', 'x${number(s.armorDamageMultiplier)}'));
+      out.add(('vs Armored', 'x${decimal(s.armorDamageMultiplier)}'));
     }
     if (s.slowedDamageMultiplier != 1) {
       out.add(('vs Slowed', 'x${number(s.slowedDamageMultiplier)}'));
@@ -333,10 +335,7 @@ class _CodexViewState extends State<CodexView> {
             if (s.rewardLabel != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 1),
-                child: Text(
-                  s.rewardLabel!,
-                  style: theme.textTheme.bodyMedium,
-                ),
+                child: Text(s.rewardLabel!, style: theme.textTheme.bodyMedium),
               ),
           ],
         ),
