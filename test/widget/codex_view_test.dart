@@ -71,4 +71,26 @@ void main() {
     await tester.tap(find.byTooltip('Codex'));
     expect(pressed, isTrue);
   });
+
+  testWidgets('renders every section without overflow on a narrow surface', (
+    tester,
+  ) async {
+    // 360 x 640 logical surface (spec §10.3).
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+
+    for (final chip in const ['Towers', 'Enemies', 'Effects', 'Stages']) {
+      await tester.tap(find.text(chip));
+      await tester.pumpAndSettle();
+    }
+
+    expect(tester.takeException(), isNull);
+  });
 }

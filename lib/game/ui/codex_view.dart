@@ -80,9 +80,23 @@ class _CodexViewState extends State<CodexView> {
         children: [
           for (final ef in CodexData.effects)
             Card(
-              child: ListTile(
-                title: Text(ef.title),
-                subtitle: Text(ef.description),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(ef.title, style: theme.textTheme.titleMedium),
+                    const SizedBox(height: 4),
+                    Text(ef.description, style: theme.textTheme.bodyMedium),
+                    if (ef.relatedSpecializations.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Used by: ${ef.relatedSpecializations.map((s) => s.label).join(', ')}',
+                        style: theme.textTheme.labelSmall,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ),
         ],
@@ -118,11 +132,16 @@ class _CodexViewState extends State<CodexView> {
               children: [
                 Icon(towerIcon(t.type)),
                 const SizedBox(width: 8),
-                Text(t.label, style: theme.textTheme.titleMedium),
+                Flexible(
+                  child: Text(t.label, style: theme.textTheme.titleMedium),
+                ),
                 const Spacer(),
-                Text(
-                  'Available from wave ${t.unlockWave}',
-                  style: theme.textTheme.labelSmall,
+                Flexible(
+                  child: Text(
+                    'Available from wave ${t.unlockWave}',
+                    style: theme.textTheme.labelSmall,
+                    textAlign: TextAlign.end,
+                  ),
                 ),
               ],
             ),
@@ -135,6 +154,8 @@ class _CodexViewState extends State<CodexView> {
                 style: theme.textTheme.titleSmall,
               ),
               Text(spec.description, style: theme.textTheme.bodyMedium),
+              for (final (k, v) in _specialtyLines(spec.specializedStats))
+                _line(theme, k, v),
               const SizedBox(height: 6),
             ],
           ],
@@ -184,6 +205,14 @@ class _CodexViewState extends State<CodexView> {
     }
     if (s.slowedDamageMultiplier != 1) {
       out.add(('vs Slowed', 'x${number(s.slowedDamageMultiplier)}'));
+    }
+    // Spec-only amplifiers (prism split, cluster burst) — surfaced on the
+    // relevant specialization cards (spec §8.1).
+    if (s.prismSplitDamageMultiplier > 0) {
+      out.add(('Prism split', '${percent(s.prismSplitDamageMultiplier)} dmg'));
+    }
+    if (s.clusterBurstCount > 0) {
+      out.add(('Cluster burst', '${s.clusterBurstCount}'));
     }
     return out;
   }
@@ -236,9 +265,11 @@ class _CodexViewState extends State<CodexView> {
           children: [
             Row(
               children: [
-                Text(
-                  '${s.stage.name} (${s.stage.mapLabel})',
-                  style: theme.textTheme.titleMedium,
+                Flexible(
+                  child: Text(
+                    '${s.stage.name} (${s.stage.mapLabel})',
+                    style: theme.textTheme.titleMedium,
+                  ),
                 ),
                 const Spacer(),
                 _badge(theme, _statusLabel(s.status)),
