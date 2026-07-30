@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/campaign/stage_reward_label.dart';
 import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/codex_view.dart';
@@ -124,5 +125,107 @@ void main() {
     }
 
     expect(tester.takeException(), isNull);
+  });
+
+  // Regression: the cadence formatter must preserve two-decimal precision for
+  // fire / field-tick / drone-attack intervals instead of collapsing them via
+  // number()'s one-decimal rounding.
+  testWidgets(
+    'Pulse Laser exposes its 0.24s fire interval (not prose-only)',
+    (tester) async {
+      // Tall surface so the lazy Towers ListView builds every tower card,
+      // including the Pulse Laser specialization rows near the bottom.
+      tester.view.physicalSize = const Size(800, 10000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CodexView(progress: CampaignProgress(), onBack: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Towers is the default section. Pulse Laser's defining benefit is its
+      // 0.24s fire interval; it must render as a numeric row, not be hidden.
+      expect(find.text('0.24s'), findsOneWidget);
+      // The specialization heading renders as "Pulse Laser (<cost>g)".
+      expect(
+        find.textContaining(TowerSpecialization.pulseLaser.label),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('Gravity Well field tick interval renders at 0.45s', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 10000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Both Gravity Well specializations tick at 0.45s; the Field row is a
+    // single composite value string, so match by substring. number() would
+    // have rendered 0.5s here.
+    expect(find.textContaining('0.45s'), findsWidgets);
+  });
+
+  // Regression: stageRewardLabel already prefixes uncleared rewards with
+  // "Reward: "; the codex must not also key the row with "Reward" and produce
+  // "Reward Reward: +30 Gold".
+  testWidgets(
+    'uncleared side stage reward renders without duplicated Reward wording',
+    (tester) async {
+      final progress = CampaignProgress(); // salvage-rift locked + uncleared
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CodexView(progress: progress, onBack: () {}),
+        ),
+      );
+      await tester.tap(find.text('Stages'));
+      await tester.pumpAndSettle();
+
+      final salvageRift = OrionCampaign.stages.firstWhere(
+        (s) => s.id == 'salvage-rift',
+      );
+      final expected = stageRewardLabel(salvageRift, isCleared: false);
+      expect(expected, 'Reward: +${GameBalance.salvageRiftGoldBonus} Gold');
+      expect(find.text(expected!), findsOneWidget);
+      // No keyed-row duplication.
+      expect(find.textContaining('Reward Reward'), findsNothing);
+    },
+  );
+
+  // Pin the three status badge labels specified by the feature contract.
+  testWidgets('status badges render Locked / Unlocked / Cleared', (tester) async {
+    // outpost-alpha cleared => Cleared; nebula-relay (dep cleared, not cleared
+    // itself) => Unlocked; aurora-gate (dep asteroid-foundry not cleared) =>
+    // Locked. All three badges appear in one Stages view.
+    final progress = CampaignProgress(
+      bestResultsByStageId: {
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 0,
+        ),
+      },
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: progress, onBack: () {}),
+      ),
+    );
+    await tester.tap(find.text('Stages'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cleared'), findsOneWidget);
+    expect(find.text('Unlocked'), findsOneWidget);
+    expect(find.text('Locked'), findsWidgets);
+    // The old non-contract label must be gone.
+    expect(find.text('Open'), findsNothing);
   });
 }

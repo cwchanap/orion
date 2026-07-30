@@ -152,7 +152,7 @@ class CodexData {
       trait: EnemyTrait.shielded,
       label: EnemyTrait.shielded.label,
       effect:
-          'Carries a shield that absorbs damage and recharges out of combat.',
+          'Carries a shield that absorbs damage before health. Shield recharge is not inherent — it only occurs on stages whose modifier profile grants it.',
     ),
     CodexTraitEntry(
       trait: EnemyTrait.swarm,
@@ -162,7 +162,8 @@ class CodexData {
     CodexTraitEntry(
       trait: EnemyTrait.regen,
       label: EnemyTrait.regen.label,
-      effect: 'Regenerates health when not taking damage.',
+      effect:
+          'Regenerates health continuously. Corrosion suppresses regeneration while it lasts.',
     ),
     CodexTraitEntry(
       trait: EnemyTrait.heavy,
@@ -193,7 +194,7 @@ class CodexData {
       id: 'armorShred',
       title: 'Armor Shred',
       description:
-          'Permanently strips a fraction of an armored enemy\'s damage reduction per hit.',
+          'Temporarily reduces an armored enemy\'s damage reduction while corrosion is active. A stronger application overrides a weaker one rather than stacking, and the reduction resets when corrosion expires.',
       relatedSpecializations: _specsWhere((s) => s.armorShred > 0),
     ),
     CodexEffectEntry(
@@ -323,10 +324,10 @@ class CodexData {
       EnemyArchetype.armoredDrone =>
         'Reduces incoming damage via armor; favors high single hits.',
       EnemyArchetype.shieldedDrone =>
-        'Absorbs hits with a shield that recharges out of combat.',
+        'Absorbs hits with a shield before health. Recharge only happens on stages that grant it.',
       EnemyArchetype.swarmDrone => 'Fast, fragile, and numerous.',
       EnemyArchetype.regenDrone =>
-        'Heals itself over time when not under fire.',
+        'Heals itself over time; corrosion pauses the regeneration.',
       EnemyArchetype.heavyDrone => 'A slow, high-health bruiser.',
       EnemyArchetype.armoredHeavyDrone =>
         'A heavy frame with armor — extremely durable.',

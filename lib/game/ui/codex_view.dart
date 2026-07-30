@@ -143,7 +143,7 @@ class _CodexViewState extends State<CodexView> {
       // Damage / Fire interval only when meaningful (drone bay has damage 0).
       if (t.baseStats.damage > 0) ...[
         ('Damage', number(t.baseStats.damage)),
-        ('Fire interval', '${number(t.baseStats.fireInterval)}s'),
+        ('Fire interval', '${cadence(t.baseStats.fireInterval)}s'),
       ],
       ..._specialtyLines(t.baseStats),
     ];
@@ -179,6 +179,8 @@ class _CodexViewState extends State<CodexView> {
                 style: theme.textTheme.titleSmall,
               ),
               Text(spec.description, style: theme.textTheme.bodyMedium),
+              for (final (k, v) in _specializationCoreLines(spec.specializedStats))
+                _line(theme, k, v),
               for (final (k, v) in _specialtyLines(spec.specializedStats))
                 _line(theme, k, v),
               const SizedBox(height: 6),
@@ -187,6 +189,21 @@ class _CodexViewState extends State<CodexView> {
         ),
       ),
     );
+  }
+
+  // Core stats for a specialization card. Range always renders; Damage and
+  // Fire interval render when meaningful (drone bay has damage 0). These are
+  // the values a specialization's defining benefit often lives in (e.g. Pulse
+  // Laser's 0.24s fire interval), which _specialtyLines omits.
+  List<(String, String)> _specializationCoreLines(TowerStats s) {
+    final out = <(String, String)>[
+      ('Range', number(s.range)),
+      if (s.damage > 0) ...[
+        ('Damage', number(s.damage)),
+        ('Fire interval', '${cadence(s.fireInterval)}s'),
+      ],
+    ];
+    return out;
   }
 
   // Specialty rows render only when non-default (spec §8.1).
@@ -213,13 +230,13 @@ class _CodexViewState extends State<CodexView> {
     if (s.fieldRadius > 0) {
       out.add((
         'Field',
-        'r ${number(s.fieldRadius)}, ${number(s.fieldDuration)}s, tick ${number(s.fieldTickInterval)}s',
+        'r ${number(s.fieldRadius)}, ${number(s.fieldDuration)}s, tick ${cadence(s.fieldTickInterval)}s',
       ));
     }
     if (s.droneCount > 0) {
       out.add((
         'Drones',
-        '${s.droneCount} (cap ${s.maxActiveDrones}), ${number(s.droneDamage)} dmg / ${number(s.droneAttackInterval)}s, ${number(s.droneLifetime)}s life',
+        '${s.droneCount} (cap ${s.maxActiveDrones}), ${number(s.droneDamage)} dmg / ${cadence(s.droneAttackInterval)}s, ${number(s.droneLifetime)}s life',
       ));
     }
     if (s.shieldDamageMultiplier != 1) {
@@ -309,7 +326,18 @@ class _CodexViewState extends State<CodexView> {
             Text(s.stage.description, style: theme.textTheme.bodyMedium),
             const SizedBox(height: 6),
             for (final m in s.modifiers) _line(theme, m.title, m.description),
-            if (s.rewardLabel != null) _line(theme, 'Reward', s.rewardLabel!),
+            // stageRewardLabel already prefixes uncleared rewards with
+            // "Reward: " (and returns the bare amount when cleared), so render
+            // it as a standalone label rather than a keyed row to avoid a
+            // duplicated "Reward Reward: ..." string.
+            if (s.rewardLabel != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 1),
+                child: Text(
+                  s.rewardLabel!,
+                  style: theme.textTheme.bodyMedium,
+                ),
+              ),
           ],
         ),
       ),
@@ -318,7 +346,7 @@ class _CodexViewState extends State<CodexView> {
 
   static String _statusLabel(StageProgressStatus s) => switch (s) {
     StageProgressStatus.cleared => 'Cleared',
-    StageProgressStatus.unlocked => 'Open',
+    StageProgressStatus.unlocked => 'Unlocked',
     StageProgressStatus.locked => 'Locked',
   };
 
