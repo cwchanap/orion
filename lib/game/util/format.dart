@@ -7,3 +7,20 @@ String number(double value) {
       ? value.toInt().toString()
       : value.toStringAsFixed(1);
 }
+
+/// Precision-preserving formatter for cadence values (fire intervals, field
+/// tick intervals, drone attack intervals). Rounds to at most two decimals and
+/// strips trailing zeroes so 0.24, 0.45, and 0.65 keep their distinguishing
+/// precision instead of collapsing to 0.2 / 0.5 / 0.7 as `number` would.
+/// Integers render without a decimal point.
+String cadence(double value) {
+  if (value == value.roundToDouble()) return value.toInt().toString();
+  var text = value.toStringAsFixed(2);
+  while (text.endsWith('0')) {
+    text = text.substring(0, text.length - 1);
+  }
+  if (text.endsWith('.')) {
+    text = text.substring(0, text.length - 1);
+  }
+  return text;
+}
