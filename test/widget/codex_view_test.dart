@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/codex_view.dart';
 import 'package:orion/game/ui/world_map_view.dart';
@@ -31,7 +32,38 @@ void main() {
     );
     await tester.tap(find.text('Enemies'));
     await tester.pumpAndSettle();
-    expect(find.text(EnemyArchetype.basicDrone.label), findsOneWidget);
+    // Assert the basic drone's role description — authored prose rendered only
+    // on the enemy card. The enemy label ('Drones') collides with the Drone
+    // Bay stat-row key in the Towers section, so it can't distinguish sections.
+    final basicDrone = CodexData.enemies.firstWhere(
+      (e) => e.archetype == EnemyArchetype.basicDrone,
+    );
+    expect(find.text(basicDrone.roleDescription), findsOneWidget);
+  });
+
+  testWidgets('tapping Effects shows the effects section', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+    await tester.tap(find.text('Effects'));
+    await tester.pumpAndSettle();
+    // 'Armor Shred' (capital S) is unique to the effects glossary; the
+    // specialty-line stat key is 'Armor shred' (lowercase).
+    expect(find.text('Armor Shred'), findsOneWidget);
+  });
+
+  testWidgets('tapping Stages shows the stages section', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+    await tester.tap(find.text('Stages'));
+    await tester.pumpAndSettle();
+    // The first stage card title is '<name> (<mapLabel>)'.
+    expect(find.textContaining('Outpost Alpha'), findsOneWidget);
   });
 
   testWidgets('back button invokes onBack', (tester) async {

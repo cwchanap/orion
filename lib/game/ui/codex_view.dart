@@ -20,6 +20,26 @@ class _CodexViewState extends State<CodexView> {
   int _section = 0;
   static const _sections = ['Towers', 'Enemies', 'Effects', 'Stages'];
 
+  // One ScrollController per section so each section's scroll offset is
+  // preserved independently when the player switches chips.
+  late final List<ScrollController> _scrollControllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollControllers = [
+      for (var i = 0; i < _sections.length; i++) ScrollController(),
+    ];
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _scrollControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -65,11 +85,14 @@ class _CodexViewState extends State<CodexView> {
   }
 
   Widget _body(ThemeData theme) {
+    final controller = _scrollControllers[_section];
     return switch (_section) {
       0 => ListView(
+        controller: controller,
         children: [for (final t in CodexData.towers) _towerCard(theme, t)],
       ),
       1 => ListView(
+        controller: controller,
         children: [
           for (final tr in CodexData.traits) _line(theme, tr.label, tr.effect),
           const Divider(),
@@ -77,6 +100,7 @@ class _CodexViewState extends State<CodexView> {
         ],
       ),
       2 => ListView(
+        controller: controller,
         children: [
           for (final ef in CodexData.effects)
             Card(
@@ -102,6 +126,7 @@ class _CodexViewState extends State<CodexView> {
         ],
       ),
       _ => ListView(
+        controller: controller,
         children: [
           for (final s in CodexData.stagesFor(widget.progress))
             _stageCard(theme, s),

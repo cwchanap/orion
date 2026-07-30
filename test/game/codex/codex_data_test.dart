@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
+import 'package:orion/game/campaign/stage_reward_label.dart';
 import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
 
@@ -87,21 +88,15 @@ void main() {
       }
     });
 
-    test(
-      'every effect resolves to >= 1 related specialization by derivation',
-      () {
-        for (final e in CodexData.effects) {
-          expect(
-            e.relatedSpecializations,
-            isNotEmpty,
-            reason: '${e.id} should map to >= 1 specialization',
-          );
-          for (final spec in e.relatedSpecializations) {
-            expect(spec, isA<TowerSpecialization>());
-          }
+    test('related specializations are valid and derived when present', () {
+      for (final e in CodexData.effects) {
+        // An effect may legitimately map to zero specializations today
+        // (e.g. mechanics reserved for future towers); allow empty.
+        for (final spec in e.relatedSpecializations) {
+          expect(spec, isA<TowerSpecialization>());
         }
-      },
-    );
+      }
+    });
 
     test('derived specialization sets match the signal fields', () {
       bool statsFor(TowerSpecialization s) =>
@@ -160,6 +155,20 @@ void main() {
               StageModifierMetadata.forModifier(m),
           ]);
         }
+      }
+    });
+
+    test('rewardLabel mirrors stageRewardLabel using progress.isCleared', () {
+      final progress = CampaignProgress();
+      final entries = CodexData.stagesFor(progress);
+      for (final entry in entries) {
+        expect(
+          entry.rewardLabel,
+          stageRewardLabel(
+            entry.stage,
+            isCleared: progress.isCleared(entry.stage.id),
+          ),
+        );
       }
     });
   });

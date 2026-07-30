@@ -76,7 +76,7 @@ lib/game/
 GameBalance / enums (source of truth, unchanged tuning)
         │  reads constants + enum values
         ▼
-codex/codex_data.dart   (PURE: value types + CodexData factories)   ◄── CampaignProgress (for stage status only)
+codex/codex_data.dart   (PURE: value types + CodexData factories)   ◄── CampaignProgress (for stage status) + OrionCampaign.stages (for stage list)
         │  consumed by
         ▼
 ui/codex_view.dart      (Flutter: renders cards)
@@ -87,7 +87,7 @@ ui/world_map_view.dart  (campaign map header button)
 
 The pure / Flame-free boundary the repo deliberately maintains is preserved:
 `codex_data.dart` imports only `game_models.dart`, `campaign_progress.dart`,
-`stage_definition.dart`, `stage_modifier_metadata.dart`,
+`orion_campaign.dart`, `stage_definition.dart`, `stage_modifier_metadata.dart`,
 `campaign/stage_reward_label.dart`, and `util/format.dart`. No
 `package:flutter`, no `package:flame`. Shared formatters live in the neutral
 `util/format.dart` so `campaign` never depends on `codex`.

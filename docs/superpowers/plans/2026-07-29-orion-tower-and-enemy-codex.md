@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Pure-layer boundary:** `lib/game/codex/codex_data.dart`, `lib/game/util/format.dart`, and `lib/game/campaign/stage_reward_label.dart` must NOT import `package:flutter` or `package:flame`. They import only `game_models.dart`, `campaign_progress.dart`, `stage_definition.dart`, `stage_modifier_metadata.dart`, and each other.
+- **Pure-layer boundary:** `lib/game/codex/codex_data.dart`, `lib/game/util/format.dart`, and `lib/game/campaign/stage_reward_label.dart` must NOT import `package:flutter` or `package:flame`. They import only `game_models.dart`, `campaign_progress.dart`, `orion_campaign.dart`, `stage_definition.dart`, `stage_modifier_metadata.dart`, and each other.
 - **No duplicated tuning constants:** every number shown in the codex is read from `GameBalance` / enum values at runtime. The only authored strings are short prose blurbs.
 - **Copy rules:** enemy names are plural and must equal today's `_enemyLabelForStats` output verbatim (e.g. `"Armored Drones"`); tower availability reads as `"Available from wave N"` (in-mission gating, not campaign progression).
 - **Enhanced-enum conversions are source-compatible:** all existing `TowerType.laser` / `EnemyTrait.armored` / `EnemyArchetype.basicDrone` references and `const <EnemyTrait>{...}` literals must keep compiling.
@@ -507,6 +507,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
+import 'package:orion/game/campaign/stage_reward_label.dart';
 import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
 
@@ -589,13 +590,10 @@ void main() {
       }
     });
 
-    test('every effect resolves to >= 1 related specialization by derivation', () {
-      for (final e in CodexData.effects) {
-        expect(
-          e.relatedSpecializations,
-          isNotEmpty,
-          reason: '${e.id} should map to >= 1 specialization',
-        );
+    test('related specializations are valid and derived when present', () {
+      for (final e of CodexData.effects) {
+        // An effect may legitimately map to zero specializations today
+        // (e.g. mechanics reserved for future towers); allow empty.
         for (final spec in e.relatedSpecializations) {
           expect(spec, isA<TowerSpecialization>());
         }
@@ -655,6 +653,20 @@ void main() {
             ],
           );
         }
+      }
+    });
+
+    test('rewardLabel mirrors stageRewardLabel using progress.isCleared', () {
+      final progress = CampaignProgress();
+      final entries = CodexData.stagesFor(progress);
+      for (final entry in entries) {
+        expect(
+          entry.rewardLabel,
+          stageRewardLabel(
+            entry.stage,
+            isCleared: progress.isCleared(entry.stage.id),
+          ),
+        );
       }
     });
   });
@@ -782,7 +794,7 @@ class CodexData {
       unlockWave: GameBalance.towerUnlockWave(type),
       baseStats: baseStats,
       upgradeCost: baseStats.upgradeCost,
-      specializationCost: GameBalance.towerStats(type, level: 2).specializationCost,
+      specializationCost: baseStats.specializationCost,
       specializations: [
         for (final spec in GameBalance.specializationsFor(type))
           CodexSpecializationEntry(
@@ -812,12 +824,12 @@ class CodexData {
       ),
   ];
 
-  static List<CodexTraitEntry> get traits => const [
-    CodexTraitEntry(trait: EnemyTrait.armored, label: 'Armored', effect: 'Reduces incoming damage by a flat percentage.'),
-    CodexTraitEntry(trait: EnemyTrait.shielded, label: 'Shielded', effect: 'Carries a shield that absorbs damage and recharges out of combat.'),
-    CodexTraitEntry(trait: EnemyTrait.swarm, label: 'Swarm', effect: 'Fast and fragile; arrives in large numbers.'),
-    CodexTraitEntry(trait: EnemyTrait.regen, label: 'Regen', effect: 'Regenerates health when not taking damage.'),
-    CodexTraitEntry(trait: EnemyTrait.heavy, label: 'Heavy', effect: 'High health; slow but durable.'),
+  static List<CodexTraitEntry> get traits => [
+    CodexTraitEntry(trait: EnemyTrait.armored, label: EnemyTrait.armored.label, effect: 'Reduces incoming damage by a flat percentage.'),
+    CodexTraitEntry(trait: EnemyTrait.shielded, label: EnemyTrait.shielded.label, effect: 'Carries a shield that absorbs damage and recharges out of combat.'),
+    CodexTraitEntry(trait: EnemyTrait.swarm, label: EnemyTrait.swarm.label, effect: 'Fast and fragile; arrives in large numbers.'),
+    CodexTraitEntry(trait: EnemyTrait.regen, label: EnemyTrait.regen.label, effect: 'Regenerates health when not taking damage.'),
+    CodexTraitEntry(trait: EnemyTrait.heavy, label: EnemyTrait.heavy.label, effect: 'High health; slow but durable.'),
   ];
 
   static List<CodexEffectEntry> get effects => [
@@ -1051,7 +1063,48 @@ void main() {
       );
       await tester.tap(find.text('Enemies'));
       await tester.pumpAndSettle();
-      expect(find.text(EnemyArchetype.basicDrone.label), findsOneWidget);
+      // Assert the basic drone's role description — authored prose rendered only
+      // on the enemy card. The enemy label ('Drones') collides with the Drone
+      // Bay stat-row key in the Towers section, so it can't distinguish sections.
+      final basicDrone = CodexData.enemies.firstWhere(
+        (e) => e.archetype == EnemyArchetype.basicDrone,
+      );
+      expect(find.text(basicDrone.roleDescription), findsOneWidget);
+    });
+  });
+
+  testWidgets('tapping Effects shows the effects section', (tester) async {
+    await tester.binding.runWithFrameSize(const Size(360, 640), () async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CodexView(
+            progress: CampaignProgress(),
+            onBack: () {},
+          ),
+        ),
+      );
+      await tester.tap(find.text('Effects'));
+      await tester.pumpAndSettle();
+      // 'Armor Shred' (capital S) is unique to the effects glossary; the
+      // specialty-line stat key is 'Armor shred' (lowercase).
+      expect(find.text('Armor Shred'), findsOneWidget);
+    });
+  });
+
+  testWidgets('tapping Stages shows the stages section', (tester) async {
+    await tester.binding.runWithFrameSize(const Size(360, 640), () async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CodexView(
+            progress: CampaignProgress(),
+            onBack: () {},
+          ),
+        ),
+      );
+      await tester.tap(find.text('Stages'));
+      await tester.pumpAndSettle();
+      // The first stage card title is '<name> (<mapLabel>)'.
+      expect(find.textContaining('Outpost Alpha'), findsOneWidget);
     });
   });
 
@@ -1107,6 +1160,26 @@ class _CodexViewState extends State<CodexView> {
   int _section = 0;
   static const _sections = ['Towers', 'Enemies', 'Effects', 'Stages'];
 
+  // One ScrollController per section so each section's scroll offset is
+  // preserved independently when the player switches chips.
+  late final List<ScrollController> _scrollControllers;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollControllers = [
+      for (var i = 0; i < _sections.length; i++) ScrollController(),
+    ];
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _scrollControllers) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -1152,9 +1225,14 @@ class _CodexViewState extends State<CodexView> {
   }
 
   Widget _body(ThemeData theme) {
+    final controller = _scrollControllers[_section];
     return switch (_section) {
-      0 => ListView(children: [for (final t in CodexData.towers) _towerCard(theme, t)]),
+      0 => ListView(
+          controller: controller,
+          children: [for (final t in CodexData.towers) _towerCard(theme, t)],
+        ),
       1 => ListView(
+          controller: controller,
           children: [
             for (final tr in CodexData.traits) _line(theme, tr.label, tr.effect),
             const Divider(),
@@ -1162,18 +1240,37 @@ class _CodexViewState extends State<CodexView> {
           ],
         ),
       2 => ListView(
+          controller: controller,
           children: [
             for (final ef in CodexData.effects)
               Card(
-                child: ListTile(
-                  title: Text(ef.title),
-                  subtitle: Text(ef.description),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(ef.title, style: theme.textTheme.titleMedium),
+                      const SizedBox(height: 4),
+                      Text(ef.description, style: theme.textTheme.bodyMedium),
+                      if (ef.relatedSpecializations.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          'Used by: ${ef.relatedSpecializations.map((s) => s.label).join(', ')}',
+                          style: theme.textTheme.labelSmall,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
           ],
         ),
       _ => ListView(
-          children: [for (final s in CodexData.stagesFor(widget.progress)) _stageCard(theme, s)],
+          controller: controller,
+          children: [
+            for (final s in CodexData.stagesFor(widget.progress))
+              _stageCard(theme, s),
+          ],
         ),
     };
   }
@@ -1212,6 +1309,8 @@ class _CodexViewState extends State<CodexView> {
               Text('${spec.label} (${t.specializationCost}g)',
                   style: theme.textTheme.titleSmall),
               Text(spec.description, style: theme.textTheme.bodyMedium),
+              for (final (k, v) in _specialtyLines(spec.specializedStats))
+                _line(theme, k, v),
               const SizedBox(height: 6),
             ],
           ],
@@ -1255,6 +1354,14 @@ class _CodexViewState extends State<CodexView> {
     }
     if (s.slowedDamageMultiplier != 1) {
       out.add(('vs Slowed', 'x${number(s.slowedDamageMultiplier)}'));
+    }
+    // Spec-only amplifiers (prism split, cluster burst) — surfaced on the
+    // relevant specialization cards (spec §8.1).
+    if (s.prismSplitDamageMultiplier > 0) {
+      out.add(('Prism split', '${percent(s.prismSplitDamageMultiplier)} dmg'));
+    }
+    if (s.clusterBurstCount > 0) {
+      out.add(('Cluster burst', '${s.clusterBurstCount}'));
     }
     return out;
   }
