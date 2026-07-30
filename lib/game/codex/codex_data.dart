@@ -283,7 +283,7 @@ class CodexData {
       TowerSpecialization.pulseLaser =>
         'Maximized fire rate for concentrated single-target damage.',
       TowerSpecialization.prismLaser =>
-        'Each shot splits to nearby targets at reduced damage.',
+        'Each shot splits to one nearby target at reduced damage.',
       TowerSpecialization.siegeRocket =>
         'Heaviest single hit with the largest splash radius.',
       TowerSpecialization.clusterRocket =>
@@ -322,7 +322,7 @@ class CodexData {
       EnemyArchetype.basicEliteDrone =>
         'A tougher baseline drone with notably more health.',
       EnemyArchetype.armoredDrone =>
-        'Reduces incoming damage via armor; favors high single hits.',
+        'Reduces incoming damage by a flat percentage. Counter with armor shred or towers that deal bonus damage versus armored enemies.',
       EnemyArchetype.shieldedDrone =>
         'Absorbs hits with a shield before health. Recharge only happens on stages that grant it.',
       EnemyArchetype.swarmDrone => 'Fast, fragile, and numerous.',

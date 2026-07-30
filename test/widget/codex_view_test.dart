@@ -130,31 +130,30 @@ void main() {
   // Regression: the cadence formatter must preserve two-decimal precision for
   // fire / field-tick / drone-attack intervals instead of collapsing them via
   // number()'s one-decimal rounding.
-  testWidgets(
-    'Pulse Laser exposes its 0.24s fire interval (not prose-only)',
-    (tester) async {
-      // Tall surface so the lazy Towers ListView builds every tower card,
-      // including the Pulse Laser specialization rows near the bottom.
-      tester.view.physicalSize = const Size(800, 10000);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+  testWidgets('Pulse Laser exposes its 0.24s fire interval (not prose-only)', (
+    tester,
+  ) async {
+    // Tall surface so the lazy Towers ListView builds every tower card,
+    // including the Pulse Laser specialization rows near the bottom.
+    tester.view.physicalSize = const Size(800, 10000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: CodexView(progress: CampaignProgress(), onBack: () {}),
-        ),
-      );
-      await tester.pumpAndSettle();
-      // Towers is the default section. Pulse Laser's defining benefit is its
-      // 0.24s fire interval; it must render as a numeric row, not be hidden.
-      expect(find.text('0.24s'), findsOneWidget);
-      // The specialization heading renders as "Pulse Laser (<cost>g)".
-      expect(
-        find.textContaining(TowerSpecialization.pulseLaser.label),
-        findsOneWidget,
-      );
-    },
-  );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Towers is the default section. Pulse Laser's defining benefit is its
+    // 0.24s fire interval; it must render as a numeric row, not be hidden.
+    expect(find.text('0.24s'), findsOneWidget);
+    // The specialization heading renders as "Pulse Laser (<cost>g)".
+    expect(
+      find.textContaining(TowerSpecialization.pulseLaser.label),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('Gravity Well field tick interval renders at 0.45s', (
     tester,
@@ -173,6 +172,45 @@ void main() {
     // single composite value string, so match by substring. number() would
     // have rendered 0.5s here.
     expect(find.textContaining('0.45s'), findsWidgets);
+  });
+
+  // Regression: shield/armor damage multipliers must preserve two-decimal
+  // precision (e.g. 1.55, 1.65) instead of collapsing to one decimal via
+  // number()'s toStringAsFixed(1) rounding.
+  testWidgets('Magnetic Railgun vs Armored multiplier renders at x1.55', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 10000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Magnetic Railgun's armorDamageMultiplier is 1.55; number() would have
+    // rendered x1.6.
+    expect(find.text('x1.55'), findsOneWidget);
+  });
+
+  testWidgets('Overload Relay vs Shield multiplier renders at x1.65', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 10000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+    await tester.pumpAndSettle();
+    // Overload Relay's shieldDamageMultiplier is 1.65; number() would have
+    // rendered x1.6 or x1.7.
+    expect(find.text('x1.65'), findsOneWidget);
   });
 
   // Regression: stageRewardLabel already prefixes uncleared rewards with
@@ -202,7 +240,9 @@ void main() {
   );
 
   // Pin the three status badge labels specified by the feature contract.
-  testWidgets('status badges render Locked / Unlocked / Cleared', (tester) async {
+  testWidgets('status badges render Locked / Unlocked / Cleared', (
+    tester,
+  ) async {
     // outpost-alpha cleared => Cleared; nebula-relay (dep cleared, not cleared
     // itself) => Unlocked; aurora-gate (dep asteroid-foundry not cleared) =>
     // Locked. All three badges appear in one Stages view.
