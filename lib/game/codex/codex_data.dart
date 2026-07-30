@@ -112,10 +112,7 @@ class CodexData {
       unlockWave: GameBalance.towerUnlockWave(type),
       baseStats: baseStats,
       upgradeCost: baseStats.upgradeCost,
-      specializationCost: GameBalance.towerStats(
-        type,
-        level: 2,
-      ).specializationCost,
+      specializationCost: baseStats.specializationCost,
       specializations: [
         for (final spec in GameBalance.specializationsFor(type))
           CodexSpecializationEntry(
@@ -145,31 +142,31 @@ class CodexData {
       ),
   ];
 
-  static List<CodexTraitEntry> get traits => const [
+  static List<CodexTraitEntry> get traits => [
     CodexTraitEntry(
       trait: EnemyTrait.armored,
-      label: 'Armored',
+      label: EnemyTrait.armored.label,
       effect: 'Reduces incoming damage by a flat percentage.',
     ),
     CodexTraitEntry(
       trait: EnemyTrait.shielded,
-      label: 'Shielded',
+      label: EnemyTrait.shielded.label,
       effect:
           'Carries a shield that absorbs damage and recharges out of combat.',
     ),
     CodexTraitEntry(
       trait: EnemyTrait.swarm,
-      label: 'Swarm',
+      label: EnemyTrait.swarm.label,
       effect: 'Fast and fragile; arrives in large numbers.',
     ),
     CodexTraitEntry(
       trait: EnemyTrait.regen,
-      label: 'Regen',
+      label: EnemyTrait.regen.label,
       effect: 'Regenerates health when not taking damage.',
     ),
     CodexTraitEntry(
       trait: EnemyTrait.heavy,
-      label: 'Heavy',
+      label: EnemyTrait.heavy.label,
       effect: 'High health; slow but durable.',
     ),
   ];
