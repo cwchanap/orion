@@ -22,6 +22,16 @@
 - Target 360×640 logical pixels.
 - Final gates: `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, full `flutter test`, two human 1× runs.
 
+## Review Resolution Incorporated
+
+- Player-visible effect feedback is added without moving resolver calls into production Flutter: `GameSession.snapshot()` projects `selectedTowerStats`, and `_TowerSummary` renders those resolved values.
+- The acquired strip keeps compact title chips and exposes exact `effectText` through tooltips.
+- Definition-owned tuning is the single source for rules, immediate gold, and copy.
+- Multi-wave schedule/orchestration tests share `stageWithWaveCount(int)`.
+- Rule tests explicitly cover Overclock Relay and Heavy Caliber × Overclock composition.
+- Both auto-start helpers guard pending drafts.
+- Direct blocked actions use `Choose a Salvage Module first.` while preserving existing failure enums.
+
 ## File Map
 
 **Create**
@@ -589,7 +599,7 @@ await _pumpStageWithSelectedTower(
 expect(find.textContaining('Range ${number(resolved.range)}'), findsOneWidget);
 ```
 
-Add imports for module, resolver, and format helpers in the test only.
+Resolver use here is test-fixture construction only.
 
 - [ ] **Step 3: Verify red**
 
@@ -599,7 +609,7 @@ flutter test test/widget/run_module_draft_panel_test.dart test/widget/sell_butto
 
 - [ ] **Step 4: Implement draft panel**
 
-`RunModuleDraftPanel` uses `Material` + `SafeArea` + `SingleChildScrollView`; exactly three cards render `definition.title`, `definition.effectText`, `definition.affinity.label`, and invoke `onSelected(id)` once per tap. No confirmation/reroll/local gameplay state.
+`RunModuleDraftPanel` uses `Material` + `SafeArea` + `SingleChildScrollView`; exactly three cards render `definition.title`, `definition.effectText`, `definition.affinity.label`, and invoke `onSelected(id)`. No confirmation/reroll/local gameplay state.
 
 - [ ] **Step 5: Implement compact acquired reminder**
 
