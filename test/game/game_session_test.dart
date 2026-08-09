@@ -1053,13 +1053,17 @@ void main() {
         final offer = session.pendingRunModuleOffer;
         expect(offer, isNotNull);
         expect(offer!.draftNumber, wave ~/ 2);
+        final firstSnapshot = session.snapshot();
+        final secondSnapshot = session.snapshot();
+        expect(firstSnapshot.pendingRunModuleOffer, offer);
+        expect(secondSnapshot.pendingRunModuleOffer, offer);
         expect(
-          session.snapshot().pendingRunModuleOffer?.moduleIds,
-          offer.moduleIds,
+          firstSnapshot.pendingRunModuleOffer?.moduleIds,
+          secondSnapshot.pendingRunModuleOffer?.moduleIds,
         );
         expect(
-          session.snapshot().pendingRunModuleOffer?.offerId,
-          offer.offerId,
+          firstSnapshot.pendingRunModuleOffer?.offerId,
+          secondSnapshot.pendingRunModuleOffer?.offerId,
         );
         expect(
           session.selectRunModule(
@@ -1070,6 +1074,9 @@ void main() {
         );
         expect(session.pendingRunModuleOffer, isNull);
       }
+
+      completeWave(session); // wave 7 must not open another draft
+      expect(session.pendingRunModuleOffer, isNull);
 
       expect(picker.seenCandidates, hasLength(3));
       expect(session.acquiredRunModules, [
@@ -1267,6 +1274,15 @@ void main() {
         completeWave(session);
         completeWave(session);
         final firstOffer = session.pendingRunModuleOffer!;
+        final firstCandidates = picker.seenCandidates[0];
+        expect(firstCandidates, isNotEmpty);
+        expect(
+          firstCandidates.every(
+            (id) =>
+                runModuleDefinition(id).affinity == RunModuleAffinity.universal,
+          ),
+          isTrue,
+        );
         expect(
           session.selectRunModule(
             offerId: firstOffer.offerId,
@@ -1278,6 +1294,10 @@ void main() {
         completeWave(session);
         final secondOffer = session.pendingRunModuleOffer!;
         expect(
+          picker.seenCandidates[1],
+          isNot(contains(RunModuleId.heavyCaliber)),
+        );
+        expect(
           session.selectRunModule(
             offerId: secondOffer.offerId,
             moduleId: RunModuleId.overclockRelay,
@@ -1288,6 +1308,8 @@ void main() {
         completeWave(session);
 
         final candidates = picker.seenCandidates[2];
+        expect(candidates, isNot(contains(RunModuleId.heavyCaliber)));
+        expect(candidates, isNot(contains(RunModuleId.overclockRelay)));
         expect(candidates, contains(RunModuleId.cryoReservoir));
         expect(candidates, contains(RunModuleId.rocketFusing));
         expect(candidates, hasLength(greaterThanOrEqualTo(3)));
