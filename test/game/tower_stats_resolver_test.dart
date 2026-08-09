@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/rules/tower_stats_resolver.dart';
 
 void main() {
@@ -18,6 +19,24 @@ void main() {
       );
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
       expect(stats.damage, closeTo(base.damage * 1.10, 1e-9));
+    });
+
+    test('applies run modules after campaign modifiers', () {
+      final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      final resolved = TowerStatsResolver.resolve(
+        tower(TowerType.laser),
+        campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+        runModules: const [RunModuleId.heavyCaliber],
+      );
+      expect(
+        resolved.damage,
+        closeTo(
+          base.damage *
+              1.10 *
+              runModuleDefinition(RunModuleId.heavyCaliber).damageMultiplier,
+          1e-9,
+        ),
+      );
     });
 
     test('laser damage unchanged when laserDamageFraction is 0', () {
@@ -131,5 +150,51 @@ void main() {
         expect(resolved.range, base.range);
       }
     });
+
+    test(
+      'explicit empty run modules preserve campaign and stage modifiers',
+      () {
+        final laserDefault = TowerStatsResolver.resolve(
+          tower(TowerType.laser),
+          campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+        );
+        final laserExplicitEmpty = TowerStatsResolver.resolve(
+          tower(TowerType.laser),
+          campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+          runModules: const [],
+        );
+        expect(laserExplicitEmpty.damage, laserDefault.damage);
+
+        final cryoDefault = TowerStatsResolver.resolve(
+          tower(TowerType.cryo),
+          campaignModifiers: const CampaignModifiers(
+            cryoSlowDurationBonus: 0.30,
+          ),
+        );
+        final cryoExplicitEmpty = TowerStatsResolver.resolve(
+          tower(TowerType.cryo),
+          campaignModifiers: const CampaignModifiers(
+            cryoSlowDurationBonus: 0.30,
+          ),
+          runModules: const [],
+        );
+        expect(cryoExplicitEmpty.slowDuration, cryoDefault.slowDuration);
+
+        final gravityDefault = TowerStatsResolver.resolve(
+          tower(TowerType.gravityWell),
+          stageModifiers: const [StageModifier.amplifiedGravityWells],
+        );
+        final gravityExplicitEmpty = TowerStatsResolver.resolve(
+          tower(TowerType.gravityWell),
+          stageModifiers: const [StageModifier.amplifiedGravityWells],
+          runModules: const [],
+        );
+        expect(gravityExplicitEmpty.fieldRadius, gravityDefault.fieldRadius);
+        expect(
+          gravityExplicitEmpty.fieldDuration,
+          gravityDefault.fieldDuration,
+        );
+      },
+    );
   });
 }
