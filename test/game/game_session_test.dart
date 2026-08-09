@@ -3,7 +3,33 @@ import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/rules/game_session.dart';
+import 'package:orion/game/rules/module_offer_picker.dart';
+
+import 'game_test_fixtures.dart';
+
+final class _FixedModuleOfferPicker implements ModuleOfferPicker {
+  _FixedModuleOfferPicker(this.offers);
+
+  final List<List<RunModuleId>> offers;
+  final List<List<RunModuleId>> seenCandidates = [];
+  int _index = 0;
+
+  @override
+  List<RunModuleId> pick(List<RunModuleId> candidates, {required int count}) {
+    final requested = offers[_index++];
+    seenCandidates.add(List.unmodifiable(candidates));
+    expect(requested, hasLength(count));
+    expect(requested.every(candidates.contains), isTrue);
+    return List.unmodifiable(requested);
+  }
+}
+
+void completeWave(GameSession session) {
+  expect(session.startWave(), isTrue);
+  session.finishActiveWave();
+}
 
 void main() {
   group('GameSession', () {
@@ -992,6 +1018,322 @@ void main() {
       session.startWave();
       session.finishActiveWave();
       expect(session.gold - before, 57);
+    });
+
+    test('opens scheduled module drafts only after waves 2, 4, and 6', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+        const [
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+          RunModuleId.emergencySalvage,
+        ],
+        const [
+          RunModuleId.longSight,
+          RunModuleId.emergencySalvage,
+          RunModuleId.cryoReservoir,
+        ],
+      ]);
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        offerPicker: picker,
+      );
+
+      for (var wave = 1; wave <= 6; wave += 1) {
+        completeWave(session);
+        if (wave.isOdd) {
+          expect(session.pendingRunModuleOffer, isNull);
+          continue;
+        }
+
+        final offer = session.pendingRunModuleOffer;
+        expect(offer, isNotNull);
+        expect(offer!.draftNumber, wave ~/ 2);
+        expect(
+          session.snapshot().pendingRunModuleOffer?.moduleIds,
+          offer.moduleIds,
+        );
+        expect(
+          session.snapshot().pendingRunModuleOffer?.offerId,
+          offer.offerId,
+        );
+        expect(
+          session.selectRunModule(
+            offerId: offer.offerId,
+            moduleId: offer.moduleIds.first,
+          ),
+          isTrue,
+        );
+        expect(session.pendingRunModuleOffer, isNull);
+      }
+
+      expect(picker.seenCandidates, hasLength(3));
+      expect(session.acquiredRunModules, [
+        RunModuleId.heavyCaliber,
+        RunModuleId.overclockRelay,
+        RunModuleId.longSight,
+      ]);
+    });
+
+    test(
+      'module selection rejects stale, wrong, and non-offered choices atomically',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+        ]);
+        final session = GameSession.initial(
+          stage: stageWithWaveCount(8),
+          offerPicker: picker,
+        );
+        completeWave(session);
+        completeWave(session);
+        final offer = session.pendingRunModuleOffer!;
+        final goldBefore = session.gold;
+        final acquiredBefore = session.acquiredRunModules;
+
+        expect(
+          session.selectRunModule(
+            offerId: offer.offerId - 1,
+            moduleId: offer.moduleIds.first,
+          ),
+          isFalse,
+        );
+        expect(
+          session.selectRunModule(
+            offerId: offer.offerId,
+            moduleId: RunModuleId.cryoReservoir,
+          ),
+          isFalse,
+        );
+        expect(session.gold, goldBefore);
+        expect(session.acquiredRunModules, acquiredBefore);
+        expect(session.pendingRunModuleOffer?.offerId, offer.offerId);
+
+        expect(
+          session.selectRunModule(
+            offerId: offer.offerId,
+            moduleId: RunModuleId.emergencySalvage,
+          ),
+          isFalse,
+        );
+        expect(session.pendingRunModuleOffer?.offerId, offer.offerId);
+
+        expect(
+          session.selectRunModule(
+            offerId: offer.offerId,
+            moduleId: RunModuleId.heavyCaliber,
+          ),
+          isTrue,
+        );
+        expect(session.pendingRunModuleOffer, isNull);
+        expect(session.acquiredRunModules, [RunModuleId.heavyCaliber]);
+      },
+    );
+
+    test(
+      'Emergency Salvage grants its definition-owned immediate gold once',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.emergencySalvage,
+            RunModuleId.heavyCaliber,
+            RunModuleId.longSight,
+          ],
+        ]);
+        final session = GameSession.initial(
+          stage: stageWithWaveCount(8),
+          offerPicker: picker,
+        );
+        completeWave(session);
+        completeWave(session);
+        final before = session.gold;
+        final offer = session.pendingRunModuleOffer!;
+
+        expect(
+          session.selectRunModule(
+            offerId: offer.offerId,
+            moduleId: RunModuleId.emergencySalvage,
+          ),
+          isTrue,
+        );
+        expect(
+          session.gold,
+          before +
+              runModuleDefinition(RunModuleId.emergencySalvage).immediateGold,
+        );
+        expect(
+          session.selectRunModule(
+            offerId: offer.offerId,
+            moduleId: RunModuleId.emergencySalvage,
+          ),
+          isFalse,
+        );
+        expect(
+          session.gold,
+          before +
+              runModuleDefinition(RunModuleId.emergencySalvage).immediateGold,
+        );
+      },
+    );
+
+    test('restart clears module state but offer IDs continue increasing', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+        const [
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+          RunModuleId.emergencySalvage,
+        ],
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+      ]);
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        offerPicker: picker,
+      );
+      completeWave(session);
+      completeWave(session);
+      final firstOffer = session.pendingRunModuleOffer!;
+      expect(
+        session.selectRunModule(
+          offerId: firstOffer.offerId,
+          moduleId: firstOffer.moduleIds.first,
+        ),
+        isTrue,
+      );
+      completeWave(session);
+      completeWave(session);
+      final secondOffer = session.pendingRunModuleOffer!;
+      expect(secondOffer.offerId, greaterThan(firstOffer.offerId));
+
+      session.restart();
+      expect(session.pendingRunModuleOffer, isNull);
+      expect(session.acquiredRunModules, isEmpty);
+
+      completeWave(session);
+      completeWave(session);
+      expect(
+        session.pendingRunModuleOffer!.offerId,
+        greaterThan(secondOffer.offerId),
+      );
+    });
+
+    test(
+      'module candidates include unlocked affinity fallbacks for a laser build',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+          const [
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+            RunModuleId.emergencySalvage,
+          ],
+          const [
+            RunModuleId.cryoReservoir,
+            RunModuleId.rocketFusing,
+            RunModuleId.emergencySalvage,
+          ],
+        ]);
+        final session = GameSession.initial(
+          stage: stageWithWaveCount(8),
+          offerPicker: picker,
+        );
+        expect(
+          session
+              .placeTower(const GridPosition(2, 1), TowerType.laser)
+              .isAllowed,
+          isTrue,
+        );
+
+        completeWave(session);
+        completeWave(session);
+        final firstOffer = session.pendingRunModuleOffer!;
+        expect(
+          session.selectRunModule(
+            offerId: firstOffer.offerId,
+            moduleId: RunModuleId.heavyCaliber,
+          ),
+          isTrue,
+        );
+        completeWave(session);
+        completeWave(session);
+        final secondOffer = session.pendingRunModuleOffer!;
+        expect(
+          session.selectRunModule(
+            offerId: secondOffer.offerId,
+            moduleId: RunModuleId.overclockRelay,
+          ),
+          isTrue,
+        );
+        completeWave(session);
+        completeWave(session);
+
+        final candidates = picker.seenCandidates[2];
+        expect(candidates, contains(RunModuleId.cryoReservoir));
+        expect(candidates, contains(RunModuleId.rocketFusing));
+        expect(candidates, hasLength(greaterThanOrEqualTo(3)));
+      },
+    );
+
+    test('resolveTowerStats and selected snapshot use acquired modules', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.longSight,
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+        ],
+      ]);
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        offerPicker: picker,
+      );
+      expect(
+        session.placeTower(const GridPosition(2, 1), TowerType.laser).isAllowed,
+        isTrue,
+      );
+      completeWave(session);
+      completeWave(session);
+      final offer = session.pendingRunModuleOffer!;
+      expect(
+        session.selectRunModule(
+          offerId: offer.offerId,
+          moduleId: RunModuleId.longSight,
+        ),
+        isTrue,
+      );
+      final tower = session.towers.single;
+      final stats = session.resolveTowerStats(tower);
+      final snapshot = session.snapshot(selectedTower: tower);
+
+      expect(snapshot.selectedTowerStats, isNotNull);
+      expect(snapshot.selectedTowerStats!.range, stats.range);
+      expect(
+        stats.range,
+        closeTo(
+          GameBalance.towerStats(TowerType.laser, level: 1).range *
+              runModuleDefinition(RunModuleId.longSight).rangeMultiplier,
+          1e-9,
+        ),
+      );
     });
   });
 

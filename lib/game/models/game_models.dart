@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import '../modules/run_module.dart';
+
 enum GamePhase { build, wave, won, lost }
 
 enum TowerType {
@@ -509,8 +511,12 @@ class GameSnapshot {
     required this.speedMultiplier,
     required this.autoStartEnabled,
     required this.autoStartCountdownRemaining,
+    this.pendingRunModuleOffer,
+    List<RunModuleId> acquiredRunModules = const [],
+    this.selectedTowerStats,
   }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes),
-       stageModifiers = List.unmodifiable(stageModifiers);
+       stageModifiers = List.unmodifiable(stageModifiers),
+       acquiredRunModules = List.unmodifiable(acquiredRunModules);
 
   final GamePhase phase;
   final int gold;
@@ -531,6 +537,9 @@ class GameSnapshot {
   final double speedMultiplier;
   final bool autoStartEnabled;
   final double? autoStartCountdownRemaining;
+  final RunModuleOffer? pendingRunModuleOffer;
+  final List<RunModuleId> acquiredRunModules;
+  final TowerStats? selectedTowerStats;
 
   bool get canStartWave => phase == GamePhase.build;
   bool get isEnded => phase == GamePhase.won || phase == GamePhase.lost;

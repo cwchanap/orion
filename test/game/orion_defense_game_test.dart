@@ -11,9 +11,28 @@ import 'package:orion/game/components/gravity_field_component.dart';
 import 'package:orion/game/components/projectile_component.dart';
 import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/enemy_overlay_state.dart';
+import 'package:orion/game/rules/module_offer_picker.dart';
+
+import 'game_test_fixtures.dart';
+
+final class _FixedModuleOfferPicker implements ModuleOfferPicker {
+  _FixedModuleOfferPicker(this.offers);
+
+  final List<List<RunModuleId>> offers;
+  int _index = 0;
+
+  @override
+  List<RunModuleId> pick(List<RunModuleId> candidates, {required int count}) {
+    final requested = offers[_index++];
+    expect(requested, hasLength(count));
+    expect(requested.every(candidates.contains), isTrue);
+    return List.unmodifiable(requested);
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -178,7 +197,7 @@ void main() {
     test(
       'wave clear starts auto-start countdown when another wave remains',
       () {
-        final game = OrionDefenseGame(stage: _emptyWaveStage());
+        final game = OrionDefenseGame(stage: stageWithWaveCount(2));
 
         game.toggleAutoStart();
         game.startWave();
@@ -193,7 +212,7 @@ void main() {
     );
 
     test('auto-start toggled on after a cleared wave starts countdown', () {
-      final game = OrionDefenseGame(stage: _emptyWaveStage());
+      final game = OrionDefenseGame(stage: stageWithWaveCount(2));
 
       game.startWave();
       game.onGameResize(Vector2(800, 1200));
@@ -212,7 +231,7 @@ void main() {
     });
 
     test('auto-start countdown can be canceled by turning auto-start off', () {
-      final game = OrionDefenseGame(stage: _emptyWaveStage());
+      final game = OrionDefenseGame(stage: stageWithWaveCount(2));
 
       game.toggleAutoStart();
       game.startWave();
@@ -228,7 +247,7 @@ void main() {
     test(
       'auto-start countdown starts next wave after scaled unpaused time',
       () {
-        final game = OrionDefenseGame(stage: _emptyWaveStage());
+        final game = OrionDefenseGame(stage: stageWithWaveCount(2));
 
         game.toggleAutoStart();
         game.setSpeedMultiplier(3);
@@ -245,7 +264,7 @@ void main() {
     );
 
     test('paused auto-start countdown does not advance', () {
-      final game = OrionDefenseGame(stage: _emptyWaveStage());
+      final game = OrionDefenseGame(stage: stageWithWaveCount(2));
 
       game.toggleAutoStart();
       game.startWave();
@@ -259,6 +278,212 @@ void main() {
       expect(game.snapshot.isPaused, isTrue);
       expect(game.snapshot.autoStartCountdownRemaining, 3);
     });
+
+    test('wave 2 opens a module offer and suspends auto-start pacing', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+      ]);
+      final game = OrionDefenseGame(
+        stage: stageWithWaveCount(8),
+        moduleOfferPicker: picker,
+      );
+      game.toggleAutoStart();
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0);
+      expect(game.snapshot.autoStartCountdownRemaining, 3);
+
+      game.update(3); // auto-start wave 2
+      expect(game.snapshot.phase, GamePhase.wave);
+      game.update(0); // complete empty wave 2
+
+      expect(game.snapshot.pendingRunModuleOffer, isNotNull);
+      expect(game.snapshot.pendingRunModuleOffer!.draftNumber, 1);
+      expect(game.snapshot.autoStartCountdownRemaining, isNull);
+    });
+
+    test(
+      'selecting a valid module starts a fresh full auto-start countdown',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(8),
+          moduleOfferPicker: picker,
+        );
+        game.toggleAutoStart();
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0);
+        game.update(3);
+        game.update(0);
+        final offer = game.snapshot.pendingRunModuleOffer!;
+
+        game.selectRunModule(offer.offerId, offer.moduleIds.first);
+
+        expect(game.snapshot.pendingRunModuleOffer, isNull);
+        expect(
+          game.snapshot.autoStartCountdownRemaining,
+          OrionDefenseGame.autoStartCountdownSeconds,
+        );
+      },
+    );
+
+    test(
+      'module selection refreshes existing and newly placed tower stats',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(8),
+          moduleOfferPicker: picker,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        final initialComponent = game.children
+            .whereType<TowerComponent>()
+            .single;
+        final base = GameBalance.towerStats(TowerType.laser, level: 1);
+        expect(initialComponent.stats.damage, base.damage);
+
+        game.startWave();
+        game.update(0); // wave 1
+        game.startWave();
+        game.update(0); // wave 2 opens draft 1
+        final offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.heavyCaliber);
+
+        final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+        expect(
+          initialComponent.stats.damage,
+          closeTo(base.damage * heavy.damageMultiplier, 1e-9),
+        );
+        expect(
+          initialComponent.stats.fireInterval,
+          closeTo(base.fireInterval * heavy.fireIntervalMultiplier, 1e-9),
+        );
+
+        _tapCell(game, const GridPosition(2, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        final components = game.children.whereType<TowerComponent>().toList();
+        expect(components, hasLength(2));
+        expect(components[1].stats.damage, initialComponent.stats.damage);
+        expect(
+          components[1].stats.fireInterval,
+          initialComponent.stats.fireInterval,
+        );
+      },
+    );
+
+    test('Drone Bay applies Heavy Caliber and Overclock to drone channels', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+        const [
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+          RunModuleId.emergencySalvage,
+        ],
+      ]);
+      final game = OrionDefenseGame(
+        stage: stageWithWaveCount(8),
+        moduleOfferPicker: picker,
+      );
+      game.onGameResize(Vector2(800, 1200));
+
+      game.startWave();
+      game.update(0); // wave 1
+      game.startWave();
+      game.update(0); // wave 2, draft 1
+      var offer = game.snapshot.pendingRunModuleOffer!;
+      game.selectRunModule(offer.offerId, RunModuleId.heavyCaliber);
+      game.startWave();
+      game.update(0); // wave 3
+      game.startWave();
+      game.update(0); // wave 4, draft 2
+      offer = game.snapshot.pendingRunModuleOffer!;
+      game.selectRunModule(offer.offerId, RunModuleId.overclockRelay);
+      game.startWave();
+      game.update(0); // wave 5 unlocks Drone Bay for the next build phase
+
+      _tapCell(game, const GridPosition(2, 1));
+      game.placeTower(TowerType.droneBay);
+      game.processLifecycleEvents();
+      final component = game.children.whereType<TowerComponent>().single;
+      final base = GameBalance.towerStats(TowerType.droneBay, level: 1);
+      final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+      final overclock = runModuleDefinition(RunModuleId.overclockRelay);
+      expect(
+        component.stats.droneDamage,
+        closeTo(
+          base.droneDamage *
+              heavy.damageMultiplier *
+              overclock.damageMultiplier,
+          1e-9,
+        ),
+      );
+      expect(
+        component.stats.fireInterval,
+        closeTo(
+          base.fireInterval *
+              heavy.fireIntervalMultiplier *
+              overclock.fireIntervalMultiplier,
+          1e-9,
+        ),
+      );
+      expect(component.stats.damage, 0);
+    });
+
+    test(
+      'TowerComponent.updateTower resolves through its provider callback',
+      () {
+        var resolveCalls = 0;
+        TowerStats resolve(PlacedTower tower) {
+          resolveCalls += 1;
+          return GameBalance.towerStats(tower.type, level: tower.level);
+        }
+
+        final tower = PlacedTower(
+          id: 1,
+          type: TowerType.laser,
+          position: const GridPosition(0, 0),
+        );
+        final component = TowerComponent(
+          tower: tower,
+          center: Vector2.zero(),
+          resolveStats: resolve,
+          acquireTarget: (_) => null,
+          launchProjectile: (_, _) {},
+        );
+        expect(resolveCalls, 1);
+        expect(component.stats.level, 1);
+
+        component.updateTower(tower.upgraded());
+
+        expect(resolveCalls, 2);
+        expect(component.stats.level, 2);
+      },
+    );
 
     test('paused active-wave update does not run combat components', () {
       final game = OrionDefenseGame(stage: _singleEnemyStage());
@@ -756,7 +981,7 @@ void main() {
     }
 
     test('restart resets pacing state', () {
-      final game = OrionDefenseGame(stage: _emptyWaveStage());
+      final game = OrionDefenseGame(stage: stageWithWaveCount(2));
 
       game.toggleAutoStart();
       game.setSpeedMultiplier(3);
@@ -774,7 +999,7 @@ void main() {
     });
 
     test('won state resets pacing state', () {
-      final game = OrionDefenseGame(stage: _emptyWaveStage(waveCount: 1));
+      final game = OrionDefenseGame(stage: stageWithWaveCount(1));
 
       game.toggleAutoStart();
       game.setSpeedMultiplier(3);
@@ -1092,7 +1317,7 @@ void main() {
 
     test('applies campaign modifiers to session starting values', () {
       final game = OrionDefenseGame(
-        stage: _emptyWaveStage(),
+        stage: stageWithWaveCount(2),
         campaignModifiers: const CampaignModifiers(
           bonusGold: 30,
           bonusHealth: 5,
@@ -1108,7 +1333,7 @@ void main() {
     });
 
     test('defaults to no campaign modifiers and baseline economy', () {
-      final game = OrionDefenseGame(stage: _emptyWaveStage());
+      final game = OrionDefenseGame(stage: stageWithWaveCount(2));
 
       expect(game.snapshot.gold, GameBalance.startingGold);
       expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
@@ -1664,26 +1889,6 @@ StageDefinition _modifierStage({
       ),
     ],
     modifiers: modifiers,
-    mapColumn: 0,
-    mapRow: 0,
-  );
-}
-
-StageDefinition _emptyWaveStage({int waveCount = 2}) {
-  return StageDefinition(
-    id: 'empty-wave-stage',
-    name: 'Empty Wave Stage',
-    mapLabel: 'Empty',
-    description: 'Stage with empty waves for timing tests',
-    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
-    waves: List<WaveDefinition>.generate(
-      waveCount,
-      (_) => const WaveDefinition(groups: [], clearBonus: 0),
-      growable: false,
-    ),
-    unlockDependencies: const [],
-    isMainPath: true,
-    mainPathOrder: 1,
     mapColumn: 0,
     mapRow: 0,
   );

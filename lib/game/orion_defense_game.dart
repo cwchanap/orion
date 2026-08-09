@@ -21,10 +21,12 @@ import 'components/gravity_field_component.dart';
 import 'components/projectile_component.dart';
 import 'components/tower_component.dart';
 import 'models/game_models.dart';
+import 'modules/run_module.dart';
 import 'rules/board_layout.dart';
 import 'rules/combat_effects.dart';
 import 'rules/enemy_logic.dart';
 import 'rules/game_session.dart';
+import 'rules/module_offer_picker.dart';
 import 'rules/stage_modifier_rules.dart';
 import 'rules/tower_targeting.dart';
 
@@ -39,12 +41,14 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
     this.campaignModifiers = CampaignModifiers.empty,
+    ModuleOfferPicker? moduleOfferPicker,
     this.onStageWon,
     this.onReturnToMap,
   }) : stage = stage ?? OrionCampaign.stageOne,
        _session = GameSession.initial(
          stage: stage ?? OrionCampaign.stageOne,
          campaignModifiers: campaignModifiers,
+         offerPicker: moduleOfferPicker,
        ) {
     _resetPacing();
   }
@@ -301,6 +305,18 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
+  void selectRunModule(int offerId, RunModuleId moduleId) {
+    if (!_session.selectRunModule(offerId: offerId, moduleId: moduleId)) {
+      return;
+    }
+
+    for (final component in _towerComponents.values) {
+      component.updateTower(component.placedTower);
+    }
+    _startAutoStartCountdownIfNeeded();
+    _publishSnapshot();
+  }
+
   void restart() {
     _clearCombatComponents(removeTowers: true);
     _resetWaveSpawnState();
@@ -464,12 +480,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       tower: tower,
       center: _cellCenter(tower.position),
       radius: _towerRadius,
+      resolveStats: _session.resolveTowerStats,
       acquireTarget: _selectTargetForTower,
       launchProjectile: _launchProjectile,
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
-      campaignModifiers: campaignModifiers,
-      stageModifiers: stage.modifiers,
       priority: 10,
     );
     _towerComponents[tower.id] = component;
@@ -625,6 +640,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   bool _tickAutoStartCountdown(double dt) {
+    if (_session.pendingRunModuleOffer != null) {
+      _autoStartCountdownRemaining = null;
+      return false;
+    }
+
     final remaining = _autoStartCountdownRemaining;
     if (remaining == null) {
       return false;
@@ -650,6 +670,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   void _startAutoStartCountdownIfNeeded() {
     if (_autoStartEnabled &&
         _autoStartCountdownRemaining == null &&
+        _session.pendingRunModuleOffer == null &&
         _session.phase == GamePhase.build &&
         _session.clearedWaveCount > 0 &&
         _session.activeWave != null) {
@@ -809,9 +830,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
     _session.finishActiveWave();
     final didWin = _session.phase == GamePhase.won;
+    final hasPendingDraft = _session.pendingRunModuleOffer != null;
     _resetWaveSpawnState();
     if (didWin) {
       _resetPacing();
+    } else if (hasPendingDraft) {
+      _autoStartCountdownRemaining = null;
     } else {
       _startAutoStartCountdownIfNeeded();
     }
