@@ -497,6 +497,107 @@ void main() {
     });
 
     test(
+      'module selection refreshes a surviving drone without resetting its state',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.emergencySalvage,
+          ],
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.cryoReservoir,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: _droneBayModuleRefreshStage(),
+          moduleOfferPicker: picker,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        // Clear waves 1-2 and choose Long Sight from draft 1.
+        game.startWave();
+        game.update(0);
+        game.startWave();
+        game.update(0);
+        var offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.longSight);
+
+        // Clear waves 3-4 and choose Emergency Salvage from draft 2.
+        game.startWave();
+        game.update(0);
+        game.startWave();
+        game.update(0);
+        offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.emergencySalvage);
+
+        // Drone Bay unlocks for wave 6 after wave 5 is cleared.
+        game.startWave();
+        game.update(0);
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.droneBay);
+        game.processLifecycleEvents();
+
+        game.startWave();
+        game.update(0.01); // spawn wave 6's durable enemy
+        game.processLifecycleEvents();
+        game.children.whereType<TowerComponent>().single.update(0.01);
+        game.processLifecycleEvents();
+        final drone = game.children.whereType<DroneComponent>().first;
+
+        // Put the drone on a live attack cooldown and consume some lifetime
+        // before wave 6 is cleared.
+        drone.update(0.5);
+
+        game.children.whereType<EnemyComponent>().single.applyDamage(1000000);
+        game.update(0.01); // clear wave 6 and open draft 3
+        game.processLifecycleEvents();
+        offer = game.snapshot.pendingRunModuleOffer!;
+
+        game.selectRunModule(offer.offerId, RunModuleId.heavyCaliber);
+        final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+        final base = GameBalance.towerStats(TowerType.droneBay, level: 1);
+        expect(drone.parent, same(game));
+        expect(
+          drone.stats.droneDamage,
+          closeTo(base.droneDamage * heavy.damageMultiplier, 1e-9),
+        );
+
+        // The same drone survives into wave 7 and applies its refreshed
+        // damage only after the pre-selection cooldown has elapsed.
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        final healthBeforeAttack = enemy.health;
+        // The pre-selection cooldown is still active: a refresh that resets
+        // it would damage the new wave's enemy immediately.
+        drone.update(0.1);
+        expect(enemy.health, healthBeforeAttack);
+        drone.update(base.droneAttackInterval);
+        expect(
+          enemy.health,
+          closeTo(
+            healthBeforeAttack - base.droneDamage * heavy.damageMultiplier,
+            1e-9,
+          ),
+        );
+
+        // The elapsed pre-selection lifetime is preserved too: this duration
+        // is longer than the remaining lifetime but shorter than a reset one.
+        drone.update(base.droneLifetime * 0.8);
+        expect(drone.parent, isNull);
+      },
+    );
+
+    test(
       'TowerComponent.updateTower resolves through its provider callback',
       () {
         var resolveCalls = 0;
@@ -2233,6 +2334,40 @@ StageDefinition _droneBayUnlockStage() {
       ),
       // A trailing empty wave so clearing wave 6 leaves the game in build
       // phase (not won), allowing the sell-during-build flow to be tested.
+      const WaveDefinition(groups: [], clearBonus: 0),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _droneBayModuleRefreshStage() {
+  const durableEnemy = EnemyStats(
+    health: 100000,
+    speed: 1,
+    baseDamage: 1,
+    goldReward: 0,
+  );
+  return StageDefinition(
+    id: 'drone-bay-module-refresh-stage',
+    name: 'Drone Bay Module Refresh Stage',
+    mapLabel: 'Drone',
+    description: 'Stage that keeps a drone alive across module selection',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: [
+      for (var wave = 0; wave < 5; wave += 1)
+        const WaveDefinition(groups: [], clearBonus: 0),
+      const WaveDefinition(
+        groups: [WaveGroup(enemyCount: 1, enemyStats: durableEnemy)],
+        clearBonus: 0,
+      ),
+      const WaveDefinition(
+        groups: [WaveGroup(enemyCount: 1, enemyStats: durableEnemy)],
+        clearBonus: 0,
+      ),
       const WaveDefinition(groups: [], clearBonus: 0),
     ],
     unlockDependencies: const [],

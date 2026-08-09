@@ -27,12 +27,18 @@ class DroneComponent extends CircleComponent {
        );
 
   final int ownerTowerId;
-  final TowerStats stats;
+  TowerStats stats;
   final DroneTargetProvider acquireTarget;
   final DroneExpiredCallback onExpired;
   double _remaining;
   double _attackRemaining;
   bool _expired = false;
+
+  /// Replaces only the combat stats; lifetime and attack cooldown continue
+  /// from their current values so a live drone is not restarted mid-run.
+  void updateStats(TowerStats stats) {
+    this.stats = stats;
+  }
 
   @override
   void update(double dt) {
