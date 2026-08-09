@@ -339,6 +339,48 @@ void main() {
     );
 
     test(
+      'pending module draft blocks actions and board selection feedback',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(8),
+          moduleOfferPicker: picker,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(2, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        _tapCell(game, const GridPosition(2, 1));
+        game.upgradeSelectedTower();
+
+        game.startWave();
+        game.update(0);
+        game.startWave();
+        _tapCell(game, const GridPosition(2, 1));
+        game.update(0);
+
+        expect(game.snapshot.pendingRunModuleOffer, isNotNull);
+        expect(game.snapshot.selectedTower?.id, 1);
+
+        game.startWave();
+        expect(game.snapshot.feedback, 'Choose a Salvage Module first.');
+
+        game.setTargetingMode(TowerTargetingMode.strongest);
+        expect(game.snapshot.feedback, 'Choose a Salvage Module first.');
+
+        _tapCell(game, const GridPosition(3, 1));
+        expect(game.snapshot.selectedTower?.id, 1);
+        expect(game.snapshot.selectedCell, isNull);
+      },
+    );
+
+    test(
       'module selection refreshes existing and newly placed tower stats',
       () {
         final picker = _FixedModuleOfferPicker([
@@ -1155,6 +1197,7 @@ void main() {
         game.startWave();
         game.update(0);
         game.processLifecycleEvents();
+        _selectPendingModuleIfNeeded(game);
       }
       expect(game.snapshot.phase, GamePhase.build);
       expect(game.snapshot.unlockedTowerTypes, contains(TowerType.droneBay));
@@ -1186,6 +1229,7 @@ void main() {
       game.update(0.01);
       game.processLifecycleEvents();
       expect(game.snapshot.phase, GamePhase.build);
+      _selectPendingModuleIfNeeded(game);
 
       final droneBayId = game.snapshot.selectedTower?.id;
       expect(droneBayId, isNull); // not selected yet
@@ -1216,6 +1260,7 @@ void main() {
         game.startWave();
         game.update(0);
         game.processLifecycleEvents();
+        _selectPendingModuleIfNeeded(game);
       }
       expect(game.snapshot.phase, GamePhase.build);
       expect(game.snapshot.unlockedTowerTypes, contains(TowerType.gravityWell));
@@ -1288,6 +1333,7 @@ void main() {
           game.startWave();
           game.update(0);
           game.processLifecycleEvents();
+          _selectPendingModuleIfNeeded(game);
         }
         _tapCell(game, const GridPosition(0, 1));
         game.placeTower(TowerType.gravityWell);
@@ -1510,6 +1556,7 @@ void main() {
           for (var wave = 0; wave < 4; wave += 1) {
             game.startWave();
             game.update(0);
+            _selectPendingModuleIfNeeded(game);
           }
           _tapCell(game, const GridPosition(0, 1));
           game.placeTower(TowerType.gravityWell);
@@ -2279,6 +2326,15 @@ void _tapCell(OrionDefenseGame game, GridPosition position) {
     boardOrigin: Offset.zero,
   );
   game.onTapDown(TapDownEvent(1, game, TapDownDetails(globalPosition: center)));
+}
+
+void _selectPendingModuleIfNeeded(OrionDefenseGame game) {
+  final offer = game.snapshot.pendingRunModuleOffer;
+  if (offer == null) return;
+  final moduleId = offer.moduleIds.firstWhere(
+    (id) => id != RunModuleId.emergencySalvage,
+  );
+  game.selectRunModule(offer.offerId, moduleId);
 }
 
 void _tapPoint(OrionDefenseGame game, Vector2 point) {

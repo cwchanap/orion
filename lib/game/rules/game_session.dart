@@ -95,6 +95,9 @@ class GameSession {
 
   bool isTowerUnlocked(TowerType type) => unlockedTowerTypes.contains(type);
 
+  bool get _canMutateBuild =>
+      _phase == GamePhase.build && _pendingRunModuleOffer == null;
+
   GameSnapshot snapshot({
     GridPosition? selectedCell,
     PlacedTower? selectedTower,
@@ -158,6 +161,9 @@ class GameSession {
     if (_phase != GamePhase.build) {
       return const PlacementResult.denied(PlacementFailure.invalidPhase);
     }
+    if (_pendingRunModuleOffer != null) {
+      return const PlacementResult.denied(PlacementFailure.pendingModuleDraft);
+    }
     if (!BoardLayout.isInBounds(position)) {
       return const PlacementResult.denied(PlacementFailure.offBoard);
     }
@@ -195,7 +201,7 @@ class GameSession {
   }
 
   bool upgradeTower(int towerId) {
-    if (_phase != GamePhase.build) {
+    if (!_canMutateBuild) {
       return false;
     }
 
@@ -220,7 +226,7 @@ class GameSession {
   }
 
   bool specializeTower(int towerId, TowerSpecialization specialization) {
-    if (_phase != GamePhase.build) {
+    if (!_canMutateBuild) {
       return false;
     }
 
@@ -245,7 +251,7 @@ class GameSession {
   }
 
   int? sellTower(int towerId) {
-    if (_phase != GamePhase.build) {
+    if (!_canMutateBuild) {
       return null;
     }
     final entry = _findTowerEntry(towerId);
@@ -259,7 +265,7 @@ class GameSession {
   }
 
   bool setTargetingMode(int towerId, TowerTargetingMode mode) {
-    if (_phase != GamePhase.build) {
+    if (!_canMutateBuild) {
       return false;
     }
 
@@ -273,7 +279,7 @@ class GameSession {
   }
 
   bool startWave() {
-    if (_phase != GamePhase.build || _waveIndex >= stage.waves.length) {
+    if (!_canMutateBuild || _waveIndex >= stage.waves.length) {
       return false;
     }
     _phase = GamePhase.wave;

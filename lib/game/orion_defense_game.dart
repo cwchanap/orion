@@ -136,6 +136,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (_session.phase == GamePhase.won || _session.phase == GamePhase.lost) {
       return;
     }
+    if (_session.pendingRunModuleOffer != null) {
+      return;
+    }
 
     if (_session.phase == GamePhase.wave) {
       final enemy = _enemyAt(event.canvasPosition);
@@ -176,7 +179,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   void placeTower(TowerType type) {
     final position = _selectedCell;
     if (position == null) {
-      _publishSnapshot(feedback: 'Select a buildable cell first.');
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? 'Select a buildable cell first.',
+      );
       return;
     }
 
@@ -197,12 +202,16 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   void upgradeSelectedTower() {
     final tower = _selectedTower;
     if (tower == null) {
-      _publishSnapshot(feedback: 'Select a tower first.');
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? 'Select a tower first.',
+      );
       return;
     }
 
     if (!_session.upgradeTower(tower.id)) {
-      _publishSnapshot(feedback: _upgradeMessage(tower));
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? _upgradeMessage(tower),
+      );
       return;
     }
 
@@ -218,12 +227,18 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   void specializeSelectedTower(TowerSpecialization specialization) {
     final tower = _selectedTower;
     if (tower == null) {
-      _publishSnapshot(feedback: 'Select a tower first.');
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? 'Select a tower first.',
+      );
       return;
     }
 
     if (!_session.specializeTower(tower.id, specialization)) {
-      _publishSnapshot(feedback: _specializationMessage(tower, specialization));
+      _publishSnapshot(
+        feedback:
+            _draftBlockMessage() ??
+            _specializationMessage(tower, specialization),
+      );
       return;
     }
 
@@ -239,13 +254,17 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   void sellSelectedTower() {
     final tower = _selectedTower;
     if (tower == null) {
-      _publishSnapshot(feedback: 'Select a tower first.');
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? 'Select a tower first.',
+      );
       return;
     }
 
     final refund = _session.sellTower(tower.id);
     if (refund == null) {
-      _publishSnapshot(feedback: 'Sell towers between waves.');
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? 'Sell towers between waves.',
+      );
       return;
     }
 
@@ -273,13 +292,17 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   void setTargetingMode(TowerTargetingMode mode) {
     final tower = _selectedTower;
     if (tower == null) {
-      _publishSnapshot(feedback: 'Select a tower first.');
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? 'Select a tower first.',
+      );
       return;
     }
 
     if (!_session.setTargetingMode(tower.id, mode)) {
       _publishSnapshot(
-        feedback: 'Targeting can only change during build phase.',
+        feedback:
+            _draftBlockMessage() ??
+            'Targeting can only change during build phase.',
       );
       return;
     }
@@ -295,7 +318,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   void startWave() {
     if (!_session.startWave()) {
-      _publishSnapshot(feedback: 'Wave cannot start right now.');
+      _publishSnapshot(
+        feedback: _draftBlockMessage() ?? 'Wave cannot start right now.',
+      );
       return;
     }
 
@@ -945,6 +970,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   String _placementMessage(PlacementFailure? failure) {
     return switch (failure) {
       PlacementFailure.invalidPhase => 'Build towers between waves.',
+      PlacementFailure.pendingModuleDraft => 'Choose a Salvage Module first.',
       PlacementFailure.offBoard => 'Select a cell on the board.',
       PlacementFailure.pathBlocked => 'Cannot build on the enemy path.',
       PlacementFailure.occupied => 'That cell already has a tower.',
@@ -953,6 +979,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       null => 'Cannot place a tower there.',
     };
   }
+
+  String? _draftBlockMessage() => _session.pendingRunModuleOffer == null
+      ? null
+      : 'Choose a Salvage Module first.';
 
   String _upgradeMessage(PlacedTower tower) {
     if (_session.phase != GamePhase.build) {
