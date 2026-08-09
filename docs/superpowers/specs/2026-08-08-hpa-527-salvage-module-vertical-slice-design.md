@@ -14,13 +14,13 @@ The current codebase already has the seams this feature needs:
 - `OrionDefenseGame` owns Flame orchestration, pacing, component refresh, and snapshot publication.
 - `OrionGamePage` renders the stage from `GameSnapshot` and already uses a top-level `Stack` for HUD, bottom controls, and terminal overlays.
 
-That means the vertical slice should extend the existing flow instead of introducing a new game-state machine, event bus, effect-command engine, deterministic protocol, or persistence model.
+The vertical slice therefore extends the existing flow instead of introducing a new game-state machine, event bus, effect-command engine, deterministic protocol, or persistence model.
 
 ## Goal
 
-Ship six temporary Salvage Modules and three one-tap drafts after waves 2, 4, and 6. A selected module affects the remainder of the current run, is visible in the mission UI, and is cleared on restart or stage exit.
+Ship six temporary Salvage Modules and three one-tap drafts after waves 2, 4, and 6. A selected module affects the remainder of the current run, is visibly understandable after selection, and is cleared on restart or stage exit.
 
-The implementation must preserve Orion's current ownership rules:
+The implementation preserves Orion's current ownership rules:
 
 - rules and run state remain outside widgets;
 - UI consumes immutable snapshot data;
@@ -41,7 +41,8 @@ This slice intentionally does **not** include:
 - versioned draft algorithms, hashes, fingerprints, or canonical serialization;
 - persistent run history or mid-run save/resume;
 - generic semantic combat events, generated attacks, recursion protection, or per-event cap infrastructure;
-- a seven-stage release-certification or statistical seed-sweep program.
+- a seven-stage release-certification or statistical seed-sweep program;
+- a tower range-ring rendering subsystem.
 
 ## Approaches considered
 
@@ -49,36 +50,21 @@ This slice intentionally does **not** include:
 
 `GameSession` stores acquired module IDs and the current offer. `TowerStatsResolver` receives those IDs and applies `RunModuleRules` after campaign and stage modifiers. Immediate economy effects are applied by `GameSession` when selection succeeds.
 
-**Advantages**
+This is preferred because every resolution starts from `GameBalance`, so existing and newly placed towers are consistent and repeated refreshes cannot compound modifiers accidentally.
 
-- Reuses the existing stat pipeline.
-- Existing and newly placed towers resolve the same way.
-- Re-resolving cannot accidentally compound modifiers because every calculation starts from `GameBalance`.
-- Module definitions remain small and declarative.
-- Easy to test without Flame or Flutter.
+### B. Mutate live `TowerComponent.stats` directly when a card is selected — rejected
 
-**Cost**
+This is initially smaller but creates two correctness paths: already-existing towers are mutated while newly placed towers must reconstruct previous module effects. Repeated refreshes can also compound multipliers.
 
-- `TowerStats.copyWith` needs three additional fields used by this slice.
-- `TowerComponent` needs to carry the current acquired module IDs when resolving stats.
+### C. Introduce a generic modifier/effect framework — rejected
 
-This is the preferred balance of simplicity and maintainability.
+A generic registry, semantic event bus, or command graph could support future triggered modules, but none of the six vertical-slice modules require it. Add a new rule seam only when a later accepted module has concrete player value that cannot fit the existing stat/economy pipeline.
 
-### B. Mutate live `TowerComponent.stats` directly when a card is selected
+## Module domain and single-source tuning
 
-This is initially the smallest code diff, but it creates two correctness problems: repeated refreshes can compound multipliers, and towers placed after the selection need a separate path to reconstruct prior effects. Avoid this approach.
-
-### C. Introduce a generic modifier/effect framework
-
-A generic effect registry, typed event routing, or command graph could support future triggered modules, but none of the six vertical-slice modules require it. Building that framework now would delay the product experiment and create speculative abstractions. Defer until an accepted module actually cannot fit the existing stat/economy seams.
-
-## Module domain
-
-Create a focused module domain file at `lib/game/modules/run_module.dart`.
+Create `lib/game/modules/run_module.dart`.
 
 ### IDs and affinity
-
-Use enums because modules are run-only and are not persisted:
 
 ```dart
 enum RunModuleId {
@@ -90,43 +76,62 @@ enum RunModuleId {
   rocketFusing,
 }
 
-enum RunModuleAffinity { universal, cryo, rocket }
+enum RunModuleAffinity {
+  universal('Universal'),
+  cryo('Cryo'),
+  rocket('Rocket');
+
+  const RunModuleAffinity(this.label);
+  final String label;
+}
 ```
 
-`RunModuleDefinition` contains only player-facing/catalog metadata:
+### Definition owns tuning
+
+All player-facing magnitudes live in `RunModuleDefinition`. Do not repeat numeric tuning inside `RunModuleRules` or `GameSession`.
 
 ```dart
 final class RunModuleDefinition {
   const RunModuleDefinition({
     required this.id,
     required this.title,
-    required this.effectText,
     required this.affinity,
+    this.damageMultiplier = 1,
+    this.fireIntervalMultiplier = 1,
+    this.rangeMultiplier = 1,
+    this.splashRadiusMultiplier = 1,
+    this.slowDurationBonus = 0,
+    this.immediateGold = 0,
   });
 
   final RunModuleId id;
   final String title;
-  final String effectText;
   final RunModuleAffinity affinity;
+  final double damageMultiplier;
+  final double fireIntervalMultiplier;
+  final double rangeMultiplier;
+  final double splashRadiusMultiplier;
+  final double slowDurationBonus;
+  final int immediateGold;
+
+  String get effectText;
 }
 ```
 
-The catalog is a fixed ordered list plus a lookup helper. Do not put executable closures in definitions.
+`effectText` is derived from these fields for the six known module IDs so displayed percentages/gold cannot drift from applied math. The formatter remains local to the module domain; it is not a generalized localization or balance-description framework.
 
-### Initial tuning
+Initial tuning:
 
-These values are intentionally simple and may be adjusted from the two required human playtests without changing architecture:
-
-| Module | Initial effect | Affinity |
+| Module | Definition values | Affinity |
 | --- | --- | --- |
-| Heavy Caliber | `damage × 1.20`, `fireInterval × 1.10` | Universal |
-| Overclock Relay | `fireInterval × 0.85`, `damage × 0.92` | Universal |
-| Long Sight | `range × 1.15` | Universal |
-| Emergency Salvage | gain `90` gold immediately | Universal |
-| Cryo Reservoir | `slowDuration + 0.60s` | Cryo |
-| Rocket Fusing | `splashRadius × 1.25`, `damage × 0.90` | Rocket |
+| Heavy Caliber | `damageMultiplier: 1.20`, `fireIntervalMultiplier: 1.10` | Universal |
+| Overclock Relay | `fireIntervalMultiplier: 0.85`, `damageMultiplier: 0.92` | Universal |
+| Long Sight | `rangeMultiplier: 1.15` | Universal |
+| Emergency Salvage | `immediateGold: 90` | Universal |
+| Cryo Reservoir | `slowDurationBonus: 0.60` | Cryo |
+| Rocket Fusing | `splashRadiusMultiplier: 1.25`, `damageMultiplier: 0.90` | Rocket |
 
-There are four universal modules, so a draft can always remain useful even if future tower-affinity eligibility becomes narrower. Cryo and Rocket are both unlocked from wave 1 today, but eligibility is still expressed explicitly rather than relying on that fact.
+There are four universal modules, so a draft can remain viable even if tower-affinity eligibility changes later.
 
 ### Composition
 
@@ -139,11 +144,11 @@ GameBalance base
 → RunModuleRules
 ```
 
-Multiplicative effects compose multiplicatively. Additive `Cryo Reservoir` applies once because acquired IDs are unique. `Emergency Salvage` has no tower-stat effect.
+`RunModuleRules` reads magnitudes from each definition. It does not own hard-coded balance numbers. Multiplicative effects compose multiplicatively; additive slow duration applies once because acquired IDs are unique. Emergency Salvage has neutral stat fields and only an immediate economy effect.
 
 ## Offer model and picker
 
-Create `RunModuleOffer` in the module domain:
+Create an immutable `RunModuleOffer`:
 
 ```dart
 final class RunModuleOffer {
@@ -159,7 +164,7 @@ final class RunModuleOffer {
 }
 ```
 
-The session stores the immutable offer instance. Snapshot rebuilding, resizing, pausing, and foregrounding only re-project that stored offer; they never invoke the picker.
+The session stores the exact offer. Snapshot rebuilding, resizing, pausing, and foregrounding only re-project that stored value.
 
 Use a tiny injectable picker under `lib/game/rules/module_offer_picker.dart`:
 
@@ -169,24 +174,20 @@ abstract interface class ModuleOfferPicker {
 }
 ```
 
-Production uses an ordinary `dart:math Random` implementation that shuffles a candidate copy and takes three. Tests inject a fixed picker.
+Production uses ordinary `dart:math Random`; tests inject scripted choices. No run seed, algorithm version, hash ranking, prior-offer history, or cross-platform byte-identity contract is introduced.
 
-No run seed, algorithm version, hash ranking, prior-offer history, or cross-platform byte-identity contract is introduced.
-
-If fewer than three eligible candidates exist, throw `StateError`. With the fixed six-module catalog and its four universal entries this represents a developer-authored invariant failure, not a recoverable player state. Unit tests guard the invariant instead of adding a production recovery UI.
+If fewer than three eligible candidates exist, throw `StateError`. With the fixed six-module catalog this is a developer-authored invariant failure, not a player recovery flow.
 
 ## Eligibility
 
-Eligibility is pure and small:
+Eligibility is pure and deliberately small:
 
-1. Exclude already acquired module IDs.
-2. Universal modules are eligible.
-3. Cryo-affinity modules are eligible when Cryo is in `GameSession.unlockedTowerTypes`.
-4. Rocket-affinity modules are eligible when Rocket is in `GameSession.unlockedTowerTypes`.
+1. exclude already acquired IDs;
+2. universal modules are eligible;
+3. Cryo-affinity modules are eligible when Cryo is unlocked;
+4. Rocket-affinity modules are eligible when Rocket is unlocked.
 
-"Currently buildable" means unlocked for the current wave progression, not currently affordable. Gold should not make a future-useful card disappear.
-
-Unselected cards may reappear in later offers. No complete offer-history structure is stored.
+"Currently buildable" means unlocked for current wave progression, not affordable with current gold. Unselected cards may reappear later. No complete offer-history structure is stored.
 
 ## Session state and lifecycle
 
@@ -199,25 +200,19 @@ int _completedModuleDrafts = 0;
 int _nextModuleOfferId = 1;
 ```
 
-Expose immutable getters for acquired modules and the pending offer.
-
-`_nextModuleOfferId` remains monotonic across `restart()` on the same `GameSession`. Restart clears acquired modules, pending offer, and completed draft count, but does not reuse old offer IDs. This makes old callbacks unable to match a later offer accidentally without introducing a full run-identity object.
+`_nextModuleOfferId` remains monotonic across `restart()` on the same session. Restart clears acquired modules, pending offer, and completed draft count but does not reuse old offer IDs.
 
 ### Draft schedule
 
-`finishActiveWave()` remains the only draft-opening boundary.
+`finishActiveWave()` remains the only opening boundary. After `_waveIndex` increments:
 
-After the current wave is accounted for and `_waveIndex` increments:
-
-- if the mission is complete, enter `won` and open no draft;
+- terminal mission → enter `won`, no draft;
 - otherwise enter `build`;
-- when the completed wave count is exactly 2, 4, or 6, generate and store one offer.
+- completed wave count 2, 4, or 6 → generate and store one offer.
 
-`GameSession.snapshot()` never generates offers.
+`GameSession.snapshot()` never invokes the picker.
 
 ### Selection
-
-Add:
 
 ```dart
 bool selectRunModule({
@@ -226,73 +221,81 @@ bool selectRunModule({
 });
 ```
 
-A selection succeeds only when:
-
-- there is a pending offer;
-- `offerId` matches that offer;
-- the module is one of the three offered IDs;
-- the module is not already acquired.
+Selection succeeds only when the pending offer exists, IDs match, the module was offered, and it is not already acquired.
 
 On success:
 
-1. append the module ID to acquired modules;
-2. apply the one-time `Emergency Salvage` gold reward when selected;
+1. append the module ID;
+2. read `runModuleDefinition(moduleId).immediateGold` and add it once when non-zero;
 3. clear the pending offer;
-4. increment the completed draft count;
+4. increment completed drafts;
 5. return `true`.
 
-Duplicate, stale, or non-offered selections return `false` with no mutation.
+Stale, duplicate, and non-offered selection returns `false` with no mutation.
 
 ## Authoritative intermission gate
 
-A pending offer is still `GamePhase.build`; do not add a fifth phase.
-
-Add one private/session-level predicate equivalent to:
+A pending offer remains `GamePhase.build`; do not add a fifth phase.
 
 ```dart
 bool get _canMutateBuild =>
     _phase == GamePhase.build && _pendingRunModuleOffer == null;
 ```
 
-Use it for:
+Use it for placement, upgrade, specialization, sale, targeting-mode changes, and manual/automatic `startWave()`.
 
-- placement validation;
-- upgrade;
-- specialization;
-- sale;
-- targeting-mode changes;
-- manual/automatic `startWave()`.
+Presentation-layer blocking is secondary. Direct calls still fail closed.
 
-This is the correctness boundary. Widget disabling is only presentation.
+When the game layer sees an action rejected specifically because a draft is pending, it should publish **`Choose a Salvage Module first.`** rather than the generic build-phase denial. Reuse the existing failure enums; do not add a module-specific `PlacementFailure`.
 
-## Snapshot projection
+## Snapshot projection and player-visible feedback
 
-Extend `GameSnapshot` with immutable module data:
+Extend `GameSnapshot` with:
 
 ```dart
 final RunModuleOffer? pendingRunModuleOffer;
 final List<RunModuleId> acquiredRunModules;
+final TowerStats? selectedTowerStats;
 ```
 
-`game_models.dart` may import `modules/run_module.dart`; the module domain deliberately does not import `game_models.dart`, avoiding a circular dependency. Tower affinity is therefore represented by `RunModuleAffinity`, with the rules layer mapping that affinity to `TowerType`.
-
-Update:
+`GameSession.snapshot()` already receives the selected `PlacedTower`; when non-null it resolves `selectedTowerStats` using the same pipeline as combat:
 
 ```dart
-bool get canStartWave =>
-    phase == GamePhase.build && pendingRunModuleOffer == null;
+TowerStatsResolver.resolve(
+  selectedTower,
+  campaignModifiers: campaignModifiers,
+  stageModifiers: stage.modifiers,
+  runModules: _acquiredRunModules,
+)
 ```
 
-No separate module view model is needed for six static definitions; UI may map immutable IDs to the read-only catalog helper for title/effect copy.
+This is intentionally a snapshot projection rather than calling `TowerStatsResolver` from Flutter. It fixes the product-observation gap without moving rule calculation into widgets.
+
+`canStartWave` becomes false while a draft is pending.
+
+### Why this feedback is part of the slice
+
+The experiment asks whether selected modules are noticeable. Emergency Salvage is naturally visible in gold, but Long Sight is hard to perceive without any current range readout. Orion's selected-tower UI currently shows level/specialization and action costs, not resolved combat stats.
+
+The slice therefore adds a compact selected-tower summary using `snapshot.selectedTowerStats`, showing at least:
+
+- Damage;
+- Fire interval;
+- Range;
+- type-relevant secondary value when present (`Slow` duration for Cryo or `Splash` radius for Rocket).
+
+This makes Long Sight and the universal damage/cadence trade-offs inspectable without adding a range-ring renderer.
+
+The acquired-module strip also shows both module title and effect text (compact two-line chip/card or tooltip/details presentation), so the player has a post-draft reminder of what changed.
 
 ## Runtime stat integration
 
 Create `lib/game/rules/run_module_rules.dart` with two responsibilities:
 
-1. determine whether a definition is eligible for the current unlocked tower set;
-2. apply acquired tower-stat effects to an already campaign/stage-resolved `TowerStats`.
+1. eligibility for the current unlocked tower set;
+2. applying definition-owned stat fields to an already campaign/stage-resolved `TowerStats`.
 
-Extend `TowerStats.copyWith` only with fields used by the vertical slice:
+Extend `TowerStats.copyWith` only with fields used here:
 
 ```dart
 double? range,
@@ -300,179 +303,164 @@ double? fireInterval,
 double? splashRadius,
 ```
 
-Do not generalize `copyWith` to every `TowerStats` field.
-
-Extend `TowerStatsResolver.resolve` with:
+`TowerStatsResolver.resolve` gains:
 
 ```dart
 Iterable<RunModuleId> runModules = const []
 ```
 
-and apply `RunModuleRules.applyTowerStats(...)` after `StageModifierRules.effectiveTowerStats(...)`.
+and applies `RunModuleRules` after stage modifiers.
 
-`TowerComponent` stores the current immutable run-module list alongside existing campaign/stage modifiers. Add `updateRunModules(...)` to replace the list and re-resolve `stats` from the current `PlacedTower`. `updateTower(...)` continues to re-resolve with the stored module list.
+`TowerComponent` stores the current immutable module list. `updateRunModules(...)` replaces it and re-resolves from the current `PlacedTower`; `updateTower(...)` continues to use the stored module list after upgrades/specializations.
 
-`OrionDefenseGame` passes current acquired IDs when creating a new tower component. After a successful module selection it calls `updateRunModules` for every existing tower component. This keeps old and newly placed towers consistent without mutating stats incrementally.
+`OrionDefenseGame` passes acquired IDs to newly created towers and refreshes every existing tower after successful selection.
 
 ## OrionDefenseGame pacing integration
 
-Add a small public bridge:
+Add:
 
 ```dart
 void selectRunModule(int offerId, RunModuleId moduleId)
 ```
 
-On successful session selection:
+On success:
 
-1. refresh all existing tower components;
+1. refresh existing towers;
 2. start a fresh auto-start countdown if auto-start is enabled;
-3. publish the updated snapshot.
+3. publish the snapshot.
 
-When `_finishWaveIfComplete()` opens a pending offer:
+When a draft opens:
 
-- set `_autoStartCountdownRemaining = null`;
+- `_autoStartCountdownRemaining = null`;
 - preserve `_autoStartEnabled`;
-- do not call `_startAutoStartCountdownIfNeeded()`.
+- do not start a replacement countdown.
 
-When the player selects a module, `_startAutoStartCountdownIfNeeded()` starts the normal full three-second countdown from scratch.
+Both pacing helpers explicitly guard pending offers:
 
-Also make `_tickAutoStartCountdown()` and `_startAutoStartCountdownIfNeeded()` respect `snapshot/session pending offer` through `GameSession.startWave()` and an explicit pending check. No hidden countdown time accrues during the intermission.
+- `_tickAutoStartCountdown(...)` clears/ignores countdown state when a module offer is pending;
+- `_startAutoStartCountdownIfNeeded()` requires no pending offer.
 
-`onTapDown` should return early while an offer is pending so the board selection highlight does not change beneath the modal intermission.
+This duplicates the session's authoritative `startWave()` guard intentionally at the pacing boundary so hidden countdown state cannot produce confusing feedback.
 
-Pause and speed values are preserved but need no special intermission controls; there is no active combat while the offer is pending.
+`onTapDown` returns early while an offer is pending so board selection cannot change beneath the modal intermission.
+
+Pause and speed values are preserved; there is no active combat during the draft.
 
 ## UI design
 
-Create `lib/game/ui/run_module_draft_panel.dart` rather than adding the complete feature UI to the already-large `orion_game_page.dart`.
+Create `lib/game/ui/run_module_draft_panel.dart` rather than adding the complete feature UI to `orion_game_page.dart`.
 
-The file contains two small widgets:
+The file contains:
 
-- `RunModuleDraftPanel` — blocking full-screen intermission for a pending offer;
-- `AcquiredRunModuleStrip` — compact read-only chip list.
+- `RunModuleDraftPanel` — full-screen blocking intermission;
+- `AcquiredRunModuleStrip` — compact read-only reminder including title + effect.
 
 ### Draft panel
 
-`OrionGamePage` inserts the panel in the stage `Stack` above gameplay controls and below the terminal end-state overlay:
+`OrionGamePage` inserts the panel in the existing stage `Stack` above gameplay controls and below terminal end-state UI.
+
+On a 360×640 surface it uses a scroll-safe vertical list of exactly three cards. Each card shows title, one-sentence effect, and affinity. Header copy is `Salvage Module N of 3`.
+
+One tap calls `game.selectRunModule(offer.offerId, id)`. The session remains the one-shot guard; the widget owns no gameplay state.
+
+### Acquired strip and selected tower summary
+
+The acquired strip sits below the HUD and is hidden when empty. Each acquired entry includes its title and effect reminder.
+
+When a tower is selected, `_TowerSummary` receives resolved `TowerStats` from the snapshot and displays the compact combat values described above. Existing upgrade/specialization costs may use the same resolved `TowerStats`; module fields do not alter costs.
+
+No UI code calculates module magnitudes or eligibility.
+
+## Test fixture strategy
+
+The draft schedule is multi-wave, while many existing tests use one-wave custom stages. Add one small shared test helper under `test/game/game_test_fixtures.dart`:
 
 ```dart
-if (snapshot.pendingRunModuleOffer != null)
-  Positioned.fill(
-    child: RunModuleDraftPanel(...),
-  ),
+StageDefinition stageWithWaveCount(int count)
 ```
 
-The panel uses an opaque-enough `Material` barrier so taps do not reach Flame. On 360×640 it uses a scroll-safe vertical column of exactly three `FilledButton`/card controls.
+It returns a valid custom stage with `count` empty waves and zero clear bonuses, suitable for deterministic session/orchestration tests.
 
-Each card shows:
+Session tests may add a file-local `completeWave(session)` helper. Flame tests drive the empty-wave fixture through the real `OrionDefenseGame.update` path so draft opening and auto-start behavior are tested at the actual orchestration boundary rather than by exposing private session internals.
 
-- module title;
-- one-sentence effect;
-- `Universal`, `Cryo`, or `Rocket` affinity.
-
-Header copy is `Salvage Module N of 3`.
-
-One tap calls `game.selectRunModule(offer.offerId, id)`. The session is the final one-shot guard; the widget does not keep independent gameplay state.
-
-### Acquired strip
-
-Show acquired modules below the HUD using compact chips/titles. Hide the strip when empty. It is `IgnorePointer`/read-only and should not cover the primary board area more than the existing HUD stack already does.
-
-## Restart and route exit
-
-`GameSession.restart()` clears:
-
-- acquired module IDs;
-- pending offer;
-- completed draft count.
-
-It preserves only the monotonic next offer ID.
-
-Returning to the map already discards the `OrionDefenseGame` instance, so run-only module state dies with that session. No campaign persistence change is required.
-
-App background/foreground with the process alive naturally preserves the offer because it is ordinary in-memory session state. No process-death resume is added.
+This is test support only, not a production abstraction.
 
 ## Testing strategy
 
-Follow existing test locations and style.
+### Catalog and picker
+
+- fixed six IDs and initial definition magnitudes;
+- effect text reflects definition-owned numbers;
+- random picker returns distinct candidates without mutating input;
+- insufficient candidate count throws.
 
 ### Pure rules
 
-- `test/game/run_module_rules_test.dart`
-  - eligibility for universal/Cryo/Rocket affinity;
-  - exact initial stat modifiers;
-  - composition of multiple acquired modules;
-  - non-matching towers remain unaffected.
-- `test/game/module_offer_picker_test.dart`
-  - returns requested distinct count from candidates;
-  - does not mutate caller list;
-  - fails clearly when fewer than three candidates exist.
-- `test/game/tower_stats_resolver_test.dart`
-  - proves order base → campaign → stage → run module;
-  - proves no-module output remains unchanged.
+- universal/Cryo/Rocket eligibility;
+- Heavy Caliber exact math;
+- Overclock Relay exact math, including interval direction;
+- Heavy Caliber + Overclock Relay composition (`damage × 1.20 × 0.92`, `fireInterval × 1.10 × 0.85`);
+- Long Sight;
+- Cryo-only and Rocket-only effects;
+- empty module list preserves prior resolver output;
+- campaign/stage values are resolved before run modules.
 
 ### Session
 
-Extend `test/game/game_session_test.dart` for:
+- drafts after waves 2/4/6 and nowhere else;
+- same stored offer across repeated snapshots;
+- acquired exclusion and distinct cards;
+- valid selection once;
+- stale/duplicate/non-offered selections no-op;
+- Emergency Salvage reward comes from its definition and applies once;
+- build actions and wave starts fail while pending;
+- `selectedTowerStats` reflects acquired modules;
+- restart clears temporary state but offer IDs remain monotonic.
 
-- drafts after waves 2, 4, and 6 only;
-- stable stored offer across repeated snapshots;
-- acquired exclusion and no duplicate cards;
-- stale/duplicate/non-offered selection rejection;
-- immediate Emergency Salvage gold applied exactly once;
-- placement, upgrade, specialization, sale, targeting, and wave start blocked while pending;
-- restart clears temporary module state and does not reuse offer IDs.
+### Flame orchestration
 
-### Game orchestration
-
-Extend `test/game/orion_defense_game_test.dart` for:
-
-- auto-start countdown clears when a draft opens;
-- successful selection begins a fresh full countdown;
-- existing tower components refresh after stat-module selection;
-- towers placed after selection receive the same run modifiers.
+- auto-start countdown is cleared when draft opens;
+- both countdown helpers remain inert while pending;
+- valid selection starts a fresh full countdown;
+- existing tower component stats refresh;
+- towers placed afterward inherit modules;
+- direct rejected action during a pending draft surfaces `Choose a Salvage Module first.`;
+- board taps do not change selection under the modal state.
 
 ### Widget
 
-Add `test/widget/run_module_draft_panel_test.dart` for:
+At 360×640:
 
-- 360×640 layout without overflow;
-- exactly three visible/selectable cards;
-- header draft number and affinity/effect copy;
-- acquired module strip appears after selection;
-- modal panel prevents ordinary controls from being the active interaction surface.
+- header and exactly three cards fit/scroll without overflow;
+- card title/effect/affinity render;
+- callback fires once for a tapped card;
+- acquired entries include effect reminders;
+- selected tower summary displays resolved damage/fire interval/range and a relevant secondary stat;
+- empty acquired strip stays hidden.
 
-No platform build matrix, thousand-seed sweep, or new integration-test infrastructure is required.
+### Human validation
 
-## Human validation
+Play Stage 1 and one later main-path stage at 1×. Record:
 
-Before implementation PR completion, play:
+1. draft comprehension;
+2. pacing impact;
+3. dead/mandatory choice observed;
+4. selected-module effect noticeability.
 
-1. Stage 1 at 1×;
-2. one later campaign stage at 1×.
-
-Record concise observations in the implementation PR:
-
-- whether each draft was understandable in a few seconds;
-- whether the three pauses improved mission rhythm or felt disruptive;
-- whether any module was obviously dead or mandatory;
-- whether the selected modules were noticeable during play;
-- any obvious tuning adjustment made to the six constants.
-
-The purpose is product validation, not formal balance evidence.
+If a balance value is changed after playtesting, edit the definition in `run_module.dart`, update the exact-value test, and rerun focused/full checks. No rules/copy hunting across multiple files.
 
 ## Acceptance criteria
 
-- [ ] A normal eight-wave mission produces one stable three-card offer after waves 2, 4, and 6.
-- [ ] Offers are stored in session state and are never regenerated by snapshot/UI lifecycle work.
-- [ ] Acquired modules never reappear; one offer contains no duplicate IDs.
-- [ ] Selection is one tap, applies exactly once, and stale/non-offered callbacks do nothing.
-- [ ] A pending offer authoritatively blocks all build mutations and wave starts while remaining in `GamePhase.build`.
-- [ ] Auto-start pauses for the intermission and restarts from the full countdown after selection.
-- [ ] Existing and newly placed towers resolve acquired module effects through base → campaign → stage → run-module ordering.
-- [ ] Emergency Salvage grants its one-time gold only when selected.
-- [ ] Restart and map exit clear all temporary module state.
-- [ ] Draft UI and acquired-module strip are snapshot-driven and fit 360×640.
-- [ ] No-module behavior is unchanged.
-- [ ] Stage 1 and one later stage receive a short human 1× product check before implementation completion.
-- [ ] `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, and full `flutter test` pass.
+- [ ] A normal mission presents exactly one stable three-card draft after waves 2, 4, and 6.
+- [ ] Pending drafts authoritatively block all build mutations and wave starts.
+- [ ] Stale/non-offered/duplicate selections do not mutate state.
+- [ ] Acquired modules are unique and excluded from later offers.
+- [ ] Existing and newly placed towers use base → campaign → stage → run-module resolution.
+- [ ] Module tuning magnitudes have one source of truth in the catalog definitions.
+- [ ] Emergency Salvage applies its definition-owned reward once.
+- [ ] Auto-start cannot tick or start behind an intermission and resumes with a fresh full countdown.
+- [ ] Player-facing draft cards and acquired reminders explain each selected effect.
+- [ ] Selected-tower UI displays resolved combat stats from `GameSnapshot`, making Long Sight and universal stat trade-offs inspectable.
+- [ ] Restart and stage exit discard run-only module state; no campaign save migration occurs.
+- [ ] Stage 1 and one later-stage human run are recorded before catalog/progression expansion.
+- [ ] Focused tests, formatting, analysis, and full `flutter test` pass during implementation.
