@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Ship six temporary Salvage Modules with one stable three-card draft after waves 2, 4, and 6, authoritative intermission gating, run-stat integration through the existing resolver, and a portrait-mobile snapshot-driven picker UI.
+**Goal:** Ship six temporary Salvage Modules with stable three-card drafts after waves 2, 4, and 6, authoritative intermission gating, player-visible resolved effects, and a portrait-mobile snapshot-driven picker UI.
 
-**Architecture:** `GameSession` owns run-only module state, offer generation boundaries, selection, economy effects, and build/wave gating. `TowerStatsResolver` appends one pure `RunModuleRules` step after the existing base → campaign → stage pipeline, while `OrionDefenseGame` only refreshes Flame components and pacing. Flutter renders immutable `GameSnapshot` module data through a focused draft-panel widget.
+**Architecture:** `GameSession` owns run-only module state, offer generation, selection, one-time economy effects, and build/wave gating. `TowerStatsResolver` appends one pure `RunModuleRules` step after the existing base → campaign → stage pipeline, while `OrionDefenseGame` refreshes Flame components and pacing. Flutter renders immutable module data and resolved selected-tower stats from `GameSnapshot`.
 
 **Tech Stack:** Dart 3.12+, Flutter 3.44+, Flame 1.37+, `flutter_test`; no new packages.
 
@@ -12,7 +12,8 @@
 
 - Keep `GamePhase` unchanged: a pending module offer is still `GamePhase.build`.
 - Exactly six initial modules: Heavy Caliber, Overclock Relay, Long Sight, Emergency Salvage, Cryo Reservoir, Rocket Fusing.
-- Initial tuning: Heavy Caliber `damage × 1.20`, `fireInterval × 1.10`; Overclock Relay `fireInterval × 0.85`, `damage × 0.92`; Long Sight `range × 1.15`; Emergency Salvage `+90` gold once; Cryo Reservoir `slowDuration + 0.60`; Rocket Fusing `splashRadius × 1.25`, `damage × 0.90`.
+- Definition-owned initial tuning: Heavy Caliber `damage × 1.20`, `fireInterval × 1.10`; Overclock Relay `fireInterval × 0.85`, `damage × 0.92`; Long Sight `range × 1.15`; Emergency Salvage `+90` gold once; Cryo Reservoir `slowDuration + 0.60`; Rocket Fusing `splashRadius × 1.25`, `damage × 0.90`.
+- Balance magnitudes live only in `RunModuleDefinition`; `RunModuleRules` and `GameSession` read them instead of repeating magic numbers.
 - Drafts open only after completed waves 2, 4, and 6.
 - Each offer contains exactly three distinct eligible, non-acquired module IDs and is generated once.
 - Unselected cards may reappear later; do not store complete offer history.
@@ -21,7 +22,8 @@
 - Apply tower effects in order: base → campaign → stage → run modules.
 - Keep all six effects on existing stat/economy seams; no generic event bus, effect-command graph, generated attacks, recursion, or cap framework.
 - Run-only module state is never written to `CampaignSave`.
-- UI remains snapshot-driven; widgets do not read mutable `GameSession` or Flame component collections.
+- UI remains snapshot-driven; widgets do not invoke module eligibility/rule logic or inspect mutable Flame collections.
+- Selected-tower combat stats are projected through `GameSnapshot` so Long Sight and damage/cadence trade-offs are inspectable without adding a range-ring subsystem.
 - Do not add Mission Report, blueprint progression, Codex module pages, audio, haptics, rarity, rerolls, decks, inventories, or mid-run resume.
 - Minimum mobile target is 360×640 logical pixels.
 - Required final checks: `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, full `flutter test`.
@@ -30,29 +32,31 @@
 
 ### Create
 
-- `lib/game/modules/run_module.dart` — run-module IDs, affinity, definitions, catalog, immutable offer value.
+- `lib/game/modules/run_module.dart` — IDs, affinity, single-source tuning, derived effect copy, catalog, immutable offer.
 - `lib/game/rules/module_offer_picker.dart` — injectable three-card picker and production random implementation.
-- `lib/game/rules/run_module_rules.dart` — eligibility and pure tower-stat module application.
-- `lib/game/ui/run_module_draft_panel.dart` — blocking draft panel plus acquired-module strip.
+- `lib/game/rules/run_module_rules.dart` — eligibility and pure tower-stat application from definition values.
+- `lib/game/ui/run_module_draft_panel.dart` — blocking draft panel plus acquired-module reminder strip.
+- `test/game/game_test_fixtures.dart` — small multi-wave empty-stage fixture shared by session/Flame tests.
 - `test/game/module_offer_picker_test.dart` — picker contract.
-- `test/game/run_module_rules_test.dart` — eligibility and exact effect math.
+- `test/game/run_module_rules_test.dart` — eligibility, exact tuning application, and composition.
 - `test/widget/run_module_draft_panel_test.dart` — 360×640 draft/strip behavior.
 
 ### Modify
 
-- `lib/game/models/game_models.dart` — extend `TowerStats.copyWith`; add module data to `GameSnapshot`; make `canStartWave` pending-offer aware.
+- `lib/game/models/game_models.dart` — extend `TowerStats.copyWith`; add module and resolved selected-tower data to `GameSnapshot`; make `canStartWave` pending-offer aware.
 - `lib/game/rules/tower_stats_resolver.dart` — append `RunModuleRules` after stage resolution.
-- `lib/game/rules/game_session.dart` — own offer/acquired state, schedule, selection, economy effect, and authoritative gating.
+- `lib/game/rules/game_session.dart` — own offer/acquired state, schedule, selection, economy effect, snapshot-resolved selected tower, gating, restart.
 - `lib/game/components/tower_component.dart` — resolve and refresh with current run modules.
-- `lib/game/orion_defense_game.dart` — bridge selection, refresh towers, suspend/restart auto-start countdown, block board taps during offer.
-- `lib/game/ui/orion_game_page.dart` — render acquired strip and blocking draft panel from snapshot.
+- `lib/game/orion_defense_game.dart` — bridge selection, refresh towers, suspend/restart auto-start, block board taps, publish clear draft-block feedback.
+- `lib/game/ui/orion_game_page.dart` — render acquired reminders, blocking draft panel, and resolved tower summary from snapshot.
 - `test/game/tower_stats_resolver_test.dart` — pipeline-order and no-module regression coverage.
-- `test/game/game_session_test.dart` — draft schedule, offer stability, selection, gating, restart.
-- `test/game/orion_defense_game_test.dart` — component refresh and pacing integration.
+- `test/game/game_session_test.dart` — draft schedule, offer stability, selection, gating, resolved summary, restart.
+- `test/game/orion_defense_game_test.dart` — component refresh, auto-start guards, direct denial feedback.
+- Existing selected-tower widget tests under `test/widget/` as required by compiler failures — update their `GameSnapshot` fixtures with `selectedTowerStats` rather than adding UI-side rule calculation.
 
 ---
 
-### Task 1: Add the six-module catalog and injectable offer picker
+### Task 1: Add the single-source module catalog and injectable offer picker
 
 **Files:**
 - Create: `lib/game/modules/run_module.dart`
@@ -62,7 +66,7 @@
 **Interfaces:**
 - Produces `RunModuleId`, `RunModuleAffinity`, `RunModuleDefinition`, `RunModuleOffer`, `runModuleCatalog`, `runModuleDefinition(RunModuleId)`.
 - Produces `ModuleOfferPicker.pick(List<RunModuleId>, {required int count})` and `RandomModuleOfferPicker`.
-- `run_module.dart` must not import `game_models.dart`; later rules map affinity to `TowerType`.
+- `run_module.dart` may import `../util/format.dart` but must not import `game_models.dart`.
 
 - [ ] **Step 1: Write picker tests first**
 
@@ -77,24 +81,16 @@ import 'package:orion/game/rules/module_offer_picker.dart';
 
 void main() {
   group('RandomModuleOfferPicker', () {
-    test('returns the requested number of distinct candidates', () {
+    test('returns requested distinct candidates without mutating input', () {
       final picker = RandomModuleOfferPicker(math.Random(7));
       final candidates = RunModuleId.values.toList();
+      final before = List<RunModuleId>.of(candidates);
 
       final result = picker.pick(candidates, count: 3);
 
       expect(result, hasLength(3));
       expect(result.toSet(), hasLength(3));
       expect(result.every(candidates.contains), isTrue);
-    });
-
-    test('does not mutate the caller candidate list', () {
-      final picker = RandomModuleOfferPicker(math.Random(11));
-      final candidates = RunModuleId.values.toList();
-      final before = List<RunModuleId>.of(candidates);
-
-      picker.pick(candidates, count: 3);
-
       expect(candidates, before);
     });
 
@@ -113,19 +109,21 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run the new test and verify red**
+- [ ] **Step 2: Run the picker test and verify red**
 
 ```bash
 flutter test test/game/module_offer_picker_test.dart
 ```
 
-Expected: compile failure because the module domain and picker do not exist yet.
+Expected: compile failure because the module domain and picker do not exist.
 
-- [ ] **Step 3: Implement the module domain**
+- [ ] **Step 3: Implement definition-owned tuning and derived copy**
 
-Create `lib/game/modules/run_module.dart` with these public shapes:
+Create `lib/game/modules/run_module.dart`:
 
 ```dart
+import '../util/format.dart';
+
 enum RunModuleId {
   heavyCaliber,
   overclockRelay,
@@ -148,14 +146,42 @@ final class RunModuleDefinition {
   const RunModuleDefinition({
     required this.id,
     required this.title,
-    required this.effectText,
     required this.affinity,
+    this.damageMultiplier = 1,
+    this.fireIntervalMultiplier = 1,
+    this.rangeMultiplier = 1,
+    this.splashRadiusMultiplier = 1,
+    this.slowDurationBonus = 0,
+    this.immediateGold = 0,
   });
 
   final RunModuleId id;
   final String title;
-  final String effectText;
   final RunModuleAffinity affinity;
+  final double damageMultiplier;
+  final double fireIntervalMultiplier;
+  final double rangeMultiplier;
+  final double splashRadiusMultiplier;
+  final double slowDurationBonus;
+  final int immediateGold;
+
+  String get effectText => switch (id) {
+    RunModuleId.heavyCaliber =>
+      'All towers deal ${percent(damageMultiplier - 1)} more damage; '
+      'attacks take ${percent(fireIntervalMultiplier - 1)} longer.',
+    RunModuleId.overclockRelay =>
+      'All towers attack ${percent(1 - fireIntervalMultiplier)} sooner; '
+      'damage drops ${percent(1 - damageMultiplier)}.',
+    RunModuleId.longSight =>
+      'All towers gain ${percent(rangeMultiplier - 1)} range.',
+    RunModuleId.emergencySalvage =>
+      'Gain $immediateGold gold immediately.',
+    RunModuleId.cryoReservoir =>
+      'Cryo slows last ${number(slowDurationBonus)} seconds longer.',
+    RunModuleId.rocketFusing =>
+      'Rocket splash grows ${percent(splashRadiusMultiplier - 1)}; '
+      'direct damage drops ${percent(1 - damageMultiplier)}.',
+  };
 }
 
 final class RunModuleOffer {
@@ -169,52 +195,67 @@ final class RunModuleOffer {
   final int draftNumber;
   final List<RunModuleId> moduleIds;
 }
-```
 
-Define `const runModuleCatalog` in exactly this order and expose `runModuleDefinition(id)` using `firstWhere`:
-
-```dart
 const runModuleCatalog = <RunModuleDefinition>[
   RunModuleDefinition(
     id: RunModuleId.heavyCaliber,
     title: 'Heavy Caliber',
-    effectText: 'All towers deal 20% more damage but fire 10% slower.',
     affinity: RunModuleAffinity.universal,
+    damageMultiplier: 1.20,
+    fireIntervalMultiplier: 1.10,
   ),
   RunModuleDefinition(
     id: RunModuleId.overclockRelay,
     title: 'Overclock Relay',
-    effectText: 'All towers fire 15% faster but deal 8% less damage.',
     affinity: RunModuleAffinity.universal,
+    fireIntervalMultiplier: 0.85,
+    damageMultiplier: 0.92,
   ),
   RunModuleDefinition(
     id: RunModuleId.longSight,
     title: 'Long Sight',
-    effectText: 'All towers gain 15% range.',
     affinity: RunModuleAffinity.universal,
+    rangeMultiplier: 1.15,
   ),
   RunModuleDefinition(
     id: RunModuleId.emergencySalvage,
     title: 'Emergency Salvage',
-    effectText: 'Gain 90 gold immediately.',
     affinity: RunModuleAffinity.universal,
+    immediateGold: 90,
   ),
   RunModuleDefinition(
     id: RunModuleId.cryoReservoir,
     title: 'Cryo Reservoir',
-    effectText: 'Cryo slows last 0.6 seconds longer.',
     affinity: RunModuleAffinity.cryo,
+    slowDurationBonus: 0.60,
   ),
   RunModuleDefinition(
     id: RunModuleId.rocketFusing,
     title: 'Rocket Fusing',
-    effectText: 'Rocket splash grows 25%, but direct damage drops 10%.',
     affinity: RunModuleAffinity.rocket,
+    splashRadiusMultiplier: 1.25,
+    damageMultiplier: 0.90,
   ),
 ];
 
 RunModuleDefinition runModuleDefinition(RunModuleId id) =>
     runModuleCatalog.firstWhere((definition) => definition.id == id);
+```
+
+Add a small catalog test group to `module_offer_picker_test.dart` asserting the six IDs, the current Overclock/Salvage values, and derived copy:
+
+```dart
+test('catalog owns tuning used by player copy', () {
+  final overclock = runModuleDefinition(RunModuleId.overclockRelay);
+  final salvage = runModuleDefinition(RunModuleId.emergencySalvage);
+
+  expect(overclock.fireIntervalMultiplier, 0.85);
+  expect(overclock.damageMultiplier, 0.92);
+  expect(overclock.effectText, contains('15%'));
+  expect(overclock.effectText, contains('8%'));
+  expect(salvage.immediateGold, 90);
+  expect(salvage.effectText, contains('90 gold'));
+});
 ```
 
 - [ ] **Step 4: Implement the picker without mutating input**
@@ -248,7 +289,7 @@ final class RandomModuleOfferPicker implements ModuleOfferPicker {
 }
 ```
 
-- [ ] **Step 5: Run picker tests green**
+- [ ] **Step 5: Run Task 1 green**
 
 ```bash
 flutter test test/game/module_offer_picker_test.dart
@@ -265,7 +306,7 @@ git commit -m "feat: add salvage module catalog and picker (HPA-527)"
 
 ---
 
-### Task 2: Add pure eligibility and tower-stat module rules
+### Task 2: Apply definition-owned module tuning through the existing resolver
 
 **Files:**
 - Create: `lib/game/rules/run_module_rules.dart`
@@ -275,11 +316,11 @@ git commit -m "feat: add salvage module catalog and picker (HPA-527)"
 - Modify: `test/game/tower_stats_resolver_test.dart`
 
 **Interfaces:**
-- Consumes module-domain types from Task 1.
+- Consumes `RunModuleDefinition` tuning from Task 1.
 - Produces `RunModuleRules.isEligible(...)` and `RunModuleRules.applyTowerStats(...)`.
 - Extends `TowerStatsResolver.resolve(..., Iterable<RunModuleId> runModules = const [])`.
 
-- [ ] **Step 1: Write exact rule tests**
+- [ ] **Step 1: Write exact rule tests, including Overclock and composition**
 
 Create `test/game/run_module_rules_test.dart`:
 
@@ -291,7 +332,7 @@ import 'package:orion/game/rules/run_module_rules.dart';
 
 void main() {
   group('RunModuleRules.isEligible', () {
-    test('universal modules are always eligible', () {
+    test('universal is always eligible and affinity requires unlock', () {
       expect(
         RunModuleRules.isEligible(
           runModuleDefinition(RunModuleId.longSight),
@@ -299,9 +340,6 @@ void main() {
         ),
         isTrue,
       );
-    });
-
-    test('tower affinity requires that family to be unlocked', () {
       final cryo = runModuleDefinition(RunModuleId.cryoReservoir);
       expect(
         RunModuleRules.isEligible(
@@ -321,47 +359,87 @@ void main() {
   });
 
   group('RunModuleRules.applyTowerStats', () {
-    test('Heavy Caliber and Long Sight compose from resolved values', () {
+    test('Overclock Relay applies exact interval and damage multipliers', () {
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      final definition = runModuleDefinition(RunModuleId.overclockRelay);
+
       final resolved = RunModuleRules.applyTowerStats(
         base,
-        const [RunModuleId.heavyCaliber, RunModuleId.longSight],
+        const [RunModuleId.overclockRelay],
       );
 
-      expect(resolved.damage, closeTo(base.damage * 1.20, 1e-9));
-      expect(resolved.fireInterval, closeTo(base.fireInterval * 1.10, 1e-9));
-      expect(resolved.range, closeTo(base.range * 1.15, 1e-9));
+      expect(
+        resolved.fireInterval,
+        closeTo(base.fireInterval * definition.fireIntervalMultiplier, 1e-9),
+      );
+      expect(
+        resolved.damage,
+        closeTo(base.damage * definition.damageMultiplier, 1e-9),
+      );
     });
 
-    test('Cryo Reservoir only changes Cryo', () {
-      final cryo = GameBalance.towerStats(TowerType.cryo, level: 1);
-      final laser = GameBalance.towerStats(TowerType.laser, level: 1);
+    test('Heavy Caliber and Overclock Relay compose multiplicatively', () {
+      final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+      final overclock = runModuleDefinition(RunModuleId.overclockRelay);
 
+      final resolved = RunModuleRules.applyTowerStats(
+        base,
+        const [RunModuleId.heavyCaliber, RunModuleId.overclockRelay],
+      );
+
+      expect(
+        resolved.damage,
+        closeTo(
+          base.damage * heavy.damageMultiplier * overclock.damageMultiplier,
+          1e-9,
+        ),
+      );
+      expect(
+        resolved.fireInterval,
+        closeTo(
+          base.fireInterval *
+              heavy.fireIntervalMultiplier *
+              overclock.fireIntervalMultiplier,
+          1e-9,
+        ),
+      );
+    });
+
+    test('Long Sight, Cryo Reservoir, and Rocket Fusing use definitions', () {
+      final laser = GameBalance.towerStats(TowerType.laser, level: 1);
+      final cryo = GameBalance.towerStats(TowerType.cryo, level: 1);
+      final rocket = GameBalance.towerStats(TowerType.rocket, level: 1);
+      final sight = runModuleDefinition(RunModuleId.longSight);
+      final reservoir = runModuleDefinition(RunModuleId.cryoReservoir);
+      final fusing = runModuleDefinition(RunModuleId.rocketFusing);
+
+      expect(
+        RunModuleRules.applyTowerStats(
+          laser,
+          const [RunModuleId.longSight],
+        ).range,
+        closeTo(laser.range * sight.rangeMultiplier, 1e-9),
+      );
       expect(
         RunModuleRules.applyTowerStats(
           cryo,
           const [RunModuleId.cryoReservoir],
         ).slowDuration,
-        closeTo(cryo.slowDuration + 0.60, 1e-9),
+        closeTo(cryo.slowDuration + reservoir.slowDurationBonus, 1e-9),
       );
-      expect(
-        RunModuleRules.applyTowerStats(
-          laser,
-          const [RunModuleId.cryoReservoir],
-        ).slowDuration,
-        laser.slowDuration,
-      );
-    });
-
-    test('Rocket Fusing only changes Rocket', () {
-      final base = GameBalance.towerStats(TowerType.rocket, level: 1);
-      final resolved = RunModuleRules.applyTowerStats(
-        base,
+      final rocketResolved = RunModuleRules.applyTowerStats(
+        rocket,
         const [RunModuleId.rocketFusing],
       );
-
-      expect(resolved.splashRadius, closeTo(base.splashRadius * 1.25, 1e-9));
-      expect(resolved.damage, closeTo(base.damage * 0.90, 1e-9));
+      expect(
+        rocketResolved.splashRadius,
+        closeTo(rocket.splashRadius * fusing.splashRadiusMultiplier, 1e-9),
+      );
+      expect(
+        rocketResolved.damage,
+        closeTo(rocket.damage * fusing.damageMultiplier, 1e-9),
+      );
     });
   });
 }
@@ -369,7 +447,7 @@ void main() {
 
 - [ ] **Step 2: Add resolver-order regression tests**
 
-Import `run_module.dart` in `test/game/tower_stats_resolver_test.dart`, then add:
+In `test/game/tower_stats_resolver_test.dart`, add imports and:
 
 ```dart
 test('applies run modules after campaign modifiers', () {
@@ -380,6 +458,7 @@ test('applies run modules after campaign modifiers', () {
   );
   const campaign = CampaignModifiers(laserDamageFraction: 0.10);
   final base = GameBalance.towerStats(TowerType.laser, level: 1);
+  final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
 
   final resolved = TowerStatsResolver.resolve(
     placed,
@@ -387,16 +466,18 @@ test('applies run modules after campaign modifiers', () {
     runModules: const [RunModuleId.heavyCaliber],
   );
 
-  expect(resolved.damage, closeTo(base.damage * 1.10 * 1.20, 1e-9));
+  expect(
+    resolved.damage,
+    closeTo(base.damage * 1.10 * heavy.damageMultiplier, 1e-9),
+  );
 });
 
-test('empty run-module list preserves current resolver output', () {
+test('empty run modules preserve current resolver output', () {
   const placed = PlacedTower(
     id: 1,
     type: TowerType.gravityWell,
     position: GridPosition(0, 0),
   );
-
   final current = TowerStatsResolver.resolve(
     placed,
     stageModifiers: const [StageModifier.amplifiedGravityWells],
@@ -414,17 +495,17 @@ test('empty run-module list preserves current resolver output', () {
 });
 ```
 
-- [ ] **Step 3: Run focused tests and verify red**
+- [ ] **Step 3: Run rule/resolver tests red**
 
 ```bash
 flutter test test/game/run_module_rules_test.dart test/game/tower_stats_resolver_test.dart
 ```
 
-Expected: compile failures for missing rules and new resolver/copy fields.
+Expected: compile failure for missing rules and new resolver/copy fields.
 
 - [ ] **Step 4: Extend `TowerStats.copyWith` narrowly**
 
-In `lib/game/models/game_models.dart`, add only these nullable inputs to the existing method:
+Add only:
 
 ```dart
 double? range,
@@ -432,66 +513,66 @@ double? fireInterval,
 double? splashRadius,
 ```
 
-Wire them into the returned `TowerStats`:
+and wire them to the returned `TowerStats` with `?? this.<field>`.
+
+- [ ] **Step 5: Implement data-driven `RunModuleRules`**
+
+Create `lib/game/rules/run_module_rules.dart`:
 
 ```dart
-range: range ?? this.range,
-fireInterval: fireInterval ?? this.fireInterval,
-splashRadius: splashRadius ?? this.splashRadius,
-```
+import '../models/game_models.dart';
+import '../modules/run_module.dart';
 
-Keep every other existing copy field unchanged.
+abstract final class RunModuleRules {
+  static bool isEligible(
+    RunModuleDefinition definition, {
+    required Iterable<TowerType> unlockedTowerTypes,
+  }) {
+    final unlocked = unlockedTowerTypes.toSet();
+    return switch (definition.affinity) {
+      RunModuleAffinity.universal => true,
+      RunModuleAffinity.cryo => unlocked.contains(TowerType.cryo),
+      RunModuleAffinity.rocket => unlocked.contains(TowerType.rocket),
+    };
+  }
 
-- [ ] **Step 5: Implement `RunModuleRules`**
-
-Create `lib/game/rules/run_module_rules.dart`. `isEligible` maps affinity to currently unlocked tower types. `applyTowerStats` loops over `runModuleCatalog` order, skips unacquired definitions, and uses these transformations:
-
-```dart
-switch (definition.id) {
-  case RunModuleId.heavyCaliber:
-    stats = stats.copyWith(
-      damage: stats.damage * 1.20,
-      fireInterval: stats.fireInterval * 1.10,
-    );
-  case RunModuleId.overclockRelay:
-    stats = stats.copyWith(
-      fireInterval: stats.fireInterval * 0.85,
-      damage: stats.damage * 0.92,
-    );
-  case RunModuleId.longSight:
-    stats = stats.copyWith(range: stats.range * 1.15);
-  case RunModuleId.cryoReservoir:
-    if (stats.type == TowerType.cryo) {
-      stats = stats.copyWith(slowDuration: stats.slowDuration + 0.60);
-    }
-  case RunModuleId.rocketFusing:
-    if (stats.type == TowerType.rocket) {
+  static TowerStats applyTowerStats(
+    TowerStats resolvedStats,
+    Iterable<RunModuleId> acquiredModules,
+  ) {
+    final acquired = acquiredModules.toSet();
+    var stats = resolvedStats;
+    for (final definition in runModuleCatalog) {
+      if (!acquired.contains(definition.id) ||
+          !_appliesToTower(definition.affinity, stats.type)) {
+        continue;
+      }
       stats = stats.copyWith(
-        splashRadius: stats.splashRadius * 1.25,
-        damage: stats.damage * 0.90,
+        damage: stats.damage * definition.damageMultiplier,
+        fireInterval:
+            stats.fireInterval * definition.fireIntervalMultiplier,
+        range: stats.range * definition.rangeMultiplier,
+        splashRadius:
+            stats.splashRadius * definition.splashRadiusMultiplier,
+        slowDuration: stats.slowDuration + definition.slowDurationBonus,
       );
     }
-  case RunModuleId.emergencySalvage:
-    break;
+    return stats;
+  }
+
+  static bool _appliesToTower(RunModuleAffinity affinity, TowerType type) {
+    return switch (affinity) {
+      RunModuleAffinity.universal => true,
+      RunModuleAffinity.cryo => type == TowerType.cryo,
+      RunModuleAffinity.rocket => type == TowerType.rocket,
+    };
+  }
 }
 ```
 
-Use a `Set<RunModuleId>` locally to avoid applying duplicate IDs if a caller ever passes them twice.
-
 - [ ] **Step 6: Append run modules to `TowerStatsResolver`**
 
-Import `run_module.dart` and `run_module_rules.dart`. Extend `resolve`:
-
-```dart
-static TowerStats resolve(
-  PlacedTower tower, {
-  CampaignModifiers campaignModifiers = CampaignModifiers.empty,
-  Iterable<StageModifier> stageModifiers = const [],
-  Iterable<RunModuleId> runModules = const [],
-})
-```
-
-Replace the direct stage-rule return with:
+Extend `resolve` with `Iterable<RunModuleId> runModules = const []`, retain the existing base/campaign/stage code, then:
 
 ```dart
 final stageAdjusted = StageModifierRules.effectiveTowerStats(
@@ -501,40 +582,61 @@ final stageAdjusted = StageModifierRules.effectiveTowerStats(
 return RunModuleRules.applyTowerStats(stageAdjusted, runModules);
 ```
 
-Update the resolver comment to state `base → campaign → stage → run modules`.
+Update its comment to `base → campaign → stage → run modules`.
 
-- [ ] **Step 7: Run rule/resolver tests green**
+- [ ] **Step 7: Run Task 2 green and commit**
 
 ```bash
 flutter test test/game/run_module_rules_test.dart test/game/tower_stats_resolver_test.dart
-```
-
-Expected: all pass.
-
-- [ ] **Step 8: Commit Task 2**
-
-```bash
 git add lib/game/models/game_models.dart lib/game/rules/run_module_rules.dart lib/game/rules/tower_stats_resolver.dart test/game/run_module_rules_test.dart test/game/tower_stats_resolver_test.dart
 git commit -m "feat: apply salvage modules to tower stats (HPA-527)"
 ```
 
 ---
 
-### Task 3: Make `GameSession` own draft lifecycle, selection, economy, and gating
+### Task 3: Add multi-wave fixtures and make `GameSession` own the draft lifecycle
 
 **Files:**
+- Create: `test/game/game_test_fixtures.dart`
 - Modify: `lib/game/models/game_models.dart`
 - Modify: `lib/game/rules/game_session.dart`
 - Modify: `test/game/game_session_test.dart`
 
 **Interfaces:**
-- Consumes Task 1 picker/domain and Task 2 eligibility rules.
-- Produces `GameSession.pendingRunModuleOffer`, `GameSession.acquiredRunModules`, and `GameSession.selectRunModule(...)`.
-- `GameSnapshot` gains `pendingRunModuleOffer` and `acquiredRunModules`.
+- Produces `stageWithWaveCount(int count)` for session/Flame tests.
+- Produces `GameSession.pendingRunModuleOffer`, `GameSession.acquiredRunModules`, `GameSession.selectRunModule(...)`.
+- `GameSnapshot` gains `pendingRunModuleOffer`, `acquiredRunModules`, and `selectedTowerStats`.
 
-- [ ] **Step 1: Add a fixed picker test double**
+- [ ] **Step 1: Add the shared empty-wave stage fixture**
 
-In `test/game/game_session_test.dart`, import the module and picker files and add:
+Create `test/game/game_test_fixtures.dart`:
+
+```dart
+import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/models/game_models.dart';
+
+StageDefinition stageWithWaveCount(int count) {
+  if (count <= 0) throw ArgumentError.value(count, 'count');
+  return StageDefinition(
+    id: 'test-$count-waves',
+    name: 'Test $count Waves',
+    mapLabel: 'Test',
+    description: 'Deterministic empty-wave test stage',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: List<WaveDefinition>.generate(
+      count,
+      (_) => const WaveDefinition(groups: [], clearBonus: 0),
+      growable: false,
+    ),
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+```
+
+- [ ] **Step 2: Add a fixed picker and explicit wave helper in session tests**
+
+In `test/game/game_session_test.dart`:
 
 ```dart
 final class _FixedModuleOfferPicker implements ModuleOfferPicker {
@@ -551,42 +653,33 @@ final class _FixedModuleOfferPicker implements ModuleOfferPicker {
     return List.unmodifiable(requested);
   }
 }
+
+void completeWave(GameSession session) {
+  expect(session.startWave(), isTrue);
+  session.finishActiveWave();
+}
 ```
 
-- [ ] **Step 2: Write draft schedule and snapshot-stability tests**
+Use `stageWithWaveCount(8)` for every schedule/restart test instead of inventing ad hoc stages.
 
-Use `GameSession.initial(offerPicker: picker)`, clear waves via `startWave()` / `finishActiveWave()`, and assert:
+- [ ] **Step 3: Write schedule, stability, selection, and gating tests**
 
-```dart
-expect(session.pendingRunModuleOffer, isNull);
-
-expect(session.startWave(), isTrue);
-session.finishActiveWave();
-expect(session.pendingRunModuleOffer, isNull);
-
-expect(session.startWave(), isTrue);
-session.finishActiveWave();
-final firstOffer = session.pendingRunModuleOffer!;
-expect(firstOffer.draftNumber, 1);
-expect(firstOffer.moduleIds, const [
-  RunModuleId.heavyCaliber,
-  RunModuleId.longSight,
-  RunModuleId.emergencySalvage,
-]);
-expect(session.snapshot().pendingRunModuleOffer, same(firstOffer));
-expect(session.snapshot().pendingRunModuleOffer, same(firstOffer));
-```
-
-After selecting one card, continue through waves 4 and 6 and verify drafts 2 and 3. Verify no offer after waves 1, 3, 5, 7, or terminal wave 8.
-
-- [ ] **Step 3: Write selection and one-time economy tests**
-
-For a fixed offer containing Emergency Salvage:
+Cover waves 1–8 using the helper. After wave 2:
 
 ```dart
 final offer = session.pendingRunModuleOffer!;
-final beforeGold = session.gold;
+expect(offer.draftNumber, 1);
+expect(session.snapshot().pendingRunModuleOffer, same(offer));
+expect(session.snapshot().pendingRunModuleOffer, same(offer));
+```
 
+Select one offered ID, complete waves 3–4, repeat for draft 2, then waves 5–6 for draft 3. Assert no draft after 1/3/5/7/8.
+
+For Emergency Salvage, read the expected reward from the definition:
+
+```dart
+final reward = runModuleDefinition(RunModuleId.emergencySalvage).immediateGold;
+final beforeGold = session.gold;
 expect(
   session.selectRunModule(
     offerId: offer.offerId,
@@ -594,108 +687,67 @@ expect(
   ),
   isTrue,
 );
-expect(session.gold, beforeGold + 90);
-expect(session.acquiredRunModules, contains(RunModuleId.emergencySalvage));
-expect(session.pendingRunModuleOffer, isNull);
-
-expect(
-  session.selectRunModule(
-    offerId: offer.offerId,
-    moduleId: RunModuleId.emergencySalvage,
-  ),
-  isFalse,
-);
-expect(session.gold, beforeGold + 90);
+expect(session.gold, beforeGold + reward);
 ```
 
-Add separate assertions for a wrong `offerId` and a module not present in the offer; both return `false` and leave gold/acquired/pending state unchanged.
+Repeat the same selection and verify `false` with no second reward. Add wrong-offer and non-offered no-op cases.
 
-- [ ] **Step 4: Write acquired-exclusion and no-duplicate offer tests**
+While a draft is pending, assert placement, upgrade, specialization, sale, retarget, and `startWave` are all rejected. After selection they recover.
 
-After selecting a module from draft 1, advance to draft 2 and assert:
+- [ ] **Step 4: Write resolved selected-tower projection test**
+
+Place a Laser, reach draft 1 with a fixed Long Sight offer, select it, then:
 
 ```dart
-expect(session.pendingRunModuleOffer!.moduleIds, isNot(contains(selectedId)));
+final tower = session.towers.single;
+final snapshot = session.snapshot(selectedTower: tower);
+final base = GameBalance.towerStats(TowerType.laser, level: 1);
+final sight = runModuleDefinition(RunModuleId.longSight);
+
 expect(
-  session.pendingRunModuleOffer!.moduleIds.toSet(),
-  hasLength(session.pendingRunModuleOffer!.moduleIds.length),
+  snapshot.selectedTowerStats!.range,
+  closeTo(base.range * sight.rangeMultiplier, 1e-9),
 );
 ```
 
-The fixed picker must only request candidates supplied by the session, proving acquired IDs were filtered before selection.
+This proves the UI can display resolved module effects without invoking rules itself.
 
-- [ ] **Step 5: Write authoritative gating tests**
+- [ ] **Step 5: Write restart/monotonic offer-ID test**
 
-Reach a pending draft with a placed tower and enough gold. While pending, assert:
+Capture a draft offer ID, call `restart()`, verify acquired/pending/draft-count state clears, then reopen draft 1 and assert the new offer ID is greater than the old one.
 
-```dart
-expect(
-  session.validatePlacement(const GridPosition(0, 0), TowerType.laser).failure,
-  PlacementFailure.invalidPhase,
-);
-expect(session.upgradeTower(tower.id), isFalse);
-expect(
-  session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
-  isFalse,
-);
-expect(session.sellTower(tower.id), isNull);
-expect(
-  session.setTargetingMode(tower.id, TowerTargetingMode.strongest),
-  isFalse,
-);
-expect(session.startWave(), isFalse);
-```
-
-After a valid module selection, verify `startWave()` can succeed again and ordinary build validations return to their previous behavior.
-
-- [ ] **Step 6: Write restart and monotonic-offer-ID regression**
-
-Capture the first offer ID, restart, clear waves 1 and 2 again with enough fixed-picker entries, then assert:
-
-```dart
-final oldOfferId = session.pendingRunModuleOffer!.offerId;
-session.restart();
-expect(session.acquiredRunModules, isEmpty);
-expect(session.pendingRunModuleOffer, isNull);
-
-// Clear waves 1 and 2 again.
-expect(session.pendingRunModuleOffer!.offerId, greaterThan(oldOfferId));
-```
-
-- [ ] **Step 7: Run session tests and verify red**
+- [ ] **Step 6: Run session tests red**
 
 ```bash
 flutter test test/game/game_session_test.dart
 ```
 
-Expected: compile failures until the new session/snapshot APIs exist.
+Expected: compile/assertion failures until the new APIs exist.
 
-- [ ] **Step 8: Extend `GameSnapshot`**
+- [ ] **Step 7: Extend `GameSnapshot`**
 
-Import `../modules/run_module.dart` from `game_models.dart`. Add constructor inputs:
+Import the module domain in `game_models.dart`. Add optional constructor/fields:
 
 ```dart
 this.pendingRunModuleOffer,
 List<RunModuleId> acquiredRunModules = const [],
+this.selectedTowerStats,
 ```
 
-Store acquired IDs with `List.unmodifiable`, add fields:
+Store acquired IDs with `List.unmodifiable` and add:
 
 ```dart
 final RunModuleOffer? pendingRunModuleOffer;
 final List<RunModuleId> acquiredRunModules;
-```
+final TowerStats? selectedTowerStats;
 
-and change:
-
-```dart
 bool get canStartWave =>
     phase == GamePhase.build && pendingRunModuleOffer == null;
 ```
 
-- [ ] **Step 9: Inject the picker and add session-owned module state**
+- [ ] **Step 8: Inject picker and add session-owned state**
 
-Add `ModuleOfferPicker? offerPicker` to `GameSession.initial`, default it to `RandomModuleOfferPicker()`, and store:
+Add `ModuleOfferPicker? offerPicker` to `GameSession.initial`, default to `RandomModuleOfferPicker()`, and store:
 
 ```dart
 final ModuleOfferPicker _offerPicker;
@@ -703,26 +755,22 @@ final List<RunModuleId> _acquiredRunModules = [];
 RunModuleOffer? _pendingRunModuleOffer;
 int _completedModuleDrafts = 0;
 int _nextModuleOfferId = 1;
-
-List<RunModuleId> get acquiredRunModules =>
-    List.unmodifiable(_acquiredRunModules);
-RunModuleOffer? get pendingRunModuleOffer => _pendingRunModuleOffer;
 ```
 
-- [ ] **Step 10: Centralize build mutation gating**
+Expose immutable acquired IDs and the pending offer.
 
-Add:
+- [ ] **Step 9: Centralize authoritative build gating**
 
 ```dart
 bool get _canMutateBuild =>
     _phase == GamePhase.build && _pendingRunModuleOffer == null;
 ```
 
-Use `_canMutateBuild` for placement validation, upgrade, specialization, sale, targeting-mode changes, and `startWave()`. Preserve every existing validation after the phase/intermission gate. Placement continues to report `PlacementFailure.invalidPhase` rather than adding a module-specific failure enum.
+Use it for placement validation, upgrade, specialization, sale, targeting changes, and `startWave()`. Preserve every existing non-phase validation.
 
-- [ ] **Step 11: Generate offers only from `finishActiveWave()`**
+- [ ] **Step 10: Open drafts only from `finishActiveWave()`**
 
-After `_waveIndex` increments, handle terminal victory first. Otherwise set `_phase = GamePhase.build` and call:
+After incrementing `_waveIndex`, process victory first, then build phase, then:
 
 ```dart
 void _openModuleDraftIfDue() {
@@ -740,18 +788,16 @@ void _openModuleDraftIfDue() {
       .map((definition) => definition.id)
       .toList(growable: false);
 
-  final selected = _offerPicker.pick(candidates, count: 3);
+  final ids = _offerPicker.pick(candidates, count: 3);
   _pendingRunModuleOffer = RunModuleOffer(
     offerId: _nextModuleOfferId++,
     draftNumber: _completedModuleDrafts + 1,
-    moduleIds: selected,
+    moduleIds: ids,
   );
 }
 ```
 
-`GameSession.snapshot()` only projects `_pendingRunModuleOffer`; it never calls the picker.
-
-- [ ] **Step 12: Implement atomic selection**
+- [ ] **Step 11: Implement atomic selection using definition-owned reward**
 
 ```dart
 bool selectRunModule({
@@ -767,20 +813,35 @@ bool selectRunModule({
   }
 
   _acquiredRunModules.add(moduleId);
-  if (moduleId == RunModuleId.emergencySalvage) {
-    _gold += 90;
-  }
+  _gold += runModuleDefinition(moduleId).immediateGold;
   _pendingRunModuleOffer = null;
   _completedModuleDrafts += 1;
   return true;
 }
 ```
 
-- [ ] **Step 13: Project state and clear temporary data on restart**
+Neutral definitions have `immediateGold == 0`.
 
-Pass `pendingRunModuleOffer` and `acquiredRunModules` into `GameSnapshot` from `snapshot()`.
+- [ ] **Step 12: Project module state and resolved selected-tower stats**
 
-In `restart()` add:
+Import `tower_stats_resolver.dart` in `game_session.dart`. In `snapshot(...)`:
+
+```dart
+final resolvedSelectedTower = selectedTower == null
+    ? null
+    : TowerStatsResolver.resolve(
+        selectedTower,
+        campaignModifiers: campaignModifiers,
+        stageModifiers: stage.modifiers,
+        runModules: _acquiredRunModules,
+      );
+```
+
+Pass `pendingRunModuleOffer`, `acquiredRunModules`, and `selectedTowerStats: resolvedSelectedTower` into `GameSnapshot`.
+
+- [ ] **Step 13: Clear temporary state on restart without reusing IDs**
+
+Add to `restart()`:
 
 ```dart
 _acquiredRunModules.clear();
@@ -790,68 +851,66 @@ _completedModuleDrafts = 0;
 
 Do not reset `_nextModuleOfferId`.
 
-- [ ] **Step 14: Run session tests green**
+- [ ] **Step 14: Run Task 3 green and commit**
 
 ```bash
 flutter test test/game/game_session_test.dart
-```
-
-Expected: all existing and new tests pass.
-
-- [ ] **Step 15: Commit Task 3**
-
-```bash
-git add lib/game/models/game_models.dart lib/game/rules/game_session.dart test/game/game_session_test.dart
+git add test/game/game_test_fixtures.dart lib/game/models/game_models.dart lib/game/rules/game_session.dart test/game/game_session_test.dart
 git commit -m "feat: add salvage module draft lifecycle (HPA-527)"
 ```
 
 ---
 
-### Task 4: Refresh Flame tower stats and suspend auto-start during drafts
+### Task 4: Refresh Flame stats and make auto-start inert during drafts
 
 **Files:**
 - Modify: `lib/game/components/tower_component.dart`
 - Modify: `lib/game/orion_defense_game.dart`
 - Modify: `test/game/orion_defense_game_test.dart`
+- Read/reuse: `test/game/game_test_fixtures.dart`
 
 **Interfaces:**
-- Consumes `GameSession.selectRunModule`, `acquiredRunModules`, and resolver `runModules` input.
+- Consumes `GameSession.selectRunModule`, `acquiredRunModules`, and resolver `runModules`.
 - Produces `TowerComponent.updateRunModules(...)` and `OrionDefenseGame.selectRunModule(...)`.
 
-- [ ] **Step 1: Write orchestration tests first**
+- [ ] **Step 1: Write multi-wave orchestration tests using the shared fixture**
 
-In `test/game/orion_defense_game_test.dart`, add an injectable fixed `ModuleOfferPicker` and cover these behaviors:
+Use `stageWithWaveCount(8)` plus a fixed picker. Drive empty waves through the real game update path rather than exposing `_session`.
 
-1. After wave 2 completes with auto-start enabled, `snapshot.pendingRunModuleOffer != null` and `autoStartCountdownRemaining == null`.
-2. Selecting a valid card clears the offer and sets `autoStartCountdownRemaining` to `OrionDefenseGame.autoStartCountdownSeconds`.
-3. Heavy Caliber updates an already placed tower's runtime damage and fire interval.
-4. A tower placed after Heavy Caliber selection receives the same modifiers.
+Cover:
 
-Inspect tower components through the existing Flame child tree rather than exposing a new mutable collection:
+1. After wave 2 completes with auto-start enabled, `pendingRunModuleOffer != null` and countdown is null.
+2. Calling `game.update(...)` while the offer is pending does not recreate/tick a countdown.
+3. Selecting a card starts a fresh `OrionDefenseGame.autoStartCountdownSeconds` countdown when auto-start remains enabled.
+4. Heavy Caliber refreshes an existing Laser `TowerComponent`.
+5. A Laser placed after selection receives the same definition-owned multipliers.
+6. Calling `game.startWave()` while pending keeps the offer and publishes `Choose a Salvage Module first.`.
+
+For runtime stats:
 
 ```dart
 final component = game.children.whereType<TowerComponent>().single;
 final base = GameBalance.towerStats(TowerType.laser, level: 1);
-expect(component.stats.damage, closeTo(base.damage * 1.20, 1e-9));
+final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+expect(
+  component.stats.damage,
+  closeTo(base.damage * heavy.damageMultiplier, 1e-9),
+);
 ```
 
-- [ ] **Step 2: Run orchestration tests and verify red**
+- [ ] **Step 2: Run orchestration test red**
 
 ```bash
 flutter test test/game/orion_defense_game_test.dart
 ```
 
-Expected: compile/assertion failures for missing picker injection, module bridge, and refresh behavior.
+Expected: compile/assertion failures for missing picker injection, bridge, refresh, and pacing guards.
 
 - [ ] **Step 3: Let `TowerComponent` carry current run modules**
 
-Add constructor input:
+Add constructor input `Iterable<RunModuleId> runModules = const []`, store `List.unmodifiable`, and pass it to every `TowerStatsResolver.resolve` call.
 
-```dart
-Iterable<RunModuleId> runModules = const [],
-```
-
-Store an immutable list and pass it into every `TowerStatsResolver.resolve` call. Add:
+Add:
 
 ```dart
 void updateRunModules(Iterable<RunModuleId> modules) {
@@ -865,37 +924,23 @@ void updateRunModules(Iterable<RunModuleId> modules) {
 }
 ```
 
-Update `updateTower(...)` so it also passes the stored `runModules` when re-resolving after upgrades/specialization.
+Update `updateTower(...)` to include stored run modules.
 
-- [ ] **Step 4: Allow `OrionDefenseGame` picker injection for tests**
+- [ ] **Step 4: Inject picker through `OrionDefenseGame` and new towers**
 
-Add optional constructor input:
+Add optional constructor input `ModuleOfferPicker? moduleOfferPicker` and pass it to `GameSession.initial(offerPicker: moduleOfferPicker)`.
 
-```dart
-ModuleOfferPicker? moduleOfferPicker,
-```
-
-and pass it to `GameSession.initial(offerPicker: moduleOfferPicker)`. Production callers omit it.
-
-- [ ] **Step 5: Pass acquired modules to newly created tower components**
-
-In `_addTowerComponent`, add:
+In `_addTowerComponent` add:
 
 ```dart
 runModules: _session.acquiredRunModules,
 ```
 
-No other Flame component receives module-domain state.
-
-- [ ] **Step 6: Add selection bridge and refresh existing tower components**
-
-Add:
+- [ ] **Step 5: Add selection bridge and refresh existing towers**
 
 ```dart
 void selectRunModule(int offerId, RunModuleId moduleId) {
-  if (!_session.selectRunModule(offerId: offerId, moduleId: moduleId)) {
-    return;
-  }
+  if (!_session.selectRunModule(offerId: offerId, moduleId: moduleId)) return;
 
   for (final tower in _towerComponents.values) {
     tower.updateRunModules(_session.acquiredRunModules);
@@ -905,11 +950,9 @@ void selectRunModule(int offerId, RunModuleId moduleId) {
 }
 ```
 
-Do not introduce feedback events or component-side eligibility decisions.
+- [ ] **Step 6: Suspend auto-start at all pacing boundaries**
 
-- [ ] **Step 7: Suspend auto-start when a draft opens**
-
-In `_finishWaveIfComplete()` after `_session.finishActiveWave()`:
+In `_finishWaveIfComplete()` after session completion:
 
 ```dart
 final didWin = _session.phase == GamePhase.won;
@@ -924,54 +967,60 @@ if (didWin) {
 }
 ```
 
-Preserve `_autoStartEnabled` when a draft opens.
-
-Also add `_session.pendingRunModuleOffer == null` to `_startAutoStartCountdownIfNeeded()` so no caller can create a hidden countdown during an intermission.
-
-- [ ] **Step 8: Prevent board selection changes beneath the modal panel**
-
-At the start of `onTapDown`, after terminal-state rejection, add:
+At the top of `_tickAutoStartCountdown`:
 
 ```dart
 if (_session.pendingRunModuleOffer != null) {
-  return;
+  _autoStartCountdownRemaining = null;
+  return false;
 }
 ```
 
-This is presentation hygiene; `GameSession` remains the authoritative mutation gate.
+Add `_session.pendingRunModuleOffer == null` to `_startAutoStartCountdownIfNeeded()`.
 
-- [ ] **Step 9: Run orchestration and resolver regressions green**
+- [ ] **Step 7: Block board taps and make direct denial feedback accurate**
+
+At the start of `onTapDown` after terminal-state rejection:
+
+```dart
+if (_session.pendingRunModuleOffer != null) return;
+```
+
+Add one private constant/helper:
+
+```dart
+static const String _moduleDraftBlockingMessage =
+    'Choose a Salvage Module first.';
+```
+
+For `startWave()` and any build-action feedback method reached while a draft is pending, prefer this message before the existing generic build-phase message. Do **not** add a new failure enum.
+
+- [ ] **Step 8: Run Task 4 green and commit**
 
 ```bash
 flutter test test/game/orion_defense_game_test.dart test/game/tower_stats_resolver_test.dart
-```
-
-Expected: all pass.
-
-- [ ] **Step 10: Commit Task 4**
-
-```bash
 git add lib/game/components/tower_component.dart lib/game/orion_defense_game.dart test/game/orion_defense_game_test.dart
 git commit -m "feat: apply salvage modules in active missions (HPA-527)"
 ```
 
 ---
 
-### Task 5: Add the snapshot-driven mobile draft panel and acquired strip
+### Task 5: Add the mobile draft UI, effect reminders, and resolved tower summary
 
 **Files:**
 - Create: `lib/game/ui/run_module_draft_panel.dart`
 - Modify: `lib/game/ui/orion_game_page.dart`
 - Create: `test/widget/run_module_draft_panel_test.dart`
+- Modify existing selected-tower widget fixtures when required by compilation.
 
 **Interfaces:**
-- Consumes immutable `RunModuleOffer`, acquired `RunModuleId` list, and `runModuleDefinition` lookup.
-- Produces `RunModuleDraftPanel({required RunModuleOffer offer, required ValueChanged<RunModuleId> onSelected})`.
-- Produces `AcquiredRunModuleStrip({required List<RunModuleId> moduleIds})`.
+- Consumes immutable `RunModuleOffer`, acquired `RunModuleId`, catalog copy, and `GameSnapshot.selectedTowerStats`.
+- Produces `RunModuleDraftPanel` and `AcquiredRunModuleStrip`.
+- UI does not call `RunModuleRules` or `TowerStatsResolver`.
 
-- [ ] **Step 1: Write 360×640 widget tests first**
+- [ ] **Step 1: Write 360×640 draft/strip tests first**
 
-Create `test/widget/run_module_draft_panel_test.dart` with a fixed 360×640 `MediaQuery` harness and:
+Create `test/widget/run_module_draft_panel_test.dart` with a fixed 360×640 harness and:
 
 ```dart
 final offer = RunModuleOffer(
@@ -985,79 +1034,48 @@ final offer = RunModuleOffer(
 );
 ```
 
-Assert:
+Assert title/effect/affinity text for all three cards, no overflow, and one callback after tapping Heavy Caliber.
+
+Render `AcquiredRunModuleStrip` with Heavy Caliber and Long Sight. Assert both titles exist and `find.byTooltip(runModuleDefinition(id).effectText)` finds each reminder. Empty input renders no module title.
+
+- [ ] **Step 2: Add a resolved selected-tower UI regression**
+
+In the appropriate existing selected-tower widget test, construct a snapshot with:
 
 ```dart
-expect(find.text('Salvage Module 2 of 3'), findsOneWidget);
-expect(find.text('Heavy Caliber'), findsOneWidget);
-expect(find.text('Emergency Salvage'), findsOneWidget);
-expect(find.text('Cryo Reservoir'), findsOneWidget);
-expect(find.text('Universal'), findsWidgets);
-expect(find.text('Cryo'), findsOneWidget);
-expect(tester.takeException(), isNull);
+selectedTower: tower,
+selectedTowerStats: TowerStatsResolver.resolve(
+  tower,
+  runModules: const [RunModuleId.longSight],
+),
+acquiredRunModules: const [RunModuleId.longSight],
 ```
 
-Tap `Heavy Caliber` and assert the callback receives `RunModuleId.heavyCaliber` once. Render `AcquiredRunModuleStrip` with two IDs and assert both titles appear; render it with an empty list and assert no module title appears.
+Assert the selected-tower panel renders a range value equal to the resolved `selectedTowerStats.range`, not the raw base range.
 
-- [ ] **Step 2: Run widget test and verify red**
+The resolver call is test-fixture construction only. Production Flutter code reads the snapshot field.
+
+- [ ] **Step 3: Run widget tests red**
 
 ```bash
-flutter test test/widget/run_module_draft_panel_test.dart
+flutter test test/widget/run_module_draft_panel_test.dart test/widget_test.dart
 ```
 
-Expected: compile failure because the widget file does not exist.
+Expected: compile/assertion failures until the UI widgets/summary exist.
 
-- [ ] **Step 3: Implement `RunModuleDraftPanel`**
+- [ ] **Step 4: Implement `RunModuleDraftPanel`**
 
-Create `lib/game/ui/run_module_draft_panel.dart` using `Material`, `SafeArea`, and `SingleChildScrollView`. The public widget must follow this structure:
+Create `lib/game/ui/run_module_draft_panel.dart` with `Material` + `SafeArea` + `SingleChildScrollView`. Render exactly three cards from `offer.moduleIds`. Each card displays:
 
-```dart
-class RunModuleDraftPanel extends StatelessWidget {
-  const RunModuleDraftPanel({
-    super.key,
-    required this.offer,
-    required this.onSelected,
-  });
+- `definition.title`;
+- `definition.effectText`;
+- `definition.affinity.label`.
 
-  final RunModuleOffer offer;
-  final ValueChanged<RunModuleId> onSelected;
+One tap invokes `onSelected(id)`. Do not add confirmation, reroll, rarity, or local gameplay state.
 
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return Material(
-      color: theme.colorScheme.scrim.withValues(alpha: 0.84),
-      child: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'Salvage Module ${offer.draftNumber} of 3',
-                textAlign: TextAlign.center,
-                style: theme.textTheme.headlineSmall,
-              ),
-              const SizedBox(height: 12),
-              for (final id in offer.moduleIds) ...[
-                _RunModuleCard(
-                  definition: runModuleDefinition(id),
-                  onPressed: () => onSelected(id),
-                ),
-                const SizedBox(height: 10),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-```
+- [ ] **Step 5: Implement compact acquired reminders using tooltips**
 
-Implement `_RunModuleCard` as a `FilledButton.tonal` or `Card` + `InkWell` containing title, one-sentence effect, and affinity label. Do not add confirmation, reroll, rarity, or independent gameplay state.
-
-- [ ] **Step 4: Implement `AcquiredRunModuleStrip` in the same focused file**
+Use title-only chips wrapped in effect tooltips to avoid expanding the HUD vertically:
 
 ```dart
 class AcquiredRunModuleStrip extends StatelessWidget {
@@ -1076,9 +1094,12 @@ class AcquiredRunModuleStrip extends StatelessWidget {
       runSpacing: 6,
       children: [
         for (final id in moduleIds)
-          Chip(
-            visualDensity: VisualDensity.compact,
-            label: Text(runModuleDefinition(id).title),
+          Tooltip(
+            message: runModuleDefinition(id).effectText,
+            child: Chip(
+              visualDensity: VisualDensity.compact,
+              label: Text(runModuleDefinition(id).title),
+            ),
           ),
       ],
     );
@@ -1086,11 +1107,47 @@ class AcquiredRunModuleStrip extends StatelessWidget {
 }
 ```
 
-- [ ] **Step 5: Wire both widgets into `OrionGamePage`**
+This preserves compact portrait layout while keeping effect text available after selection.
 
-Import `run_module_draft_panel.dart`.
+- [ ] **Step 6: Render resolved selected-tower combat stats**
 
-Inside the existing top HUD `Column`, add after `_Hud`:
+Reuse `lib/game/util/format.dart` (`number`, `cadence`). Change `_TowerSummary` to accept `TowerStats stats` and render, beneath level/specialization:
+
+```dart
+Text(
+  'Damage ${number(stats.damage)} • '
+  'Fire ${cadence(stats.fireInterval)}s • '
+  'Range ${number(stats.range)}',
+),
+```
+
+Add one type-relevant line only when meaningful:
+
+```dart
+if (tower.type == TowerType.cryo && stats.slowDuration > 0)
+  Text('Slow ${number(stats.slowDuration)}s'),
+if (tower.type == TowerType.rocket && stats.splashRadius > 0)
+  Text('Splash ${number(stats.splashRadius)}'),
+```
+
+In `_UpgradePanel`, use:
+
+```dart
+final stats = snapshot.selectedTowerStats ??
+    GameBalance.towerStats(
+      tower.type,
+      level: tower.level,
+      specialization: tower.specialization,
+    );
+```
+
+The fallback keeps manually built legacy test snapshots compiling; live game snapshots supply resolved stats from `GameSession`.
+
+Pass `stats` into `_TowerSummary`. Do not invoke the resolver in production UI.
+
+- [ ] **Step 7: Wire strip and blocking panel into the existing stage stack**
+
+Below `_Hud`:
 
 ```dart
 if (snapshot.acquiredRunModules.isNotEmpty) ...[
@@ -1099,7 +1156,7 @@ if (snapshot.acquiredRunModules.isNotEmpty) ...[
 ],
 ```
 
-Inside the stage `Stack`, after bottom controls and before `_EndStatePanel`, add:
+Above terminal end-state overlay:
 
 ```dart
 if (snapshot.pendingRunModuleOffer case final offer?)
@@ -1112,36 +1169,34 @@ if (snapshot.pendingRunModuleOffer case final offer?)
   ),
 ```
 
-Do not add eligibility or effect calculations to the UI.
-
-- [ ] **Step 6: Run widget tests green**
+- [ ] **Step 8: Run Task 5 green and commit**
 
 ```bash
 flutter test test/widget/run_module_draft_panel_test.dart test/widget_test.dart
 ```
 
-Expected: all pass with no overflow exception at 360×640.
-
-- [ ] **Step 7: Commit Task 5**
+Then run any selected-tower widget file that compiler/test output identified, and only after all focused widget tests pass:
 
 ```bash
-git add lib/game/ui/run_module_draft_panel.dart lib/game/ui/orion_game_page.dart test/widget/run_module_draft_panel_test.dart
+git add lib/game/ui/run_module_draft_panel.dart lib/game/ui/orion_game_page.dart test/widget/run_module_draft_panel_test.dart test/widget
 git commit -m "feat: add salvage module intermission UI (HPA-527)"
 ```
 
+Before staging, inspect `git status --short` and stage only selected-tower widget test files actually changed; do not stage unrelated `test/widget` changes.
+
 ---
 
-### Task 6: Verify the complete vertical slice and record two human playtests
+### Task 6: Verify the vertical slice and record two human playtests
 
 **Files:**
-- No new report or evidence file.
-- If verification exposes a defect, make the smallest correction in the task-owned source/test files that caused it and rerun that task's focused checks before continuing.
+- No new evidence/report file.
+- If verification exposes a defect, change only the source/test file that owns that behavior and rerun its focused test before continuing.
 
 **Interfaces:**
 - Consumes all previous tasks.
-- Produces a verified implementation branch plus concise Stage 1 and later-stage observations in the implementation PR body or a PR comment.
+- Produces a verified implementation branch plus concise Stage 1 and later-stage observations in the implementation PR body/comment.
 
-- [ ] **Step 1: Run all focused tests**
+- [ ] **Step 1: Run all focused automated tests**
 
 ```bash
 flutter test \
@@ -1155,7 +1210,7 @@ flutter test \
 
 Expected: all pass.
 
-- [ ] **Step 2: Run formatting and static analysis**
+- [ ] **Step 2: Run format and analysis**
 
 ```bash
 dart format --output=none --set-exit-if-changed .
@@ -1164,58 +1219,57 @@ flutter analyze
 
 Expected: both exit 0.
 
-- [ ] **Step 3: Run the full existing test suite**
+- [ ] **Step 3: Run full suite**
 
 ```bash
 flutter test
 ```
 
-Expected: all tests pass.
+Expected: all pass.
 
-- [ ] **Step 4: Manual Stage 1 playtest at 1×**
+- [ ] **Step 4: Play Outpost Alpha at 1×**
 
-Play Outpost Alpha through all three drafts and record exactly these four observations in the implementation PR:
+Record exactly:
 
-1. Draft comprehension: yes/no, plus one sentence.
-2. Mission pacing: improved / neutral / disruptive, plus one sentence.
-3. Dead or mandatory card observed: module name or `none`.
-4. Selected-module effect noticeable: yes/no, plus one sentence.
+1. Draft comprehension: yes/no + one sentence.
+2. Mission pacing: improved / neutral / disruptive + one sentence.
+3. Dead or mandatory card: module name or `none`.
+4. Selected-module effect noticeable: yes/no + one sentence; explicitly inspect the resolved selected-tower summary for Long Sight/Heavy/Overclock when selected.
 
-Do not add telemetry or structured evidence export.
+- [ ] **Step 5: Play one later main-path stage at 1×**
 
-- [ ] **Step 5: Manual later-stage playtest at 1×**
+Record the same four observations, preferring a stage with enough enemy variety to notice Rocket/Cryo trade-offs.
 
-Choose one unlocked later main-path stage and record the same four observations. Prefer a stage with enough enemy variety to notice universal, Rocket, and Cryo trade-offs.
-
-If both human runs reveal an obviously weak or overpowering constant, edit only the relevant constants/copy in `run_module_rules.dart` / `run_module.dart`, update its exact-value test, rerun Steps 1–3, and include that tuning change in the implementation commit that owns the rule.
+If tuning changes, edit the relevant `RunModuleDefinition` fields in `run_module.dart`, update its exact catalog expectation, rerun Steps 1–3, and record the reason. `RunModuleRules`, session reward code, and effect copy must not need a balance-number edit.
 
 - [ ] **Step 6: Walk the acceptance checklist**
 
-Verify each item against tests and the two playthroughs:
+Verify:
 
 - [ ] drafts occur after waves 2, 4, and 6 only;
-- [ ] each offer remains unchanged until selection;
-- [ ] acquired cards do not reappear;
-- [ ] each offer contains three distinct IDs;
+- [ ] each stored offer remains unchanged until selection;
+- [ ] acquired cards do not reappear and offers contain three distinct IDs;
 - [ ] stale, duplicate, and non-offered selections do not mutate state;
 - [ ] build, upgrade, specialize, sell, retarget, and start-wave are blocked while pending;
-- [ ] auto-start resumes with a fresh full countdown;
-- [ ] existing towers update immediately after a stat module;
-- [ ] towers placed after selection inherit the same modules;
-- [ ] Emergency Salvage adds 90 gold once;
-- [ ] restart clears temporary modules and pending offer;
+- [ ] direct blocked action feedback says `Choose a Salvage Module first.`;
+- [ ] auto-start cannot tick/recreate a countdown while pending and resumes with a fresh full countdown;
+- [ ] existing towers refresh immediately and future towers inherit modules;
+- [ ] Emergency Salvage uses its definition-owned 90-gold value exactly once;
+- [ ] acquired reminders expose effect text;
+- [ ] selected-tower summary shows resolved module-modified damage/fire interval/range and relevant Cryo/Rocket secondary stat;
+- [ ] restart clears temporary state while offer IDs remain monotonic;
 - [ ] returning to the world map abandons run-only state with the game instance;
 - [ ] 360×640 draft UI has no overflow;
-- [ ] no save-schema or package dependency changed.
+- [ ] no save-schema, package dependency, event bus, seed protocol, or range-ring subsystem was added.
 
-Do not claim completion until every automated check has fresh passing output and the two human observations are recorded.
+Do not claim implementation completion until every automated command has fresh passing output and both human observations are recorded.
 
 ---
 
 ## Self-Review
 
-**1. Spec coverage:** Tasks 1–2 implement the catalog, picker, eligibility, and base → campaign → stage → run-module stat pipeline. Task 3 owns the 2/4/6 lifecycle, stable offers, stale-tap protection, acquired exclusion, Emergency Salvage, authoritative gating, and restart cleanup. Task 4 handles existing/new tower consistency and auto-start pacing. Task 5 implements the blocking 360×640 snapshot-driven UI and acquired strip. Task 6 covers focused/full automated verification plus the two required human 1× checks. Every design acceptance criterion maps to a task.
+**Spec coverage:** Task 1 makes the catalog the single source for tuning/copy and supplies the injectable picker. Task 2 covers eligibility and exact application, including Overclock and Heavy×Overclock composition. Task 3 supplies reusable multi-wave fixtures, the 2/4/6 session lifecycle, stale selection protection, definition-owned gold, authoritative gating, resolved selected-tower snapshot data, and restart cleanup. Task 4 covers existing/future tower consistency, both auto-start guards, board blocking, and accurate direct-denial copy. Task 5 makes module effects player-inspectable without putting rules in UI or adding a range renderer. Task 6 runs focused/full verification and two human checks.
 
-**2. Placeholder scan:** No TBD/TODO markers or symbolic shell paths remain. Every new public type and method used by a later task is defined earlier with a concrete signature. Human validation asks for four exact observations rather than an undefined report.
+**Placeholder scan:** No TBD/TODO or undefined implementation step remains. The only conditional staging instruction explicitly requires inspecting changed files and staging exact paths rather than `git add -A`.
 
-**3. Type consistency:** `RunModuleId`, `RunModuleDefinition`, and `RunModuleOffer` originate in `run_module.dart`; `ModuleOfferPicker` originates in `module_offer_picker.dart`; `RunModuleRules` consumes those types; `GameSession` injects `ModuleOfferPicker`; `GameSnapshot` projects `RunModuleOffer` plus `List<RunModuleId>`; `TowerStatsResolver` and `TowerComponent` both use `Iterable<RunModuleId>` inputs; `OrionDefenseGame.selectRunModule(int, RunModuleId)` matches `RunModuleDraftPanel`'s callback path.
+**Type consistency:** `RunModuleDefinition` owns all tuning. `RunModuleRules` consumes definitions. `GameSession` injects `ModuleOfferPicker` and projects `RunModuleOffer`, `List<RunModuleId>`, and resolved `TowerStats`. `TowerStatsResolver`/`TowerComponent` consume `Iterable<RunModuleId>`. `OrionDefenseGame.selectRunModule(int, RunModuleId)` matches the draft callback. Production UI reads `GameSnapshot.selectedTowerStats`; it does not resolve game rules itself.
