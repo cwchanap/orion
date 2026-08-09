@@ -44,6 +44,19 @@ This slice intentionally does **not** include:
 - a seven-stage release-certification or statistical seed-sweep program;
 - a tower range-ring rendering subsystem.
 
+## Review decisions
+
+The external review was technically sound on five points and directionally sound on the sixth:
+
+1. **Player-visible feedback:** accepted, but not by calling `TowerStatsResolver` from Flutter. Current `_UpgradePanel` uses raw `GameBalance` stats for action costs and `_TowerSummary` does not display combat stats at all. The design instead projects resolved selected-tower stats through `GameSnapshot`, keeping production UI snapshot-only. Long Sight becomes inspectable numerically; no range-ring subsystem is added.
+2. **Single-source tuning:** accepted. Magnitudes move onto `RunModuleDefinition`; rules, economy application, and effect copy read those values.
+3. **Multi-wave test fixture:** accepted. Add one shared empty-wave stage fixture used by session and Flame orchestration tests.
+4. **Overclock/composition coverage:** accepted. Add exact Overclock and Heavy Caliber × Overclock tests.
+5. **Auto-start pending guard:** accepted. Guard both `_tickAutoStartCountdown` and `_startAutoStartCountdownIfNeeded`.
+6. **Draft-block feedback copy:** accepted. Reuse existing failure enums but publish `Choose a Salvage Module first.` when the game layer knows a draft is pending.
+
+No review item justifies a new phase, event bus, seed protocol, persistence work, or generalized effect architecture.
+
 ## Approaches considered
 
 ### A. Store acquired module IDs and resolve their effects through one pure rules step — selected
@@ -118,7 +131,7 @@ final class RunModuleDefinition {
 }
 ```
 
-`effectText` is derived from these fields for the six known module IDs so displayed percentages/gold cannot drift from applied math. The formatter remains local to the module domain; it is not a generalized localization or balance-description framework.
+`effectText` is derived from these fields for the six known module IDs so displayed percentages/gold cannot drift from applied math. Reuse the existing `util/format.dart` helpers rather than adding another formatter layer.
 
 Initial tuning:
 
@@ -286,7 +299,7 @@ The slice therefore adds a compact selected-tower summary using `snapshot.select
 
 This makes Long Sight and the universal damage/cadence trade-offs inspectable without adding a range-ring renderer.
 
-The acquired-module strip also shows both module title and effect text (compact two-line chip/card or tooltip/details presentation), so the player has a post-draft reminder of what changed.
+The acquired-module strip keeps title chips compact and exposes each `effectText` through a tooltip, avoiding a large permanent HUD block while retaining post-draft explanation.
 
 ## Runtime stat integration
 
@@ -353,7 +366,7 @@ Create `lib/game/ui/run_module_draft_panel.dart` rather than adding the complete
 The file contains:
 
 - `RunModuleDraftPanel` — full-screen blocking intermission;
-- `AcquiredRunModuleStrip` — compact read-only reminder including title + effect.
+- `AcquiredRunModuleStrip` — compact read-only reminder with effect tooltip.
 
 ### Draft panel
 
@@ -365,7 +378,7 @@ One tap calls `game.selectRunModule(offer.offerId, id)`. The session remains the
 
 ### Acquired strip and selected tower summary
 
-The acquired strip sits below the HUD and is hidden when empty. Each acquired entry includes its title and effect reminder.
+The acquired strip sits below the HUD and is hidden when empty. Each title chip has the definition's exact effect as its tooltip.
 
 When a tower is selected, `_TowerSummary` receives resolved `TowerStats` from the snapshot and displays the compact combat values described above. Existing upgrade/specialization costs may use the same resolved `TowerStats`; module fields do not alter costs.
 
@@ -381,7 +394,7 @@ StageDefinition stageWithWaveCount(int count)
 
 It returns a valid custom stage with `count` empty waves and zero clear bonuses, suitable for deterministic session/orchestration tests.
 
-Session tests may add a file-local `completeWave(session)` helper. Flame tests drive the empty-wave fixture through the real `OrionDefenseGame.update` path so draft opening and auto-start behavior are tested at the actual orchestration boundary rather than by exposing private session internals.
+Session tests add a file-local `completeWave(session)` helper. Flame tests drive the empty-wave fixture through the real `OrionDefenseGame.update` path so draft opening and auto-start behavior are tested at the actual orchestration boundary rather than by exposing private session internals.
 
 This is test support only, not a production abstraction.
 
@@ -434,7 +447,7 @@ At 360×640:
 - header and exactly three cards fit/scroll without overflow;
 - card title/effect/affinity render;
 - callback fires once for a tapped card;
-- acquired entries include effect reminders;
+- acquired titles expose effect tooltips;
 - selected tower summary displays resolved damage/fire interval/range and a relevant secondary stat;
 - empty acquired strip stays hidden.
 
@@ -447,7 +460,7 @@ Play Stage 1 and one later main-path stage at 1×. Record:
 3. dead/mandatory choice observed;
 4. selected-module effect noticeability.
 
-If a balance value is changed after playtesting, edit the definition in `run_module.dart`, update the exact-value test, and rerun focused/full checks. No rules/copy hunting across multiple files.
+If a balance value is changed after playtesting, edit the definition in `run_module.dart`, update the exact-value test, and rerun focused/full checks. No rules/session/copy hunting across multiple files.
 
 ## Acceptance criteria
 
