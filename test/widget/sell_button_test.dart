@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/util/format.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -120,6 +121,45 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('selected drone bay shows resolved drone damage', (tester) async {
+    final stats = GameBalance.towerStats(TowerType.droneBay, level: 1);
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.droneBay,
+        position: GridPosition(0, 0),
+      ),
+      selectedTowerStats: stats,
+    );
+
+    expect(find.text('Drone dmg ${number(stats.droneDamage)}'), findsOneWidget);
+  });
+
+  testWidgets('selected laser shows resolved damage, fire, and range', (
+    tester,
+  ) async {
+    final stats = GameBalance.towerStats(TowerType.laser, level: 1);
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(0, 0),
+      ),
+      selectedTowerStats: stats,
+    );
+
+    expect(
+      find.text(
+        'Damage ${number(stats.damage)} • '
+        'Fire ${cadence(stats.fireInterval)}s • '
+        'Range ${number(stats.range)}',
+      ),
+      findsOneWidget,
+    );
+  });
 }
 
 /// Pumps [OrionGamePage], enters the first stage, and drives the panel with a
@@ -128,6 +168,7 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   WidgetTester tester,
   PlacedTower selectedTower, {
   GamePhase phase = GamePhase.build,
+  TowerStats? selectedTowerStats,
 }) async {
   OrionDefenseGame? game;
 
@@ -165,6 +206,7 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
     speedMultiplier: snapshot.speedMultiplier,
     autoStartEnabled: snapshot.autoStartEnabled,
     autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    selectedTowerStats: selectedTowerStats,
   );
   await tester.pump();
 

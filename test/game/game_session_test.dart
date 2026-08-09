@@ -31,6 +31,18 @@ void completeWave(GameSession session) {
   session.finishActiveWave();
 }
 
+void selectPendingModuleIfNeeded(GameSession session) {
+  final offer = session.pendingRunModuleOffer;
+  if (offer == null) return;
+  final moduleId = offer.moduleIds.firstWhere(
+    (id) => id != RunModuleId.emergencySalvage,
+  );
+  expect(
+    session.selectRunModule(offerId: offer.offerId, moduleId: moduleId),
+    isTrue,
+  );
+}
+
 void main() {
   group('GameSession', () {
     test('starts in build phase with approved economy', () {
@@ -177,6 +189,7 @@ void main() {
       for (var wave = 0; wave < 7; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
+        selectPendingModuleIfNeeded(session);
       }
 
       final preview = session.snapshot().nextWavePreview;
@@ -219,6 +232,7 @@ void main() {
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
+        selectPendingModuleIfNeeded(wonSession);
       }
 
       expect(wonSession.phase, GamePhase.won);
@@ -326,6 +340,7 @@ void main() {
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
+        selectPendingModuleIfNeeded(wonSession);
       }
 
       final wonResult = wonSession.placeTower(
@@ -401,6 +416,7 @@ void main() {
         for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
           expect(wonSession.startWave(), isTrue);
           wonSession.finishActiveWave();
+          selectPendingModuleIfNeeded(wonSession);
         }
 
         expect(wonSession.upgradeTower(wonTower.id), isFalse);
@@ -651,6 +667,7 @@ void main() {
       for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
+        selectPendingModuleIfNeeded(session);
       }
 
       expect(session.phase, GamePhase.won);
@@ -663,6 +680,7 @@ void main() {
       for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
+        selectPendingModuleIfNeeded(session);
       }
 
       expect(session.phase, GamePhase.won);
@@ -690,6 +708,7 @@ void main() {
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
+        selectPendingModuleIfNeeded(wonSession);
       }
 
       wonSession.rewardKill(8);
@@ -718,6 +737,7 @@ void main() {
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
+        selectPendingModuleIfNeeded(wonSession);
       }
 
       wonSession.damageBase(5);
@@ -807,6 +827,7 @@ void main() {
       for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
         session.finishActiveWave();
+        selectPendingModuleIfNeeded(session);
       }
 
       expect(session.phase, GamePhase.won);
@@ -1356,6 +1377,67 @@ void main() {
           1e-9,
         ),
       );
+    });
+
+    test('pending module draft blocks every build mutation until selected', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+      ]);
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        gold: 500,
+        offerPicker: picker,
+      );
+      const towerPosition = GridPosition(2, 1);
+      expect(
+        session.placeTower(towerPosition, TowerType.laser).isAllowed,
+        isTrue,
+      );
+      final tower = session.towerAt(towerPosition)!;
+      expect(session.upgradeTower(tower.id), isTrue);
+
+      completeWave(session);
+      completeWave(session);
+
+      final offer = session.pendingRunModuleOffer!;
+      expect(
+        session
+            .validatePlacement(const GridPosition(3, 1), TowerType.laser)
+            .failure,
+        PlacementFailure.pendingModuleDraft,
+      );
+      expect(session.upgradeTower(tower.id), isFalse);
+      expect(
+        session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
+        isFalse,
+      );
+      expect(session.sellTower(tower.id), isNull);
+      expect(
+        session.setTargetingMode(tower.id, TowerTargetingMode.strongest),
+        isFalse,
+      );
+      expect(session.startWave(), isFalse);
+      expect(session.snapshot().canStartWave, isFalse);
+
+      expect(
+        session.selectRunModule(
+          offerId: offer.offerId,
+          moduleId: offer.moduleIds.first,
+        ),
+        isTrue,
+      );
+      expect(
+        session
+            .validatePlacement(const GridPosition(3, 1), TowerType.laser)
+            .isAllowed,
+        isTrue,
+      );
+      expect(session.snapshot().canStartWave, isTrue);
+      expect(session.startWave(), isTrue);
     });
   });
 

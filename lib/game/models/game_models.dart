@@ -81,6 +81,7 @@ enum EnemyArchetype {
 
 enum PlacementFailure {
   invalidPhase,
+  pendingModuleDraft,
   offBoard,
   pathBlocked,
   occupied,
@@ -541,7 +542,8 @@ class GameSnapshot {
   final List<RunModuleId> acquiredRunModules;
   final TowerStats? selectedTowerStats;
 
-  bool get canStartWave => phase == GamePhase.build;
+  bool get canStartWave =>
+      phase == GamePhase.build && pendingRunModuleOffer == null;
   bool get isEnded => phase == GamePhase.won || phase == GamePhase.lost;
 }
 

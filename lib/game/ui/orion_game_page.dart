@@ -10,7 +10,9 @@ import '../campaign/stage_modifier_metadata.dart';
 import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
+import '../util/format.dart';
 import 'codex_view.dart';
+import 'run_module_draft_panel.dart';
 import 'tech_tree_view.dart';
 import 'tower_icons.dart';
 import 'world_map_view.dart';
@@ -187,6 +189,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         _Hud(snapshot: snapshot),
+                        if (snapshot.acquiredRunModules.isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          AcquiredRunModuleStrip(
+                            moduleIds: snapshot.acquiredRunModules,
+                          ),
+                        ],
                         if (snapshot.nextWavePreview != null) ...[
                           const SizedBox(height: 8),
                           _NextWavePanel(
@@ -217,6 +225,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   bottom: 12,
                   child: _BottomControls(game: game, snapshot: snapshot),
                 ),
+                if (snapshot.pendingRunModuleOffer case final offer?)
+                  Positioned.fill(
+                    child: RunModuleDraftPanel(
+                      offer: offer,
+                      onSelected: (moduleId) =>
+                          game.selectRunModule(offer.offerId, moduleId),
+                    ),
+                  ),
                 if (snapshot.isEnded)
                   Positioned.fill(
                     child: _EndStatePanel(game: game, snapshot: snapshot),
@@ -1083,7 +1099,11 @@ class _UpgradePanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             mainAxisSize: MainAxisSize.min,
             children: [
-              _TowerSummary(tower: tower, towerName: towerName),
+              _TowerSummary(
+                tower: tower,
+                towerName: towerName,
+                stats: snapshot.selectedTowerStats,
+              ),
               const SizedBox(height: 10),
               Align(alignment: Alignment.centerLeft, child: actions),
             ],
@@ -1093,7 +1113,11 @@ class _UpgradePanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
-                child: _TowerSummary(tower: tower, towerName: towerName),
+                child: _TowerSummary(
+                  tower: tower,
+                  towerName: towerName,
+                  stats: snapshot.selectedTowerStats,
+                ),
               ),
               const SizedBox(width: 12),
               Flexible(
@@ -1155,13 +1179,31 @@ class _TargetingModePicker extends StatelessWidget {
 }
 
 class _TowerSummary extends StatelessWidget {
-  const _TowerSummary({required this.tower, required this.towerName});
+  const _TowerSummary({
+    required this.tower,
+    required this.towerName,
+    required this.stats,
+  });
 
   final PlacedTower tower;
   final String towerName;
+  final TowerStats? stats;
 
   @override
   Widget build(BuildContext context) {
+    final secondary = switch (tower.type) {
+      TowerType.cryo when stats != null && stats!.slowDuration > 0 =>
+        'Slow ${number(stats!.slowDuration)}s',
+      TowerType.rocket when stats != null && stats!.splashRadius > 0 =>
+        'Splash ${number(stats!.splashRadius)}',
+      TowerType.nanite
+          when stats != null && stats!.corrosionDamagePerSecond > 0 =>
+        'Corrosion ${number(stats!.corrosionDamagePerSecond)}/s',
+      TowerType.droneBay when stats != null && stats!.droneDamage > 0 =>
+        'Drone dmg ${number(stats!.droneDamage)}',
+      _ => null,
+    };
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -1176,6 +1218,18 @@ class _TowerSummary extends StatelessWidget {
               ? 'Level ${tower.level}'
               : 'Level ${tower.level} • ${tower.specialization!.label}',
         ),
+        if (stats != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            'Damage ${number(stats!.damage)} • '
+            'Fire ${cadence(stats!.fireInterval)}s • '
+            'Range ${number(stats!.range)}',
+          ),
+          if (secondary != null) ...[
+            const SizedBox(height: 2),
+            Text(secondary),
+          ],
+        ],
       ],
     );
   }
