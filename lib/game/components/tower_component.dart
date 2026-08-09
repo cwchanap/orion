@@ -4,34 +4,27 @@ import 'package:flame/components.dart';
 
 import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
-import '../campaign/campaign_progress.dart';
 import '../models/game_models.dart';
-import '../rules/tower_stats_resolver.dart';
 import 'enemy_component.dart';
 
 typedef TargetAcquirer = EnemyComponent? Function(TowerComponent tower);
 typedef ProjectileLauncher =
     void Function(TowerComponent tower, EnemyComponent target);
+typedef TowerStatsProvider = TowerStats Function(PlacedTower tower);
 
 class TowerComponent extends CircleComponent {
   TowerComponent({
     required PlacedTower tower,
     required Vector2 center,
+    required this.resolveStats,
     required this.acquireTarget,
     required this.launchProjectile,
     this.spriteSheet,
     this.towerVarietySheet,
-    this.campaignModifiers = CampaignModifiers.empty,
-    List<StageModifier> stageModifiers = const [],
     double radius = 15,
     super.priority,
-  }) : stageModifiers = List.unmodifiable(stageModifiers),
-       placedTower = tower,
-       stats = TowerStatsResolver.resolve(
-         tower,
-         campaignModifiers: campaignModifiers,
-         stageModifiers: stageModifiers,
-       ),
+  }) : placedTower = tower,
+       stats = resolveStats(tower),
        super(
          radius: radius,
          anchor: Anchor.center,
@@ -41,8 +34,7 @@ class TowerComponent extends CircleComponent {
 
   PlacedTower placedTower;
   TowerStats stats;
-  final CampaignModifiers campaignModifiers;
-  final List<StageModifier> stageModifiers;
+  final TowerStatsProvider resolveStats;
   final TargetAcquirer acquireTarget;
   final ProjectileLauncher launchProjectile;
   final GameSpriteSheet? spriteSheet;
@@ -57,11 +49,7 @@ class TowerComponent extends CircleComponent {
 
   void updateTower(PlacedTower tower) {
     placedTower = tower;
-    stats = TowerStatsResolver.resolve(
-      tower,
-      campaignModifiers: campaignModifiers,
-      stageModifiers: stageModifiers,
-    );
+    stats = resolveStats(tower);
     paint.color = _towerColor(tower.type);
   }
 

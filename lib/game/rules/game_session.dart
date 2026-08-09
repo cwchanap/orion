@@ -1,9 +1,16 @@
+// The private offer picker is injected through the public factory's named
+// argument to keep the private constructor inaccessible to callers.
+// ignore_for_file: prefer_initializing_formals
+
 import '../campaign/campaign_progress.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
+import '../modules/run_module.dart';
 import 'board_layout.dart';
+import 'module_offer_picker.dart';
 import 'stage_modifier_rules.dart';
+import 'tower_stats_resolver.dart';
 
 class GameSession {
   factory GameSession.initial({
@@ -11,6 +18,7 @@ class GameSession {
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     int? gold,
     int? baseHealth,
+    ModuleOfferPicker? offerPicker,
   }) {
     final resolvedStage = stage ?? OrionCampaign.stageOne;
     final resolvedGold = gold ?? campaignModifiers.adjustedStartingGold;
@@ -25,6 +33,7 @@ class GameSession {
       campaignModifiers: campaignModifiers,
       startingGold: resolvedGold,
       startingBaseHealth: resolvedBaseHealth,
+      offerPicker: offerPicker ?? RandomModuleOfferPicker(),
     );
   }
 
@@ -33,8 +42,10 @@ class GameSession {
     required this.campaignModifiers,
     required this.startingGold,
     required this.startingBaseHealth,
+    required ModuleOfferPicker offerPicker,
   }) : _gold = startingGold,
-       _baseHealth = startingBaseHealth {
+       _baseHealth = startingBaseHealth,
+       _offerPicker = offerPicker {
     if (stage.waves.isEmpty) {
       throw ArgumentError.value(
         stage.id,
@@ -48,11 +59,15 @@ class GameSession {
   final int startingGold;
   final int startingBaseHealth;
   final CampaignModifiers campaignModifiers;
+  final ModuleOfferPicker _offerPicker;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
+  final List<RunModuleId> _acquiredRunModules = [];
   int _nextTowerId = 1;
   int _gold;
   int _baseHealth;
   int _waveIndex = 0;
+  RunModuleOffer? _pendingRunModuleOffer;
+  int _nextModuleOfferId = 1;
   GamePhase _phase = GamePhase.build;
 
   int get gold => _gold;
@@ -61,6 +76,9 @@ class GameSession {
   int get clearedWaveCount => _waveIndex;
   GamePhase get phase => _phase;
   List<PlacedTower> get towers => List.unmodifiable(_towersByPosition.values);
+  RunModuleOffer? get pendingRunModuleOffer => _pendingRunModuleOffer;
+  List<RunModuleId> get acquiredRunModules =>
+      List.unmodifiable(_acquiredRunModules);
   List<TowerType> get unlockedTowerTypes {
     final nextWaveNumber = _waveIndex + 1;
     return TowerType.values
@@ -119,6 +137,20 @@ class GameSession {
       speedMultiplier: speedMultiplier,
       autoStartEnabled: autoStartEnabled,
       autoStartCountdownRemaining: autoStartCountdownRemaining,
+      pendingRunModuleOffer: _pendingRunModuleOffer,
+      acquiredRunModules: _acquiredRunModules,
+      selectedTowerStats: selectedTower == null
+          ? null
+          : resolveTowerStats(selectedTower),
+    );
+  }
+
+  TowerStats resolveTowerStats(PlacedTower tower) {
+    return TowerStatsResolver.resolve(
+      tower,
+      campaignModifiers: campaignModifiers,
+      stageModifiers: stage.modifiers,
+      runModules: _acquiredRunModules,
     );
   }
 
@@ -263,6 +295,22 @@ class GameSession {
     }
 
     _phase = GamePhase.build;
+    _openModuleDraftIfDue();
+  }
+
+  bool selectRunModule({required int offerId, required RunModuleId moduleId}) {
+    final offer = _pendingRunModuleOffer;
+    if (offer == null ||
+        offer.offerId != offerId ||
+        !offer.moduleIds.contains(moduleId) ||
+        _acquiredRunModules.contains(moduleId)) {
+      return false;
+    }
+
+    _acquiredRunModules.add(moduleId);
+    _gold += runModuleDefinition(moduleId).immediateGold;
+    _pendingRunModuleOffer = null;
+    return true;
   }
 
   void rewardKill(int goldReward) {
@@ -291,6 +339,8 @@ class GameSession {
     _baseHealth = startingBaseHealth;
     _waveIndex = 0;
     _phase = GamePhase.build;
+    _acquiredRunModules.clear();
+    _pendingRunModuleOffer = null;
   }
 
   int _effectiveClearBonus(int baseClearBonus) {
@@ -312,5 +362,67 @@ class GameSession {
       }
     }
     return null;
+  }
+
+  TowerType? _affinityTower(RunModuleAffinity affinity) => switch (affinity) {
+    RunModuleAffinity.universal => null,
+    RunModuleAffinity.cryo => TowerType.cryo,
+    RunModuleAffinity.rocket => TowerType.rocket,
+  };
+
+  List<RunModuleId> _moduleCandidates() {
+    final acquired = _acquiredRunModules.toSet();
+    final placedTypes = _towersByPosition.values
+        .map((tower) => tower.type)
+        .toSet();
+    final unlockedTypes = unlockedTowerTypes.toSet();
+    final remaining = runModuleCatalog
+        .where((definition) => !acquired.contains(definition.id))
+        .toList(growable: false);
+    final candidates = <RunModuleId>[];
+
+    void addMatching(bool Function(RunModuleDefinition definition) matches) {
+      for (final definition in remaining) {
+        if (matches(definition) && !candidates.contains(definition.id)) {
+          candidates.add(definition.id);
+        }
+      }
+    }
+
+    addMatching((definition) {
+      final tower = _affinityTower(definition.affinity);
+      return tower == null || placedTypes.contains(tower);
+    });
+
+    if (candidates.length < 3) {
+      addMatching((definition) {
+        final tower = _affinityTower(definition.affinity);
+        return tower != null && unlockedTypes.contains(tower);
+      });
+    }
+
+    if (candidates.length < 3) {
+      addMatching((_) => true);
+    }
+
+    return candidates;
+  }
+
+  void _openModuleDraftIfDue() {
+    if (_pendingRunModuleOffer != null ||
+        !const {2, 4, 6}.contains(_waveIndex)) {
+      return;
+    }
+
+    final candidates = _moduleCandidates();
+    if (candidates.length < 3) {
+      return;
+    }
+
+    _pendingRunModuleOffer = RunModuleOffer(
+      offerId: _nextModuleOfferId++,
+      draftNumber: _waveIndex ~/ 2,
+      moduleIds: _offerPicker.pick(candidates, count: 3),
+    );
   }
 }
