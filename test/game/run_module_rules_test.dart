@@ -118,6 +118,24 @@ void main() {
     expect(unchangedLaser.slowDuration, laser.slowDuration);
   });
 
+  test('effectText describes every catalog entry', () {
+    for (final id in RunModuleId.values) {
+      expect(runModuleDefinition(id).effectText, isNotEmpty);
+    }
+    expect(
+      runModuleDefinition(RunModuleId.overclockRelay).effectText,
+      'Attack interval drops 15%; all tower damage drops 8%.',
+    );
+    expect(
+      runModuleDefinition(RunModuleId.longSight).effectText,
+      'All towers gain 15% range.',
+    );
+    expect(
+      runModuleDefinition(RunModuleId.rocketFusing).effectText,
+      'Rocket splash grows 25%; damage drops 10%.',
+    );
+  });
+
   test('Rocket Fusing changes splash and damage only on Rocket towers', () {
     final rocket = GameBalance.towerStats(TowerType.rocket, level: 1);
     final laser = GameBalance.towerStats(TowerType.laser, level: 1);

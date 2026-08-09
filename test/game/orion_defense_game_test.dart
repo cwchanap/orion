@@ -380,6 +380,96 @@ void main() {
       },
     );
 
+    test('placeTower without a selected cell reports feedback', () {
+      final game = OrionDefenseGame();
+
+      game.placeTower(TowerType.laser);
+
+      expect(game.snapshot.feedback, 'Select a buildable cell first.');
+    });
+
+    test('upgradeSelectedTower without a selected tower reports feedback', () {
+      final game = OrionDefenseGame();
+
+      game.upgradeSelectedTower();
+
+      expect(game.snapshot.feedback, 'Select a tower first.');
+    });
+
+    test('upgradeSelectedTower reports feedback when tower is maxed', () {
+      final game = OrionDefenseGame();
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 0));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+      _tapCell(game, const GridPosition(0, 0));
+      game.upgradeSelectedTower();
+
+      game.upgradeSelectedTower();
+
+      expect(
+        game.snapshot.feedback,
+        'Choose a specialization or use a maxed tower.',
+      );
+    });
+
+    test(
+      'specializeSelectedTower without a selected tower reports feedback',
+      () {
+        final game = OrionDefenseGame();
+
+        game.specializeSelectedTower(TowerSpecialization.prismLaser);
+
+        expect(game.snapshot.feedback, 'Select a tower first.');
+      },
+    );
+
+    test(
+      'specializeSelectedTower reports feedback when tower is not upgraded',
+      () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 0));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        _tapCell(game, const GridPosition(0, 0));
+
+        game.specializeSelectedTower(TowerSpecialization.prismLaser);
+
+        expect(
+          game.snapshot.feedback,
+          'Upgrade this tower before specializing.',
+        );
+      },
+    );
+
+    test(
+      'update during a pending draft clears any stale auto-start countdown',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(8),
+          moduleOfferPicker: picker,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0); // wave 1
+        game.startWave();
+        game.update(0); // wave 2 opens draft
+        expect(game.snapshot.pendingRunModuleOffer, isNotNull);
+
+        game.update(0.1);
+
+        expect(game.snapshot.pendingRunModuleOffer, isNotNull);
+      },
+    );
+
     test(
       'module selection refreshes existing and newly placed tower stats',
       () {
