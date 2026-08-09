@@ -222,14 +222,21 @@ class TowerStats {
 
   /// Returns a copy with overridden fields. Exposes the fields runtime stat
   /// resolvers need to mutate: `damage` and `slowDuration` for campaign tech
-  /// upgrades, and `fieldRadius` and `fieldDuration` for stage environmental
-  /// modifiers (e.g. amplified gravity wells). Everything else copies from
-  /// `this`. Kept narrow on purpose — extend only if another feature needs it.
+  /// upgrades, `fieldRadius` and `fieldDuration` for stage environmental
+  /// modifiers (e.g. amplified gravity wells), and `range`, `fireInterval`,
+  /// `splashRadius`, `corrosionDamagePerSecond`, and `droneDamage` for run
+  /// modules. Everything else copies from `this`. Kept narrow on purpose —
+  /// extend only if another feature needs it.
   TowerStats copyWith({
     double? damage,
     double? slowDuration,
     double? fieldRadius,
     double? fieldDuration,
+    double? range,
+    double? fireInterval,
+    double? splashRadius,
+    double? corrosionDamagePerSecond,
+    double? droneDamage,
   }) {
     return TowerStats(
       type: type,
@@ -238,11 +245,11 @@ class TowerStats {
       cost: cost,
       upgradeCost: upgradeCost,
       specializationCost: specializationCost,
-      range: range,
+      range: range ?? this.range,
       damage: damage ?? this.damage,
-      fireInterval: fireInterval,
+      fireInterval: fireInterval ?? this.fireInterval,
       projectileSpeed: projectileSpeed,
-      splashRadius: splashRadius,
+      splashRadius: splashRadius ?? this.splashRadius,
       slowMultiplier: slowMultiplier,
       slowDuration: slowDuration ?? this.slowDuration,
       pierceCount: pierceCount,
@@ -250,7 +257,8 @@ class TowerStats {
       chainCount: chainCount,
       chainRange: chainRange,
       chainFalloff: chainFalloff,
-      corrosionDamagePerSecond: corrosionDamagePerSecond,
+      corrosionDamagePerSecond:
+          corrosionDamagePerSecond ?? this.corrosionDamagePerSecond,
       corrosionDuration: corrosionDuration,
       armorShred: armorShred,
       fieldRadius: fieldRadius ?? this.fieldRadius,
@@ -258,7 +266,7 @@ class TowerStats {
       fieldTickInterval: fieldTickInterval,
       droneCount: droneCount,
       droneLifetime: droneLifetime,
-      droneDamage: droneDamage,
+      droneDamage: droneDamage ?? this.droneDamage,
       droneAttackInterval: droneAttackInterval,
       maxActiveDrones: maxActiveDrones,
       shieldDamageMultiplier: shieldDamageMultiplier,
