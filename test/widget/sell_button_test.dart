@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/util/format.dart';
@@ -160,6 +161,105 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('selected cryo shows slow duration secondary stat', (
+    tester,
+  ) async {
+    final stats = GameBalance.towerStats(TowerType.cryo, level: 1);
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.cryo,
+        position: GridPosition(0, 0),
+      ),
+      selectedTowerStats: stats,
+    );
+
+    expect(find.text('Slow ${number(stats.slowDuration)}s'), findsOneWidget);
+  });
+
+  testWidgets('selected rocket shows splash radius secondary stat', (
+    tester,
+  ) async {
+    final stats = GameBalance.towerStats(TowerType.rocket, level: 1);
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.rocket,
+        position: GridPosition(0, 0),
+      ),
+      selectedTowerStats: stats,
+    );
+
+    expect(find.text('Splash ${number(stats.splashRadius)}'), findsOneWidget);
+  });
+
+  testWidgets('selected nanite shows corrosion secondary stat', (tester) async {
+    final stats = GameBalance.towerStats(TowerType.nanite, level: 1);
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.nanite,
+        position: GridPosition(0, 0),
+      ),
+      selectedTowerStats: stats,
+    );
+
+    expect(
+      find.text('Corrosion ${number(stats.corrosionDamagePerSecond)}/s'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('acquired run modules strip renders in the HUD', (tester) async {
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(0, 0),
+      ),
+      acquiredRunModules: const [RunModuleId.heavyCaliber],
+    );
+
+    final definition = runModuleDefinition(RunModuleId.heavyCaliber);
+    expect(find.textContaining(definition.title), findsWidgets);
+  });
+
+  testWidgets('pending module offer shows the draft panel overlay', (
+    tester,
+  ) async {
+    final offer = RunModuleOffer(
+      offerId: 1,
+      draftNumber: 1,
+      moduleIds: const [
+        RunModuleId.heavyCaliber,
+        RunModuleId.overclockRelay,
+        RunModuleId.longSight,
+      ],
+    );
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(0, 0),
+      ),
+      pendingRunModuleOffer: offer,
+    );
+
+    expect(find.text('Salvage Module 1 of 3'), findsOneWidget);
+    for (final id in offer.moduleIds) {
+      expect(find.text(runModuleDefinition(id).title), findsOneWidget);
+    }
+
+    await tester.tap(find.text('Heavy Caliber'));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+  });
 }
 
 /// Pumps [OrionGamePage], enters the first stage, and drives the panel with a
@@ -169,6 +269,8 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   PlacedTower selectedTower, {
   GamePhase phase = GamePhase.build,
   TowerStats? selectedTowerStats,
+  RunModuleOffer? pendingRunModuleOffer,
+  List<RunModuleId> acquiredRunModules = const [],
 }) async {
   OrionDefenseGame? game;
 
@@ -206,6 +308,8 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
     speedMultiplier: snapshot.speedMultiplier,
     autoStartEnabled: snapshot.autoStartEnabled,
     autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    pendingRunModuleOffer: pendingRunModuleOffer,
+    acquiredRunModules: acquiredRunModules,
     selectedTowerStats: selectedTowerStats,
   );
   await tester.pump();
