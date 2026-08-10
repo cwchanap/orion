@@ -839,6 +839,75 @@ void main() {
     expect(store.saveCalls, 0);
   });
 
+  testWidgets('Mission Retry survives consecutive losses', (tester) async {
+    // Regression: _restartFromMissionReport cleared _missionStageId, which is
+    // only restored by _startStage (world-map re-launch) or _handleStageWon
+    // (win). A loss does neither, so loss → Retry → loss → Retry hit the
+    // `_missionStageId!` null check on the second retry.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    // First loss → Retry.
+    await publishLoss(tester, game!);
+    expect(find.text('Mission Failed'), findsOneWidget);
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.pumpAndSettle();
+    expect(game!.snapshot.phase, GamePhase.build);
+
+    // Second loss → Retry. Previously crashed on `_missionStageId!`.
+    await publishLoss(tester, game!);
+    expect(find.text('Mission Failed'), findsOneWidget);
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.pumpAndSettle();
+    expect(game!.snapshot.phase, GamePhase.build);
+    expect(store.saveCalls, 0);
+  });
+
+  testWidgets('Mission Retry is safe under rapid taps on a loss', (tester) async {
+    // A fast double-tap on Retry before the report rebuilds reaches the same
+    // `_missionStageId!` null assertion as the consecutive-loss path.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishLoss(tester, game!);
+    final retryButton = find.byTooltip('Retry');
+    expect(retryButton, findsOneWidget);
+
+    // Both taps land before the report rebuilds.
+    await tester.tap(retryButton);
+    await tester.tap(retryButton);
+    await tester.pumpAndSettle();
+
+    expect(game!.snapshot.phase, GamePhase.build);
+    expect(store.saveCalls, 0);
+  });
+
   testWidgets('Mission World Map exit stays blocked while saving', (
     tester,
   ) async {
@@ -2069,6 +2138,36 @@ Future<void> publishVictory(
     acquiredRunModules: snapshot.acquiredRunModules,
   );
   game.onStageWon?.call(StageCompletion(stage: game.stage, result: result));
+  await tester.pump();
+}
+
+// Mirrors publishVictory but for the loss path: publishes a lost snapshot
+// without invoking onStageWon (a loss never calls _handleStageWon), which is
+// the exact condition that left _missionStageId unrestored between retries.
+Future<void> publishLoss(WidgetTester tester, OrionDefenseGame game) async {
+  final snapshot = game.stateNotifier.value;
+  game.stateNotifier.value = GameSnapshot(
+    phase: GamePhase.lost,
+    gold: snapshot.gold,
+    baseHealth: 0,
+    startingBaseHealth: snapshot.startingBaseHealth,
+    waveNumber: snapshot.waveNumber,
+    waveTotal: snapshot.waveTotal,
+    stageId: snapshot.stageId,
+    stageName: snapshot.stageName,
+    stageLabel: snapshot.stageLabel,
+    unlockedTowerTypes: snapshot.unlockedTowerTypes,
+    stageModifiers: snapshot.stageModifiers,
+    nextWavePreview: null,
+    selectedCell: null,
+    selectedTower: null,
+    feedback: null,
+    isPaused: false,
+    speedMultiplier: 1,
+    autoStartEnabled: false,
+    autoStartCountdownRemaining: null,
+    acquiredRunModules: snapshot.acquiredRunModules,
+  );
   await tester.pump();
 }
 
