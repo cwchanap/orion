@@ -426,7 +426,7 @@ class GameSession {
 
     _pendingRunModuleOffer = RunModuleOffer(
       offerId: _nextModuleOfferId++,
-      draftNumber: _waveIndex ~/ 2,
+      draftNumber: GameBalance.moduleDraftWaves.indexOf(_waveIndex) + 1,
       draftTotal: GameBalance.moduleDraftWaves.length,
       moduleIds: _offerPicker.pick(candidates, count: 3),
     );

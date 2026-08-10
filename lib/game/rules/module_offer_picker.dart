@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import '../modules/run_module.dart';
+import '../models/game_models.dart';
 
 abstract interface class ModuleOfferPicker {
   List<RunModuleId> pick(List<RunModuleId> candidates, {required int count});
