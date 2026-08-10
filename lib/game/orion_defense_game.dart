@@ -343,6 +343,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         drone.updateStats(ownerTower.stats);
       }
     }
+    for (final field in children.whereType<GravityFieldComponent>()) {
+      final ownerTower = _towerComponents[field.ownerTowerId];
+      if (ownerTower != null) {
+        field.updateStats(ownerTower.stats);
+      }
+    }
     _startAutoStartCountdownIfNeeded();
     _publishSnapshot();
   }
