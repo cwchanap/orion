@@ -24,10 +24,17 @@ class GravityFieldComponent extends CircleComponent {
        );
 
   final int ownerTowerId;
-  final TowerStats stats;
+  TowerStats stats;
   final GravityEnemiesProvider enemiesProvider;
   double _remaining;
   double _tickRemaining;
+
+  /// Replaces only the combat stats; remaining duration and tick cooldown
+  /// continue from their current values so a lingering field is not restarted
+  /// mid-run when a run module is selected between waves.
+  void updateStats(TowerStats stats) {
+    this.stats = stats;
+  }
 
   @override
   void update(double dt) {

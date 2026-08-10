@@ -701,6 +701,128 @@ void main() {
     );
 
     test(
+      'module selection refreshes a lingering gravity field without resetting its state',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.emergencySalvage,
+          ],
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.cryoReservoir,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: _gravityWellModuleRefreshStage(),
+          moduleOfferPicker: picker,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        // Clear waves 1-2 and choose Long Sight from draft 1.
+        game.startWave();
+        game.update(0);
+        game.startWave();
+        game.update(0);
+        var offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.longSight);
+
+        // Clear waves 3-4 and choose Emergency Salvage from draft 2.
+        game.startWave();
+        game.update(0);
+        game.startWave();
+        game.update(0);
+        offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.emergencySalvage);
+
+        // Gravity Well unlocks at wave 5. Place it, then clear the empty
+        // wave 5 so wave 6 (which opens draft 3 on clear) is next.
+        expect(
+          game.snapshot.unlockedTowerTypes,
+          contains(TowerType.gravityWell),
+        );
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.gravityWell);
+        game.processLifecycleEvents();
+        game.startWave(); // wave 5: empty
+        game.update(0);
+        game.processLifecycleEvents();
+
+        // Wave 6: spawn the durable enemy and fire the gravity well so a
+        // field is created. Firing via the tower's own update() avoids a
+        // concurrent-modification error in unmounted unit tests.
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        game.children.whereType<TowerComponent>().single.update(0.01);
+        game.processLifecycleEvents();
+        final field = game.children.whereType<GravityFieldComponent>().single;
+        expect(field.parent, same(game));
+
+        // Consume some field duration and establish a live tick cooldown
+        // before wave 6 is cleared. The first update ticks immediately
+        // (tickRemaining starts at 0); 0.5s leaves ~0.0s of the next tick
+        // interval and ~1.5s of remaining duration.
+        field.update(0.5);
+
+        // Clear wave 6 by resolving the enemy; the field lingers because
+        // its fieldDuration (2.0s) has not elapsed. Draft 3 opens.
+        game.children.whereType<EnemyComponent>().single.applyDamage(1000000);
+        game.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.snapshot.phase, GamePhase.build);
+        offer = game.snapshot.pendingRunModuleOffer!;
+        expect(field.parent, same(game)); // lingers into the draft
+
+        // Select Heavy Caliber, which raises damage by 20%. The lingering
+        // field must pick up the refreshed stats; without a refresh it would
+        // keep dealing the pre-module base damage.
+        game.selectRunModule(offer.offerId, RunModuleId.heavyCaliber);
+        game.processLifecycleEvents();
+        final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+        final base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+        expect(
+          field.stats.damage,
+          closeTo(base.damage * heavy.damageMultiplier, 1e-9),
+        );
+
+        // Start wave 7 and spawn its enemy at the same path start the field
+        // is centered on. The preserved tick cooldown means a short update
+        // does not damage the new enemy yet.
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final wave7Enemy = game.children.whereType<EnemyComponent>().single;
+        final healthBeforeTick = wave7Enemy.health;
+        field.update(0.1);
+        expect(wave7Enemy.health, healthBeforeTick); // cooldown preserved
+
+        // After the remaining tick cooldown elapses, the field deals the
+        // refreshed (Heavy Caliber) damage.
+        field.update(base.fieldTickInterval);
+        expect(
+          wave7Enemy.health,
+          closeTo(
+            healthBeforeTick - base.damage * heavy.damageMultiplier,
+            1e-9,
+          ),
+        );
+
+        // The pre-selection duration is preserved too: this duration is
+        // longer than the remaining lifetime but shorter than a reset one.
+        field.update(base.fieldDuration);
+        expect(field.parent, isNull);
+      },
+    );
+
+    test(
       'TowerComponent.updateTower resolves through its provider callback',
       () {
         var resolveCalls = 0;
@@ -2472,6 +2594,45 @@ StageDefinition _droneBayModuleRefreshStage() {
         clearBonus: 0,
       ),
       const WaveDefinition(groups: [], clearBonus: 0),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+/// Stage that unlocks the gravity well at wave 5 and keeps a lingering field
+/// alive across the wave-6 module draft. Waves 1-5 are empty (drafts at 2 and
+/// 4 must be dismissed), wave 6 spawns a durable enemy whose gravity field can
+/// survive the wave clear into draft 3, and wave 7 spawns another durable
+/// enemy to exercise the refreshed field's tick.
+StageDefinition _gravityWellModuleRefreshStage() {
+  const durableEnemy = EnemyStats(
+    health: 100000,
+    speed: 1,
+    baseDamage: 1,
+    goldReward: 0,
+  );
+  return StageDefinition(
+    id: 'gravity-well-module-refresh-stage',
+    name: 'Gravity Well Module Refresh Stage',
+    mapLabel: 'Gravity',
+    description:
+        'Stage that keeps a gravity field alive across module selection',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: [
+      for (var wave = 0; wave < 5; wave += 1)
+        const WaveDefinition(groups: [], clearBonus: 0),
+      const WaveDefinition(
+        groups: [WaveGroup(enemyCount: 1, enemyStats: durableEnemy)],
+        clearBonus: 0,
+      ),
+      const WaveDefinition(
+        groups: [WaveGroup(enemyCount: 1, enemyStats: durableEnemy)],
+        clearBonus: 0,
+      ),
     ],
     unlockDependencies: const [],
     isMainPath: true,
