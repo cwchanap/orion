@@ -1405,7 +1405,9 @@ void main() {
       // can upgrade, so a false result must be the pending draft blocking it.
       const upgradeCandidatePosition = GridPosition(4, 1);
       expect(
-        session.placeTower(upgradeCandidatePosition, TowerType.laser).isAllowed,
+        session
+            .placeTower(upgradeCandidatePosition, TowerType.laser)
+            .isAllowed,
         isTrue,
       );
       final upgradeCandidate = session.towerAt(upgradeCandidatePosition)!;
