@@ -1072,7 +1072,10 @@ void main() {
 
         final offer = session.pendingRunModuleOffer;
         expect(offer, isNotNull);
-        expect(offer!.draftNumber, GameBalance.moduleDraftWaves.indexOf(wave) + 1);
+        expect(
+          offer!.draftNumber,
+          GameBalance.moduleDraftWaves.indexOf(wave) + 1,
+        );
         final firstSnapshot = session.snapshot();
         final secondSnapshot = session.snapshot();
         expect(firstSnapshot.pendingRunModuleOffer, offer);
