@@ -160,11 +160,13 @@ final class RunModuleOffer {
   RunModuleOffer({
     required this.offerId,
     required this.draftNumber,
+    required this.draftTotal,
     required List<RunModuleId> moduleIds,
   }) : moduleIds = List.unmodifiable(moduleIds);
 
   final int offerId;
   final int draftNumber;
+  final int draftTotal;
   final List<RunModuleId> moduleIds;
 }
 ```

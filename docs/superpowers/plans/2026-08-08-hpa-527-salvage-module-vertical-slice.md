@@ -264,11 +264,13 @@ final class RunModuleOffer {
   RunModuleOffer({
     required this.offerId,
     required this.draftNumber,
+    required this.draftTotal,
     required List<RunModuleId> moduleIds,
   }) : moduleIds = List.unmodifiable(moduleIds);
 
   final int offerId;
   final int draftNumber;
+  final int draftTotal;
   final List<RunModuleId> moduleIds;
 }
 ```
@@ -997,6 +999,7 @@ Create `test/widget/run_module_draft_panel_test.dart` with a 360×640 harness an
 final offer = RunModuleOffer(
   offerId: 4,
   draftNumber: 2,
+  draftTotal: GameBalance.moduleDraftWaves.length,
   moduleIds: const [
     RunModuleId.heavyCaliber,
     RunModuleId.emergencySalvage,
