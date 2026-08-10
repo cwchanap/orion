@@ -568,6 +568,53 @@ void main() {
     );
   });
 
+  testWidgets('mission save composes with a subsequent tech-tree purchase', (
+    tester,
+  ) async {
+    const expectedResult = StageResult(
+      medal: StageMedal.gold,
+      bestBaseHealth: 20,
+    );
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delaySaves: true,
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(tester, game!, result: expectedResult);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(store.progress.resultFor('outpost-alpha'), expectedResult);
+    await tester.tap(find.byTooltip('World Map').last);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Purchase'));
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    expect(store.progress.resultFor('outpost-alpha'), expectedResult);
+    expect(
+      store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
+      isTrue,
+    );
+  });
+
   testWidgets('Mission save failure reports unchanged progress', (
     tester,
   ) async {
@@ -643,6 +690,58 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(store.saveCalls, 2);
+    expect(find.text('Saved.'), findsOneWidget);
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+  });
+
+  testWidgets('Mission Retry Save is single-flight on rapid taps', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delaySaves: true,
+      failOnSaveIndices: {0},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Retry Save'), findsOneWidget);
+    expect(store.saveCalls, 1);
+    store.failOnSaveIndices.clear();
+
+    // Both taps happen before the first retry completion. The save-state
+    // guard must collapse them into one additional queued write.
+    final retryButton = find.byTooltip('Retry Save');
+    await tester.tap(retryButton);
+    await tester.tap(retryButton);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+
+    expect(store.saveCalls, 2);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
     expect(find.text('Saved.'), findsOneWidget);
     expect(
       store.progress.resultFor('outpost-alpha'),
