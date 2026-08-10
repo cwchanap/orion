@@ -445,6 +445,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final saveTask = _saveQueue.then((_) async {
       try {
         if (saveGeneration != _progressGeneration) {
+          onFailed?.call();
           return; // a reset invalidated this save; the reset owns wiping
         }
         final payload = buildSave(
