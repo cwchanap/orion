@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/util/format.dart';
@@ -235,6 +234,7 @@ void main() {
     final offer = RunModuleOffer(
       offerId: 1,
       draftNumber: 1,
+      draftTotal: GameBalance.moduleDraftWaves.length,
       moduleIds: const [
         RunModuleId.heavyCaliber,
         RunModuleId.overclockRelay,

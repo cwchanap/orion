@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/modules/run_module.dart';
+import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 
 void main() {
@@ -14,6 +14,7 @@ void main() {
     final offer = RunModuleOffer(
       offerId: 4,
       draftNumber: 2,
+      draftTotal: GameBalance.moduleDraftWaves.length,
       moduleIds: const [
         RunModuleId.heavyCaliber,
         RunModuleId.emergencySalvage,
@@ -70,13 +71,15 @@ void main() {
   });
 
   testWidgets('empty acquired reminder renders no module copy', (tester) async {
+    final definition = runModuleDefinition(RunModuleId.heavyCaliber);
+
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(body: AcquiredRunModuleStrip(moduleIds: [])),
       ),
     );
 
-    expect(find.textContaining('Heavy Caliber'), findsNothing);
-    expect(find.textContaining('All tower damage'), findsNothing);
+    expect(find.textContaining(definition.title), findsNothing);
+    expect(find.textContaining(definition.effectText), findsNothing);
   });
 }

@@ -3,7 +3,6 @@ import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
 
@@ -1400,6 +1399,18 @@ void main() {
       final tower = session.towerAt(towerPosition)!;
       expect(session.upgradeTower(tower.id), isTrue);
 
+      // A separate level-1 tower isolates the upgrade gate: the level-2
+      // tower above can no longer upgrade (canUpgrade requires level == 1),
+      // so asserting upgradeTower on it would be vacuous. This tower still
+      // can upgrade, so a false result must be the pending draft blocking it.
+      const upgradeCandidatePosition = GridPosition(4, 1);
+      expect(
+        session.placeTower(upgradeCandidatePosition, TowerType.laser).isAllowed,
+        isTrue,
+      );
+      final upgradeCandidate = session.towerAt(upgradeCandidatePosition)!;
+      expect(upgradeCandidate.level, 1);
+
       completeWave(session);
       completeWave(session);
 
@@ -1410,7 +1421,7 @@ void main() {
             .failure,
         PlacementFailure.pendingModuleDraft,
       );
-      expect(session.upgradeTower(tower.id), isFalse);
+      expect(session.upgradeTower(upgradeCandidate.id), isFalse);
       expect(
         session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
         isFalse,

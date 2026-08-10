@@ -869,10 +869,22 @@ void selectRunModule(int offerId, RunModuleId moduleId) {
   for (final component in _towerComponents.values) {
     component.updateTower(component.placedTower);
   }
+  // Damage-affecting modules (e.g. heavyCaliber) change droneDamage, so
+  // surviving drones must be refreshed too. updateStats replaces only the
+  // combat stats; lifetime and attack cooldown continue from their current
+  // values so a live drone is not restarted mid-run.
+  for (final drone in children.whereType<DroneComponent>()) {
+    final ownerTower = _towerComponents[drone.ownerTowerId];
+    if (ownerTower != null) {
+      drone.updateStats(ownerTower.stats);
+    }
+  }
   _startAutoStartCountdownIfNeeded();
   _publishSnapshot();
 }
 ```
+
+Integration test: `orion_defense_game_test.dart`'s "module selection refreshes a surviving drone without resetting its state" covers this path — it places a Drone Bay, launches a drone, consumes some lifetime/cooldown, opens a draft, selects `heavyCaliber`, then asserts the same drone survives with `drone.stats.droneDamage == base.droneDamage * heavy.damageMultiplier`, that the pre-selection attack cooldown is preserved (no immediate damage on the next wave), and that the elapsed lifetime is preserved (the drone expires before a full reset lifetime would).
 
 - [ ] **Step 13: Suspend auto-start around a pending offer**
 
