@@ -564,8 +564,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     _missionPriorResult = _progress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
-    _missionStageId = null;
     _missionSaveState = null;
+    // _missionStageId represents the currently running stage, not per-attempt
+    // terminal state, so it stays valid across restart() of the same stage.
+    // Clearing it broke loss → Retry → loss → Retry: a loss never calls
+    // _handleStageWon (the only other re-setter besides _startStage), so the
+    // second retry hit the `_missionStageId!` null check above.
     game.restart();
   }
 
