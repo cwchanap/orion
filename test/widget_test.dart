@@ -568,6 +568,46 @@ void main() {
     );
   });
 
+  testWidgets('Mission Replay restarts the stage after a saved victory', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delaySaves: true,
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Saved.'), findsOneWidget);
+    expect(find.byTooltip('Replay Mission'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Replay Mission'));
+    await tester.pumpAndSettle();
+
+    // The mission report is gone and the stage is back in build phase.
+    expect(find.text('Saved.'), findsNothing);
+    expect(find.text('Start Wave'), findsOneWidget);
+    expect(game!.snapshot.phase, GamePhase.build);
+  });
+
   testWidgets('mission save composes with a subsequent tech-tree purchase', (
     tester,
   ) async {
