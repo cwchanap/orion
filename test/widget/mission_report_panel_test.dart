@@ -150,6 +150,38 @@ void main() {
     expect(find.text('Unlocks a new blueprint after saving.'), findsOneWidget);
   });
 
+  testWidgets('null saveState victory falls back to replay and map actions', (
+    tester,
+  ) async {
+    // Catches a production panel that omits the defensive null-saveState
+    // branch — didWin with no saveState yet — leaving the action row empty.
+    var replayed = false;
+    var returned = false;
+    await _pumpPanel(
+      tester,
+      _victoryContentNullSaveState(),
+      onReplay: () => replayed = true,
+      onReturnToMap: () => returned = true,
+    );
+
+    expect(find.text('Replay Mission'), findsOneWidget);
+    expect(find.text('World Map'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Replay Mission'));
+    await tester.tap(find.byTooltip('World Map'));
+    expect(replayed, isTrue);
+    expect(returned, isTrue);
+  });
+
+  testWidgets('null saveState victory shows the info save-status icon', (
+    tester,
+  ) async {
+    // Catches a production _SaveStateRow that drops the null-state icon case.
+    await _pumpPanel(tester, _victoryContentNullSaveState());
+
+    expect(find.bySemanticsLabel('Save status'), findsOneWidget);
+  });
+
   testWidgets('three module IDs fit the 360 by 640 surface without overflow', (
     tester,
   ) async {
@@ -228,6 +260,22 @@ MissionReportContent _victoryContent(
     saveText: saveText,
     reward: reward,
     nextOpportunityText: nextOpportunityText,
+  );
+}
+
+MissionReportContent _victoryContentNullSaveState() {
+  return MissionReportContent(
+    stageId: 'outpost-alpha',
+    stageName: 'Outpost Alpha',
+    didWin: true,
+    outcomeText: 'Gold medal • Base 20/20',
+    comparisonText: 'New first-clear result',
+    moduleIds: const [],
+    emptyModulesText: 'No Salvage Modules acquired',
+    saveState: null,
+    saveText: 'Save status pending.',
+    nextOpportunityText:
+        'Replay for a better result or continue on the World Map.',
   );
 }
 
