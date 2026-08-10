@@ -558,6 +558,7 @@ void main() {
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
@@ -593,6 +594,7 @@ void main() {
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
@@ -681,6 +683,7 @@ void main() {
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
@@ -782,6 +785,7 @@ void main() {
     store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
+    expect(store.saveCalls, 2);
     expect(find.text('Saved.'), findsOneWidget);
     expect(
       store.progress.resultFor('outpost-alpha'),
@@ -1061,6 +1065,7 @@ void main() {
       store.saveCompletions[0].complete();
       await tester.pumpAndSettle();
 
+      expect(tester.takeException(), isNull);
       expect(store.saveCalls, 1);
     },
   );

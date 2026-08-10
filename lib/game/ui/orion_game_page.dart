@@ -317,7 +317,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     );
     _missionPriorResult = _progress.resultFor(stage.id);
     _missionVictoryResult = null;
-    _missionStageId = null;
+    _missionStageId = stage.id;
     _missionSaveState = null;
     final game = OrionDefenseGame(
       stage: stage,
@@ -557,13 +557,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final game = _game;
     if (game == null) return;
 
-    final snapshot = game.snapshot;
-    if (snapshot.phase == GamePhase.won &&
+    if (_missionVictoryResult != null &&
         _missionSaveState != MissionSaveState.saved) {
       return;
     }
 
-    _missionPriorResult = _progress.resultFor(game.stage.id);
+    _missionPriorResult = _progress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
     _missionStageId = null;
     _missionSaveState = null;

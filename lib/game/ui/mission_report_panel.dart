@@ -80,7 +80,7 @@ class MissionReportPanel extends StatelessWidget {
         ),
         _MissionAction(label: 'World Map', icon: Icons.map, tonal: true),
       ],
-      MissionSaveState.saved => [
+      MissionSaveState.saved || null => [
         _MissionAction(
           label: 'Replay Mission',
           icon: Icons.replay,
@@ -101,19 +101,6 @@ class MissionReportPanel extends StatelessWidget {
         ),
         _MissionAction(
           label: 'World Map (Unsaved)',
-          icon: Icons.map,
-          onPressed: onReturnToMap,
-          tonal: true,
-        ),
-      ],
-      null => [
-        _MissionAction(
-          label: 'Replay Mission',
-          icon: Icons.replay,
-          onPressed: onReplay,
-        ),
-        _MissionAction(
-          label: 'World Map',
           icon: Icons.map,
           onPressed: onReturnToMap,
           tonal: true,
