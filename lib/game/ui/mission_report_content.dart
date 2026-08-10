@@ -82,7 +82,6 @@ MissionReportContent projectVictoryReport({
     MissionResultComparison.retained =>
       'Saved best retained: ${priorSavedResult!.medal.label} • ${priorSavedResult.bestBaseHealth} base health',
   };
-  final moduleIds = List<RunModuleId>.unmodifiable(snapshot.acquiredRunModules);
 
   return MissionReportContent(
     stageId: snapshot.stageId,
@@ -93,8 +92,10 @@ MissionReportContent projectVictoryReport({
     result: result,
     comparison: comparison,
     comparisonText: comparisonText,
-    moduleIds: moduleIds,
-    emptyModulesText: moduleIds.isEmpty ? 'No Salvage Modules acquired' : null,
+    moduleIds: snapshot.acquiredRunModules,
+    emptyModulesText: snapshot.acquiredRunModules.isEmpty
+        ? 'No Salvage Modules acquired'
+        : null,
     saveState: saveState,
     saveText: switch (saveState) {
       MissionSaveState.saving => 'Saving result…',
@@ -117,15 +118,15 @@ MissionReportContent projectVictoryReport({
 }
 
 MissionReportContent projectLossReport({required GameSnapshot snapshot}) {
-  final moduleIds = List<RunModuleId>.unmodifiable(snapshot.acquiredRunModules);
-
   return MissionReportContent(
     stageId: snapshot.stageId,
     stageName: snapshot.stageName,
     didWin: false,
     outcomeText: 'Reached Wave ${snapshot.waveNumber}/${snapshot.waveTotal}',
-    moduleIds: moduleIds,
-    emptyModulesText: moduleIds.isEmpty ? 'No Salvage Modules acquired' : null,
+    moduleIds: snapshot.acquiredRunModules,
+    emptyModulesText: snapshot.acquiredRunModules.isEmpty
+        ? 'No Salvage Modules acquired'
+        : null,
     nextOpportunityText: 'Adjust your build and retry when ready.',
   );
 }

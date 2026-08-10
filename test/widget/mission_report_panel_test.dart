@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
@@ -9,8 +10,17 @@ void main() {
     tester,
   ) async {
     // Catches a production panel that exposes replay/map before save truth is
-    // resolved, which could discard an improving result.
-    await _pumpPanel(tester, _victoryContent(MissionSaveState.saving));
+    // resolved, which could discard an improving result. Callbacks are provided
+    // so the test verifies the panel actively disables otherwise available
+    // exits — not merely that no callback was supplied.
+    var replayed = false;
+    var returned = false;
+    await _pumpPanel(
+      tester,
+      _victoryContent(MissionSaveState.saving),
+      onReplay: () => replayed = true,
+      onReturnToMap: () => returned = true,
+    );
 
     expect(find.text('Saving result…'), findsOneWidget);
     expect(find.text('Replay Mission'), findsOneWidget);
@@ -30,6 +40,8 @@ void main() {
     );
     expect(replayButton.onPressed, isNull);
     expect(mapButton.onPressed, isNull);
+    expect(replayed, isFalse);
+    expect(returned, isFalse);
   });
 
   testWidgets('saved victory enables replay and world map actions', (
@@ -201,6 +213,26 @@ void main() {
 
     expect(find.text('Replay Mission'), findsOneWidget);
     expect(find.text('World Map'), findsOneWidget);
+
+    // Verify the action buttons are physically reachable within the viewport,
+    // not merely present in the widget tree.
+    final replayRect = tester.getRect(
+      find.descendant(
+        of: find.byTooltip('Replay Mission'),
+        matching: find.byType(IconButton),
+      ),
+    );
+    final mapRect = tester.getRect(
+      find.descendant(
+        of: find.byTooltip('World Map'),
+        matching: find.byType(IconButton),
+      ),
+    );
+    expect(replayRect.top, greaterThanOrEqualTo(0));
+    expect(replayRect.bottom, lessThanOrEqualTo(640));
+    expect(mapRect.top, greaterThanOrEqualTo(0));
+    expect(mapRect.bottom, lessThanOrEqualTo(640));
+
     expect(tester.takeException(), isNull);
   });
 }
@@ -230,36 +262,47 @@ Future<void> _pumpPanel(
   );
 }
 
+GameSnapshot _syntheticSnapshot({
+  List<RunModuleId> modules = const [],
+  int baseHealth = 20,
+  int waveNumber = 8,
+  GamePhase phase = GamePhase.won,
+}) {
+  return GameSnapshot(
+    phase: phase,
+    gold: 120,
+    baseHealth: baseHealth,
+    startingBaseHealth: 20,
+    waveNumber: waveNumber,
+    waveTotal: 8,
+    stageId: 'outpost-alpha',
+    stageName: 'Outpost Alpha',
+    stageLabel: 'Alpha',
+    unlockedTowerTypes: const [TowerType.laser, TowerType.cryo],
+    stageModifiers: const [],
+    nextWavePreview: null,
+    selectedCell: null,
+    selectedTower: null,
+    feedback: null,
+    isPaused: false,
+    speedMultiplier: 1,
+    autoStartEnabled: false,
+    autoStartCountdownRemaining: null,
+    acquiredRunModules: modules,
+  );
+}
+
 MissionReportContent _victoryContent(
   MissionSaveState saveState, {
   List<RunModuleId> moduleIds = const [],
   MissionRewardFact? reward,
 }) {
-  final saveText = switch (saveState) {
-    MissionSaveState.saving => 'Saving result…',
-    MissionSaveState.saved => 'Saved.',
-    MissionSaveState.failed => 'Save failed — progress unchanged.',
-  };
-  final nextOpportunityText = switch (saveState) {
-    MissionSaveState.saving => 'Saving must finish before you replay or leave.',
-    MissionSaveState.saved =>
-      'Replay for a better result or continue on the World Map.',
-    MissionSaveState.failed =>
-      'Retry saving, or return without keeping this result.',
-  };
-
-  return MissionReportContent(
-    stageId: 'outpost-alpha',
-    stageName: 'Outpost Alpha',
-    didWin: true,
-    outcomeText: 'Gold medal • Base 20/20',
-    comparisonText: 'New first-clear result',
-    moduleIds: moduleIds,
-    emptyModulesText: moduleIds.isEmpty ? 'No Salvage Modules acquired' : null,
+  return projectVictoryReport(
+    snapshot: _syntheticSnapshot(modules: moduleIds),
+    result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    priorSavedResult: null,
     saveState: saveState,
-    saveText: saveText,
     reward: reward,
-    nextOpportunityText: nextOpportunityText,
   );
 }
 
@@ -280,13 +323,11 @@ MissionReportContent _victoryContentNullSaveState() {
 }
 
 MissionReportContent _lossContent() {
-  return MissionReportContent(
-    stageId: 'outpost-alpha',
-    stageName: 'Outpost Alpha',
-    didWin: false,
-    outcomeText: 'Reached Wave 5/8',
-    moduleIds: [],
-    emptyModulesText: 'No Salvage Modules acquired',
-    nextOpportunityText: 'Adjust your build and retry when ready.',
+  return projectLossReport(
+    snapshot: _syntheticSnapshot(
+      phase: GamePhase.lost,
+      baseHealth: 0,
+      waveNumber: 5,
+    ),
   );
 }

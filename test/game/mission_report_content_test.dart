@@ -50,6 +50,10 @@ void main() {
     expect(content.comparison, MissionResultComparison.firstClear);
     expect(content.comparisonText, 'New first-clear result');
     expect(content.saveText, 'Saving result…');
+    expect(
+      content.nextOpportunityText,
+      'Saving must finish before you replay or leave.',
+    );
     expect(content.moduleIds, [RunModuleId.heavyCaliber]);
     expect(content.emptyModulesText, isNull);
   });
@@ -68,6 +72,10 @@ void main() {
     expect(content.comparison, MissionResultComparison.medalImproved);
     expect(content.comparisonText, 'Medal improved: Silver → Gold');
     expect(content.saveText, 'Saved.');
+    expect(
+      content.nextOpportunityText,
+      'Replay for a better result or continue on the World Map.',
+    );
   });
 
   test('projects same-medal base-health improvement', () {
