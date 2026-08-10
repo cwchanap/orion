@@ -256,32 +256,14 @@ void main() {
 
     await startStageFromBriefing(tester);
 
-    final snapshot = game!.stateNotifier.value;
-    game!.stateNotifier.value = GameSnapshot(
-      phase: GamePhase.won,
-      gold: snapshot.gold,
-      baseHealth: 14,
-      startingBaseHealth: snapshot.startingBaseHealth,
-      waveNumber: snapshot.waveTotal,
-      waveTotal: snapshot.waveTotal,
-      stageId: snapshot.stageId,
-      stageName: snapshot.stageName,
-      stageLabel: snapshot.stageLabel,
-      unlockedTowerTypes: snapshot.unlockedTowerTypes,
-      stageModifiers: const [],
-      nextWavePreview: null,
-      selectedCell: snapshot.selectedCell,
-      selectedTower: snapshot.selectedTower,
-      feedback: snapshot.feedback,
-      isPaused: snapshot.isPaused,
-      speedMultiplier: snapshot.speedMultiplier,
-      autoStartEnabled: snapshot.autoStartEnabled,
-      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
     );
-    await tester.pump();
 
     expect(find.text('Victory'), findsOneWidget);
-    expect(find.text('Silver medal - Base 14/20'), findsOneWidget);
+    expect(find.text('Silver medal • Base 14/20'), findsOneWidget);
     expect(find.textContaining('Environment:'), findsNothing);
   });
 
@@ -325,7 +307,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Base Lost'), findsOneWidget);
+    expect(find.text('Mission Failed'), findsOneWidget);
     expect(find.textContaining('Environment:'), findsNothing);
   });
 
@@ -518,51 +500,11 @@ void main() {
   });
 
   testWidgets(
-    'stage clear save failure keeps prior progress and shows feedback',
-    (tester) async {
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha'}),
-        saveError: StateError('save failed'),
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('nebula-relay'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
-      expect(find.text('Next Wave 1/8'), findsOneWidget);
-      expect(store.progress.bestResultsByStageId.keys, {'outpost-alpha'});
-      expect(store.progress.resultFor('nebula-relay'), isNull);
-    },
-  );
-
-  testWidgets(
-    'optimistic stage clear is visible on map before save fails, then reverts',
+    'Mission improving victory keeps visible progress unchanged while saving',
     (tester) async {
       final store = _TestCampaignProgressStore(
         progress: _progressWithResults({'outpost-alpha'}),
         delaySaves: true,
-        saveError: StateError('save failed'),
       );
       OrionDefenseGame? game;
 
@@ -575,111 +517,27 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-
       await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('nebula-relay'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-
-      game!.returnToMap();
-      await tester.pumpAndSettle();
-
-      // Optimistic: Relay shows as cleared with Silver medal before save
-      // completes.
-      expect(find.text('Relay'), findsOneWidget);
-      expect(find.text('Silver'), findsOneWidget);
-
-      // Complete the save → throws → rollback to prior progress.
-      store.saveCompletions.single.complete();
-      await tester.pumpAndSettle();
-
-      expect(find.text('Relay'), findsOneWidget);
-      expect(find.text('Silver'), findsNothing);
-      expect(find.text('Open'), findsWidgets);
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'blocks stage launch while a stage-completion save is in flight',
-    (tester) async {
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
-        delaySaves: true,
-        saveError: StateError('save failed'),
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Start a stage, then fire onStageWon for salvage-rift (bonus gold).
-      await startStageFromBriefing(tester, mapLabel: 'Foundry');
-
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-
-      // Return to map while the save is still pending.
-      game!.returnToMap();
-      await tester.pumpAndSettle();
-      game = null;
-
-      // Tapping another stage must not launch it while the save is in flight.
-      await tester.tap(find.text('Relay'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Orion Sector Map'), findsOneWidget);
-      expect(find.text('Start Wave'), findsNothing);
-      expect(find.text('Start Mission'), findsNothing);
-      expect(find.text('Replay Mission'), findsNothing);
-      expect(game, isNull);
-
-      // Complete the save → it throws → progress rolls back.
-      store.saveCompletions.single.complete();
-      await tester.pumpAndSettle();
-
-      // Now the stage can be started, and it must NOT carry the bonus gold
-      // from the reverted salvage-rift clear.
-      await startStageFromBriefing(
+      await publishVictory(
         tester,
-        mapLabel: 'Relay',
-        actionLabel: 'Replay Mission',
+        game!,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
       );
 
-      expect(find.text('Start Wave'), findsOneWidget);
-      expect(find.text('Gold 150'), findsOneWidget);
-      expect(find.text('Gold 180'), findsNothing);
+      expect(find.text('Saving result…'), findsOneWidget);
+      expect(
+        store.progress.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+      );
     },
   );
 
-  testWidgets('serializes sibling stage clear saves without losing progress', (
+  testWidgets('Mission save success publishes committed result', (
     tester,
   ) async {
     final store = _TestCampaignProgressStore(
-      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+      progress: _progressWithResults({'outpost-alpha'}),
       delaySaves: true,
     );
     OrionDefenseGame? game;
@@ -693,261 +551,382 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-
     await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-    game!.onStageWon?.call(
-      StageCompletion(
-        stage: OrionCampaign.stageById('salvage-rift'),
-        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-      ),
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    game!.onStageWon?.call(
-      StageCompletion(
-        stage: OrionCampaign.stageById('asteroid-foundry'),
-        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-      ),
-    );
-
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    if (store.saveCompletions.length > 1) {
-      store.saveCompletions[1].complete();
-      await tester.pump();
-      store.saveCompletions[0].complete();
-    } else {
-      store.saveCompletions[0].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-      store.saveCompletions[1].complete();
-    }
+    store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
-    expect(store.progress.bestResultsByStageId.keys, {
-      'outpost-alpha',
-      'nebula-relay',
-      'salvage-rift',
-      'asteroid-foundry',
-    });
+    expect(find.text('Saved.'), findsOneWidget);
     expect(
-      store.progress.resultFor('salvage-rift'),
-      const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-    );
-    expect(
-      store.progress.resultFor('asteroid-foundry'),
+      store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
   });
 
+  testWidgets('Mission save failure reports unchanged progress', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delaySaves: true,
+      saveError: StateError('save failed'),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+    expect(find.text('Could not save campaign progress.'), findsNothing);
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+    );
+  });
+
+  testWidgets('Mission Retry Save retries once and can commit', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delaySaves: true,
+      failOnSaveIndices: {0},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Retry Save'), findsOneWidget);
+    expect(store.saveCalls, 1);
+    store.failOnSaveIndices.clear();
+
+    await tester.tap(find.byTooltip('Retry Save'));
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    expect(store.saveCalls, 2);
+    expect(find.text('Saved.'), findsOneWidget);
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+  });
+
+  testWidgets('Mission loss does not write campaign progress', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    final snapshot = game!.stateNotifier.value;
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.lost,
+      gold: snapshot.gold,
+      baseHealth: 0,
+      startingBaseHealth: snapshot.startingBaseHealth,
+      waveNumber: snapshot.waveNumber,
+      waveTotal: snapshot.waveTotal,
+      stageId: snapshot.stageId,
+      stageName: snapshot.stageName,
+      stageLabel: snapshot.stageLabel,
+      unlockedTowerTypes: snapshot.unlockedTowerTypes,
+      stageModifiers: snapshot.stageModifiers,
+      nextWavePreview: null,
+      selectedCell: null,
+      selectedTower: null,
+      feedback: null,
+      isPaused: false,
+      speedMultiplier: 1,
+      autoStartEnabled: false,
+      autoStartCountdownRemaining: null,
+      acquiredRunModules: snapshot.acquiredRunModules,
+    );
+    await tester.pump();
+
+    expect(find.text('Mission Failed'), findsOneWidget);
+    expect(store.saveCalls, 0);
+  });
+
+  testWidgets('Mission World Map exit stays blocked while saving', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delaySaves: true,
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    game!.returnToMap();
+    await tester.pump();
+
+    expect(find.text('Saving result…'), findsOneWidget);
+    expect(find.text('Orion Sector Map'), findsNothing);
+
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('Mission failed exit leaves an unsaved breadcrumb', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      saveError: StateError('save failed'),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('World Map (Unsaved)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('Mission result was not saved.'), findsOneWidget);
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+    );
+  });
+
+  testWidgets('Mission delayed failure after disposal is setState safe', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delaySaves: true,
+      failOnSaveIndices: {0},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+    await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+    await tester.pumpAndSettle();
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(store.saveCalls, 1);
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+    );
+  });
+
+  testWidgets('blocks stage launch while a tech-tree save is in flight', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+      }),
+      delaySaves: true,
+      saveError: StateError('save failed'),
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Purchase'));
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Relay'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('Start Wave'), findsNothing);
+    expect(find.text('Start Mission'), findsNothing);
+    expect(find.text('Replay Mission'), findsNothing);
+
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    await startStageFromBriefing(
+      tester,
+      mapLabel: 'Relay',
+      actionLabel: 'Replay Mission',
+    );
+
+    expect(find.text('Start Wave'), findsOneWidget);
+  });
+
   testWidgets(
-    'persists queued stage save even if page is disposed before it runs',
+    'persists queued tech save even if page is disposed before it runs',
     (tester) async {
       final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+        }),
         delaySaves: true,
       );
-      OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
+        MaterialApp(home: OrionGamePage(progressStore: store)),
       );
       await tester.pumpAndSettle();
 
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      // Queue two saves; the first is delayed so the second waits in _saveQueue.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('asteroid-foundry'),
-          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-        ),
-      );
-
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Purchase'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-      // Dispose OrionGamePage while the first save is still pending, so the
-      // second _saveStageCompletion will run on an unmounted widget.
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       await tester.pumpAndSettle();
 
-      // Complete the first save; the second _saveStageCompletion now runs.
       store.saveCompletions[0].complete();
       await tester.pumpAndSettle();
 
-      // The second save is also delayed; complete it.
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-      store.saveCompletions[1].complete();
-      await tester.pumpAndSettle();
-
-      expect(store.saveCalls, 2);
+      expect(store.saveCalls, 1);
       expect(
-        store.progress.bestResultsByStageId.keys,
-        contains('asteroid-foundry'),
-      );
-      expect(
-        store.progress.resultFor('asteroid-foundry'),
-        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
+        isTrue,
       );
     },
   );
 
   testWidgets(
-    'queued save after disposal keeps earlier queued result in store',
-    (tester) async {
-      // Regression: when a save's _saveStageCompletion runs after the page is
-      // disposed, _progress must still advance so a later queued save derives
-      // from the latest in-memory state instead of overwriting the store with
-      // stale progress that drops the earlier result.
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
-        delaySaves: true,
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      // Prior save keeps _saveQueue pending so the next two saves queue behind
-      // it and only run after disposal.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-
-      // Queue two more saves; neither runs until the prior save completes.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('asteroid-foundry'),
-          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-        ),
-      );
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('aurora-gate'),
-          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 18),
-        ),
-      );
-
-      // Dispose before the queued saves run, so both _saveStageCompletion calls
-      // execute on an unmounted widget.
-      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-      await tester.pumpAndSettle();
-
-      // Complete the prior save; the first queued save now runs unmounted.
-      store.saveCompletions[0].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-      store.saveCompletions[1].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
-      store.saveCompletions[2].complete();
-      await tester.pumpAndSettle();
-
-      expect(store.saveCalls, 3);
-      // The asteroid-foundry result from the first queued save must survive the
-      // second queued save's overwrite of the store snapshot.
-      expect(
-        store.progress.bestResultsByStageId.keys,
-        contains('asteroid-foundry'),
-      );
-      expect(
-        store.progress.resultFor('asteroid-foundry'),
-        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-      );
-      expect(
-        store.progress.resultFor('aurora-gate'),
-        const StageResult(medal: StageMedal.gold, bestBaseHealth: 18),
-      );
-    },
-  );
-
-  testWidgets(
-    'failed queued save after disposal does not call setState on a defunct '
+    'failed tech save after disposal does not call setState on a defunct '
     'State',
     (tester) async {
-      // Round-5 review P2: the queued failure handler unconditionally called
-      // _showCampaignPersistenceFailure() (which calls setState) when the
-      // generation matched. If the page was disposed while a delayed save was
-      // in flight and that save then failed, setState fired on a defunct
-      // State. The rollback must still run (it only mutates in-memory state),
-      // but UI feedback must be guarded by mounted.
       final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+        }),
         delaySaves: true,
         failOnSaveIndices: {0},
       );
-      OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
+        MaterialApp(home: OrionGamePage(progressStore: store)),
       );
       await tester.pumpAndSettle();
 
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      // Queue a stage-completion save that will fail.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Purchase'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-      // Dispose the page while the save is still pending.
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       await tester.pumpAndSettle();
 
-      // Complete (and fail) the save after disposal. Without the mounted
-      // guard this throws a "setState() called after dispose()" assertion.
       store.saveCompletions[0].complete();
       await tester.pumpAndSettle();
 
-      // The rollback still ran: salvage-rift is not in the in-memory store.
-      expect(
-        store.progress.bestResultsByStageId.keys,
-        isNot(contains('salvage-rift')),
-      );
       expect(store.saveCalls, 1);
     },
   );
 
-  testWidgets('stage replay save does not downgrade an existing medal', (
-    tester,
-  ) async {
+  testWidgets('retained replay result does not write a save', (tester) async {
     final store = _TestCampaignProgressStore(
       saveError: StateError('save failed'),
       progress: CampaignProgress(
@@ -973,13 +952,11 @@ void main() {
 
     await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-    game!.onStageWon?.call(
-      StageCompletion(
-        stage: OrionCampaign.stageById('outpost-alpha'),
-        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-      ),
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
     );
-    await tester.pumpAndSettle();
 
     expect(
       store.progress.resultFor('outpost-alpha'),
@@ -987,6 +964,7 @@ void main() {
     );
     expect(store.saveCalls, 0);
     expect(find.text('Could not save campaign progress.'), findsNothing);
+    expect(find.text('Best result already saved.'), findsOneWidget);
   });
 
   testWidgets(
@@ -997,36 +975,26 @@ void main() {
       // reset runs and fails. Progress — including the just-saved result —
       // is retained. The generation bump is monotonic and never rolled back.
       final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+        }),
         delaySaves: true,
         resetResults: [StateError('reset failed')],
       );
-      OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
+        MaterialApp(home: OrionGamePage(progressStore: store)),
       );
       await tester.pumpAndSettle();
 
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Purchase'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-      game!.returnToMap();
+      await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
 
       // The Reset button is disabled while the save is in flight. Drain the
@@ -1044,11 +1012,11 @@ void main() {
       expect(store.progress.bestResultsByStageId.keys, {
         'outpost-alpha',
         'nebula-relay',
-        'salvage-rift',
+        'asteroid-foundry',
       });
       expect(
-        store.progress.resultFor('salvage-rift'),
-        const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
+        isTrue,
       );
     },
   );
@@ -1061,33 +1029,25 @@ void main() {
     // runs and wipes the store. No post-stale-save cleanup is needed
     // because the reset runs after — not racing with — the save.
     final store = _TestCampaignProgressStore(
-      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+      progress: _progressWithResults({
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+      }),
       delaySaves: true,
     );
-    OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
-      ),
+      MaterialApp(home: OrionGamePage(progressStore: store)),
     );
     await tester.pumpAndSettle();
 
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-    // Queue a stage-completion save (delayed).
-    game!.onStageWon?.call(
-      StageCompletion(
-        stage: OrionCampaign.stageById('salvage-rift'),
-        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-      ),
-    );
+    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Purchase'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    game!.returnToMap();
+    await tester.tap(find.byTooltip('Back'));
     await tester.pumpAndSettle();
 
     // Drain the pending save first; the Reset button is disabled while
@@ -1135,7 +1095,11 @@ void main() {
     // single-flight — the Reset button is disabled while a reset is in
     // flight, and a second programmatic call is a no-op.
     final store = _TestCampaignProgressStore(
-      progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+      progress: _progressWithResults({
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+      }),
       delayResets: true,
     );
     OrionDefenseGame? createdGame;
@@ -1180,325 +1144,6 @@ void main() {
     expect(find.text('Campaign reset.'), findsOneWidget);
     expect(store.resetCalls, 1);
   });
-
-  testWidgets(
-    'failed first queued save does not clobber a later queued save (P2b)',
-    (tester) async {
-      // Round-3 review P2b: _saveQueue previously covered only store.save,
-      // so a failed first save's full-snapshot rollback could overwrite a
-      // later save's optimistic update. With targeted rollback, the first
-      // save's failure removes only its own stage result; the second save's
-      // result survives and is persisted.
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
-        delaySaves: true,
-        failOnSaveIndices: {0},
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      // Queue two stage-completion saves. The first (salvage-rift) will
-      // fail; the second (asteroid-foundry) should succeed.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('asteroid-foundry'),
-          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-        ),
-      );
-
-      // Complete the first save — it throws and rolls back salvage-rift only.
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-      store.saveCompletions[0].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-
-      // Complete the second save — it persists asteroid-foundry.
-      store.saveCompletions[1].complete();
-      await tester.pumpAndSettle();
-
-      expect(store.saveCalls, 2);
-      // salvage-rift was rolled back; asteroid-foundry survives.
-      expect(
-        store.progress.bestResultsByStageId.keys,
-        contains('asteroid-foundry'),
-      );
-      expect(
-        store.progress.bestResultsByStageId.keys,
-        isNot(contains('salvage-rift')),
-      );
-      expect(
-        store.progress.resultFor('asteroid-foundry'),
-        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-      );
-    },
-  );
-
-  testWidgets(
-    'two failing same-stage saves leave no stale result in memory (round-5 P2)',
-    (tester) async {
-      // Round-5 review P2: when two saves target the SAME stage and both fail,
-      // the rollback previously restored the captured optimistic priorResult
-      // instead of the committed disk state. Save A optimistically records
-      // Clear; save B optimistically improves it to Gold. Save A fails — its
-      // rollback sees Gold (B's optimistic) and correctly does nothing. Save B
-      // fails — its rollback restores priorResult, which was Clear (captured
-      // from A's optimistic update). The UI then treated the stage as cleared
-      // even though nothing was committed to disk. The fix restores
-      // _committedProgress.resultFor(stageId) so the resolved outcome of every
-      // earlier transaction is the rollback target.
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
-        delaySaves: true,
-        failOnSaveIndices: {0, 1},
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      // Queue two saves for the same stage: Clear then Gold. Both will fail.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.clear,
-            bestBaseHealth: 10,
-          ),
-        ),
-      );
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-        ),
-      );
-
-      // Complete save 0 (Clear) — it fails; rollback sees Gold and does
-      // nothing.
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-      store.saveCompletions[0].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-
-      // Complete save 1 (Gold) — it fails; rollback must restore the
-      // committed value (null), not the stale optimistic Clear.
-      store.saveCompletions[1].complete();
-      await tester.pumpAndSettle();
-
-      // Nothing was committed to disk for salvage-rift.
-      expect(store.saveCalls, 2);
-      expect(
-        store.progress.bestResultsByStageId.keys,
-        isNot(contains('salvage-rift')),
-      );
-
-      // Return to the map and verify the in-memory optimistic state was
-      // fully rolled back — the Rift stage shows "Open", not a stale
-      // "Clear" or "Gold". Use a descendant finder so other stages' Clear
-      // medals (outpost-alpha, nebula-relay) don't produce false positives.
-      game!.returnToMap();
-      await tester.pumpAndSettle();
-
-      final riftNode = find.ancestor(
-        of: find.text('Rift'),
-        matching: find.byType(InkWell),
-      );
-      expect(
-        find.descendant(of: riftNode, matching: find.text('Clear')),
-        findsNothing,
-      );
-      expect(
-        find.descendant(of: riftNode, matching: find.text('Gold')),
-        findsNothing,
-      );
-      expect(
-        find.descendant(of: riftNode, matching: find.text('Open')),
-        findsOneWidget,
-      );
-    },
-  );
-
-  testWidgets(
-    'successful earlier queued save does not persist a later failing save '
-    '(round-4 P1)',
-    (tester) async {
-      // Round-4 review P1: optimistic mutations are applied to the shared
-      // _progress aggregate before their queued saves run. Previously each
-      // queued save wrote CampaignSave(progress: _progress, ...) — the
-      // aggregate at execution time — so an EARLIER successful save would
-      // persist a LATER transaction's mutation, and when the later save then
-      // failed and rolled back in memory, the mutation remained on disk.
-      // Reopening the app resurrected a result whose save reported failure.
-      //
-      // This test covers the later-save-fails ordering (the inverse of the
-      // P2b test above): save 0 (salvage-rift) succeeds, save 1
-      // (asteroid-foundry) fails. The fix builds each save's payload from
-      // committed disk state plus that save's own delta, so save 0 writes
-      // only salvage-rift; asteroid-foundry never reaches disk.
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
-        delaySaves: true,
-        failOnSaveIndices: {1},
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      // Queue two stage-completion saves synchronously. Save 0 (salvage-rift)
-      // will succeed; save 1 (asteroid-foundry) will fail.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('asteroid-foundry'),
-          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-        ),
-      );
-
-      // Complete save 0 — it persists salvage-rift only (not asteroid-foundry).
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-      store.saveCompletions[0].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-
-      // Complete save 1 — it fails and rolls asteroid-foundry back in memory.
-      store.saveCompletions[1].complete();
-      await tester.pumpAndSettle();
-
-      expect(store.saveCalls, 2);
-      // salvage-rift (successful save) is on disk.
-      expect(
-        store.progress.bestResultsByStageId.keys,
-        contains('salvage-rift'),
-      );
-      expect(
-        store.progress.resultFor('salvage-rift'),
-        const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-      );
-      // asteroid-foundry (failed save) is NOT on disk — the earlier
-      // successful save must not have persisted it via the shared aggregate.
-      expect(
-        store.progress.bestResultsByStageId.keys,
-        isNot(contains('asteroid-foundry')),
-      );
-      // The failure is surfaced to the player.
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
-    },
-  );
-
-  testWidgets(
-    'failed stage save rolls back only progress, not a later tech purchase',
-    (tester) async {
-      // Field-scoped rollback (HPA-100): a failed stage-completion save must
-      // restore _progress to its prior value without clobbering the tech tree
-      // a subsequent purchase writes. The stage save (first) fails; the
-      // purchase save (second) succeeds and its techTree value survives.
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({
-          'outpost-alpha',
-          'nebula-relay',
-          'asteroid-foundry',
-        }),
-        failOnSaveIndices: const {0},
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      // Queue a stage-completion save (save 0) — it fails on persistence.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      // Field-scoped rollback: _progress restored to prior (no salvage-rift).
-      expect(store.progress.bestResultsByStageId.keys, {
-        'outpost-alpha',
-        'nebula-relay',
-        'asteroid-foundry',
-      });
-      expect(store.progress.resultFor('salvage-rift'), isNull);
-
-      // Return to the map and open the tech tree to queue a purchase save.
-      game!.returnToMap();
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.byTooltip('Tech Tree'));
-      await tester.pumpAndSettle();
-
-      // With 3 clear medals only Solar Capacitors (cost 3) is affordable, so
-      // exactly one "Purchase" button is present.
-      await tester.tap(find.text('Purchase'));
-      await tester.pumpAndSettle();
-
-      // The purchase save (save 1) succeeded; the techTree retains the new
-      // value despite the earlier stage save's failure path having run.
-      expect(store.saveCalls, 2);
-      expect(
-        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
-        isTrue,
-      );
-    },
-  );
 
   testWidgets(
     'failed purchase save sets feedback on both tech tree and map views',
@@ -1595,44 +1240,35 @@ void main() {
     },
   );
 
-  testWidgets(
-    'null store shows persistence failure and does not throw on stage save',
-    (tester) async {
-      // Null-store guard (HPA-100): when _store is null, _persistSave must
-      // surface the persistence-failure feedback and return without throwing.
-      OrionDefenseGame? game;
+  testWidgets('null store marks Mission report failed without throwing', (
+    tester,
+  ) async {
+    OrionDefenseGame? game;
 
-      await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStoreLoader: () async => throw StateError('no store'),
-            onGameCreated: (created) => game = created,
-          ),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStoreLoader: () async => throw StateError('no store'),
+          onGameCreated: (created) => game = created,
         ),
-      );
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.pumpAndSettle();
 
-      // Load failed → _store is null. Alpha is still unlocked and launchable.
-      expect(find.text('Could not load campaign progress.'), findsOneWidget);
+    expect(find.text('Could not load campaign progress.'), findsOneWidget);
 
-      await startStageFromBriefing(tester);
+    await startStageFromBriefing(tester);
 
-      // Fire onStageWon → _persistSave hits the null-store guard. No throw;
-      // the failure feedback is routed to the active game's HUD.
-      game!.onStageWon?.call(
-        StageCompletion(
-          stage: OrionCampaign.stageById('salvage-rift'),
-          result: const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    await tester.pumpAndSettle();
 
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
-    },
-  );
+    expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+    expect(find.text('Could not save campaign progress.'), findsNothing);
+  });
 
   test('snapshot exposes the current tower unlocks', () {
     final session = GameSession.initial();
@@ -2258,6 +1894,38 @@ Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
   }
 
   fail('Condition was not met before pump limit.');
+}
+
+Future<void> publishVictory(
+  WidgetTester tester,
+  OrionDefenseGame game, {
+  required StageResult result,
+}) async {
+  final snapshot = game.stateNotifier.value;
+  game.stateNotifier.value = GameSnapshot(
+    phase: GamePhase.won,
+    gold: snapshot.gold,
+    baseHealth: result.bestBaseHealth,
+    startingBaseHealth: snapshot.startingBaseHealth,
+    waveNumber: snapshot.waveTotal,
+    waveTotal: snapshot.waveTotal,
+    stageId: snapshot.stageId,
+    stageName: snapshot.stageName,
+    stageLabel: snapshot.stageLabel,
+    unlockedTowerTypes: snapshot.unlockedTowerTypes,
+    stageModifiers: snapshot.stageModifiers,
+    nextWavePreview: null,
+    selectedCell: null,
+    selectedTower: null,
+    feedback: null,
+    isPaused: false,
+    speedMultiplier: 1,
+    autoStartEnabled: false,
+    autoStartCountdownRemaining: null,
+    acquiredRunModules: snapshot.acquiredRunModules,
+  );
+  game.onStageWon?.call(StageCompletion(stage: game.stage, result: result));
+  await tester.pump();
 }
 
 Finder _activeIgnorePointerAncestorsOf(Finder finder) {

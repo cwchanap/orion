@@ -12,6 +12,8 @@ import '../models/game_models.dart';
 import '../orion_defense_game.dart';
 import '../util/format.dart';
 import 'codex_view.dart';
+import 'mission_report_content.dart';
+import 'mission_report_panel.dart';
 import 'run_module_draft_panel.dart';
 import 'tech_tree_view.dart';
 import 'tower_icons.dart';
@@ -61,6 +63,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
   int _pendingSaves = 0;
   bool _isSavingProgress = false;
   bool _isResetting = false;
+  StageResult? _missionPriorResult;
+  StageResult? _missionVictoryResult;
+  String? _missionStageId;
+  MissionSaveState? _missionSaveState;
 
   @override
   void initState() {
@@ -233,9 +239,37 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           game.selectRunModule(offer.offerId, moduleId),
                     ),
                   ),
-                if (snapshot.isEnded)
+                if (snapshot.phase == GamePhase.lost)
                   Positioned.fill(
-                    child: _EndStatePanel(game: game, snapshot: snapshot),
+                    child: MissionReportPanel(
+                      content: projectLossReport(snapshot: snapshot),
+                      onReplay: _restartFromMissionReport,
+                      onReturnToMap: _returnFromMissionReport,
+                    ),
+                  ),
+                if (snapshot.phase == GamePhase.won &&
+                    _missionVictoryResult != null &&
+                    _missionSaveState != null)
+                  Positioned.fill(
+                    child: MissionReportPanel(
+                      content: projectVictoryReport(
+                        snapshot: snapshot,
+                        result: _missionVictoryResult!,
+                        priorSavedResult: _missionPriorResult,
+                        saveState: _missionSaveState!,
+                        reward: null,
+                      ),
+                      onReplay: _missionSaveState == MissionSaveState.saved
+                          ? _restartFromMissionReport
+                          : null,
+                      onReturnToMap:
+                          _missionSaveState == MissionSaveState.saving
+                          ? null
+                          : _returnFromMissionReport,
+                      onRetrySave: _missionSaveState == MissionSaveState.failed
+                          ? _saveMissionResult
+                          : null,
+                    ),
                   ),
               ],
             );
@@ -281,11 +315,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
       OrionCampaign.stages,
       _techTree,
     );
+    _missionPriorResult = _progress.resultFor(stage.id);
+    _missionVictoryResult = null;
+    _missionStageId = null;
+    _missionSaveState = null;
     final game = OrionDefenseGame(
       stage: stage,
       campaignModifiers: campaignModifiers,
-      onStageWon: _saveStageCompletion,
-      onReturnToMap: _returnToMap,
+      onStageWon: _handleStageWon,
+      onReturnToMap: _returnFromMissionReport,
     );
     widget.onGameCreated?.call(game);
 
@@ -365,11 +403,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
     CampaignProgress? nextProgress,
     CampaignTechTree? nextTechTree,
     required CampaignSave Function(CampaignSave committed) buildSave,
-    required VoidCallback rollback,
+    VoidCallback? rollback,
+    ValueChanged<CampaignSave>? onCommitted,
+    VoidCallback? onFailed,
   }) async {
     final store = _store;
     if (store == null) {
-      _showCampaignPersistenceFailure();
+      if (onFailed != null) {
+        onFailed();
+      } else {
+        _showCampaignPersistenceFailure();
+      }
       return;
     }
 
@@ -413,17 +457,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
         if (saveGeneration == _progressGeneration) {
           _committedProgress = payload.progress;
           _committedTechTree = payload.techTree;
+          onCommitted?.call(payload);
+        } else if (onFailed != null) {
+          onFailed();
         }
       } catch (_) {
         if (saveGeneration == _progressGeneration) {
-          rollback();
-          // UI feedback is guarded by mounted: the rollback must still run
-          // after disposal (it only mutates in-memory state), but calling
-          // setState on a defunct State is a debug assertion violation
-          // (round-5 review P2).
-          if (mounted) {
+          rollback?.call();
+          if (onFailed != null) {
+            onFailed();
+          } else if (mounted) {
             _showCampaignPersistenceFailure();
           }
+        } else if (onFailed != null) {
+          onFailed();
         }
       } finally {
         _decrementPendingSaves();
@@ -432,59 +479,94 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _saveQueue = saveTask.catchError((_) {});
   }
 
-  Future<void> _saveStageCompletion(StageCompletion completion) {
-    if (_isResetting) {
-      return Future<void>.value();
+  void _handleStageWon(StageCompletion completion) {
+    if (_isResetting ||
+        _missionVictoryResult != null ||
+        _missionSaveState != null) {
+      return;
     }
-    final stageId = completion.stage.id;
-    final priorResult = _progress.resultFor(stageId);
-    final newProgress = _progress.recordResult(stageId, completion.result);
-    // recordResult returns the same instance when the new result is not an
-    // improvement; compare the stored result for the stage (via StageResult.==)
-    // so this no-op check survives a future recordResult implementation that
-    // always allocates a fresh CampaignProgress.
-    if (newProgress.resultFor(stageId) == priorResult) {
-      return Future<void>.value();
+
+    _missionStageId = completion.stage.id;
+    _missionVictoryResult = completion.result;
+
+    if (!completion.result.isBetterThan(_missionPriorResult)) {
+      _setMissionSaveState(MissionSaveState.saved);
+      return;
     }
-    return _persistSave(
-      nextProgress: newProgress,
+
+    _saveMissionResult();
+  }
+
+  Future<void> _saveMissionResult() async {
+    if (_missionSaveState == MissionSaveState.saving ||
+        _missionSaveState == MissionSaveState.saved) {
+      return;
+    }
+
+    final stageId = _missionStageId;
+    final result = _missionVictoryResult;
+    if (stageId == null || result == null) {
+      _setMissionSaveState(MissionSaveState.failed);
+      return;
+    }
+
+    _setMissionSaveState(MissionSaveState.saving);
+
+    await _persistSave(
       buildSave: (committed) => CampaignSave(
-        progress: committed.progress.recordResult(stageId, completion.result),
+        progress: committed.progress.recordResult(stageId, result),
         techTree: committed.techTree,
       ),
-      rollback: () {
-        // Conditional rollback: only undo this save's result if it is still
-        // the current optimistic value for the stage. A later concurrent
-        // completion for the same stage (e.g. clear then gold) supersedes
-        // this one and owns its own rollback; unconditionally restoring the
-        // prior value onto the aggregate would erase the later result from
-        // the optimistic UI state (round-4 review P1 same-stage case).
-        //
-        // When the latest optimistic result fails, restore the committed
-        // disk state rather than the captured priorResult. priorResult was
-        // read from the optimistic _progress at queue time, so when two
-        // saves target the same stage and both fail, the second save's
-        // priorResult carries the first save's optimistic (never-committed)
-        // value — restoring it leaves a stale result in the UI that can
-        // unlock dependent stages and contribute medal points until reload.
-        // Since transactions execute serially, _committedProgress already
-        // represents the resolved outcome of every earlier transaction
-        // (round-5 review P2).
-        if (_progress.resultFor(stageId) == completion.result) {
-          _progress = _progress.withResult(
-            stageId,
-            _committedProgress.resultFor(stageId),
-          );
-        }
+      onCommitted: (payload) {
+        _progress = payload.progress;
+        _setMissionSaveState(MissionSaveState.saved);
       },
+      onFailed: () => _setMissionSaveState(MissionSaveState.failed),
     );
   }
 
+  void _setMissionSaveState(MissionSaveState state) {
+    _missionSaveState = state;
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   void _returnToMap() {
+    if (_missionSaveState == MissionSaveState.saving) {
+      return;
+    }
     setState(() {
       _game = null;
       _activeView = _ShellView.worldMap;
     });
+  }
+
+  void _returnFromMissionReport() {
+    if (_missionSaveState == MissionSaveState.saving) {
+      return;
+    }
+    if (_missionSaveState == MissionSaveState.failed) {
+      _mapFeedback = 'Mission result was not saved.';
+    }
+    _returnToMap();
+  }
+
+  void _restartFromMissionReport() {
+    final game = _game;
+    if (game == null) return;
+
+    final snapshot = game.snapshot;
+    if (snapshot.phase == GamePhase.won &&
+        _missionSaveState != MissionSaveState.saved) {
+      return;
+    }
+
+    _missionPriorResult = _progress.resultFor(game.stage.id);
+    _missionVictoryResult = null;
+    _missionStageId = null;
+    _missionSaveState = null;
+    game.restart();
   }
 
   Future<void> _confirmResetCampaign() async {
@@ -911,9 +993,9 @@ class _BottomControls extends StatelessWidget {
           children: [
             IconButton.filledTonal(
               tooltip: 'World Map',
-              onPressed: snapshot.phase == GamePhase.wave
-                  ? null
-                  : game.returnToMap,
+              onPressed: snapshot.phase == GamePhase.build
+                  ? game.returnToMap
+                  : null,
               icon: const Icon(Icons.map),
             ),
             const SizedBox(width: 12),
@@ -1305,87 +1387,6 @@ class _UpgradeActions extends StatelessWidget {
           label: Text('Sell +${GameBalance.refundValue(tower)}'),
         ),
       ],
-    );
-  }
-}
-
-class _EndStatePanel extends StatelessWidget {
-  const _EndStatePanel({required this.game, required this.snapshot});
-
-  final OrionDefenseGame game;
-  final GameSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final didWin = snapshot.phase == GamePhase.won;
-    final result = didWin
-        ? StageResult.fromVictoryBaseHealth(
-            snapshot.baseHealth,
-            startingBaseHealth: snapshot.startingBaseHealth,
-          )
-        : null;
-
-    return ColoredBox(
-      color: Colors.black.withValues(alpha: 0.62),
-      child: Center(
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: theme.colorScheme.surface,
-            border: Border.all(color: theme.colorScheme.outlineVariant),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  didWin ? Icons.emoji_events : Icons.warning_amber,
-                  size: 44,
-                  color: didWin
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.error,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  didWin ? 'Victory' : 'Base Lost',
-                  style: theme.textTheme.headlineSmall,
-                ),
-                if (didWin && result != null) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    '${result.medal.label} medal - '
-                    'Base ${result.bestBaseHealth}/${snapshot.startingBaseHealth}',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: theme.colorScheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  alignment: WrapAlignment.center,
-                  children: [
-                    FilledButton.icon(
-                      onPressed: game.restart,
-                      icon: const Icon(Icons.restart_alt),
-                      label: const Text('Restart'),
-                    ),
-                    FilledButton.tonalIcon(
-                      onPressed: game.returnToMap,
-                      icon: const Icon(Icons.map),
-                      label: const Text('World Map'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
