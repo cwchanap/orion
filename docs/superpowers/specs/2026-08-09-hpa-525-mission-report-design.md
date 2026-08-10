@@ -2,16 +2,18 @@
 
 ## Context
 
-HPA-527 has shipped the minimum Salvage Module vertical slice, so HPA-525 is now Orion's next actionable reward-loop task. It is unblocked by HPA-527 and directly blocks HPA-528, the one-blueprint reward proof.
+HPA-527 has shipped the minimum Salvage Module vertical slice, so HPA-525 is Orion's next actionable reward-loop task. It is unblocked by HPA-527 and directly blocks HPA-528, the one-blueprint reward proof.
 
-The current end-of-run path is intentionally small but has two mismatched responsibilities:
+The current end-of-run path has two mismatched responsibilities:
 
 - `OrionDefenseGame` publishes a terminal `GameSnapshot` and calls `onStageWon` after a victory.
-- `OrionGamePage` persists the stage result through the generic optimistic `_persistSave` queue.
+- `OrionGamePage` persists the stage result through the generic optimistic `_persistSave` path.
 - `_EndStatePanel` derives its own victory/loss copy directly from `GameSnapshot` and exposes `game.restart` / `game.returnToMap` immediately.
-- the report therefore cannot distinguish saving, saved, and failed progress, and the player can leave while an optimistic result is still unresolved.
+- `_BottomControls` also exposes `game.returnToMap` for every non-wave phase, including terminal `won` / `lost` states.
 
-HPA-525 should replace that path without introducing a run analytics system, persistence redesign, report controller, event bus, or generic reward framework.
+The report therefore cannot distinguish saving, saved, and failed progress, and the callback graph can still leave the mission while a result write is unresolved.
+
+HPA-100 also established a repository-wide persistence invariant that remains relevant here: campaign writes share `_saveQueue`, use `_progressGeneration` to reject stale work, and compose payloads from committed state. HPA-525 must remove optimistic stage-result semantics without creating a second independent `store.save` writer.
 
 ## Goal
 
@@ -22,31 +24,51 @@ Replace the minimal end panel with a compact Mission Report that answers four qu
 3. Which Salvage Modules defined the run?
 4. What can I do next?
 
-For a victory that improves campaign progress, the report appears immediately in `Saving…`, becomes `Saved` only after the write succeeds, and becomes `Save failed` without optimistic campaign mutation if the write fails.
+For an improving victory, the report appears in `Saving…`, becomes `Saved` only after the queued write succeeds, and becomes `Save failed` without optimistic campaign mutation if the write fails.
+
+## Review resolution
+
+The design review found several valid gaps. This revision makes these explicit changes:
+
+1. **Keep one campaign writer.** Mission saves do not call `_persistSave`, because its optimistic mutation/rollback contract is wrong for the report, but they do enqueue on the existing `_saveQueue`, capture `_progressGeneration`, and build the payload from `_committedProgress` / `_committedTechTree`.
+2. **Close every terminal exit path.** Report buttons, the underlying terminal World Map control, `game.returnToMap()` callback routing, and `_returnToMap()` itself all respect the Mission Report saving guard.
+3. **Freeze the authoritative victory result.** `_handleStageWon` stores `completion.result`; report projection uses that same `StageResult` that persistence writes. A won snapshot alone is not treated as an implicit forever-`saving` report.
+4. **Reuse `StageResult.isBetterThan`.** The projection uses the existing improvement rule, then only inspects medal rank to distinguish medal improvement from base-health improvement.
+5. **Own empty-module copy in the projection.** Pure tests cover victory and loss with no acquired modules.
+6. **Name the residual durability risk.** If the process is killed while `Saving…`, the result can be lost. HPA-525 intentionally adds no mid-write recovery or optimistic map state.
+7. **Keep the presentation DTO breadth.** Raw result/wave fields and `MissionModuleFact.id` remain because they are cheap and useful for focused tests and HPA-528. No extra abstraction is added.
+8. **Add the missing regressions.** Tests explicitly call `game.returnToMap()` during saving and verify mission-save-then-tech-purchase preserves both pieces of committed state.
 
 ## Scope decisions
 
-### Recommended approach: page-owned result save + pure report projection
+### Recommended approach: page-owned report state + pure projection + shared serial writer
 
-Keep the terminal gameplay snapshot in the existing game/session layer, but move end-of-run presentation and persistence truth into `OrionGamePage`:
+Keep terminal gameplay state in the existing game/session layer, but move report presentation and persistence truth into `OrionGamePage`:
 
-- add one pure report projection that converts the terminal snapshot + prior committed result + explicit save state into immutable display content;
+- add one pure report projection that converts the terminal snapshot, frozen victory result, prior committed result, and explicit save state into immutable display content;
 - render that content in one dedicated Mission Report widget;
-- replace `_saveStageCompletion` with a dedicated single-result save path that does not use `_persistSave`;
-- keep the tech-tree/reset persistence machinery unchanged;
+- replace `_saveStageCompletion` with a dedicated non-optimistic stage-result save path;
+- serialize that path through the existing `_saveQueue` rather than creating a parallel writer;
+- keep the tech-tree/reset persistence behavior unchanged;
 - keep HPA-528's future reward integration as one optional typed fact on the report content.
 
-This is the smallest change that makes save meaning honest and gives HPA-528 a clean reward slot.
+This preserves the single-writer invariant while deleting the optimistic stage-result rollback behavior that makes the current terminal UI dishonest.
 
-### Alternative A: keep using `_persistSave`
+### Alternative A: keep using `_persistSave` for stage results
 
-This would add report state around the existing queued optimistic writer. It changes fewer lines initially, but preserves the exact complexity HPA-525 is meant to remove from the stage-result path: optimistic progress, committed shadows, rollback branches, generation checks, and queued mutation semantics. It also makes `Saving…` harder to reason about because the world-map model can already contain uncommitted data.
+This would preserve optimistic progress, committed-shadow rollback, and generic failure feedback while trying to layer Mission Report state on top. `Saving…` would still coexist with an in-memory world map that already contains uncommitted progress.
 
 Rejected.
 
-### Alternative B: move Mission Report state into `GameSession`
+### Alternative B: direct `store.save` outside `_saveQueue`
 
-`GameSession` could own report/save phases, but persistence and campaign navigation are Flutter shell concerns, not mission rules. That would force a framework-free rules object to model external storage state and future blueprint presentation.
+This keeps non-optimistic report semantics but creates a second campaign writer. It can race queued tech-tree/reset work and violates the persistence convention established by HPA-100.
+
+Rejected.
+
+### Alternative C: move Mission Report state into `GameSession`
+
+Persistence and campaign navigation are Flutter shell concerns, not mission rules. This would force a framework-free rules object to model external storage state and future reward presentation.
 
 Rejected.
 
@@ -56,15 +78,17 @@ This ticket does not add:
 
 - general RunStats, analytics, coaching, or evidence export;
 - persistent run history or mid-run resume;
+- durable recovery for a process kill during `Saving…`;
 - a generic reward registry or reward-surface framework;
 - boss-blueprint ownership or Codex module pages;
 - sound, haptics, animation sequencing, or screen shake;
 - changes to Salvage Module selection/effect rules;
 - a new campaign save schema;
 - new packages;
+- a new persistence controller or second save queue;
 - broad cleanup of tech-tree persistence, reset serialization, or unrelated campaign save code.
 
-The save codec is not touched. Therefore the existing v1/v2 decoder cleanup is not part of HPA-525. If implementation unexpectedly requires editing `campaign_progress_store.dart`, remove obsolete development-save decoder branches in that same change rather than extending them.
+The save codec is not touched. Therefore existing v1/v2 decoder cleanup is not part of HPA-525. If implementation unexpectedly requires editing `campaign_progress_store.dart`, remove obsolete development-save decoder branches in that same change rather than extending them.
 
 ## Report presentation model
 
@@ -109,6 +133,7 @@ final class MissionReportContent {
     required this.outcomeText,
     this.comparisonText,
     required List<MissionModuleFact> modules,
+    this.emptyModulesText,
     this.saveState,
     this.saveText,
     this.reward,
@@ -128,6 +153,7 @@ final class MissionReportContent {
   final String outcomeText;
   final String? comparisonText;
   final List<MissionModuleFact> modules;
+  final String? emptyModulesText;
   final MissionSaveState? saveState;
   final String? saveText;
   final MissionRewardFact? reward;
@@ -135,7 +161,9 @@ final class MissionReportContent {
 }
 ```
 
-`MissionRewardFact` is intentionally only two strings. It gives HPA-528 a typed optional section without creating a reward protocol, ownership model, or state machine.
+`MissionRewardFact` remains only two strings. It gives HPA-528 a typed optional section without creating ownership, reward selection, or a reward state machine.
+
+`emptyModulesText` is `No Salvage Modules acquired` only when the projected module list is empty. The widget never owns a duplicate empty-state string.
 
 ## Pure projection
 
@@ -144,40 +172,49 @@ Expose one function:
 ```dart
 MissionReportContent projectMissionReport({
   required GameSnapshot snapshot,
+  required StageResult? victoryResult,
   required StageResult? priorSavedResult,
   required MissionSaveState? saveState,
   MissionRewardFact? reward,
 });
 ```
 
-The projection is the only place that converts raw game/campaign facts into report copy. The widget does not inspect Flame components, derive medals, compare results, or infer persistence success.
+The terminal snapshot remains the source of stage identity, waves, base health display, and acquired module IDs. `victoryResult` is the frozen `StageCompletion.result` supplied by `_handleStageWon`; it is also the value the save path commits.
+
+The projection never re-derives a second victory `StageResult` from the snapshot.
 
 ### Victory projection
 
-Derive the run result with the existing rule:
+Victory requires both `victoryResult` and `saveState`.
+
+Comparison reuses the existing improvement rule:
 
 ```dart
-final result = StageResult.fromVictoryBaseHealth(
-  snapshot.baseHealth,
-  startingBaseHealth: snapshot.startingBaseHealth,
-);
+MissionResultComparison compareMissionResult(
+  StageResult result,
+  StageResult? prior,
+) {
+  if (prior == null) {
+    return MissionResultComparison.firstClear;
+  }
+  if (!result.isBetterThan(prior)) {
+    return MissionResultComparison.retained;
+  }
+  if (result.medal.rank > prior.medal.rank) {
+    return MissionResultComparison.medalImproved;
+  }
+  return MissionResultComparison.baseHealthImproved;
+}
 ```
 
-Comparison is deterministic:
+This keeps `StageResult.isBetterThan` as the source of truth for whether a run improved. Medal rank is inspected only after improvement is established so the report can choose the right sentence.
 
-1. no prior result → `firstClear`;
-2. higher medal rank → `medalImproved`;
-3. same medal and higher base health → `baseHealthImproved`;
-4. otherwise → `retained`.
-
-Suggested copy:
+Suggested comparison copy:
 
 - first clear: `New first-clear result`;
 - medal improvement: `Medal improved: Silver → Gold`;
 - base-health improvement: `Base health improved: 14 → 18`;
 - retained: `Saved best retained: Gold • 20 base health`.
-
-The first three lines describe the run result, not a committed save. Commitment is communicated only by `saveText`.
 
 Victory `outcomeText`:
 
@@ -198,9 +235,11 @@ Next-opportunity copy is exactly one sentence:
 - saved → `Replay for a better result or continue on the World Map.`;
 - failed → `Retry saving, or return without keeping this result.`.
 
+The comparison sentence describes the run relative to the previous best. Only `saveText` claims persistence state.
+
 ### Loss projection
 
-Losses do not write campaign progress, so `saveState`, `saveText`, `comparison`, and `priorSavedResult` are absent from the visible report.
+Losses do not write campaign progress, so `victoryResult`, `saveState`, `saveText`, `comparison`, and `priorSavedResult` are absent from the visible report.
 
 Use:
 
@@ -208,7 +247,7 @@ Use:
 Reached Wave <waveNumber>/<waveTotal>
 ```
 
-and one neutral next-opportunity sentence:
+and:
 
 ```text
 Adjust your build and retry when ready.
@@ -220,13 +259,17 @@ Do not infer a cause of failure.
 
 Map `snapshot.acquiredRunModules` through `runModuleDefinition(id).title` inside the projection.
 
-The report stores both the typed `RunModuleId` and title through `MissionModuleFact`. If the player loses before the first draft, render an explicit `No Salvage Modules acquired` row rather than hiding the section.
+When the list is empty, set:
+
+```text
+No Salvage Modules acquired
+```
+
+for both victory and loss. The widget renders `content.emptyModulesText` rather than defining its own fallback copy.
 
 ## Mission Report widget
 
 Create `lib/game/ui/mission_report_panel.dart`.
-
-`MissionReportPanel` receives immutable content and explicit callbacks only:
 
 ```dart
 class MissionReportPanel extends StatelessWidget {
@@ -245,11 +288,11 @@ class MissionReportPanel extends StatelessWidget {
 }
 ```
 
-The panel may use `content.saveState` to choose labels/sections, but it never decides whether a save succeeded. Null callbacks are disabled buttons.
+The panel renders immutable content and invokes callbacks. It never compares results, reads Flame components, infers save success, or writes campaign state.
 
 ### Layout
 
-Use the existing full-screen overlay pattern, but make actions persistently reachable:
+Use the existing full-screen overlay pattern with a scrollable body and fixed action area:
 
 ```text
 SafeArea
@@ -261,7 +304,7 @@ SafeArea
         └── action area
 ```
 
-This keeps the body scrollable while actions stay reachable at 360×640.
+This keeps primary actions reachable at 360×640.
 
 Content order:
 
@@ -269,12 +312,12 @@ Content order:
 2. stage name;
 3. result or reached-wave line;
 4. comparison line when victorious;
-5. `Salvage Modules` chips/rows;
+5. `Salvage Modules` rows/chips or `emptyModulesText`;
 6. save row when victorious;
 7. optional reward fact;
 8. one next-opportunity sentence.
 
-Save meaning must not rely on color. Use icon + text for `Saving`, `Saved`, and `Save failed`.
+Save meaning uses icon + text and does not rely on color.
 
 ### Actions
 
@@ -292,7 +335,7 @@ Victory, failed:
 
 - `Retry Save`;
 - `World Map (Unsaved)`;
-- no Replay button, because retrying or explicitly abandoning the unsaved result is the only useful choice.
+- no Replay button.
 
 Loss:
 
@@ -303,40 +346,52 @@ No animated multi-step reveal is required.
 
 ## Page-owned mission result state
 
-`_OrionGamePageState` owns only the state needed for the active terminal report:
+`_OrionGamePageState` owns only the active report state:
 
 ```dart
 StageResult? _missionPriorResult;
+StageResult? _missionVictoryResult;
 CampaignProgress? _pendingMissionProgress;
 MissionSaveState? _missionSaveState;
 bool _missionExitStarted = false;
 ```
 
+`_pendingMissionProgress` is the proposed in-memory value used to recognize a no-op result and make the intended commit explicit. It is **not** written directly as a whole stale payload; the queued writer rebuilds from current committed state.
+
 ### Stage start
 
-When `_startStage(stage)` succeeds, freeze the currently committed baseline before creating the game:
+When `_startStage(stage)` succeeds, freeze the committed baseline and clear prior report state before creating the game:
 
 ```dart
 _missionPriorResult = _progress.resultFor(stage.id);
+_missionVictoryResult = null;
 _pendingMissionProgress = null;
 _missionSaveState = null;
 _missionExitStarted = false;
 ```
 
-`_startStage` already rejects launches while the generic campaign writer/reset path is active, so the baseline is not competing with a pending tech-tree save.
+`_startStage` already rejects launches while `_isSavingProgress` or `_isResetting` is true, so a new mission starts from a stable committed campaign state.
 
-### Victory callback
-
-Replace `_saveStageCompletion` with `_handleStageWon` plus `_saveMissionResult`.
-
-`_handleStageWon` computes one proposed immutable progress value:
+Construct the game with:
 
 ```dart
-void _handleStageWon(StageCompletion completion) {
-  if (_missionSaveState != null) {
-    return;
+onStageWon: _handleStageWon,
+onReturnToMap: _handleGameReturnToMap,
+```
+
+The second callback closes the old direct bypass around report exit guards.
+
+### Victory callback and authoritative result
+
+`_handleStageWon` freezes the exact `StageCompletion.result` that persistence and projection will share:
+
+```dart
+Future<void> _handleStageWon(StageCompletion completion) {
+  if (_missionVictoryResult != null || _missionSaveState != null) {
+    return Future<void>.value();
   }
 
+  _missionVictoryResult = completion.result;
   final proposed = _progress.recordResult(
     completion.stage.id,
     completion.result,
@@ -344,21 +399,39 @@ void _handleStageWon(StageCompletion completion) {
   _pendingMissionProgress = proposed;
 
   if (proposed.resultFor(completion.stage.id) == _missionPriorResult) {
-    setState(() {
-      _missionSaveState = MissionSaveState.saved;
-    });
-    return;
+    _setMissionSaveState(MissionSaveState.saved);
+    return Future<void>.value();
   }
 
-  _saveMissionResult();
+  return _saveMissionResult();
 }
 ```
 
-A replay that cannot improve the committed result does not manufacture a no-op storage write. It is immediately `saved` because the best result already exists on disk. This avoids presenting a meaningless failure for a result that requires no persistence.
+A non-improving replay performs no storage write and is immediately `saved` because its best result is already committed.
 
-### Save attempt
+The real game publishes the terminal snapshot before invoking `onStageWon`, but both happen in the same completion call stack. `_handleStageWon` sets `_missionVictoryResult` and `_missionSaveState` synchronously before its first await, so the next Flutter frame can render a complete victory report.
 
-`_saveMissionResult` is single-flight and does not mutate `_progress` optimistically:
+Do not keep a fallback that interprets `snapshot.phase == won && _missionSaveState == null` as `saving`. A won snapshot without `_handleStageWon` is incomplete terminal input, not an endless save operation.
+
+### Shared serial, non-optimistic mission save
+
+`_saveMissionResult` must reuse the existing writer chain but not `_persistSave`'s optimistic mutation/rollback behavior.
+
+Required invariants:
+
+- enqueue on `_saveQueue`;
+- capture `_progressGeneration` before enqueueing;
+- increment `_pendingSaves` and set `_isSavingProgress` so the shell still has one global writer/busy signal;
+- build the payload from `_committedProgress` and `_committedTechTree` inside the queued task;
+- apply `recordResult(stageId, _missionVictoryResult!)` to the committed progress at execution time;
+- never assign `_progress` before `store.save` succeeds;
+- on success advance `_committedProgress`, `_committedTechTree`, and visible `_progress` from the successful payload;
+- on failure leave `_progress` unchanged and set only `MissionSaveState.failed`;
+- use `_decrementPendingSaves()` in `finally`;
+- keep `_saveQueue = saveTask.catchError((_) {})` so later writers are not poisoned by a failed mission save;
+- do not introduce a second queue or a rollback callback tree.
+
+Shape:
 
 ```dart
 Future<void> _saveMissionResult() async {
@@ -368,86 +441,124 @@ Future<void> _saveMissionResult() async {
   }
 
   final store = _store;
-  final proposed = _pendingMissionProgress;
-  if (store == null || proposed == null) {
-    if (mounted) {
-      setState(() {
-        _missionSaveState = MissionSaveState.failed;
-      });
-    } else {
-      _missionSaveState = MissionSaveState.failed;
-    }
+  final game = _game;
+  final result = _missionVictoryResult;
+  if (store == null || game == null || result == null) {
+    _setMissionSaveState(MissionSaveState.failed);
     return;
   }
 
-  if (mounted) {
-    setState(() {
-      _missionSaveState = MissionSaveState.saving;
-    });
-  } else {
-    _missionSaveState = MissionSaveState.saving;
-  }
+  final stageId = game.stage.id;
+  final saveGeneration = _progressGeneration;
+  _setMissionSaveState(MissionSaveState.saving);
+  _pendingSaves++;
+  _setSavingProgress(true);
 
-  try {
-    await store.save(
-      CampaignSave(
-        progress: proposed,
+  final saveTask = _saveQueue.then((_) async {
+    try {
+      if (saveGeneration != _progressGeneration) {
+        _setMissionSaveState(MissionSaveState.failed);
+        return;
+      }
+
+      final payload = CampaignSave(
+        progress: _committedProgress.recordResult(stageId, result),
         techTree: _committedTechTree,
-      ),
-    );
-    _progress = proposed;
-    _committedProgress = proposed;
-    if (mounted) {
-      setState(() {
-        _missionSaveState = MissionSaveState.saved;
-      });
-    } else {
-      _missionSaveState = MissionSaveState.saved;
+      );
+      await store.save(payload);
+
+      if (saveGeneration == _progressGeneration) {
+        _committedProgress = payload.progress;
+        _committedTechTree = payload.techTree;
+        _progress = payload.progress;
+        _setMissionSaveState(MissionSaveState.saved);
+      } else {
+        _setMissionSaveState(MissionSaveState.failed);
+      }
+    } catch (_) {
+      _setMissionSaveState(MissionSaveState.failed);
+    } finally {
+      _decrementPendingSaves();
     }
-  } catch (_) {
-    if (mounted) {
-      setState(() {
-        _missionSaveState = MissionSaveState.failed;
-      });
-    } else {
-      _missionSaveState = MissionSaveState.failed;
-    }
-  }
+  });
+
+  _saveQueue = saveTask.catchError((_) {});
+  await saveTask;
 }
 ```
 
-The implementation can factor the mounted assignment into a tiny helper to avoid duplication, but it should not introduce a controller or queue.
+This duplicates only the minimal queue plumbing needed to give the stage-result path different commit semantics. Do not extract a new persistence controller in HPA-525.
 
-On failure, `_progress` remains the prior committed value, so there is no rollback branch.
+Retry calls the same method. Because `saving` and `saved` are rejected before enqueueing, repeated Retry taps cannot create duplicate writes.
 
-Retry calls the same `_saveMissionResult` using the same `_pendingMissionProgress`.
+### Report visibility
 
-### Coexistence with existing campaign persistence
+Loss can project immediately from a lost snapshot.
 
-Do not route mission completion through `_persistSave`.
+Victory renders only when all three conditions are true:
 
-Do not remove the existing `_saveQueue`, `_committedTechTree`, generation counter, or reset logic in HPA-525 because the tech-tree/reset path still uses them. The stage launch guard already prevents entering a mission while those paths are active, and Mission Report disables leaving while its own result write is active, so the two paths do not overlap in normal UI flow.
+```text
+snapshot.phase == won
+&& _missionVictoryResult != null
+&& _missionSaveState != null
+```
 
-On successful mission save, assign `_committedProgress = proposed` so the existing tech-tree writer's committed baseline remains correct after returning to the map.
+Projection receives `_missionVictoryResult`, not a result re-derived from snapshot base health.
 
-## Replay and world-map actions
+Existing tests that inject a synthetic won `GameSnapshot` must also invoke `onStageWon` with a matching `StageCompletion`, preferably through one shared helper. A snapshot-only win is no longer a valid complete Mission Report fixture.
 
-The panel must not call `game.restart` / `game.returnToMap` directly.
+## Closing the exit graph
 
-### Replay
+Report button gating alone is insufficient because `game.returnToMap()` can be invoked by the underlying bottom control or programmatically.
 
-Page callback:
+HPA-525 closes all terminal routes.
 
-1. reject while `saveState == saving`;
-2. refresh `_missionPriorResult` from the now-current `_progress`;
-3. clear `_pendingMissionProgress` and `_missionSaveState`;
-4. call `game.restart()`.
+### Underlying bottom control
 
-The next run therefore compares against the result that is actually committed after a successful save.
+The World Map button in `_BottomControls` is enabled only in ordinary build state. It is disabled for wave, won, and lost phases:
 
-### Return to map
+```dart
+onPressed: snapshot.phase == GamePhase.build ? game.returnToMap : null,
+```
 
-Use `_missionExitStarted` as a one-shot guard:
+The terminal report owns terminal navigation.
+
+### Game callback routing
+
+Use one page callback:
+
+```dart
+void _handleGameReturnToMap() {
+  final snapshot = _game?.snapshot;
+  if (snapshot?.isEnded == true) {
+    _returnFromMissionReport();
+    return;
+  }
+  _returnToMap();
+}
+```
+
+This means programmatic `game.returnToMap()` during a terminal report reaches the same guard as report buttons.
+
+### Defensive page guard
+
+`_returnToMap()` itself refuses while a mission save is active:
+
+```dart
+void _returnToMap() {
+  if (_missionSaveState == MissionSaveState.saving) {
+    return;
+  }
+  setState(() {
+    _game = null;
+    _activeView = _ShellView.worldMap;
+  });
+}
+```
+
+This is intentionally redundant with report-button disabling because leaving while `Saving…` is the core product failure HPA-525 fixes.
+
+### Report return action
 
 ```dart
 void _returnFromMissionReport() {
@@ -464,17 +575,37 @@ void _returnFromMissionReport() {
 }
 ```
 
-`_startStage` resets the guard for the next mission.
+Loss has no save state and can return normally. Failed victory explicitly abandons the unsaved run and leaves the previous committed campaign state visible.
 
-On failure, returning to the map naturally shows the previous committed campaign state because no optimistic progress was applied.
+## Replay / retry
+
+The panel does not call `game.restart` directly.
+
+`_restartFromMissionReport`:
+
+- refuses a winning report unless `_missionSaveState == saved`;
+- allows loss retry immediately;
+- refreshes `_missionPriorResult` from `_progress` after a successful save;
+- clears `_missionVictoryResult`, `_pendingMissionProgress`, `_missionSaveState`, and `_missionExitStarted`;
+- calls `game.restart()`.
+
+This prevents an unsaved failed victory from being silently discarded through a hidden/programmatic Replay path. The failed report instead offers `Retry Save` or `World Map (Unsaved)`.
+
+## Coexistence with existing campaign persistence
+
+Do not route mission completion through `_persistSave`.
+
+Do not create a free-floating `store.save` path either.
+
+The existing `_saveQueue`, `_progressGeneration`, `_pendingSaves`, `_isSavingProgress`, committed state fields, and reset serialization remain the single writer infrastructure. Mission saving only changes **when visible progress is mutated**: unlike tech-tree `_persistSave`, the mission result is not optimistic and has no rollback branch.
+
+On successful mission save, `_committedProgress` and visible `_progress` advance together. This ensures a later tech-tree purchase builds on the just-committed mission result rather than overwriting it.
 
 ## HPA-528 integration seam
 
 HPA-525 always calls the projection with `reward: null`.
 
-HPA-528 may later build exactly one `MissionRewardFact` from its one-blueprint rule and pass it into the same projection. HPA-525 does not add ownership, reward selection, or pending-blueprint logic.
-
-That keeps the dependency direction simple:
+HPA-528 may later build exactly one `MissionRewardFact` from its one-blueprint rule and pass it into the same projection. HPA-525 does not add ownership, reward selection, pending-blueprint rules, or a generic reward framework.
 
 ```text
 HPA-528 blueprint rule
@@ -493,66 +624,89 @@ Cover:
 - medal improvement;
 - same-medal base-health improvement;
 - retained best;
+- `StageResult.isBetterThan` governs improved vs retained classification;
 - loss reached-wave copy;
 - saving, saved, and failed copy;
 - acquired module IDs/titles;
-- no-module loss;
+- victory with zero modules → empty list + `No Salvage Modules acquired`;
+- loss with zero modules → same empty-state contract;
 - optional reward fact passthrough.
 
 ### Widget
 
 At 360×640:
 
-- body can scroll without overflow;
+- body scrolls without overflow;
 - primary actions remain reachable;
 - saving disables Replay/World Map;
 - saved victory exposes Replay/World Map;
 - failed victory exposes Retry Save + World Map (Unsaved);
 - loss exposes Retry + World Map;
+- module empty-state copy renders from content;
 - save state has visible text/icon, not color-only meaning.
 
 ### Page integration
 
-Use the existing delayed/failing test campaign store to cover:
+Use the existing delayed/failing `_TestCampaignProgressStore` and a helper that publishes a terminal won snapshot **and** invokes `onStageWon` with the same `StageResult`.
 
-- victory enters `Saving result…` before the write completes;
-- campaign progress is not optimistic while saving;
-- success changes the report to `Saved.` and updates persisted/in-memory progress;
-- failure changes the report to `Save failed — progress unchanged.` and leaves campaign progress unchanged;
-- Retry Save starts exactly one new write and can succeed;
-- buttons cannot leave or replay while saving;
+Cover:
+
+- improving victory enters `Saving result…` before the queued write completes;
+- `_progress` and stored progress remain unchanged while saving;
+- direct `game.returnToMap()` during saving remains on the Mission Report;
+- terminal bottom World Map control is disabled;
+- save success changes the report to `Saved.` and updates committed/in-memory progress;
+- save failure changes the report to `Save failed — progress unchanged.` with no rollback needed;
+- Retry Save starts exactly one additional queued write and can succeed;
 - rapid repeated Retry Save does not duplicate writes;
-- repeated World Map taps do not duplicate navigation;
+- repeated report World Map actions navigate once;
+- `World Map (Unsaved)` after failure shows `Mission result was not saved.` and the prior committed map state;
 - retained replay result performs no write and shows `Best result already saved.`;
 - loss never attempts a campaign save;
-- acquired Salvage Module titles appear in the report.
+- acquired Salvage Module titles appear;
+- **mission save then tech purchase:** after a mission result successfully commits, return to the map, purchase one affordable tech upgrade, then assert the store contains both the new stage result and the purchased upgrade.
 
-Remove or rewrite stage-completion tests whose contract is intentionally deleted:
+The last regression proves the mission path shares the existing committed baseline/writer contract instead of racing or overwriting the tech-tree path.
+
+### Replacing obsolete optimistic-stage tests
+
+Remove or rewrite tests whose contract HPA-525 intentionally deletes:
 
 - optimistic clear visible on map before write resolves;
 - multiple sibling stage-completion writes queued from one active mission;
-- queued stage-result saves after page disposal;
-- rollback of optimistic stage progress.
+- optimistic rollback across concurrent stage-result callbacks;
+- stage-result-specific queued-after-disposal cases whose purpose was preserving an optimistic aggregate.
 
-Keep tech-tree save queue/reset tests unchanged.
+Keep generic tech-tree save queue/reset tests unchanged.
+
+Do not replace removed tests with durable process-death recovery. The explicit residual contract is: if the app process dies before the save future commits, the run result may be lost and the prior committed campaign remains authoritative.
 
 ## Acceptance criteria
 
 - Victory and loss reports are understandable within a few seconds.
 - Stage result, comparison, selected modules, save truth, and next action come from one pure projection.
+- The report and persistence path use the same frozen `StageCompletion.result` for victory.
+- `StageResult.isBetterThan` remains the source of truth for whether a result improved.
 - An improving victory does not update campaign progress before persistence succeeds.
+- Mission writes share `_saveQueue` / generation / committed-state composition with existing campaign persistence.
 - Saving, saved, and failed states are visually and semantically distinct.
-- Save failure leaves the prior campaign progress untouched and provides Retry Save plus World Map (Unsaved).
-- A retained replay result does not perform a meaningless storage write.
+- No terminal callback can leave the mission while saving is in flight.
+- Save failure leaves prior campaign progress untouched and provides Retry Save plus World Map (Unsaved).
+- A retained replay result performs no storage write.
 - Rebuilds/repeated taps do not duplicate result saves or world-map navigation.
-- HPA-528 can supply one optional typed reward fact without changing the report architecture.
+- HPA-528 can supply one optional typed reward fact without changing report architecture.
 - The layout works at 360×640 with primary actions reachable.
+- A mission save followed by a tech-tree purchase persists both changes.
 - `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, and the full `flutter test` suite pass.
 
 ## Self-review
 
-- No new persistence schema, package, controller, queue, or event system is introduced.
-- The stage-result path gets simpler: one prior result, one proposed progress value, one explicit save state, no optimistic rollback.
-- Unrelated tech-tree/reset persistence remains in place.
-- HPA-528 gets only the minimum typed seam it needs.
-- No placeholders or deferred design decisions remain in this spec.
+- One campaign writer remains: the mission path shares `_saveQueue`; it does not create a parallel chain.
+- The stage-result path is non-optimistic: no stage-result rollback tree is required.
+- All terminal navigation reaches a saving guard.
+- Victory display and persistence share one frozen `StageResult`.
+- Empty-module copy has one owner in the pure projection.
+- No new schema, package, controller, event system, or reward framework is introduced.
+- Unrelated tech-tree/reset behavior remains in place.
+- Process death during `Saving…` is explicitly accepted as a residual risk rather than hidden by optimistic state.
+- No placeholders or deferred design decisions remain.
