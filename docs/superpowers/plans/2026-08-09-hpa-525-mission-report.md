@@ -2,79 +2,73 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace Orion's minimal terminal panel with a compact Mission Report whose result comparison, Salvage Module summary, save truth, and next actions stay honest through queued save success, failure, retry, and navigation.
+**Goal:** Replace Orion's minimal terminal panel with a compact Mission Report whose result comparison, Salvage Module summary, save truth, and actions stay honest through save success, failure, retry, and navigation.
 
-**Architecture:** Keep `GameSession` and `OrionDefenseGame` as the source of terminal mission facts, add one Flutter-free report projection plus one report widget, and let `OrionGamePage` own explicit Mission Report state. Stage-result persistence becomes non-optimistic but still uses the existing `_saveQueue`, generation, busy counter, and committed campaign baseline so Orion keeps one serial campaign writer.
+**Architecture:** Keep `GameSession` / `OrionDefenseGame` as the source of terminal gameplay facts. Add one Flutter-free report projection module with typed victory/loss entry points and one dumb report widget. `OrionGamePage` owns Mission Report state and reuses the existing `_persistSave` queue/generation/committed-state protocol with opt-in non-optimistic completion/failure hooks rather than copying the writer.
 
 **Tech Stack:** Dart 3.12+, Flutter 3.44+, Flame 1.37+, `flutter_test`; no new packages.
 
 ## Global Constraints
 
 - HPA-527 is the gameplay baseline; do not change Salvage Module offer/effect rules.
-- Do not add a new `GamePhase` or report phase to `GameSession`.
-- Do not add RunStats, analytics, coaching, evidence export, run history, mid-run persistence, or a generic reward framework.
-- Do not route stage completion through the optimistic mutation/rollback behavior of `_persistSave`.
-- Do not call `store.save` on an independent chain; mission writes must enqueue on the existing `_saveQueue`.
-- Build mission-save payloads from `_committedProgress` / `_committedTechTree` inside the queued task.
-- Capture `_progressGeneration`, reuse `_pendingSaves` / `_isSavingProgress`, and call `_decrementPendingSaves()` in `finally`.
-- Do not optimistically update `_progress` for an improving victory.
-- A retained replay result performs no storage write and is immediately treated as already saved.
-- Victory save states are exactly `saving`, `saved`, and `failed`; loss has no save state.
-- Freeze the victory `StageCompletion.result`; projection and persistence use that same `StageResult`.
-- Do not use `snapshot.phase == won && _missionSaveState == null` as an implicit forever-`saving` fallback.
-- Save failure leaves campaign progress unchanged; no stage-result rollback callback/tree is needed.
-- While victory saving is in flight, every terminal exit route is blocked: report buttons, bottom World Map control, `game.returnToMap()`, and `_returnToMap()`.
-- Failed victory exposes `Retry Save` and `World Map (Unsaved)`; do not expose Replay until the result is saved or explicitly abandoned.
-- Use one `_missionExitStarted` one-shot guard for terminal world-map navigation.
-- Use `StageResult.isBetterThan` as the source of truth for whether a result improved.
-- Projection owns `No Salvage Modules acquired`; widgets do not duplicate that string.
-- Keep HPA-528 integration to one optional `MissionRewardFact`; HPA-525 always supplies `null`.
-- Keep existing tech-tree/reset persistence behavior unchanged except for sharing the same queue/committed baseline with the new mission writer.
-- Do not edit the save codec for this ticket. If implementation unexpectedly must edit it, remove obsolete v1/v2 development-save decoder branches rather than extending them.
-- Target 360×640 logical pixels; the report body may scroll but primary actions remain reachable.
-- Save meaning must use text/icon and cannot rely on color alone.
-- Process kill during `Saving…` may lose the run result; do not hide that residual risk by reintroducing optimistic campaign progress or durable recovery scope.
-- Final gates: `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, and full `flutter test`.
+- Do not add a report phase to `GameSession` or a new `GamePhase`.
+- Do not add RunStats, analytics, coaching, run history, mid-run persistence, or a generic reward framework.
+- Reuse `_persistSave`; do not duplicate `_saveQueue`, `_progressGeneration`, `_pendingSaves`, `_isSavingProgress`, or committed-payload logic.
+- Keep optimistic mutation optional: mission saves pass no `nextProgress` / `nextTechTree`.
+- Make `rollback` optional and add only `onCommitted` / `onFailed` hooks needed by the mission path.
+- Existing tech-tree/reset behavior must remain unchanged.
+- Freeze `completion.stage.id` and `completion.result`; report and persistence use those same values.
+- Delete `_pendingMissionProgress`; use `StageResult.isBetterThan` directly for the no-op decision.
+- Do not use a won-snapshot `null => Saving…` fallback.
+- Victory save states are exactly `saving`, `saved`, `failed`; loss has no save state.
+- Save failure leaves visible campaign progress unchanged.
+- Retained replay performs no storage write.
+- While saving, report actions and all map exit paths are blocked.
+- No `_missionExitStarted`; returning to the map is synchronous/idempotent.
+- Reuse `AcquiredRunModuleStrip` in the report.
+- Projection owns `No Salvage Modules acquired`.
+- Keep one optional typed `MissionRewardFact` because HPA-528 explicitly depends on the report reward slot; HPA-525 always supplies `null`.
+- Do not edit the save codec unless mechanically required; if touched, remove obsolete v1/v2 development-save decoding rather than extending it.
+- Target 360×640 logical pixels; body may scroll, actions stay reachable.
+- Save meaning uses icon + text, not color alone.
+- Process death during `Saving…` may lose the run result; do not add durable recovery.
+- Every task that modifies production behavior ends with the relevant focused tests; Task 3 must also end with the full existing suite green because it migrates old persistence tests.
+- Final gates: `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, full `flutter test`.
 
 ## File Map
 
 ### Create
 
-- `lib/game/ui/mission_report_content.dart` — immutable report presentation model and pure projection.
-- `lib/game/ui/mission_report_panel.dart` — compact scrollable Mission Report overlay with fixed reachable actions.
+- `lib/game/ui/mission_report_content.dart` — DTO + pure victory/loss projection.
+- `lib/game/ui/mission_report_panel.dart` — compact full-screen report overlay.
 - `test/game/mission_report_content_test.dart` — pure projection coverage.
-- `test/widget/mission_report_panel_test.dart` — 360×640 presentation/action coverage.
+- `test/widget/mission_report_panel_test.dart` — report layout/action coverage.
 
 ### Modify
 
-- `lib/game/ui/orion_game_page.dart` — freeze prior/result state, render Mission Report, queue a non-optimistic result save on the existing writer, close terminal exit paths, and remove `_EndStatePanel`.
-- `test/widget_test.dart` — page-level save success/failure/retry/no-op/loss/exit/writer-coexistence coverage and removal of obsolete optimistic stage-save tests.
+- `lib/game/ui/orion_game_page.dart` — extend `_persistSave`, own mission report state, render panel, save non-optimistically, guard exits, remove `_EndStatePanel`.
+- `test/widget_test.dart` — migrate old stage-save tests and add mission integration coverage.
 
-No production change is required in `GameSession`, `OrionDefenseGame`, `CampaignProgress`, or `CampaignProgressStore` for the intended design.
+No intended production changes in `GameSession`, `OrionDefenseGame`, `CampaignProgress`, or `CampaignProgressStore`.
 
 ---
 
-### Task 1: Add the pure Mission Report presentation model
+## Task 1: Add typed Mission Report projection
 
 **Files:**
 - Create: `lib/game/ui/mission_report_content.dart`
 - Create: `test/game/mission_report_content_test.dart`
 
 **Interfaces:**
-- Consumes: `GameSnapshot`, frozen victory `StageResult`, prior saved `StageResult`, `RunModuleId`, `runModuleDefinition`.
-- Produces: `MissionSaveState`, `MissionResultComparison`, `MissionModuleFact`, `MissionRewardFact`, `MissionReportContent`, `projectMissionReport(...)`.
-- Later tasks render only `MissionReportContent`; they do not derive comparison/module/save copy.
+- Produces `MissionSaveState`, `MissionResultComparison`, `MissionRewardFact`, `MissionReportContent`.
+- Produces `projectVictoryReport(...)` and `projectLossReport(...)`.
+- Carries raw `List<RunModuleId>` so Task 2 can reuse `AcquiredRunModuleStrip`.
 
-- [ ] **Step 1: Write the failing projection tests**
+- [ ] **Step 1: Write failing projection tests**
 
-Create `test/game/mission_report_content_test.dart`:
+Create `test/game/mission_report_content_test.dart` with a compact snapshot helper:
 
 ```dart
-import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/campaign/campaign_progress.dart';
-import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/mission_report_content.dart';
-
 GameSnapshot terminalSnapshot({
   required GamePhase phase,
   int baseHealth = 14,
@@ -104,398 +98,212 @@ GameSnapshot terminalSnapshot({
     acquiredRunModules: modules,
   );
 }
-
-void main() {
-  test('projects first clear without claiming commitment', () {
-    const result = StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 14,
-    );
-    final content = projectMissionReport(
-      snapshot: terminalSnapshot(
-        phase: GamePhase.won,
-        modules: const [
-          RunModuleId.heavyCaliber,
-          RunModuleId.emergencySalvage,
-        ],
-      ),
-      victoryResult: result,
-      priorSavedResult: null,
-      saveState: MissionSaveState.saving,
-    );
-
-    expect(content.didWin, isTrue);
-    expect(content.result, result);
-    expect(content.outcomeText, 'Silver medal • Base 14/20');
-    expect(content.comparison, MissionResultComparison.firstClear);
-    expect(content.comparisonText, 'New first-clear result');
-    expect(content.saveText, 'Saving result…');
-    expect(
-      content.modules.map((module) => module.title),
-      ['Heavy Caliber', 'Emergency Salvage'],
-    );
-    expect(content.emptyModulesText, isNull);
-  });
-
-  test('uses existing improvement rule before choosing improvement copy', () {
-    const prior = StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 14,
-    );
-    const medalImproved = StageResult(
-      medal: StageMedal.gold,
-      bestBaseHealth: 20,
-    );
-    const healthImproved = StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 17,
-    );
-    const retained = StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 12,
-    );
-
-    expect(medalImproved.isBetterThan(prior), isTrue);
-    expect(healthImproved.isBetterThan(prior), isTrue);
-    expect(retained.isBetterThan(prior), isFalse);
-
-    expect(
-      projectMissionReport(
-        snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 20),
-        victoryResult: medalImproved,
-        priorSavedResult: prior,
-        saveState: MissionSaveState.saved,
-      ).comparison,
-      MissionResultComparison.medalImproved,
-    );
-    expect(
-      projectMissionReport(
-        snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 17),
-        victoryResult: healthImproved,
-        priorSavedResult: prior,
-        saveState: MissionSaveState.saved,
-      ).comparison,
-      MissionResultComparison.baseHealthImproved,
-    );
-    expect(
-      projectMissionReport(
-        snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 12),
-        victoryResult: retained,
-        priorSavedResult: prior,
-        saveState: MissionSaveState.saved,
-      ).comparison,
-      MissionResultComparison.retained,
-    );
-  });
-
-  test('projects failed save without changing the run result', () {
-    const result = StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 14,
-    );
-    final content = projectMissionReport(
-      snapshot: terminalSnapshot(phase: GamePhase.won),
-      victoryResult: result,
-      priorSavedResult: null,
-      saveState: MissionSaveState.failed,
-    );
-
-    expect(content.result, result);
-    expect(content.comparisonText, 'New first-clear result');
-    expect(content.saveText, 'Save failed — progress unchanged.');
-    expect(
-      content.nextOpportunityText,
-      'Retry saving, or return without keeping this result.',
-    );
-  });
-
-  test('projects loss with reached wave and no save state', () {
-    final content = projectMissionReport(
-      snapshot: terminalSnapshot(
-        phase: GamePhase.lost,
-        baseHealth: 0,
-        waveNumber: 5,
-      ),
-      victoryResult: null,
-      priorSavedResult: null,
-      saveState: null,
-    );
-
-    expect(content.didWin, isFalse);
-    expect(content.outcomeText, 'Reached Wave 5/8');
-    expect(content.result, isNull);
-    expect(content.comparison, isNull);
-    expect(content.saveState, isNull);
-    expect(content.saveText, isNull);
-  });
-
-  test('projection owns empty module copy for victory and loss', () {
-    const result = StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 14,
-    );
-    final victory = projectMissionReport(
-      snapshot: terminalSnapshot(phase: GamePhase.won),
-      victoryResult: result,
-      priorSavedResult: null,
-      saveState: MissionSaveState.saved,
-    );
-    final loss = projectMissionReport(
-      snapshot: terminalSnapshot(phase: GamePhase.lost, baseHealth: 0),
-      victoryResult: null,
-      priorSavedResult: null,
-      saveState: null,
-    );
-
-    expect(victory.modules, isEmpty);
-    expect(victory.emptyModulesText, 'No Salvage Modules acquired');
-    expect(loss.modules, isEmpty);
-    expect(loss.emptyModulesText, 'No Salvage Modules acquired');
-  });
-
-  test('passes one optional typed reward fact through unchanged', () {
-    const reward = MissionRewardFact(
-      title: 'Blueprint recovered',
-      detail: 'Heavy Caliber Mk II',
-    );
-    const result = StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 14,
-    );
-    final content = projectMissionReport(
-      snapshot: terminalSnapshot(phase: GamePhase.won),
-      victoryResult: result,
-      priorSavedResult: null,
-      saveState: MissionSaveState.saved,
-      reward: reward,
-    );
-
-    expect(content.reward, same(reward));
-  });
-}
 ```
 
-- [ ] **Step 2: Run the new projection test and verify red**
+Add explicit tests:
 
-Run:
+```dart
+test('projects first clear while saving', () {
+  final content = projectVictoryReport(
+    snapshot: terminalSnapshot(
+      phase: GamePhase.won,
+      modules: const [RunModuleId.heavyCaliber],
+    ),
+    result: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
+    ),
+    priorSavedResult: null,
+    saveState: MissionSaveState.saving,
+  );
+
+  expect(content.outcomeText, 'Silver medal • Base 14/20');
+  expect(content.comparison, MissionResultComparison.firstClear);
+  expect(content.comparisonText, 'New first-clear result');
+  expect(content.saveText, 'Saving result…');
+  expect(content.moduleIds, [RunModuleId.heavyCaliber]);
+  expect(content.emptyModulesText, isNull);
+});
+
+test('projects medal improvement from isBetterThan result', () {
+  final content = projectVictoryReport(
+    snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 20),
+    result: const StageResult(
+      medal: StageMedal.gold,
+      bestBaseHealth: 20,
+    ),
+    priorSavedResult: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
+    ),
+    saveState: MissionSaveState.saved,
+  );
+
+  expect(content.comparison, MissionResultComparison.medalImproved);
+  expect(content.comparisonText, 'Medal improved: Silver → Gold');
+  expect(content.saveText, 'Saved.');
+});
+
+test('projects same-medal base-health improvement', () {
+  final content = projectVictoryReport(
+    snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 17),
+    result: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 17,
+    ),
+    priorSavedResult: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
+    ),
+    saveState: MissionSaveState.saved,
+  );
+
+  expect(content.comparison, MissionResultComparison.baseHealthImproved);
+  expect(content.comparisonText, 'Base health improved: 14 → 17');
+});
+
+test('projects retained best without implying a new write', () {
+  final content = projectVictoryReport(
+    snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 14),
+    result: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
+    ),
+    priorSavedResult: const StageResult(
+      medal: StageMedal.gold,
+      bestBaseHealth: 20,
+    ),
+    saveState: MissionSaveState.saved,
+  );
+
+  expect(content.comparison, MissionResultComparison.retained);
+  expect(content.comparisonText, 'Saved best retained: Gold • 20 base health');
+  expect(content.saveText, 'Best result already saved.');
+});
+
+test('projects failed save copy', () {
+  final content = projectVictoryReport(
+    snapshot: terminalSnapshot(phase: GamePhase.won),
+    result: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
+    ),
+    priorSavedResult: null,
+    saveState: MissionSaveState.failed,
+  );
+
+  expect(content.saveText, 'Save failed — progress unchanged.');
+  expect(
+    content.nextOpportunityText,
+    'Retry saving, or return without keeping this result.',
+  );
+});
+
+test('projects loss without save state', () {
+  final content = projectLossReport(
+    snapshot: terminalSnapshot(
+      phase: GamePhase.lost,
+      baseHealth: 0,
+      waveNumber: 5,
+    ),
+  );
+
+  expect(content.didWin, isFalse);
+  expect(content.outcomeText, 'Reached Wave 5/8');
+  expect(content.saveState, isNull);
+  expect(content.comparison, isNull);
+});
+
+test('projects empty module copy for victory and loss', () {
+  final victory = projectVictoryReport(
+    snapshot: terminalSnapshot(phase: GamePhase.won),
+    result: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
+    ),
+    priorSavedResult: null,
+    saveState: MissionSaveState.saving,
+  );
+  final loss = projectLossReport(
+    snapshot: terminalSnapshot(phase: GamePhase.lost, baseHealth: 0),
+  );
+
+  expect(victory.moduleIds, isEmpty);
+  expect(loss.moduleIds, isEmpty);
+  expect(victory.emptyModulesText, 'No Salvage Modules acquired');
+  expect(loss.emptyModulesText, 'No Salvage Modules acquired');
+});
+
+test('passes optional reward fact through unchanged', () {
+  const reward = MissionRewardFact(
+    title: 'Blueprint recovered',
+    detail: 'Heavy Caliber Mk II',
+  );
+  final content = projectVictoryReport(
+    snapshot: terminalSnapshot(phase: GamePhase.won),
+    result: const StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
+    ),
+    priorSavedResult: null,
+    saveState: MissionSaveState.saved,
+    reward: reward,
+  );
+
+  expect(content.reward, same(reward));
+});
+```
+
+- [ ] **Step 2: Verify red**
 
 ```bash
 flutter test test/game/mission_report_content_test.dart
 ```
 
-Expected: compile failure because `mission_report_content.dart` and its types do not exist.
+Expected: compile failure because the projection types/functions do not exist.
 
-- [ ] **Step 3: Implement the immutable types and projection**
+- [ ] **Step 3: Implement the DTO and typed projections**
 
-Create `lib/game/ui/mission_report_content.dart`:
+Create `lib/game/ui/mission_report_content.dart` with the exact model from the design spec. Implement comparison as:
 
 ```dart
-import '../campaign/campaign_progress.dart';
-import '../models/game_models.dart';
-
-enum MissionSaveState { saving, saved, failed }
-
-enum MissionResultComparison {
-  firstClear,
-  medalImproved,
-  baseHealthImproved,
-  retained,
-}
-
-final class MissionModuleFact {
-  const MissionModuleFact({required this.id, required this.title});
-
-  final RunModuleId id;
-  final String title;
-}
-
-final class MissionRewardFact {
-  const MissionRewardFact({required this.title, required this.detail});
-
-  final String title;
-  final String detail;
-}
-
-final class MissionReportContent {
-  MissionReportContent({
-    required this.stageId,
-    required this.stageName,
-    required this.didWin,
-    required this.waveNumber,
-    required this.waveTotal,
-    required this.remainingBaseHealth,
-    required this.startingBaseHealth,
-    this.result,
-    this.priorSavedResult,
-    this.comparison,
-    required this.outcomeText,
-    this.comparisonText,
-    required List<MissionModuleFact> modules,
-    this.emptyModulesText,
-    this.saveState,
-    this.saveText,
-    this.reward,
-    required this.nextOpportunityText,
-  }) : modules = List.unmodifiable(modules);
-
-  final String stageId;
-  final String stageName;
-  final bool didWin;
-  final int waveNumber;
-  final int waveTotal;
-  final int remainingBaseHealth;
-  final int startingBaseHealth;
-  final StageResult? result;
-  final StageResult? priorSavedResult;
-  final MissionResultComparison? comparison;
-  final String outcomeText;
-  final String? comparisonText;
-  final List<MissionModuleFact> modules;
-  final String? emptyModulesText;
-  final MissionSaveState? saveState;
-  final String? saveText;
-  final MissionRewardFact? reward;
-  final String nextOpportunityText;
-}
-
-MissionReportContent projectMissionReport({
-  required GameSnapshot snapshot,
-  required StageResult? victoryResult,
-  required StageResult? priorSavedResult,
-  required MissionSaveState? saveState,
-  MissionRewardFact? reward,
-}) {
-  final modules = snapshot.acquiredRunModules
-      .map(
-        (id) => MissionModuleFact(
-          id: id,
-          title: runModuleDefinition(id).title,
-        ),
-      )
-      .toList(growable: false);
-  final emptyModulesText = modules.isEmpty
-      ? 'No Salvage Modules acquired'
-      : null;
-
-  if (snapshot.phase != GamePhase.won) {
-    return MissionReportContent(
-      stageId: snapshot.stageId,
-      stageName: snapshot.stageName,
-      didWin: false,
-      waveNumber: snapshot.waveNumber,
-      waveTotal: snapshot.waveTotal,
-      remainingBaseHealth: snapshot.baseHealth,
-      startingBaseHealth: snapshot.startingBaseHealth,
-      outcomeText: 'Reached Wave ${snapshot.waveNumber}/${snapshot.waveTotal}',
-      modules: modules,
-      emptyModulesText: emptyModulesText,
-      reward: reward,
-      nextOpportunityText: 'Adjust your build and retry when ready.',
-    );
-  }
-
-  assert(victoryResult != null, 'Victory report requires StageCompletion.result.');
-  assert(saveState != null, 'Victory report requires an explicit save state.');
-  final result = victoryResult!;
-  final comparison = _comparison(result, priorSavedResult);
-
-  return MissionReportContent(
-    stageId: snapshot.stageId,
-    stageName: snapshot.stageName,
-    didWin: true,
-    waveNumber: snapshot.waveNumber,
-    waveTotal: snapshot.waveTotal,
-    remainingBaseHealth: result.bestBaseHealth,
-    startingBaseHealth: snapshot.startingBaseHealth,
-    result: result,
-    priorSavedResult: priorSavedResult,
-    comparison: comparison,
-    outcomeText:
-        '${result.medal.label} medal • Base ${result.bestBaseHealth}/${snapshot.startingBaseHealth}',
-    comparisonText: _comparisonText(
-      comparison,
-      result: result,
-      priorSavedResult: priorSavedResult,
-    ),
-    modules: modules,
-    emptyModulesText: emptyModulesText,
-    saveState: saveState,
-    saveText: _saveText(saveState!, comparison),
-    reward: reward,
-    nextOpportunityText: _nextOpportunityText(saveState),
-  );
-}
-
-MissionResultComparison _comparison(
+MissionResultComparison _compareResult(
   StageResult result,
-  StageResult? priorSavedResult,
+  StageResult? prior,
 ) {
-  if (priorSavedResult == null) {
-    return MissionResultComparison.firstClear;
-  }
-  if (!result.isBetterThan(priorSavedResult)) {
-    return MissionResultComparison.retained;
-  }
-  if (result.medal.rank > priorSavedResult.medal.rank) {
+  if (prior == null) return MissionResultComparison.firstClear;
+  if (!result.isBetterThan(prior)) return MissionResultComparison.retained;
+  if (result.medal.rank > prior.medal.rank) {
     return MissionResultComparison.medalImproved;
   }
   return MissionResultComparison.baseHealthImproved;
 }
-
-String _comparisonText(
-  MissionResultComparison comparison, {
-  required StageResult result,
-  required StageResult? priorSavedResult,
-}) {
-  return switch (comparison) {
-    MissionResultComparison.firstClear => 'New first-clear result',
-    MissionResultComparison.medalImproved =>
-      'Medal improved: ${priorSavedResult!.medal.label} → ${result.medal.label}',
-    MissionResultComparison.baseHealthImproved =>
-      'Base health improved: ${priorSavedResult!.bestBaseHealth} → ${result.bestBaseHealth}',
-    MissionResultComparison.retained =>
-      'Saved best retained: ${priorSavedResult!.medal.label} • '
-          '${priorSavedResult.bestBaseHealth} base health',
-  };
-}
-
-String _saveText(
-  MissionSaveState state,
-  MissionResultComparison comparison,
-) {
-  return switch (state) {
-    MissionSaveState.saving => 'Saving result…',
-    MissionSaveState.saved
-        when comparison == MissionResultComparison.retained =>
-      'Best result already saved.',
-    MissionSaveState.saved => 'Saved.',
-    MissionSaveState.failed => 'Save failed — progress unchanged.',
-  };
-}
-
-String _nextOpportunityText(MissionSaveState state) {
-  return switch (state) {
-    MissionSaveState.saving =>
-      'Saving must finish before you replay or leave.',
-    MissionSaveState.saved =>
-      'Replay for a better result or continue on the World Map.',
-    MissionSaveState.failed =>
-      'Retry saving, or return without keeping this result.',
-  };
-}
 ```
 
-- [ ] **Step 4: Run the projection tests and verify green**
+Do not duplicate `isBetterThan` with manual medal/base-health conditions.
 
-Run:
+Map modules by copying IDs only:
+
+```dart
+final moduleIds = List<RunModuleId>.unmodifiable(
+  snapshot.acquiredRunModules,
+);
+final emptyModulesText = moduleIds.isEmpty
+    ? 'No Salvage Modules acquired'
+    : null;
+```
+
+Do not call `runModuleDefinition` in this projection.
+
+- [ ] **Step 4: Verify green**
 
 ```bash
 flutter test test/game/mission_report_content_test.dart
 ```
 
-Expected: all Mission Report projection tests pass.
+Expected: PASS.
 
-- [ ] **Step 5: Commit the pure projection**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add lib/game/ui/mission_report_content.dart test/game/mission_report_content_test.dart
@@ -504,131 +312,52 @@ git commit -m "feat: add mission report projection"
 
 ---
 
-### Task 2: Add the compact Mission Report panel
+## Task 2: Add the compact Mission Report panel
 
 **Files:**
 - Create: `lib/game/ui/mission_report_panel.dart`
 - Create: `test/widget/mission_report_panel_test.dart`
 
 **Interfaces:**
-- Consumes: `MissionReportContent`, `MissionSaveState` from Task 1.
-- Produces: `MissionReportPanel(content:, onReplay:, onReturnToMap:, onRetrySave:)`.
-- The panel owns layout/action labels only; it does not derive persistence truth or comparison copy.
+- Consumes `MissionReportContent` from Task 1.
+- Reuses `AcquiredRunModuleStrip` from `lib/game/ui/run_module_draft_panel.dart`.
+- Produces disabled/enabled action callbacks only; no gameplay/persistence logic.
 
-- [ ] **Step 1: Write failing 360×640 widget tests**
+- [ ] **Step 1: Write failing widget tests**
 
-Create `test/widget/mission_report_panel_test.dart` with a helper:
+At minimum cover these states at 360×640:
 
 ```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/campaign/campaign_progress.dart';
-import 'package:orion/game/ui/mission_report_content.dart';
-import 'package:orion/game/ui/mission_report_panel.dart';
-
-MissionReportContent victoryContent(MissionSaveState state) {
-  return MissionReportContent(
-    stageId: 'outpost-alpha',
-    stageName: 'Outpost Alpha',
-    didWin: true,
-    waveNumber: 8,
-    waveTotal: 8,
-    remainingBaseHealth: 14,
-    startingBaseHealth: 20,
-    result: const StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 14,
-    ),
-    comparison: MissionResultComparison.firstClear,
-    outcomeText: 'Silver medal • Base 14/20',
-    comparisonText: 'New first-clear result',
-    modules: const [],
-    emptyModulesText: 'No Salvage Modules acquired',
-    saveState: state,
-    saveText: switch (state) {
-      MissionSaveState.saving => 'Saving result…',
-      MissionSaveState.saved => 'Saved.',
-      MissionSaveState.failed => 'Save failed — progress unchanged.',
-    },
-    nextOpportunityText: switch (state) {
-      MissionSaveState.saving =>
-        'Saving must finish before you replay or leave.',
-      MissionSaveState.saved =>
-        'Replay for a better result or continue on the World Map.',
-      MissionSaveState.failed =>
-        'Retry saving, or return without keeping this result.',
-    },
-  );
-}
-
-Future<void> pumpReport(
-  WidgetTester tester,
-  MissionReportContent content, {
-  VoidCallback? onReplay,
-  VoidCallback? onMap,
-  VoidCallback? onRetrySave,
-}) async {
+setUp(() {
   tester.view.physicalSize = const Size(360, 640);
   tester.view.devicePixelRatio = 1;
-  addTearDown(tester.view.reset);
-  await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: MissionReportPanel(
-          content: content,
-          onReplay: onReplay,
-          onReturnToMap: onMap,
-          onRetrySave: onRetrySave,
-        ),
-      ),
-    ),
-  );
-}
+});
 ```
 
-Add tests that assert:
+Use `MissionReportPanel` fixtures for:
+
+1. saving victory — visible `Saving result…`; Replay/World Map disabled;
+2. saved victory — Replay/World Map enabled;
+3. failed victory — Retry Save + World Map (Unsaved), no Replay;
+4. loss — Retry + World Map;
+5. module IDs — `AcquiredRunModuleStrip` renders `Heavy Caliber` plus its existing effect text;
+6. empty modules — `No Salvage Modules acquired`;
+7. optional reward fact — title/detail visible;
+8. no overflow at 360×640 with three module IDs.
+
+For disabled button inspection, do not cast `find.byTooltip` directly. Use the repository's established descendant pattern:
 
 ```dart
-testWidgets('saving victory disables replay and map at 360x640', (tester) async {
-  await pumpReport(tester, victoryContent(MissionSaveState.saving));
-
-  expect(find.text('Victory'), findsOneWidget);
-  expect(find.text('Saving result…'), findsOneWidget);
-  expect(find.text('No Salvage Modules acquired'), findsOneWidget);
-  expect(tester.takeException(), isNull);
-
-  final replay = tester.widget<FilledButton>(
-    find.widgetWithText(FilledButton, 'Replay Mission'),
-  );
-  final map = tester.widget<FilledButton>(
-    find.widgetWithText(FilledButton, 'World Map'),
-  );
-  expect(replay.onPressed, isNull);
-  expect(map.onPressed, isNull);
-});
-
-testWidgets('failed victory exposes retry save and unsaved map', (tester) async {
-  var retries = 0;
-  var exits = 0;
-  await pumpReport(
-    tester,
-    victoryContent(MissionSaveState.failed),
-    onRetrySave: () => retries++,
-    onMap: () => exits++,
-  );
-
-  await tester.tap(find.text('Retry Save'));
-  await tester.tap(find.text('World Map (Unsaved)'));
-  expect(retries, 1);
-  expect(exits, 1);
-});
+final mapButton = tester.widget<IconButton>(
+  find.descendant(
+    of: find.byTooltip('World Map'),
+    matching: find.byType(IconButton),
+  ),
+);
+expect(mapButton.onPressed, isNull);
 ```
 
-Also add saved-victory and loss action tests. Build loss content directly with `didWin: false`, `outcomeText: 'Reached Wave 5/8'`, no save fields, and assert `Retry` + `World Map` are enabled.
-
-- [ ] **Step 2: Run the widget test and verify red**
-
-Run:
+- [ ] **Step 2: Verify red**
 
 ```bash
 flutter test test/widget/mission_report_panel_test.dart
@@ -638,199 +367,38 @@ Expected: compile failure because `MissionReportPanel` does not exist.
 
 - [ ] **Step 3: Implement the panel**
 
-Create `lib/game/ui/mission_report_panel.dart`:
+Create the full-screen overlay with:
 
-```dart
-import 'package:flutter/material.dart';
-
-import 'mission_report_content.dart';
-
-class MissionReportPanel extends StatelessWidget {
-  const MissionReportPanel({
-    super.key,
-    required this.content,
-    this.onReplay,
-    this.onReturnToMap,
-    this.onRetrySave,
-  });
-
-  final MissionReportContent content;
-  final VoidCallback? onReplay;
-  final VoidCallback? onReturnToMap;
-  final VoidCallback? onRetrySave;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    return ColoredBox(
-      color: theme.colorScheme.scrim.withValues(alpha: 0.72),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Icon(
-                            content.didWin
-                                ? Icons.emoji_events
-                                : Icons.warning_amber,
-                            size: 40,
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            content.didWin ? 'Victory' : 'Mission Failed',
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.headlineSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            content.stageName,
-                            textAlign: TextAlign.center,
-                            style: theme.textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(content.outcomeText),
-                          if (content.comparisonText case final comparison?) ...[
-                            const SizedBox(height: 6),
-                            Text(comparison),
-                          ],
-                          const SizedBox(height: 16),
-                          Text('Salvage Modules', style: theme.textTheme.titleMedium),
-                          const SizedBox(height: 6),
-                          if (content.modules.isEmpty)
-                            Text(content.emptyModulesText!)
-                          else
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              children: [
-                                for (final module in content.modules)
-                                  Chip(label: Text(module.title)),
-                              ],
-                            ),
-                          if (content.saveText case final saveText?) ...[
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                Icon(_saveIcon(content.saveState!)),
-                                const SizedBox(width: 8),
-                                Expanded(child: Text(saveText)),
-                              ],
-                            ),
-                          ],
-                          if (content.reward case final reward?) ...[
-                            const SizedBox(height: 16),
-                            Text(reward.title, style: theme.textTheme.titleMedium),
-                            const SizedBox(height: 4),
-                            Text(reward.detail),
-                          ],
-                          const SizedBox(height: 16),
-                          Text(content.nextOpportunityText),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              _actions(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _actions() {
-    if (!content.didWin) {
-      return Row(
-        children: [
-          Expanded(
-            child: FilledButton(
-              onPressed: onReplay,
-              child: const Text('Retry'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: FilledButton.tonal(
-              onPressed: onReturnToMap,
-              child: const Text('World Map'),
-            ),
-          ),
-        ],
-      );
-    }
-
-    if (content.saveState == MissionSaveState.failed) {
-      return Row(
-        children: [
-          Expanded(
-            child: FilledButton(
-              onPressed: onRetrySave,
-              child: const Text('Retry Save'),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: FilledButton.tonal(
-              onPressed: onReturnToMap,
-              child: const Text('World Map (Unsaved)'),
-            ),
-          ),
-        ],
-      );
-    }
-
-    return Row(
-      children: [
-        Expanded(
-          child: FilledButton(
-            onPressed: onReplay,
-            child: const Text('Replay Mission'),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: FilledButton.tonal(
-            onPressed: onReturnToMap,
-            child: const Text('World Map'),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-IconData _saveIcon(MissionSaveState state) => switch (state) {
-  MissionSaveState.saving => Icons.sync,
-  MissionSaveState.saved => Icons.check_circle_outline,
-  MissionSaveState.failed => Icons.error_outline,
-};
+```text
+SafeArea
+└── Padding
+    └── Column
+        ├── Expanded(SingleChildScrollView(report body))
+        └── fixed action area
 ```
 
-The page passes null callbacks while saving, so the standard victory action row renders disabled buttons.
+Module section:
 
-- [ ] **Step 4: Run the widget tests and verify green**
+```dart
+if (content.moduleIds.isNotEmpty)
+  AcquiredRunModuleStrip(moduleIds: content.moduleIds)
+else
+  Text(content.emptyModulesText!);
+```
+
+Do not create a second module chip/label renderer.
+
+Action matrix must exactly match the design spec.
+
+- [ ] **Step 4: Verify green**
 
 ```bash
 flutter test test/widget/mission_report_panel_test.dart
 ```
 
-Expected: all Mission Report widget tests pass at 360×640 with no overflow.
+Expected: PASS and no layout exceptions.
 
-- [ ] **Step 5: Commit the panel**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add lib/game/ui/mission_report_panel.dart test/widget/mission_report_panel_test.dart
@@ -839,31 +407,323 @@ git commit -m "feat: add mission report panel"
 
 ---
 
-### Task 3: Integrate terminal result state, the shared writer, and closed exits
+## Task 3: Integrate the report and migrate the persistence tests in one green change
 
 **Files:**
 - Modify: `lib/game/ui/orion_game_page.dart`
 - Modify: `test/widget_test.dart`
 
 **Interfaces:**
-- Consumes: Task 1 `projectMissionReport`, `MissionSaveState`; Task 2 `MissionReportPanel`.
-- Produces: `_handleStageWon`, `_saveMissionResult`, `_restartFromMissionReport`, `_returnFromMissionReport`, `_handleGameReturnToMap`, `_setMissionSaveState`.
-- Reuses: `_saveQueue`, `_progressGeneration`, `_pendingSaves`, `_setSavingProgress`, `_decrementPendingSaves`, `_committedProgress`, `_committedTechTree`.
-- Keeps: `_persistSave` for existing tech-tree behavior; does not route mission result through its optimistic mutation/rollback API.
+- Extends `_persistSave(...)` with optional `rollback`, `onCommitted`, `onFailed`.
+- Adds `_missionPriorResult`, `_missionVictoryResult`, `_missionStageId`, `_missionSaveState`.
+- Adds `_handleStageWon`, `_saveMissionResult`, `_restartFromMissionReport`, `_returnFromMissionReport`, `_setMissionSaveState`.
+- Removes `_saveStageCompletion` and `_EndStatePanel`.
 
-- [ ] **Step 1: Add a shared terminal-victory test helper**
+### Task 3A: Extend `_persistSave` instead of cloning it
 
-Near `startStageFromBriefing` in `test/widget_test.dart`, add:
+- [ ] **Step 1: Add focused persistence-hook tests before changing production code**
+
+Use existing `_TestCampaignProgressStore` to prove:
+
+- a caller with no optimistic `nextProgress` leaves visible progress unchanged until commit;
+- `onCommitted` receives the committed payload;
+- `onFailed` fires on save failure without generic stage feedback;
+- existing tech-tree purchase rollback/breadcrumb tests remain unchanged and green.
+
+- [ ] **Step 2: Update `_persistSave` signature**
+
+```dart
+Future<void> _persistSave({
+  CampaignProgress? nextProgress,
+  CampaignTechTree? nextTechTree,
+  required CampaignSave Function(CampaignSave committed) buildSave,
+  VoidCallback? rollback,
+  ValueChanged<CampaignSave>? onCommitted,
+  VoidCallback? onFailed,
+}) async {
+```
+
+Required behavior:
+
+```dart
+final store = _store;
+if (store == null) {
+  if (onFailed != null) {
+    onFailed();
+  } else {
+    _showCampaignPersistenceFailure();
+  }
+  return;
+}
+```
+
+Inside queued task after successful save and generation check:
+
+```dart
+_committedProgress = payload.progress;
+_committedTechTree = payload.techTree;
+onCommitted?.call(payload);
+```
+
+On caught failure while generation still matches:
+
+```dart
+rollback?.call();
+if (onFailed != null) {
+  onFailed();
+} else if (mounted) {
+  _showCampaignPersistenceFailure();
+}
+```
+
+For stale generation, preserve current generic behavior when no callback is supplied; when mission `onFailed` is supplied, invoke it so the report does not stay `Saving…`.
+
+Do not add a second helper/queue/controller.
+
+### Task 3B: Add page-owned Mission Report state
+
+- [ ] **Step 3: Add/reset four fields at stage start**
+
+```dart
+StageResult? _missionPriorResult;
+StageResult? _missionVictoryResult;
+String? _missionStageId;
+MissionSaveState? _missionSaveState;
+```
+
+At `_startStage(stage)`:
+
+```dart
+_missionPriorResult = _progress.resultFor(stage.id);
+_missionVictoryResult = null;
+_missionStageId = null;
+_missionSaveState = null;
+```
+
+Construct game with:
+
+```dart
+onStageWon: _handleStageWon,
+onReturnToMap: _returnFromMissionReport,
+```
+
+Do not add `_pendingMissionProgress` or `_missionExitStarted`.
+
+- [ ] **Step 4: Add `_handleStageWon` using the frozen stage ID/result**
+
+```dart
+void _handleStageWon(StageCompletion completion) {
+  if (_isResetting ||
+      _missionVictoryResult != null ||
+      _missionSaveState != null) {
+    return;
+  }
+
+  _missionStageId = completion.stage.id;
+  _missionVictoryResult = completion.result;
+
+  if (!completion.result.isBetterThan(_missionPriorResult)) {
+    _setMissionSaveState(MissionSaveState.saved);
+    return;
+  }
+
+  _saveMissionResult();
+}
+```
+
+Do not derive the saved stage ID from `_game.stage.id` later.
+
+- [ ] **Step 5: Add non-optimistic `_saveMissionResult` through `_persistSave`**
+
+```dart
+Future<void> _saveMissionResult() async {
+  if (_missionSaveState == MissionSaveState.saving ||
+      _missionSaveState == MissionSaveState.saved) {
+    return;
+  }
+
+  final stageId = _missionStageId;
+  final result = _missionVictoryResult;
+  if (stageId == null || result == null) {
+    _setMissionSaveState(MissionSaveState.failed);
+    return;
+  }
+
+  _setMissionSaveState(MissionSaveState.saving);
+
+  await _persistSave(
+    buildSave: (committed) => CampaignSave(
+      progress: committed.progress.recordResult(stageId, result),
+      techTree: committed.techTree,
+    ),
+    onCommitted: (payload) {
+      _progress = payload.progress;
+      _setMissionSaveState(MissionSaveState.saved);
+    },
+    onFailed: () => _setMissionSaveState(MissionSaveState.failed),
+  );
+}
+```
+
+`_persistSave` still owns queue/generation/pending counters. Mission code owns only the report state transition and visible commit publication.
+
+- [ ] **Step 6: Add disposal-safe state helper**
+
+```dart
+void _setMissionSaveState(MissionSaveState state) {
+  _missionSaveState = state;
+  if (mounted) {
+    setState(() {});
+  }
+}
+```
+
+No `setState` after dispose.
+
+### Task 3C: Render only complete terminal inputs and close exits
+
+- [ ] **Step 7: Replace `_EndStatePanel` in the stage Stack**
+
+For loss:
+
+```dart
+if (snapshot.phase == GamePhase.lost)
+  MissionReportPanel(
+    content: projectLossReport(snapshot: snapshot),
+    onReplay: _restartFromMissionReport,
+    onReturnToMap: _returnFromMissionReport,
+  );
+```
+
+For victory, only render once both frozen values exist:
+
+```dart
+if (snapshot.phase == GamePhase.won &&
+    _missionVictoryResult != null &&
+    _missionSaveState != null)
+  MissionReportPanel(
+    content: projectVictoryReport(
+      snapshot: snapshot,
+      result: _missionVictoryResult!,
+      priorSavedResult: _missionPriorResult,
+      saveState: _missionSaveState!,
+      reward: null,
+    ),
+    onReplay: _missionSaveState == MissionSaveState.saved
+        ? _restartFromMissionReport
+        : null,
+    onReturnToMap: _missionSaveState == MissionSaveState.saving
+        ? null
+        : _returnFromMissionReport,
+    onRetrySave: _missionSaveState == MissionSaveState.failed
+        ? _saveMissionResult
+        : null,
+  );
+```
+
+No snapshot-only saving fallback.
+
+- [ ] **Step 8: Make the underlying World Map control build-only**
+
+Change `_BottomControls`:
+
+```dart
+onPressed: snapshot.phase == GamePhase.build ? game.returnToMap : null,
+```
+
+- [ ] **Step 9: Centralize return guard**
+
+```dart
+void _returnToMap() {
+  if (_missionSaveState == MissionSaveState.saving) {
+    return;
+  }
+  setState(() {
+    _game = null;
+    _activeView = _ShellView.worldMap;
+  });
+}
+
+void _returnFromMissionReport() {
+  if (_missionSaveState == MissionSaveState.saving) {
+    return;
+  }
+  if (_missionSaveState == MissionSaveState.failed) {
+    _mapFeedback = 'Mission result was not saved.';
+  }
+  _returnToMap();
+}
+```
+
+No one-shot flag.
+
+- [ ] **Step 10: Add replay guard/reset**
+
+Victory retry is allowed only after saved; loss retry is immediate. Refresh the prior result from committed `_progress` before restarting:
+
+```dart
+void _restartFromMissionReport() {
+  final game = _game;
+  if (game == null) return;
+
+  final snapshot = game.snapshot;
+  if (snapshot.phase == GamePhase.won &&
+      _missionSaveState != MissionSaveState.saved) {
+    return;
+  }
+
+  _missionPriorResult = _progress.resultFor(game.stage.id);
+  _missionVictoryResult = null;
+  _missionStageId = null;
+  _missionSaveState = null;
+  game.restart();
+}
+```
+
+### Task 3D: Migrate every old stage-save fixture before committing
+
+- [ ] **Step 11: Enumerate all old synthetic stage-completion calls**
+
+Run:
+
+```bash
+grep -n "onStageWon.*call" test/widget_test.dart
+```
+
+Classify every result. Do not rely on the previous plan's partial list.
+
+Delete/rewrite tests whose only behavior is intentionally removed:
+
+- optimistic stage clear visible before commit;
+- multiple sibling stage completions emitted from one active mission;
+- two same-stage completions from one active mission;
+- optimistic stage-result rollback interactions.
+
+Preserve the underlying generic writer invariants by re-plumbing them through tech-tree purchase saves where appropriate:
+
+- `blocks stage launch while a stage-completion save is in flight` → delay a tech-tree purchase save and assert stage launch is blocked;
+- `persists queued stage save even if page is disposed before it runs` → queue tech-tree persistence and dispose;
+- `queued save after disposal keeps earlier queued result in store` → use two affordable tech-tree purchases from a fixture with sufficient medal points;
+- `failed queued save after disposal does not call setState on a defunct State` → delayed failing tech-tree save;
+- `failed reset retains progress after a pending save drains` → pending tech-tree save then reset failure;
+- `successful reset after a pending save drains wipes the store` → pending tech-tree save then successful reset.
+
+Keep Mission Report-specific replacements:
+
+- null store → victory report becomes `failed`, no throw;
+- retained replay → zero save calls;
+- improving victory → one save call;
+- direct `game.returnToMap()` while saving → still on report.
+
+- [ ] **Step 12: Add shared synthetic-victory helper**
+
+Any page test that manually injects `GamePhase.won` must also emit a matching completion through one helper so tests cannot recreate the removed stuck-saving fixture:
 
 ```dart
 Future<void> publishVictory(
   WidgetTester tester,
   OrionDefenseGame game, {
-  StageResult result = const StageResult(
-    medal: StageMedal.silver,
-    bestBaseHealth: 14,
-  ),
-  List<RunModuleId> modules = const [],
+  required StageResult result,
 }) async {
   final snapshot = game.stateNotifier.value;
   game.stateNotifier.value = GameSnapshot(
@@ -886,400 +746,50 @@ Future<void> publishVictory(
     speedMultiplier: 1,
     autoStartEnabled: false,
     autoStartCountdownRemaining: null,
-    acquiredRunModules: modules,
+    acquiredRunModules: snapshot.acquiredRunModules,
   );
   game.onStageWon?.call(StageCompletion(stage: game.stage, result: result));
   await tester.pump();
 }
 ```
 
-This replaces snapshot-only victory fixtures. A valid synthetic victory now supplies the same `StageResult` to the report and persistence callback.
+- [ ] **Step 13: Add/replace Mission Report integration tests**
 
-- [ ] **Step 2: Write failing tests for saving truth and the programmatic exit bypass**
+Cover at minimum:
 
-Add:
+1. improving victory immediately shows `Saving result…` and store progress is unchanged while delayed;
+2. save success shows `Saved.` and commits progress;
+3. save failure shows `Save failed — progress unchanged.`;
+4. Retry Save creates one new save and can succeed;
+5. retained replay result uses zero writes and shows `Best result already saved.`;
+6. loss uses zero writes;
+7. null store becomes failed without throwing;
+8. `game.returnToMap()` during saving does not leave the report;
+9. failed report World Map sets `Mission result was not saved.` and committed progress is unchanged;
+10. delayed failure after page disposal produces no `setState()` exception.
 
-```dart
-testWidgets(
-  'improving victory is non-optimistic and game return is blocked while saving',
-  (tester) async {
-    final store = _TestCampaignProgressStore(delaySaves: true);
-    OrionDefenseGame? game;
+Use the corrected World Map button finder from Task 2 when inspecting disabled state.
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await startStageFromBriefing(tester);
-
-    await publishVictory(tester, game!);
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-
-    expect(find.text('Saving result…'), findsOneWidget);
-    expect(store.progress.resultFor('outpost-alpha'), isNull);
-
-    final bottomMap = tester.widget<IconButton>(find.byTooltip('World Map'));
-    expect(bottomMap.onPressed, isNull);
-
-    game!.returnToMap();
-    await tester.pump();
-    expect(find.text('Saving result…'), findsOneWidget);
-    expect(find.text('Orion Sector Map'), findsNothing);
-    expect(store.progress.resultFor('outpost-alpha'), isNull);
-
-    store.saveCompletions.single.complete();
-    await tester.pumpAndSettle();
-
-    expect(find.text('Saved.'), findsOneWidget);
-    expect(
-      store.progress.resultFor('outpost-alpha'),
-      const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-    );
-  },
-);
-```
-
-Run:
+- [ ] **Step 14: Run focused tests**
 
 ```bash
-flutter test test/widget_test.dart --plain-name "improving victory is non-optimistic and game return is blocked while saving"
+flutter test test/game/mission_report_content_test.dart
+flutter test test/widget/mission_report_panel_test.dart
+flutter test test/widget_test.dart --plain-name "Mission"
+flutter test test/widget_test.dart --plain-name "save"
 ```
 
-Expected: fail because the current end panel has no Mission Report state and `game.returnToMap()` still exits.
+Expected: PASS.
 
-- [ ] **Step 3: Add page imports and Mission Report fields**
-
-In `orion_game_page.dart`, import:
-
-```dart
-import 'mission_report_content.dart';
-import 'mission_report_panel.dart';
-```
-
-Add to `_OrionGamePageState`:
-
-```dart
-StageResult? _missionPriorResult;
-StageResult? _missionVictoryResult;
-CampaignProgress? _pendingMissionProgress;
-MissionSaveState? _missionSaveState;
-bool _missionExitStarted = false;
-```
-
-Add:
-
-```dart
-void _setMissionSaveState(MissionSaveState value) {
-  _missionSaveState = value;
-  if (mounted) {
-    setState(() {});
-  }
-}
-```
-
-- [ ] **Step 4: Freeze stage baseline and route callbacks through the page**
-
-In `_startStage(stage)`, after the existing save/reset/unlock guards and before `OrionDefenseGame(...)`:
-
-```dart
-_missionPriorResult = _progress.resultFor(stage.id);
-_missionVictoryResult = null;
-_pendingMissionProgress = null;
-_missionSaveState = null;
-_missionExitStarted = false;
-```
-
-Change game callbacks to:
-
-```dart
-onStageWon: _handleStageWon,
-onReturnToMap: _handleGameReturnToMap,
-```
-
-- [ ] **Step 5: Replace `_saveStageCompletion` with frozen result handling**
-
-Delete `_saveStageCompletion` and add:
-
-```dart
-Future<void> _handleStageWon(StageCompletion completion) {
-  if (_missionVictoryResult != null || _missionSaveState != null) {
-    return Future<void>.value();
-  }
-
-  _missionVictoryResult = completion.result;
-  final proposed = _progress.recordResult(
-    completion.stage.id,
-    completion.result,
-  );
-  _pendingMissionProgress = proposed;
-
-  if (proposed.resultFor(completion.stage.id) == _missionPriorResult) {
-    _setMissionSaveState(MissionSaveState.saved);
-    return Future<void>.value();
-  }
-
-  return _saveMissionResult();
-}
-```
-
-Do not derive another `StageResult` from `GameSnapshot` in the page or report projection.
-
-- [ ] **Step 6: Implement the non-optimistic save on the existing writer chain**
-
-Add:
-
-```dart
-Future<void> _saveMissionResult() async {
-  if (_missionSaveState == MissionSaveState.saving ||
-      _missionSaveState == MissionSaveState.saved) {
-    return;
-  }
-
-  final store = _store;
-  final game = _game;
-  final result = _missionVictoryResult;
-  if (store == null || game == null || result == null) {
-    _setMissionSaveState(MissionSaveState.failed);
-    return;
-  }
-
-  final stageId = game.stage.id;
-  final saveGeneration = _progressGeneration;
-  _setMissionSaveState(MissionSaveState.saving);
-  _pendingSaves++;
-  _setSavingProgress(true);
-
-  final saveTask = _saveQueue.then((_) async {
-    try {
-      if (saveGeneration != _progressGeneration) {
-        _setMissionSaveState(MissionSaveState.failed);
-        return;
-      }
-
-      final payload = CampaignSave(
-        progress: _committedProgress.recordResult(stageId, result),
-        techTree: _committedTechTree,
-      );
-      await store.save(payload);
-
-      if (saveGeneration != _progressGeneration) {
-        _setMissionSaveState(MissionSaveState.failed);
-        return;
-      }
-
-      _committedProgress = payload.progress;
-      _committedTechTree = payload.techTree;
-      _progress = payload.progress;
-      _setMissionSaveState(MissionSaveState.saved);
-    } catch (_) {
-      _setMissionSaveState(MissionSaveState.failed);
-    } finally {
-      _decrementPendingSaves();
-    }
-  });
-
-  _saveQueue = saveTask.catchError((_) {});
-  await saveTask;
-}
-```
-
-Important details:
-
-- `_pendingMissionProgress` is not assigned to `_progress` before saving.
-- The payload is rebuilt from `_committedProgress` inside the queued task, not written from a stale captured aggregate.
-- There is no stage-result rollback callback.
-- Failure updates only `_missionSaveState` plus the normal busy counter in `finally`.
-
-- [ ] **Step 7: Render the report only from complete terminal inputs**
-
-Inside `_buildStageScaffold`'s `ValueListenableBuilder`, compute:
-
-```dart
-final MissionReportContent? reportContent;
-if (snapshot.phase == GamePhase.lost) {
-  reportContent = projectMissionReport(
-    snapshot: snapshot,
-    victoryResult: null,
-    priorSavedResult: null,
-    saveState: null,
-  );
-} else if (snapshot.phase == GamePhase.won &&
-    _missionVictoryResult != null &&
-    _missionSaveState != null) {
-  reportContent = projectMissionReport(
-    snapshot: snapshot,
-    victoryResult: _missionVictoryResult,
-    priorSavedResult: _missionPriorResult,
-    saveState: _missionSaveState,
-  );
-} else {
-  reportContent = null;
-}
-```
-
-Replace `_EndStatePanel` rendering with:
-
-```dart
-if (reportContent != null)
-  Positioned.fill(
-    child: MissionReportPanel(
-      content: reportContent,
-      onReplay: _missionSaveState == MissionSaveState.saving
-          ? null
-          : _restartFromMissionReport,
-      onReturnToMap: _missionSaveState == MissionSaveState.saving
-          ? null
-          : _returnFromMissionReport,
-      onRetrySave: _missionSaveState == MissionSaveState.failed
-          ? _saveMissionResult
-          : null,
-    ),
-  ),
-```
-
-For loss, `_missionSaveState` is null, so Retry and World Map remain enabled.
-
-Delete `_EndStatePanel` after the Mission Report is wired.
-
-- [ ] **Step 8: Close the terminal exit graph**
-
-In `_BottomControls`, change the map button from “anything except wave” to build-only:
-
-```dart
-onPressed: snapshot.phase == GamePhase.build ? game.returnToMap : null,
-```
-
-Add:
-
-```dart
-void _handleGameReturnToMap() {
-  final snapshot = _game?.snapshot;
-  if (snapshot?.isEnded == true) {
-    _returnFromMissionReport();
-    return;
-  }
-  _returnToMap();
-}
-```
-
-Defensively guard `_returnToMap`:
-
-```dart
-void _returnToMap() {
-  if (_missionSaveState == MissionSaveState.saving) {
-    return;
-  }
-  setState(() {
-    _game = null;
-    _activeView = _ShellView.worldMap;
-  });
-}
-```
-
-Add report return:
-
-```dart
-void _returnFromMissionReport() {
-  if (_missionExitStarted || _missionSaveState == MissionSaveState.saving) {
-    return;
-  }
-  _missionExitStarted = true;
-
-  if (_missionSaveState == MissionSaveState.failed) {
-    _mapFeedback = 'Mission result was not saved.';
-  }
-
-  _returnToMap();
-}
-```
-
-Add report restart:
-
-```dart
-void _restartFromMissionReport() {
-  final game = _game;
-  if (game == null) {
-    return;
-  }
-  final snapshot = game.snapshot;
-  if (snapshot.phase == GamePhase.won &&
-      _missionSaveState != MissionSaveState.saved) {
-    return;
-  }
-
-  _missionPriorResult = _progress.resultFor(game.stage.id);
-  _missionVictoryResult = null;
-  _pendingMissionProgress = null;
-  _missionSaveState = null;
-  _missionExitStarted = false;
-  game.restart();
-}
-```
-
-- [ ] **Step 9: Add failing-save retry single-flight coverage**
-
-Add:
-
-```dart
-testWidgets('failed mission save retries once and can succeed', (tester) async {
-  final store = _TestCampaignProgressStore(
-    delaySaves: true,
-    failOnSaveIndices: {0},
-  );
-  OrionDefenseGame? game;
-
-  await tester.pumpWidget(
-    MaterialApp(
-      home: OrionGamePage(
-        progressStore: store,
-        onGameCreated: (created) => game = created,
-      ),
-    ),
-  );
-  await tester.pumpAndSettle();
-  await startStageFromBriefing(tester);
-  await publishVictory(tester, game!);
-
-  await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-  store.saveCompletions[0].complete();
-  await tester.pumpAndSettle();
-
-  expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
-  expect(store.progress.resultFor('outpost-alpha'), isNull);
-
-  await tester.tap(find.text('Retry Save'));
-  await tester.tap(find.text('Retry Save'));
-  await tester.pump();
-  await _pumpUntil(tester, () => store.saveCompletions.length == 2);
-
-  expect(store.saveCalls, 2);
-  store.saveCompletions[1].complete();
-  await tester.pumpAndSettle();
-
-  expect(find.text('Saved.'), findsOneWidget);
-  expect(store.saveCalls, 2);
-  expect(
-    store.progress.resultFor('outpost-alpha'),
-    const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-  );
-});
-```
-
-- [ ] **Step 10: Run focused page tests**
+- [ ] **Step 15: Run the full suite before the Task 3 commit**
 
 ```bash
-flutter test test/widget_test.dart --plain-name "improving victory is non-optimistic and game return is blocked while saving"
-flutter test test/widget_test.dart --plain-name "failed mission save retries once and can succeed"
+flutter test
 ```
 
-Expected: both pass.
+Expected: PASS. Do not commit Task 3 with the known old `onStageWon` fixtures still red.
 
-- [ ] **Step 11: Commit the page integration**
+- [ ] **Step 16: Commit**
 
 ```bash
 git add lib/game/ui/orion_game_page.dart test/widget_test.dart
@@ -1288,285 +798,121 @@ git commit -m "feat: integrate mission report save flow"
 
 ---
 
-### Task 4: Replace obsolete stage-save contracts and verify writer coexistence
+## Task 4: Add cross-writer regression and final verification
 
 **Files:**
 - Modify: `test/widget_test.dart`
-- Modify only if needed for test-driven compile fixes: `lib/game/ui/orion_game_page.dart`
+- Modify only if needed for discovered compile/test issues: files already touched in Tasks 1–3.
 
-**Interfaces:**
-- Consumes all Task 1–3 behavior.
-- Produces final regression coverage for retained results, losses, unsaved abandonment, one-shot exit, and mission-save → tech-purchase persistence.
+- [ ] **Step 1: Add mission-save → tech-tree-purchase regression**
 
-- [ ] **Step 1: Replace snapshot-only terminal tests with complete terminal fixtures**
+Use a progress fixture that has enough medal rank to purchase an affordable tech upgrade after the mission save.
 
-The old tests `victory panel shows earned medal and base health` and `loss panel hides the environment reminder` target `_EndStatePanel`.
+Flow:
 
-Replace the victory test with `publishVictory(...)` so the won snapshot and `onStageWon` callback are always paired. Assert:
+1. start a stage;
+2. publish an improving victory and complete its delayed save;
+3. return to the map;
+4. open Tech Tree;
+5. purchase one upgrade and complete that save;
+6. assert the store contains both the new stage result and purchased upgrade.
 
-```dart
-expect(find.text('Victory'), findsOneWidget);
-expect(find.text('Silver medal • Base 14/20'), findsOneWidget);
-expect(find.text('New first-clear result'), findsOneWidget);
-```
-
-For loss, keep snapshot-only injection because loss has no persistence callback, then assert:
+The final assertions must check both fields from the store:
 
 ```dart
-expect(find.text('Mission Failed'), findsOneWidget);
-expect(find.textContaining('Reached Wave'), findsOneWidget);
-expect(find.textContaining('Environment:'), findsNothing);
-```
-
-Do not add a `won => saving` fallback merely to preserve old snapshot-only test style.
-
-- [ ] **Step 2: Replace obsolete optimistic stage-save tests**
-
-Delete or rewrite tests whose contracts no longer apply:
-
-- `optimistic stage clear is visible on map before save fails, then reverts`;
-- `blocks stage launch while a stage-completion save is in flight` in its old “return to map during save” form;
-- `serializes sibling stage clear saves without losing progress`;
-- stage-result-specific queued-save-after-disposal tests;
-- same-stage optimistic rollback tests;
-- earlier/later optimistic stage save rollback composition tests.
-
-Keep the generic tech-tree/reset writer tests. They still validate `_persistSave`, `_saveQueue`, committed payload composition, and reset serialization for the paths that retain optimistic behavior.
-
-- [ ] **Step 3: Add retained-best no-write regression**
-
-```dart
-testWidgets('retained mission best is immediately saved without a write', (
-  tester,
-) async {
-  final store = _TestCampaignProgressStore(
-    progress: CampaignProgress(
-      bestResultsByStageId: {
-        'outpost-alpha': const StageResult(
-          medal: StageMedal.gold,
-          bestBaseHealth: 20,
-        ),
-      },
-    ),
-  );
-  OrionDefenseGame? game;
-
-  await tester.pumpWidget(
-    MaterialApp(
-      home: OrionGamePage(
-        progressStore: store,
-        onGameCreated: (created) => game = created,
-      ),
-    ),
-  );
-  await tester.pumpAndSettle();
-  await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-  await publishVictory(
-    tester,
-    game!,
-    result: const StageResult(
-      medal: StageMedal.silver,
-      bestBaseHealth: 14,
-    ),
-  );
-  await tester.pumpAndSettle();
-
-  expect(find.text('Best result already saved.'), findsOneWidget);
-  expect(store.saveCalls, 0);
-  expect(
-    store.progress.resultFor('outpost-alpha'),
-    const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-  );
-});
-```
-
-- [ ] **Step 4: Add loss/no-save regression**
-
-Start a mission, inject a `GameSnapshot(phase: GamePhase.lost, ...)`, pump, and assert:
-
-```dart
-expect(find.text('Mission Failed'), findsOneWidget);
-expect(find.text('Retry'), findsOneWidget);
-expect(find.text('World Map'), findsOneWidget);
-expect(store.saveCalls, 0);
-```
-
-Tap `Retry`, then verify the game returns to build phase and no campaign save occurred.
-
-- [ ] **Step 5: Add failed-save abandonment breadcrumb + one-shot exit regression**
-
-Use `_TestCampaignProgressStore(saveError: StateError('fail'))`, publish an improving victory, and wait for `Save failed — progress unchanged.`.
-
-Tap `World Map (Unsaved)` twice before pumping, then pump and assert:
-
-```dart
-expect(find.text('Orion Sector Map'), findsOneWidget);
-expect(find.text('Mission result was not saved.'), findsOneWidget);
-expect(store.progress.resultFor('outpost-alpha'), isNull);
-```
-
-The second tap must not trigger a second navigation mutation because `_missionExitStarted` is already true.
-
-- [ ] **Step 6: Add mission-save then tech-purchase writer regression**
-
-Seed enough committed medal points while leaving Alpha improvable:
-
-```dart
-final store = _TestCampaignProgressStore(
-  progress: CampaignProgress(
-    bestResultsByStageId: {
-      'outpost-alpha': const StageResult(
-        medal: StageMedal.silver,
-        bestBaseHealth: 14,
-      ),
-      'nebula-relay': const StageResult(
-        medal: StageMedal.gold,
-        bestBaseHealth: 20,
-      ),
-      'salvage-rift': const StageResult(
-        medal: StageMedal.gold,
-        bestBaseHealth: 20,
-      ),
-      'asteroid-foundry': const StageResult(
-        medal: StageMedal.gold,
-        bestBaseHealth: 20,
-      ),
-    },
-  ),
-);
-```
-
-Run the flow:
-
-```dart
-OrionDefenseGame? game;
-await tester.pumpWidget(
-  MaterialApp(
-    home: OrionGamePage(
-      progressStore: store,
-      onGameCreated: (created) => game = created,
-    ),
-  ),
-);
-await tester.pumpAndSettle();
-await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-await publishVictory(
-  tester,
-  game!,
-  result: const StageResult(
-    medal: StageMedal.gold,
-    bestBaseHealth: 20,
-  ),
-);
-await tester.pumpAndSettle();
-expect(find.text('Saved.'), findsOneWidget);
-
-await tester.tap(find.text('World Map'));
-await tester.pumpAndSettle();
-await tester.tap(find.byTooltip('Tech Tree'));
-await tester.pumpAndSettle();
-
-final solarCard = find.ancestor(
-  of: find.text('Solar Capacitors'),
-  matching: find.byType(Card),
-);
-final purchase = find.descendant(
-  of: solarCard,
-  matching: find.widgetWithText(FilledButton, 'Purchase'),
-);
-await tester.tap(purchase);
-await tester.pumpAndSettle();
-
-expect(
-  store.progress.resultFor('outpost-alpha'),
-  const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-);
+expect(store.progress.resultFor('outpost-alpha'), expectedResult);
 expect(
   store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
   isTrue,
 );
 ```
 
-This is the regression that proves the mission save advances `_committedProgress` and the later `_persistSave` tech purchase composes on that committed result instead of overwriting it.
+This proves `_persistSave` remains one writer and the later tech-tree payload composes from the mission-advanced committed baseline.
 
-- [ ] **Step 7: Run all focused Mission Report tests**
+- [ ] **Step 2: Add rapid Retry Save single-flight regression**
+
+After first failure, tap `Retry Save` twice before the delayed retry completes. Assert only one additional save was queued:
+
+```dart
+expect(store.saveCalls, 2); // original attempt + one retry
+```
+
+- [ ] **Step 3: Verify no obsolete synthetic multi-completion fixtures remain**
+
+```bash
+grep -n "onStageWon.*call" test/widget_test.dart
+```
+
+Every remaining call must be either the shared victory helper or an intentional single completion for the currently running stage. Remove any leftover impossible sibling/same-run multi-completion fixture.
+
+- [ ] **Step 4: Format**
+
+```bash
+dart format .
+dart format --output=none --set-exit-if-changed .
+```
+
+Expected: second command exits 0 with no changes.
+
+- [ ] **Step 5: Analyze**
+
+```bash
+flutter analyze
+```
+
+Expected: no issues.
+
+- [ ] **Step 6: Run focused tests**
 
 ```bash
 flutter test test/game/mission_report_content_test.dart
 flutter test test/widget/mission_report_panel_test.dart
-flutter test test/widget_test.dart
+flutter test test/widget_test.dart --plain-name "mission save"
+flutter test test/widget_test.dart --plain-name "Mission"
 ```
 
-Expected: all focused and page/widget regression tests pass.
+Expected: PASS.
 
-- [ ] **Step 8: Run formatting and static analysis**
-
-```bash
-dart format --output=none --set-exit-if-changed .
-flutter analyze
-```
-
-Expected: no formatting diff and no analyzer issues.
-
-- [ ] **Step 9: Run the full suite**
+- [ ] **Step 7: Run full suite**
 
 ```bash
 flutter test
 ```
 
-Expected: full suite passes.
+Expected: PASS.
 
-- [ ] **Step 10: Perform the compact human check**
+- [ ] **Step 8: Human 360×640 check**
 
-At 360×640 logical pixels, verify one victory and one loss:
+At logical 360×640 verify:
 
-Victory:
+- Victory Saving: result/module/save copy readable; Replay/World Map disabled.
+- Victory Saved: actions reachable without hidden overflow.
+- Victory Failed: Retry Save and World Map (Unsaved) visible.
+- Loss: Retry and World Map visible.
+- Three acquired modules reuse the same title + effect presentation as the in-run strip.
 
-1. Complete a run with at least one Salvage Module.
-2. Confirm the report appears in `Saving…` before commitment when the save can be observed.
-3. Confirm report actions are unavailable while saving.
-4. Confirm `Saved.` appears after success and Replay/World Map become reachable.
-5. Confirm module titles are readable without scrolling the action row away.
-
-Loss:
-
-1. Lose before or after a module draft.
-2. Confirm `Reached Wave N/8` is understandable.
-3. Confirm the module section shows acquired titles or `No Salvage Modules acquired`.
-4. Confirm Retry and World Map remain reachable.
-
-Residual durability check: no additional implementation is required for process death during `Saving…`. The accepted behavior is that an uncommitted result may be lost and the prior committed campaign remains authoritative.
-
-- [ ] **Step 11: Commit regression cleanup**
+- [ ] **Step 9: Commit final test/verification adjustments**
 
 ```bash
-git add test/widget_test.dart lib/game/ui/orion_game_page.dart
-git commit -m "test: cover mission report persistence flow"
+git add test/widget_test.dart lib/game/ui/mission_report_content.dart lib/game/ui/mission_report_panel.dart lib/game/ui/orion_game_page.dart
+git commit -m "test: verify mission report persistence flow"
 ```
 
 ---
 
-## Final Self-Review Checklist
+## Self-review checklist
 
-Before implementation is called complete, verify:
+Before implementation starts, confirm the plan still satisfies:
 
-- Pure projection owns all comparison, save, module-title, and empty-module copy.
-- Victory projection receives the frozen `StageCompletion.result`; it never re-derives another result from snapshot base health.
-- `StageResult.isBetterThan` decides improved vs retained.
-- No won-snapshot fallback can display `Saving…` without an actual save state.
-- Mission save is non-optimistic and has no stage-result rollback branch.
-- Mission save enqueues on the existing `_saveQueue`; there is no parallel `store.save` chain.
-- Mission payload is composed from `_committedProgress` / `_committedTechTree` inside the queued task.
-- `_pendingSaves`, `_isSavingProgress`, `_progressGeneration`, and `_decrementPendingSaves()` remain part of the shared writer contract.
-- `game.returnToMap()` during saving cannot escape the report.
-- Bottom World Map control is disabled for won/lost terminal states.
-- `_returnToMap()` has a defensive saving guard.
-- Failed result can only Retry Save or explicitly abandon via World Map (Unsaved).
-- Retained best performs zero writes.
-- Loss performs zero writes.
-- Mission-save → tech-purchase regression preserves both state changes.
-- No codec/schema change, controller, event bus, reward framework, RunStats, analytics, or durable mid-write recovery was added.
-- Process kill during `Saving…` is documented as an accepted residual risk.
-- `dart format`, `flutter analyze`, focused tests, and full `flutter test` pass.
+- one writer implementation: `_persistSave` owns queue/generation/pending/committed mechanics;
+- mission persistence is non-optimistic and has no rollback tree;
+- frozen stage ID/result are shared by report and persistence;
+- typed victory/loss projections have no release-only assertion contract;
+- `StageResult.isBetterThan` is the improvement source of truth;
+- existing `AcquiredRunModuleStrip` renders module details;
+- no `_pendingMissionProgress` / `_missionExitStarted`;
+- `MissionRewardFact` stays optional/null for HPA-525 and exists only because HPA-528 already depends on the slot;
+- all old `onStageWon` test fixtures are explicitly classified before Task 3 commits;
+- Task 3 full suite is green before commit;
+- process-kill-during-save risk remains documented, not 'fixed' with optimistic state or durable recovery;
+- no new package/schema/controller/event bus/reward framework is introduced.
