@@ -19,7 +19,7 @@
 - Prefer universal modules and affinity modules for tower families currently placed. Use unlocked affinity modules only as pivot fallback when fewer than three preferred candidates remain.
 - Production randomness is ordinary `Random`; tests inject a picker. No seed/version/hash/fingerprint/history protocol.
 - Use one monotonic `offerId` for stale callback protection.
-- Derive `draftNumber` from completed wave progress; do not store a completed-draft counter.
+- Derive `draftNumber` from the `moduleDraftWaves` schedule; do not store a completed-draft counter.
 - Stat order stays base → campaign → stage → run modules.
 - No event bus, generic effect engine, persistence migration, Mission Report, blueprint system, Codex module section, audio/haptics, rarity/rerolls/decks, mid-run resume, range-ring subsystem, seed sweep, or seven-stage certification.
 - Production Flutter reads snapshot values only; it does not invoke `TowerStatsResolver` or module rules.
@@ -36,7 +36,7 @@
 - Render acquired effect copy inline; no tooltip dependency under the HUD `IgnorePointer`.
 - Add `PlacementFailure.pendingModuleDraft`; use one `_draftBlockMessage()` helper for bool/null action feedback.
 - Extract the existing `_emptyWaveStage` helper instead of duplicating it.
-- Keep `RunModuleOffer.draftNumber` because the UI displays it; remove `_completedModuleDrafts` and derive the number from `_waveIndex ~/ 2`.
+- Keep `RunModuleOffer.draftNumber` because the UI displays it; remove `_completedModuleDrafts` and derive the number from `GameBalance.moduleDraftWaves.indexOf(_waveIndex) + 1` so it stays in lockstep with the eligibility schedule.
 - Land selectable UI and authoritative gate in the same task so no commit soft-locks the app after wave 2.
 - Keep six modules; use HPA-526 for expansion if the third draft feels repetitive in playtest.
 
@@ -44,7 +44,6 @@
 
 ### Create
 
-- `lib/game/modules/run_module.dart` — module IDs, affinity, single-source definitions, offer value.
 - `lib/game/rules/module_offer_picker.dart` — injectable random picker.
 - `lib/game/rules/run_module_rules.dart` — pure stat application only.
 - `lib/game/ui/run_module_draft_panel.dart` — blocking three-card panel + read-only acquired reminder.
@@ -55,7 +54,7 @@
 
 ### Modify
 
-- `lib/game/models/game_models.dart` — `TowerStats.copyWith`, `PlacementFailure`, defaulted snapshot module/resolved-stat fields, final `canStartWave` gate.
+- `lib/game/models/game_models.dart` — module domain (`RunModuleId`, `RunModuleAffinity`, `RunModuleDefinition`, `runModuleCatalog`, `runModuleDefinition`, `RunModuleOffer`), `TowerStats.copyWith`, `PlacementFailure`, defaulted snapshot module/resolved-stat fields, final `canStartWave` gate.
 - `lib/game/rules/tower_stats_resolver.dart` — append run-module rules.
 - `lib/game/rules/game_session.dart` — offer lifecycle, candidate policy, selection, `resolveTowerStats`, final action gate.
 - `lib/game/components/tower_component.dart` — inject one `TowerStatsProvider`; remove cached campaign/stage modifier inputs.
@@ -72,14 +71,14 @@
 ### Task 1: Add the catalog, single-source tuning, and injectable picker
 
 **Files:**
-- Create: `lib/game/modules/run_module.dart`
+- Modify: `lib/game/models/game_models.dart` (add the module domain)
 - Create: `lib/game/rules/module_offer_picker.dart`
 - Create: `test/game/module_offer_picker_test.dart`
 
 **Interfaces:**
 - Produces `RunModuleId`, `RunModuleAffinity`, `RunModuleDefinition`, `RunModuleOffer`, `runModuleCatalog`, `runModuleDefinition`.
 - Produces `ModuleOfferPicker.pick(List<RunModuleId>, {required int count})` and `RandomModuleOfferPicker`.
-- `run_module.dart` does not import `game_models.dart`; this avoids a model cycle when `GameSnapshot` later references module IDs/offers.
+- The module domain lives in `game_models.dart` alongside `GameSnapshot` and `TowerType`, keeping one model file and avoiding a separate module file that would only re-export the same definitions.
 
 - [ ] **Step 1: Write the failing catalog/picker tests**
 
@@ -89,7 +88,7 @@ Create `test/game/module_offer_picker_test.dart`:
 import 'dart:math' as math;
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/modules/run_module.dart';
+import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
 
 void main() {
@@ -144,7 +143,7 @@ Expected: compile failure because the module domain and picker do not exist.
 
 - [ ] **Step 3: Implement the module domain**
 
-Create `lib/game/modules/run_module.dart`:
+Add the module domain to `lib/game/models/game_models.dart`:
 
 ```dart
 import '../util/format.dart';
@@ -281,7 +280,7 @@ Create `lib/game/rules/module_offer_picker.dart`:
 ```dart
 import 'dart:math' as math;
 
-import '../modules/run_module.dart';
+import '../models/game_models.dart';
 
 abstract interface class ModuleOfferPicker {
   List<RunModuleId> pick(List<RunModuleId> candidates, {required int count});
@@ -307,7 +306,7 @@ final class RandomModuleOfferPicker implements ModuleOfferPicker {
 
 ```bash
 flutter test test/game/module_offer_picker_test.dart
-git add lib/game/modules/run_module.dart lib/game/rules/module_offer_picker.dart test/game/module_offer_picker_test.dart
+git add lib/game/models/game_models.dart lib/game/rules/module_offer_picker.dart test/game/module_offer_picker_test.dart
 git commit -m "feat: add salvage module catalog and picker (HPA-527)"
 ```
 
@@ -468,7 +467,6 @@ Create `lib/game/rules/run_module_rules.dart`:
 
 ```dart
 import '../models/game_models.dart';
-import '../modules/run_module.dart';
 
 abstract final class RunModuleRules {
   static TowerStats applyTowerStats(
@@ -652,7 +650,7 @@ flutter test test/game/game_session_test.dart test/game/orion_defense_game_test.
 
 - [ ] **Step 6: Add defaulted snapshot fields**
 
-Import `../modules/run_module.dart` from `game_models.dart`. Extend `GameSnapshot` constructor with:
+The module domain (`RunModuleId`, `RunModuleOffer`, etc.) already lives in `game_models.dart`. Extend `GameSnapshot` constructor with:
 
 ```dart
 this.pendingRunModuleOffer,
@@ -759,7 +757,7 @@ After `_waveIndex += 1`, handle terminal victory first. Otherwise enter build an
 ```dart
 void _openModuleDraftIfDue() {
   if (_pendingRunModuleOffer != null ||
-      !const {2, 4, 6}.contains(_waveIndex)) {
+      !GameBalance.moduleDraftWaves.contains(_waveIndex)) {
     return;
   }
 
@@ -770,7 +768,8 @@ void _openModuleDraftIfDue() {
 
   _pendingRunModuleOffer = RunModuleOffer(
     offerId: _nextModuleOfferId++,
-    draftNumber: _waveIndex ~/ 2,
+    draftNumber: GameBalance.moduleDraftWaves.indexOf(_waveIndex) + 1,
+    draftTotal: GameBalance.moduleDraftWaves.length,
     moduleIds: _offerPicker.pick(candidates, count: 3),
   );
 }
@@ -1314,6 +1313,6 @@ Do not claim completion until the automated checks have fresh passing output and
 
 **Placeholder scan:** No TBD/TODO or undefined implementation steps remain. Every public type/method consumed by a later task is defined earlier with a concrete signature.
 
-**Type consistency:** `RunModuleId`/`RunModuleOffer` originate in `run_module.dart`; `ModuleOfferPicker` feeds `GameSession`; `TowerStatsResolver` consumes module IDs; `GameSession.resolveTowerStats` supplies current campaign/stage/run inputs; `TowerComponent` consumes one `TowerStatsProvider`; `GameSnapshot` defaults all new fields and carries selected resolved stats; `OrionDefenseGame.selectRunModule(int, RunModuleId)` matches the draft panel callback.
+**Type consistency:** `RunModuleId`/`RunModuleOffer` originate in `game_models.dart` (the single source of truth for game data and tuning); `ModuleOfferPicker` feeds `GameSession`; `TowerStatsResolver` consumes module IDs; `GameSession.resolveTowerStats` supplies current campaign/stage/run inputs; `TowerComponent` consumes one `TowerStatsProvider`; `GameSnapshot` defaults all new fields and carries selected resolved stats; `OrionDefenseGame.selectRunModule(int, RunModuleId)` matches the draft panel callback.
 
 **Scope check:** The catalog stays at six, drafts stay at three, and no new subsystem was introduced. Catalog repetition is explicitly deferred to HPA-526 unless the two human runs prove it is already a blocker.

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../modules/run_module.dart';
+import '../models/game_models.dart';
 
 class RunModuleDraftPanel extends StatelessWidget {
   const RunModuleDraftPanel({

@@ -52,7 +52,7 @@ The second review identified several concrete issues in the previous draft. The 
 4. **Acquired-module reminder:** effect text is rendered inline. Tooltips are removed because the existing HUD column is inside `IgnorePointer` and tooltip-only copy is a poor touch-first affordance.
 5. **Typed placement denial:** add `PlacementFailure.pendingModuleDraft`. Bool-returning action paths keep their existing APIs and share one game-layer helper for draft-blocked feedback.
 6. **Test-fixture reuse:** extract the existing `_emptyWaveStage` helper from `orion_defense_game_test.dart` into a shared `test/game/game_test_fixtures.dart` helper rather than creating a duplicate.
-7. **Draft counter simplification:** keep `RunModuleOffer.draftNumber` because the UI renders `Salvage Module N of 3`, but derive it directly from the completed wave number. Do not store `_completedModuleDrafts`.
+7. **Draft counter simplification:** keep `RunModuleOffer.draftNumber` because the UI renders `Salvage Module N of 3`, but derive it from the configured draft schedule (`GameBalance.moduleDraftWaves.indexOf(wave) + 1`) so the displayed number stays in lockstep with the eligibility list. Do not store `_completedModuleDrafts`.
 8. **Commit playability:** session lifecycle/stat plumbing lands before the authoritative gate; the gate and selectable UI land together so no committed step soft-locks the game after wave 2.
 9. **Snapshot compatibility:** all new `GameSnapshot` fields default (`pendingRunModuleOffer = null`, `acquiredRunModules = const []`, `selectedTowerStats = null`) so existing literal test snapshots continue to compile.
 
@@ -61,11 +61,11 @@ Two review suggestions are intentionally **not** adopted:
 - **Variable-size drafts:** the vertical slice contract remains exactly three cards. If preferred candidates are short, the session fills from unlocked affinity pivots, then from remaining non-acquired definitions as a final configuration-safe fallback. The player never receives a two-card draft and wave completion never needs to throw for catalog shortage.
 - **Expanding to 8–9 modules now:** six modules remain the smallest experiment. Draft 3 has lower pool entropy, but still presents three actual choices; if playtests show repetition, HPA-526 is explicitly the catalog-expansion ticket.
 
-`RunModuleAffinity` also remains a tiny module-domain enum rather than using `TowerType?` directly. `GameSnapshot` lives in `game_models.dart` and must refer to module IDs/offers; making `run_module.dart` import `game_models.dart` for `TowerType` would create a circular model dependency. Three affinity values are cheaper and clearer than splitting the catalog solely to remove that enum.
+`RunModuleAffinity` also remains a tiny module-domain enum rather than using `TowerType?` directly. Three affinity values are cheaper and clearer than splitting the catalog solely to remove that enum.
 
 ## Module domain and single-source tuning
 
-Create `lib/game/modules/run_module.dart`.
+The module domain (`RunModuleId`, `RunModuleAffinity`, `RunModuleDefinition`, `runModuleCatalog`, `runModuleDefinition`, `RunModuleOffer`) lives in `lib/game/models/game_models.dart`, the single source of truth for game data and tuning. Colocating it with `GameSnapshot` and `TowerType` keeps one model file and avoids a separate module file that would only re-export the same definitions.
 
 ```dart
 enum RunModuleId {
@@ -221,10 +221,10 @@ No completed-draft counter is stored.
 - otherwise → `build`;
 - completed wave 2, 4, or 6 → generate/store one offer if none is already pending.
 
-The offer's displayed number is derived directly from the completed wave:
+The offer's displayed number is derived from the configured draft schedule so it stays in lockstep with eligibility:
 
 ```dart
-draftNumber: _waveIndex ~/ 2,
+draftNumber: GameBalance.moduleDraftWaves.indexOf(_waveIndex) + 1,
 ```
 
 `GameSession.snapshot()` never invokes the picker.
@@ -422,7 +422,7 @@ This avoids a commit where wave 2 creates an invisible, unselectable draft that 
 Using the extracted eight-wave fixture:
 
 - drafts after waves 2/4/6 only;
-- `draftNumber` is 1/2/3 derived from wave progress;
+- `draftNumber` is 1/2/3 derived from `moduleDraftWaves` index;
 - stored offer is stable across snapshots;
 - early no-affinity builds prefer universal cards;
 - pivot fallback still returns exactly three at draft 3;
