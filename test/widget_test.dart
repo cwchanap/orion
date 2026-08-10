@@ -876,7 +876,9 @@ void main() {
     expect(store.saveCalls, 0);
   });
 
-  testWidgets('Mission Retry is safe under rapid taps on a loss', (tester) async {
+  testWidgets('Mission Retry is safe under rapid taps on a loss', (
+    tester,
+  ) async {
     // A fast double-tap on Retry before the report rebuilds reaches the same
     // `_missionStageId!` null assertion as the consecutive-loss path.
     final store = _TestCampaignProgressStore(
