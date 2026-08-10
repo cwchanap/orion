@@ -496,9 +496,11 @@ At `_startStage(stage)`:
 ```dart
 _missionPriorResult = _progress.resultFor(stage.id);
 _missionVictoryResult = null;
-_missionStageId = null;
+_missionStageId = stage.id;
 _missionSaveState = null;
 ```
+
+`_missionStageId` is mission-scoped: it identifies the currently running stage and stays valid across `restart()` of the same stage. It is set once here and re-confirmed in `_handleStageWon`; it is NOT cleared on replay. Clearing it crashed loss → Retry → loss → Retry because a loss never invokes `_handleStageWon` (the only other re-setter besides `_startStage`), so the second retry hit the `_missionStageId!` null check in `_restartFromMissionReport`.
 
 Construct game with:
 
@@ -672,9 +674,12 @@ void _restartFromMissionReport() {
     return;
   }
 
-  _missionPriorResult = _progress.resultFor(game.stage.id);
+  _missionPriorResult = _progress.resultFor(_missionStageId!);
   _missionVictoryResult = null;
-  _missionStageId = null;
+  // _missionStageId is mission-scoped, not per-attempt. Do NOT clear it here.
+  // Clearing it broke loss → Retry → loss → Retry: a loss never calls
+  // _handleStageWon (the only other re-setter besides _startStage), so the
+  // second retry hit the `_missionStageId!` null check above.
   _missionSaveState = null;
   game.restart();
 }

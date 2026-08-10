@@ -162,28 +162,46 @@ void main() {
     expect(find.text('Unlocks a new blueprint after saving.'), findsOneWidget);
   });
 
-  testWidgets('null saveState victory falls back to replay and map actions', (
-    tester,
-  ) async {
-    // Catches a production panel that omits the defensive null-saveState
-    // branch — didWin with no saveState yet — leaving the action row empty.
-    var replayed = false;
-    var returned = false;
-    await _pumpPanel(
-      tester,
-      _victoryContentNullSaveState(),
-      onReplay: () => replayed = true,
-      onReturnToMap: () => returned = true,
-    );
+  testWidgets(
+    'null saveState victory fails closed with both actions disabled',
+    (tester) async {
+      // Catches a production panel that fails open for an unknown/null victory
+      // save state, enabling Replay/World Map before persistence is resolved.
+      // The production page only renders a victory report after
+      // _missionSaveState != null, so null is not normally reachable. Still,
+      // failing closed is the safe default: treat null like saving so a future
+      // integration mistake cannot silently permit leaving with an uncommitted
+      // result.
+      var replayed = false;
+      var returned = false;
+      await _pumpPanel(
+        tester,
+        _victoryContentNullSaveState(),
+        onReplay: () => replayed = true,
+        onReturnToMap: () => returned = true,
+      );
 
-    expect(find.text('Replay Mission'), findsOneWidget);
-    expect(find.text('World Map'), findsOneWidget);
+      expect(find.text('Replay Mission'), findsOneWidget);
+      expect(find.text('World Map'), findsOneWidget);
 
-    await tester.tap(find.byTooltip('Replay Mission'));
-    await tester.tap(find.byTooltip('World Map'));
-    expect(replayed, isTrue);
-    expect(returned, isTrue);
-  });
+      final replayButton = tester.widget<IconButton>(
+        find.descendant(
+          of: find.byTooltip('Replay Mission'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      final mapButton = tester.widget<IconButton>(
+        find.descendant(
+          of: find.byTooltip('World Map'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      expect(replayButton.onPressed, isNull);
+      expect(mapButton.onPressed, isNull);
+      expect(replayed, isFalse);
+      expect(returned, isFalse);
+    },
+  );
 
   testWidgets('null saveState victory shows the info save-status icon', (
     tester,

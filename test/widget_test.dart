@@ -982,6 +982,14 @@ void main() {
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
     );
+    // The World Map derives its display from the page's in-memory _progress,
+    // not the backing store. A regression that optimistically mutated
+    // _progress before the save completed (e.g. reintroducing nextProgress:)
+    // would show the unsaved Gold medal here while every store assertion
+    // above stays green. Alpha must still display the previously committed
+    // Clear result.
+    expect(find.text('Clear'), findsOneWidget);
+    expect(find.text('Gold'), findsNothing);
   });
 
   testWidgets('Mission delayed failure after disposal is setState safe', (

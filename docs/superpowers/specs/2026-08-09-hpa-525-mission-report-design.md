@@ -281,9 +281,11 @@ Before creating the game:
 ```dart
 _missionPriorResult = _progress.resultFor(stage.id);
 _missionVictoryResult = null;
-_missionStageId = null;
+_missionStageId = stage.id;
 _missionSaveState = null;
 ```
+
+`_missionStageId` is mission-scoped: it identifies the currently running stage and stays valid across `restart()` of the same stage. It is set once here at launch and re-confirmed in `_handleStageWon`; it is NOT cleared on replay. Clearing it broke loss → Retry → loss → Retry because a loss never invokes `_handleStageWon` (the only other re-setter besides `_startStage`), so the second retry hit the `_missionStageId!` null check in `_restartFromMissionReport`.
 
 Stage launch already refuses while `_isSavingProgress` / `_isResetting` is true, so the baseline is committed and stable.
 
@@ -471,9 +473,11 @@ Repeated calls are idempotent: they assign the same map state and do not initiat
 
 - victory: allow only when `saveState == saved`
 - loss: allow immediately
-- refresh `_missionPriorResult = _progress.resultFor(game.stage.id)` after successful save
-- clear `_missionVictoryResult`, `_missionStageId`, `_missionSaveState`
+- refresh `_missionPriorResult = _progress.resultFor(_missionStageId!)` after successful save
+- clear `_missionVictoryResult` and `_missionSaveState`; retain `_missionStageId` (it is mission-scoped, not per-attempt)
 - call `game.restart()`
+
+`_missionStageId` is NOT cleared here. It represents the currently running stage, not per-attempt terminal state. Clearing it broke loss → Retry → loss → Retry: a loss never calls `_handleStageWon` (the only other re-setter besides `_startStage`), so the second retry hit the `_missionStageId!` null check above.
 
 A failed victory cannot be silently discarded through Replay; it offers Retry Save or World Map (Unsaved).
 

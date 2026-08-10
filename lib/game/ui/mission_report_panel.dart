@@ -72,7 +72,7 @@ class MissionReportPanel extends StatelessWidget {
     }
 
     return switch (content.saveState) {
-      MissionSaveState.saving => [
+      MissionSaveState.saving || null => [
         _MissionAction(
           label: 'Replay Mission',
           icon: Icons.replay,
@@ -80,7 +80,7 @@ class MissionReportPanel extends StatelessWidget {
         ),
         _MissionAction(label: 'World Map', icon: Icons.map, tonal: true),
       ],
-      MissionSaveState.saved || null => [
+      MissionSaveState.saved => [
         _MissionAction(
           label: 'Replay Mission',
           icon: Icons.replay,
