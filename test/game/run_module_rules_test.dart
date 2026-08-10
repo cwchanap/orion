@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/rules/run_module_rules.dart';
 
 void main() {

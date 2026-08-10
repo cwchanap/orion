@@ -24,7 +24,7 @@ class RunModuleDraftPanel extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Salvage Module ${offer.draftNumber} of 3',
+                'Salvage Module ${offer.draftNumber} of ${offer.draftTotal}',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.headlineSmall,
               ),

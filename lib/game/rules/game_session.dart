@@ -6,7 +6,6 @@ import '../campaign/campaign_progress.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
-import '../modules/run_module.dart';
 import 'board_layout.dart';
 import 'module_offer_picker.dart';
 import 'stage_modifier_rules.dart';
@@ -416,7 +415,7 @@ class GameSession {
 
   void _openModuleDraftIfDue() {
     if (_pendingRunModuleOffer != null ||
-        !const {2, 4, 6}.contains(_waveIndex)) {
+        !GameBalance.moduleDraftWaves.contains(_waveIndex)) {
       return;
     }
 
@@ -428,6 +427,7 @@ class GameSession {
     _pendingRunModuleOffer = RunModuleOffer(
       offerId: _nextModuleOfferId++,
       draftNumber: _waveIndex ~/ 2,
+      draftTotal: GameBalance.moduleDraftWaves.length,
       moduleIds: _offerPicker.pick(candidates, count: 3),
     );
   }

@@ -271,6 +271,8 @@ typedef TowerStatsProvider = TowerStats Function(PlacedTower tower);
 
 It no longer stores `campaignModifiers`, `stageModifiers`, or `runModules`. Constructor initialization and `updateTower(...)` both call the same provider. After module selection, `OrionDefenseGame` refreshes existing components by calling `updateTower(component.placedTower)`; newly placed towers resolve through the same callback automatically.
 
+`DroneComponent` holds a mutable `TowerStats stats` field sourced from its owning tower's resolved stats. Because a damage-affecting module (e.g. `heavyCaliber`) changes `droneDamage`, surviving drones must be refreshed too. `DroneComponent.updateStats(TowerStats)` replaces only the combat stats; the drone's remaining lifetime and attack cooldown continue from their current values so a live drone is not restarted mid-run. After module selection, `OrionDefenseGame` iterates surviving `DroneComponent`s and calls `updateStats(ownerTower.stats)` for each drone whose owning tower still exists. Drones whose owner was sold/removed are left untouched (they expire on their own). Newly launched drones resolve through the owner tower's refreshed stats automatically, so no refresh is needed for them.
+
 `GameSession.snapshot()` uses `resolveTowerStats(selectedTower)` for `selectedTowerStats`, so displayed combat values and active tower values share the same resolution path.
 
 ## Snapshot projection

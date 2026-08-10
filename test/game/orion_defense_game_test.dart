@@ -11,7 +11,6 @@ import 'package:orion/game/components/gravity_field_component.dart';
 import 'package:orion/game/components/projectile_component.dart';
 import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/modules/run_module.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/enemy_overlay_state.dart';
@@ -362,11 +361,23 @@ void main() {
         game.startWave();
         game.update(0);
         game.startWave();
-        _tapCell(game, const GridPosition(2, 1));
+        // Tap a buildable cell during wave 2 (before it completes and opens the
+        // draft) so a cell — not the tower — is selected when the draft opens.
+        // Taps are blocked once the draft is pending, and startWave clears
+        // selection, so this is the slot that survives into the pending draft.
+        // Selecting a cell deselects the tower (selection is mutually
+        // exclusive), which is required for placeTower below to reach the
+        // placement-denial path rather than the no-cell early return.
+        _tapCell(game, const GridPosition(3, 1));
         game.update(0);
 
         expect(game.snapshot.pendingRunModuleOffer, isNotNull);
-        expect(game.snapshot.selectedTower?.id, 1);
+        expect(game.snapshot.selectedCell, const GridPosition(3, 1));
+
+        // placeTower while pending reaches the placement path and is denied
+        // with the pendingModuleDraft placement message.
+        game.placeTower(TowerType.laser);
+        expect(game.snapshot.feedback, 'Choose a Salvage Module first.');
 
         game.startWave();
         expect(game.snapshot.feedback, 'Choose a Salvage Module first.');
@@ -374,9 +385,11 @@ void main() {
         game.setTargetingMode(TowerTargetingMode.strongest);
         expect(game.snapshot.feedback, 'Choose a Salvage Module first.');
 
-        _tapCell(game, const GridPosition(3, 1));
-        expect(game.snapshot.selectedTower?.id, 1);
-        expect(game.snapshot.selectedCell, isNull);
+        // Tapping while pending does not change the selection: the buildable
+        // cell stays selected and no tower is selected.
+        _tapCell(game, const GridPosition(4, 1));
+        expect(game.snapshot.selectedCell, const GridPosition(3, 1));
+        expect(game.snapshot.selectedTower, isNull);
       },
     );
 
