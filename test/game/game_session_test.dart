@@ -5,6 +5,7 @@ import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
+import 'package:orion/game/rules/run_module_unlocks.dart';
 
 import 'game_test_fixtures.dart';
 
@@ -28,6 +29,23 @@ final class _FixedModuleOfferPicker implements ModuleOfferPicker {
 void completeWave(GameSession session) {
   expect(session.startWave(), isTrue);
   session.finishActiveWave();
+}
+
+void clearTwoWaves(GameSession session) {
+  expect(session.startWave(), isTrue);
+  session.finishActiveWave();
+  expect(session.startWave(), isTrue);
+  session.finishActiveWave();
+}
+
+final class _RecordingOfferPicker implements ModuleOfferPicker {
+  final List<List<RunModuleId>> candidateHistory = [];
+
+  @override
+  List<RunModuleId> pick(List<RunModuleId> candidates, {required int count}) {
+    candidateHistory.add(List<RunModuleId>.unmodifiable(candidates));
+    return List<RunModuleId>.unmodifiable(candidates.take(count));
+  }
 }
 
 void selectPendingModuleIfNeeded(GameSession session) {
@@ -1339,6 +1357,64 @@ void main() {
       },
     );
 
+    test('default session excludes the locked blueprint', () {
+      final picker = _RecordingOfferPicker();
+      final session = GameSession.initial(offerPicker: picker);
+
+      clearTwoWaves(session);
+
+      expect(
+        picker.candidateHistory.single,
+        isNot(contains(RunModuleId.relayCalibration)),
+      );
+    });
+
+    test('explicit unlocked eligibility can offer Relay Calibration', () {
+      final picker = _RecordingOfferPicker();
+      final session = GameSession.initial(
+        offerPicker: picker,
+        availableRunModules: {
+          ...RunModuleUnlocks.baseModules,
+          RunModuleId.relayCalibration,
+        },
+      );
+
+      clearTwoWaves(session);
+
+      expect(
+        picker.candidateHistory.single,
+        contains(RunModuleId.relayCalibration),
+      );
+      expect(session.pendingRunModuleOffer!.moduleIds.toSet(), hasLength(3));
+    });
+
+    test('eligible module set stays frozen during one attempt', () {
+      final picker = _RecordingOfferPicker();
+      final session = GameSession.initial(
+        offerPicker: picker,
+        availableRunModules: RunModuleUnlocks.baseModules,
+      );
+
+      clearTwoWaves(session);
+      final firstOffer = session.pendingRunModuleOffer!;
+      expect(
+        session.selectRunModule(
+          offerId: firstOffer.offerId,
+          moduleId: firstOffer.moduleIds.first,
+        ),
+        isTrue,
+      );
+
+      clearTwoWaves(session);
+
+      expect(
+        picker.candidateHistory.every(
+          (ids) => !ids.contains(RunModuleId.relayCalibration),
+        ),
+        isTrue,
+      );
+    });
+
     test('resolveTowerStats and selected snapshot use acquired modules', () {
       final picker = _FixedModuleOfferPicker([
         const [
@@ -1525,5 +1601,24 @@ void main() {
         (base * 1.25).round(),
       );
     });
+
+    test(
+      'restart refreshes starting resources from new campaign modifiers',
+      () {
+        final session = GameSession.initial();
+
+        expect(session.gold, GameBalance.startingGold);
+        expect(session.startingBaseHealth, GameBalance.initialBaseHealth);
+
+        const refreshed = CampaignModifiers(bonusGold: 40, bonusHealth: 3);
+        session.restart(campaignModifiers: refreshed);
+
+        expect(session.campaignModifiers, refreshed);
+        expect(session.startingGold, GameBalance.startingGold + 40);
+        expect(session.gold, GameBalance.startingGold + 40);
+        expect(session.startingBaseHealth, GameBalance.initialBaseHealth + 3);
+        expect(session.baseHealth, GameBalance.initialBaseHealth + 3);
+      },
+    );
   });
 }

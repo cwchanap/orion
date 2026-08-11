@@ -8,6 +8,7 @@ import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 import 'board_layout.dart';
 import 'module_offer_picker.dart';
+import 'run_module_unlocks.dart';
 import 'stage_modifier_rules.dart';
 import 'tower_stats_resolver.dart';
 
@@ -17,6 +18,7 @@ class GameSession {
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     int? gold,
     int? baseHealth,
+    Iterable<RunModuleId>? availableRunModules,
     ModuleOfferPicker? offerPicker,
   }) {
     final resolvedStage = stage ?? OrionCampaign.stageOne;
@@ -32,17 +34,25 @@ class GameSession {
       campaignModifiers: campaignModifiers,
       startingGold: resolvedGold,
       startingBaseHealth: resolvedBaseHealth,
+      availableRunModules: availableRunModules ?? RunModuleUnlocks.baseModules,
       offerPicker: offerPicker ?? RandomModuleOfferPicker(),
     );
   }
 
   GameSession._({
     required this.stage,
-    required this.campaignModifiers,
-    required this.startingGold,
-    required this.startingBaseHealth,
+    required CampaignModifiers campaignModifiers,
+    required int startingGold,
+    required int startingBaseHealth,
+    required Iterable<RunModuleId> availableRunModules,
     required ModuleOfferPicker offerPicker,
-  }) : _gold = startingGold,
+  }) : _campaignModifiers = campaignModifiers,
+       _startingGold = startingGold,
+       _startingBaseHealth = startingBaseHealth,
+       _availableRunModules = Set<RunModuleId>.unmodifiable(
+         availableRunModules,
+       ),
+       _gold = startingGold,
        _baseHealth = startingBaseHealth,
        _offerPicker = offerPicker {
     if (stage.waves.isEmpty) {
@@ -55,12 +65,13 @@ class GameSession {
   }
 
   final StageDefinition stage;
-  final int startingGold;
-  final int startingBaseHealth;
-  final CampaignModifiers campaignModifiers;
   final ModuleOfferPicker _offerPicker;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
   final List<RunModuleId> _acquiredRunModules = [];
+  int _startingGold;
+  int _startingBaseHealth;
+  CampaignModifiers _campaignModifiers;
+  Set<RunModuleId> _availableRunModules;
   int _nextTowerId = 1;
   int _gold;
   int _baseHealth;
@@ -69,6 +80,11 @@ class GameSession {
   int _nextModuleOfferId = 1;
   GamePhase _phase = GamePhase.build;
 
+  int get startingGold => _startingGold;
+  int get startingBaseHealth => _startingBaseHealth;
+  CampaignModifiers get campaignModifiers => _campaignModifiers;
+  Set<RunModuleId> get availableRunModules =>
+      Set<RunModuleId>.unmodifiable(_availableRunModules);
   int get gold => _gold;
   int get baseHealth => _baseHealth;
   int get waveIndex => _waveIndex;
@@ -150,7 +166,7 @@ class GameSession {
   TowerStats resolveTowerStats(PlacedTower tower) {
     return TowerStatsResolver.resolve(
       tower,
-      campaignModifiers: campaignModifiers,
+      campaignModifiers: _campaignModifiers,
       stageModifiers: stage.modifiers,
       runModules: _acquiredRunModules,
     );
@@ -337,11 +353,28 @@ class GameSession {
 
   PlacedTower? towerAt(GridPosition position) => _towersByPosition[position];
 
-  void restart() {
+  void restart({
+    CampaignModifiers? campaignModifiers,
+    Iterable<RunModuleId>? availableRunModules,
+  }) {
+    if (campaignModifiers != null) {
+      _campaignModifiers = campaignModifiers;
+      _startingGold = campaignModifiers.adjustedStartingGold;
+      _startingBaseHealth = StageModifierRules.effectiveStartingBaseHealth(
+        campaignAdjustedBaseHealth:
+            campaignModifiers.adjustedStartingBaseHealth,
+        stageModifiers: stage.modifiers,
+      );
+    }
+
+    if (availableRunModules != null) {
+      _availableRunModules = Set<RunModuleId>.unmodifiable(availableRunModules);
+    }
+
     _towersByPosition.clear();
     _nextTowerId = 1;
-    _gold = startingGold;
-    _baseHealth = startingBaseHealth;
+    _gold = _startingGold;
+    _baseHealth = _startingBaseHealth;
     _waveIndex = 0;
     _phase = GamePhase.build;
     _acquiredRunModules.clear();
@@ -353,7 +386,7 @@ class GameSession {
       return 0;
     }
     final campaignAdjusted =
-        (baseClearBonus * (1 + campaignModifiers.clearBonusFraction)).round();
+        (baseClearBonus * (1 + _campaignModifiers.clearBonusFraction)).round();
     return StageModifierRules.effectiveClearBonus(
       campaignAdjustedClearBonus: campaignAdjusted,
       stageModifiers: stage.modifiers,
@@ -382,7 +415,11 @@ class GameSession {
         .toSet();
     final unlockedTypes = unlockedTowerTypes.toSet();
     final remaining = runModuleCatalog
-        .where((definition) => !acquired.contains(definition.id))
+        .where(
+          (definition) =>
+              _availableRunModules.contains(definition.id) &&
+              !acquired.contains(definition.id),
+        )
         .toList(growable: false);
     final candidates = <RunModuleId>[];
 

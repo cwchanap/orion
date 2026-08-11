@@ -39,7 +39,8 @@ class StageCompletion {
 class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
-    this.campaignModifiers = CampaignModifiers.empty,
+    CampaignModifiers campaignModifiers = CampaignModifiers.empty,
+    Iterable<RunModuleId>? availableRunModules,
     ModuleOfferPicker? moduleOfferPicker,
     this.onStageWon,
     this.onReturnToMap,
@@ -47,16 +48,21 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
        _session = GameSession.initial(
          stage: stage ?? OrionCampaign.stageOne,
          campaignModifiers: campaignModifiers,
+         availableRunModules: availableRunModules,
          offerPicker: moduleOfferPicker,
        ) {
     _resetPacing();
   }
 
   final StageDefinition stage;
-  final CampaignModifiers campaignModifiers;
   final ValueChanged<StageCompletion>? onStageWon;
   final VoidCallback? onReturnToMap;
   final GameSession _session;
+
+  CampaignModifiers get campaignModifiers => _session.campaignModifiers;
+
+  @visibleForTesting
+  Set<RunModuleId> get availableRunModules => _session.availableRunModules;
 
   late final ValueNotifier<GameSnapshot> stateNotifier = ValueNotifier(
     _session.snapshot(),
@@ -353,12 +359,18 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
-  void restart() {
+  void restart({
+    CampaignModifiers? campaignModifiers,
+    Iterable<RunModuleId>? availableRunModules,
+  }) {
     _clearCombatComponents(removeTowers: true);
     _resetWaveSpawnState();
     _nextEnemyId = 1;
     _clearSelection();
-    _session.restart();
+    _session.restart(
+      campaignModifiers: campaignModifiers,
+      availableRunModules: availableRunModules,
+    );
     _resetPacing();
     _layoutBoardIfReady();
     _publishSnapshot();
