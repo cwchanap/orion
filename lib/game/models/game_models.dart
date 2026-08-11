@@ -108,6 +108,7 @@ enum RunModuleId {
   emergencySalvage,
   cryoReservoir,
   rocketFusing,
+  relayCalibration,
 }
 
 enum RunModuleAffinity {
@@ -603,6 +604,9 @@ final class RunModuleDefinition {
     RunModuleId.rocketFusing =>
       'Rocket splash grows ${percent(splashRadiusMultiplier - 1)}; '
           'damage drops ${percent(1 - damageMultiplier)}.',
+    RunModuleId.relayCalibration =>
+      'All towers gain ${percent(rangeMultiplier - 1)} range; '
+          'attack interval drops ${percent(1 - fireIntervalMultiplier)}.',
   };
 }
 
@@ -645,6 +649,13 @@ const runModuleCatalog = <RunModuleDefinition>[
     affinity: RunModuleAffinity.rocket,
     splashRadiusMultiplier: 1.25,
     damageMultiplier: 0.90,
+  ),
+  RunModuleDefinition(
+    id: RunModuleId.relayCalibration,
+    title: 'Relay Calibration',
+    affinity: RunModuleAffinity.universal,
+    rangeMultiplier: 1.08,
+    fireIntervalMultiplier: 0.92,
   ),
 ];
 

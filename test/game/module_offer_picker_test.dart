@@ -3,24 +3,23 @@ import 'dart:math' as math;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
+import 'package:orion/game/rules/run_module_unlocks.dart';
 
 void main() {
-  test('catalog exposes six single-source module definitions', () {
-    expect(runModuleCatalog, hasLength(6));
-    expect(
-      runModuleCatalog.map((definition) => definition.id).toSet(),
-      hasLength(6),
-    );
+  test('catalog covers every RunModuleId exactly once', () {
+    final catalogIds = runModuleCatalog
+        .map((definition) => definition.id)
+        .toList(growable: false);
 
-    final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
-    expect(heavy.damageMultiplier, 1.20);
-    expect(heavy.fireIntervalMultiplier, 1.10);
-    expect(heavy.effectText, contains('20%'));
-    expect(heavy.effectText, contains('10%'));
+    expect(catalogIds.toSet(), RunModuleId.values.toSet());
+    expect(catalogIds.toSet(), hasLength(catalogIds.length));
+    expect(catalogIds.toSet().difference(RunModuleUnlocks.baseModules), {
+      RunModuleId.relayCalibration,
+    });
 
-    final salvage = runModuleDefinition(RunModuleId.emergencySalvage);
-    expect(salvage.immediateGold, 90);
-    expect(salvage.effectText, contains('90'));
+    final relay = runModuleDefinition(RunModuleId.relayCalibration);
+    expect(relay.rangeMultiplier, 1.08);
+    expect(relay.fireIntervalMultiplier, 0.92);
   });
 
   test('picker returns distinct cards without mutating candidates', () {

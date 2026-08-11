@@ -98,6 +98,19 @@ void main() {
     );
   });
 
+  test('Relay Calibration reuses range and fire-interval multipliers', () {
+    final base = GameBalance.towerStats(TowerType.laser, level: 1);
+
+    final resolved = RunModuleRules.applyTowerStats(base, const [
+      RunModuleId.relayCalibration,
+    ]);
+
+    expect(resolved.range, closeTo(base.range * 1.08, 0.0001));
+    expect(resolved.fireInterval, closeTo(base.fireInterval * 0.92, 0.0001));
+    expect(resolved.damage, base.damage);
+    expect(resolved.splashRadius, base.splashRadius);
+  });
+
   test('Cryo Reservoir extends slow duration only on Cryo towers', () {
     final cryo = GameBalance.towerStats(TowerType.cryo, level: 1);
     final laser = GameBalance.towerStats(TowerType.laser, level: 1);
