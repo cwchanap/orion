@@ -28,6 +28,7 @@
 - Preserve the existing three-distinct-card picker, affinity preference, acquired-module exclusion, and ordinary production randomness.
 - Do not add a blueprint registry, generalized unlock graph, Codex Modules section, telemetry, deterministic seed protocol, sound/haptics, or broader catalog tuning.
 - Target the existing 360×640 logical-pixel mobile baseline.
+- The automated suite must explicitly prove the page → game Replay wiring after a committed first clear; a human check alone is not sufficient for that lifecycle invariant.
 - Final gates: `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, full `flutter test`, and one human first-clear → next-run flow.
 
 ## File Map
@@ -40,33 +41,35 @@
 ### Modify
 
 - `lib/game/models/game_models.dart` — add `relayCalibration`, its definition/effect copy, and the explicit original-six ID list.
-- `lib/game/rules/run_module_rules.dart` — no new branch expected; existing multipliers must support the new definition unchanged.
-- `lib/game/rules/game_session.dart` — accept/store eligible IDs, filter candidates, and refresh eligibility only at restart boundaries.
-- `lib/game/orion_defense_game.dart` — thread eligible IDs into session construction and restart.
-- `lib/game/ui/orion_game_page.dart` — derive eligibility from `_committedProgress`, feed run boundaries, and project first-clear reward copy.
-- `lib/game/ui/world_map_view.dart` — show one Outpost Alpha blueprint locked/recovered line.
+- `lib/game/rules/game_session.dart` — accept/store eligible IDs, filter candidates, expose testable availability, and refresh eligibility only at restart boundaries.
+- `lib/game/orion_defense_game.dart` — thread eligible IDs into session construction/restart and expose the current eligible IDs under `@visibleForTesting`.
+- `lib/game/ui/orion_game_page.dart` — derive eligibility from `_committedProgress`, feed new/restarted runs, and project first-clear reward copy.
+- `lib/game/ui/world_map_view.dart` — show one Outpost Alpha blueprint locked/recovered line; adjust node height in this task if compact-layout verification needs it.
 - `test/game/run_module_rules_test.dart` — verify Relay Calibration uses existing stat seams.
-- `test/game/game_session_test.dart` — verify locked/unlocked candidate pools and restart refresh.
+- `test/game/module_offer_picker_test.dart` — migrate the hard catalog-size guard from six to seven and verify catalog/base-pool separation.
+- `test/game/game_session_test.dart` — verify locked/unlocked candidate pools, attempt freeze, and restart refresh.
 - `test/game/orion_defense_game_test.dart` — retain restart/run-state regression coverage with the new optional eligibility input.
-- `test/widget_test.dart` — Mission Report persistence states, campaign surfaces, replay/no-duplicate, and reset integration.
+- `test/widget_test.dart` — Mission Report persistence states, the committed first-clear → Replay wiring assertion, campaign surfaces, no-duplicate reward, and reset integration.
 
 No intended changes to `CampaignProgress`, `CampaignSave`, `CampaignProgressStore`, save codecs, `MissionReportContent`, or `MissionReportPanel`.
 
 ---
 
-### Task 1: Define Relay Calibration and derive one blueprint from campaign progress
+## Task 1: Define Relay Calibration and derive one blueprint from campaign progress
 
 **Files:**
 - Modify: `lib/game/models/game_models.dart`
 - Create: `lib/game/rules/run_module_unlocks.dart`
 - Create: `test/game/run_module_unlocks_test.dart`
 - Modify: `test/game/run_module_rules_test.dart`
+- Modify: `test/game/module_offer_picker_test.dart`
 
 **Interfaces:**
 - Produces `RunModuleId.relayCalibration`.
 - Produces `const initialRunModuleIds` containing exactly the six HPA-527 modules.
-- Produces `RunModuleUnlocks.firstBlueprintModuleId` and `RunModuleUnlocks.availableFor(CampaignProgress)`.
-- Does not change `RunModuleRules.applyTowerStats(...)` signature.
+- Produces `RunModuleUnlocks.firstBlueprintModuleId`, `RunModuleUnlocks.hasFirstBlueprint(...)`, and `RunModuleUnlocks.availableFor(...)`.
+- Keeps `runModuleCatalog` as the single definition catalog with seven entries.
+- Does not change `RunModuleRules.applyTowerStats(...)` or `ModuleOfferPicker` signatures.
 
 - [ ] **Step 1: Write failing unlock derivation tests**
 
@@ -119,7 +122,7 @@ void main() {
     );
   });
 
-  test('reset progress removes the derived blueprint', () {
+  test('empty progress removes the derived blueprint after reset', () {
     final cleared = CampaignProgress().recordResult(
       OrionCampaign.stageOneId,
       clearedResult,
@@ -137,7 +140,7 @@ void main() {
 }
 ```
 
-- [ ] **Step 2: Run the unlock tests and verify red**
+- [ ] **Step 2: Run the unlock test and verify red**
 
 ```bash
 flutter test test/game/run_module_unlocks_test.dart
@@ -147,7 +150,7 @@ Expected: compile failure because `relayCalibration`, `initialRunModuleIds`, and
 
 - [ ] **Step 3: Add the seventh definition without widening the stat model**
 
-In `lib/game/models/game_models.dart`, extend the enum and add an explicit base pool:
+In `lib/game/models/game_models.dart`, extend the ID enum:
 
 ```dart
 enum RunModuleId {
@@ -159,7 +162,11 @@ enum RunModuleId {
   rocketFusing,
   relayCalibration,
 }
+```
 
+Add the explicit base-pool constant next to the run-module model:
+
+```dart
 const initialRunModuleIds = <RunModuleId>[
   RunModuleId.heavyCaliber,
   RunModuleId.overclockRelay,
@@ -170,7 +177,7 @@ const initialRunModuleIds = <RunModuleId>[
 ];
 ```
 
-Extend `effectText`:
+Extend `RunModuleDefinition.effectText`:
 
 ```dart
 RunModuleId.relayCalibration =>
@@ -190,7 +197,7 @@ RunModuleDefinition(
 ),
 ```
 
-Do not add any `TowerStats` fields or new affinity values.
+Do not add a `TowerStats` field, affinity value, or combat branch.
 
 - [ ] **Step 4: Implement the focused unlock rule**
 
@@ -216,9 +223,9 @@ abstract final class RunModuleUnlocks {
 }
 ```
 
-- [ ] **Step 5: Add the failing/passing stat seam test**
+- [ ] **Step 5: Add the stat-seam regression**
 
-In `test/game/run_module_rules_test.dart`, add:
+In `test/game/run_module_rules_test.dart`:
 
 ```dart
 test('Relay Calibration reuses range and fire-interval multipliers', () {
@@ -236,30 +243,61 @@ test('Relay Calibration reuses range and fire-interval multipliers', () {
 });
 ```
 
-No production change in `run_module_rules.dart` should be necessary because its existing generic multipliers already cover both fields.
+No production change in `run_module_rules.dart` should be required: its existing generic multiplier application is the intended implementation.
 
-- [ ] **Step 6: Run focused tests**
+- [ ] **Step 6: Migrate the existing hard catalog-length guard before running focused tests**
 
-```bash
-flutter test test/game/run_module_unlocks_test.dart test/game/run_module_rules_test.dart
+`test/game/module_offer_picker_test.dart` currently asserts six catalog entries. Replace that assertion with an explicit seven-definition/base-pool separation test:
+
+```dart
+test('catalog exposes seven definitions while the base pool remains six', () {
+  final catalogIds = runModuleCatalog
+      .map((definition) => definition.id)
+      .toSet();
+
+  expect(runModuleCatalog, hasLength(7));
+  expect(catalogIds, hasLength(7));
+  expect(catalogIds, equals(RunModuleId.values.toSet()));
+  expect(initialRunModuleIds, hasLength(6));
+  expect(catalogIds, containsAll(initialRunModuleIds));
+  expect(catalogIds.difference(initialRunModuleIds.toSet()), {
+    RunModuleId.relayCalibration,
+  });
+
+  final relay = runModuleDefinition(RunModuleId.relayCalibration);
+  expect(relay.rangeMultiplier, 1.08);
+  expect(relay.fireIntervalMultiplier, 0.92);
+});
 ```
 
-Expected: PASS.
+Keep the existing picker behavior tests. Do not teach `RandomModuleOfferPicker` about locked/unlocked modules; it still receives an already-filtered candidate list.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Run all Task 1 focused tests**
+
+```bash
+flutter test \
+  test/game/run_module_unlocks_test.dart \
+  test/game/run_module_rules_test.dart \
+  test/game/module_offer_picker_test.dart
+```
+
+Expected: PASS. This task must not leave the known catalog-length failure for the final suite.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add \
   lib/game/models/game_models.dart \
   lib/game/rules/run_module_unlocks.dart \
   test/game/run_module_unlocks_test.dart \
-  test/game/run_module_rules_test.dart
+  test/game/run_module_rules_test.dart \
+  test/game/module_offer_picker_test.dart
 git commit -m "feat: define first boss blueprint module"
 ```
 
 ---
 
-### Task 2: Freeze eligible modules per attempt and refresh them on restart
+## Task 2: Freeze eligible modules per attempt and refresh them on restart
 
 **Files:**
 - Modify: `lib/game/rules/game_session.dart`
@@ -270,24 +308,26 @@ git commit -m "feat: define first boss blueprint module"
 **Interfaces:**
 - `GameSession.initial({ ..., Iterable<RunModuleId> availableRunModules = initialRunModuleIds })`
 - `GameSession.restart({Iterable<RunModuleId>? availableRunModules})`
+- `Set<RunModuleId> get GameSession.availableRunModules`
 - `OrionDefenseGame({ ..., Iterable<RunModuleId> availableRunModules = initialRunModuleIds })`
 - `OrionDefenseGame.restart({Iterable<RunModuleId>? availableRunModules})`
+- `@visibleForTesting Set<RunModuleId> get OrionDefenseGame.availableRunModules`
 - Eligibility may change only at construction/restart boundaries; it never changes during an active attempt.
 
-- [ ] **Step 1: Add a recording offer picker to the session tests**
+- [ ] **Step 1: Add a recording offer picker to session tests**
 
-In `test/game/game_session_test.dart`, add a test helper next to the existing picker fakes:
+In `test/game/game_session_test.dart`, add a helper that records every candidate set it receives:
 
 ```dart
 final class _RecordingOfferPicker implements ModuleOfferPicker {
-  List<RunModuleId> lastCandidates = const [];
+  final List<List<RunModuleId>> candidateHistory = [];
 
   @override
   List<RunModuleId> pick(
     List<RunModuleId> candidates, {
     required int count,
   }) {
-    lastCandidates = List<RunModuleId>.unmodifiable(candidates);
+    candidateHistory.add(List<RunModuleId>.unmodifiable(candidates));
     return List<RunModuleId>.unmodifiable(candidates.take(count));
   }
 }
@@ -300,9 +340,7 @@ void clearTwoWaves(GameSession session) {
 }
 ```
 
-- [ ] **Step 2: Write failing eligibility tests**
-
-Add these tests:
+- [ ] **Step 2: Write the locked/unlocked candidate tests**
 
 ```dart
 test('default session keeps Relay Calibration out of the draft pool', () {
@@ -311,9 +349,11 @@ test('default session keeps Relay Calibration out of the draft pool', () {
 
   clearTwoWaves(session);
 
-  expect(picker.lastCandidates, hasLength(6));
-  expect(picker.lastCandidates, isNot(contains(RunModuleId.relayCalibration)));
-  expect(session.pendingRunModuleOffer!.moduleIds, hasLength(3));
+  expect(picker.candidateHistory.single, hasLength(6));
+  expect(
+    picker.candidateHistory.single,
+    isNot(contains(RunModuleId.relayCalibration)),
+  );
   expect(session.pendingRunModuleOffer!.moduleIds.toSet(), hasLength(3));
 });
 
@@ -329,16 +369,66 @@ test('unlocked session includes Relay Calibration as a valid candidate', () {
 
   clearTwoWaves(session);
 
-  expect(picker.lastCandidates, contains(RunModuleId.relayCalibration));
+  expect(
+    picker.candidateHistory.single,
+    contains(RunModuleId.relayCalibration),
+  );
   expect(session.pendingRunModuleOffer!.moduleIds.toSet(), hasLength(3));
 });
+```
 
-test('restart can refresh availability for the next run', () {
+- [ ] **Step 3: Add an explicit attempt-freeze regression**
+
+The seventh definition exists globally after Task 1, so verify a six-ID attempt remains six-ID across multiple draft boundaries until restart:
+
+```dart
+test('eligible module set stays frozen for the active attempt', () {
+  final picker = _RecordingOfferPicker();
+  final session = GameSession.initial(
+    offerPicker: picker,
+    availableRunModules: initialRunModuleIds,
+  );
+
+  clearTwoWaves(session);
+  final firstOffer = session.pendingRunModuleOffer!;
+  expect(
+    session.selectRunModule(
+      offerId: firstOffer.offerId,
+      moduleId: firstOffer.moduleIds.first,
+    ),
+    isTrue,
+  );
+
+  expect(session.startWave(), isTrue);
+  session.finishActiveWave();
+  expect(session.startWave(), isTrue);
+  session.finishActiveWave();
+
+  expect(picker.candidateHistory, hasLength(2));
+  for (final candidates in picker.candidateHistory) {
+    expect(candidates, isNot(contains(RunModuleId.relayCalibration)));
+  }
+  expect(
+    session.availableRunModules,
+    unorderedEquals(initialRunModuleIds),
+  );
+});
+```
+
+This test documents the product promise that adding/owning a catalog entry elsewhere cannot mutate the current attempt; only `restart(...)` changes the stored eligibility.
+
+- [ ] **Step 4: Add the restart-refresh regression**
+
+```dart
+test('restart refreshes availability for the next run', () {
   final picker = _RecordingOfferPicker();
   final session = GameSession.initial(offerPicker: picker);
 
   clearTwoWaves(session);
-  expect(picker.lastCandidates, isNot(contains(RunModuleId.relayCalibration)));
+  expect(
+    picker.candidateHistory.last,
+    isNot(contains(RunModuleId.relayCalibration)),
+  );
 
   session.restart(
     availableRunModules: const [
@@ -346,22 +436,31 @@ test('restart can refresh availability for the next run', () {
       RunModuleId.relayCalibration,
     ],
   );
-  clearTwoWaves(session);
 
-  expect(picker.lastCandidates, contains(RunModuleId.relayCalibration));
   expect(session.acquiredRunModules, isEmpty);
+  expect(session.pendingRunModuleOffer, isNull);
+  expect(
+    session.availableRunModules,
+    contains(RunModuleId.relayCalibration),
+  );
+
+  clearTwoWaves(session);
+  expect(
+    picker.candidateHistory.last,
+    contains(RunModuleId.relayCalibration),
+  );
 });
 ```
 
-- [ ] **Step 3: Run the session tests and verify red**
+- [ ] **Step 5: Run the session tests and verify red**
 
 ```bash
 flutter test test/game/game_session_test.dart
 ```
 
-Expected: compile failure because the availability inputs do not exist.
+Expected: compile failure because the availability inputs/getter do not exist.
 
-- [ ] **Step 4: Store and filter the eligible set in `GameSession`**
+- [ ] **Step 6: Store and filter the eligible set in `GameSession`**
 
 Add the factory parameter:
 
@@ -369,17 +468,16 @@ Add the factory parameter:
 Iterable<RunModuleId> availableRunModules = initialRunModuleIds,
 ```
 
-Pass it to the private constructor, then store:
+Store an immutable copy:
 
 ```dart
 Set<RunModuleId> _availableRunModules;
+
+Set<RunModuleId> get availableRunModules =>
+    Set<RunModuleId>.unmodifiable(_availableRunModules);
 ```
 
-Initialize it as an immutable copy:
-
-```dart
-_availableRunModules = Set<RunModuleId>.unmodifiable(availableRunModules),
-```
+Initialize `_availableRunModules` from the factory/private constructor input.
 
 Filter `_moduleCandidates()` before the existing affinity preference logic:
 
@@ -413,9 +511,9 @@ void restart({Iterable<RunModuleId>? availableRunModules}) {
 }
 ```
 
-Keep the current offer picker and affinity fallback code otherwise unchanged.
+Do not otherwise change candidate preference/fallback or picker behavior.
 
-- [ ] **Step 5: Thread the same boundary through `OrionDefenseGame`**
+- [ ] **Step 7: Thread the same boundary through `OrionDefenseGame`**
 
 Constructor:
 
@@ -427,7 +525,7 @@ OrionDefenseGame({
   ModuleOfferPicker? moduleOfferPicker,
   this.onStageWon,
   this.onReturnToMap,
-}) : ...,
+}) : stage = stage ?? OrionCampaign.stageOne,
      _session = GameSession.initial(
        stage: stage ?? OrionCampaign.stageOne,
        campaignModifiers: campaignModifiers,
@@ -453,23 +551,50 @@ void restart({Iterable<RunModuleId>? availableRunModules}) {
 }
 ```
 
-Do not add blueprint ownership logic to Flame.
+Expose only the narrow test observation needed by Task 3:
 
-- [ ] **Step 6: Preserve game restart regressions**
+```dart
+@visibleForTesting
+Set<RunModuleId> get availableRunModules => _session.availableRunModules;
+```
 
-In `test/game/orion_defense_game_test.dart`, extend an existing restart test or add one that constructs the game with a deterministic `ModuleOfferPicker`, calls `restart(availableRunModules: ...)`, and verifies the ordinary restart invariants still hold: phase returns to build, acquired modules/pending offer are cleared, gold/base health reset, and pacing resets.
+`orion_defense_game.dart` already imports `package:flutter/foundation.dart`, so do not add another testing package or controller.
 
-The candidate membership itself is already proven at the `GameSession` boundary; do not add a test-only public getter to `OrionDefenseGame`.
+- [ ] **Step 8: Add/adjust game-level restart coverage**
 
-- [ ] **Step 7: Run focused tests**
+In `test/game/orion_defense_game_test.dart`, construct a game with the base six, call:
+
+```dart
+game.restart(
+  availableRunModules: const [
+    ...initialRunModuleIds,
+    RunModuleId.relayCalibration,
+  ],
+);
+```
+
+Then assert:
+
+```dart
+expect(game.availableRunModules, contains(RunModuleId.relayCalibration));
+expect(game.snapshot.acquiredRunModules, isEmpty);
+expect(game.snapshot.pendingRunModuleOffer, isNull);
+expect(game.snapshot.phase, GamePhase.build);
+```
+
+Keep existing restart pacing/component cleanup assertions intact.
+
+- [ ] **Step 9: Run focused Task 2 tests**
 
 ```bash
-flutter test test/game/game_session_test.dart test/game/orion_defense_game_test.dart
+flutter test \
+  test/game/game_session_test.dart \
+  test/game/orion_defense_game_test.dart
 ```
 
 Expected: PASS.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add \
@@ -477,61 +602,150 @@ git add \
   lib/game/orion_defense_game.dart \
   test/game/game_session_test.dart \
   test/game/orion_defense_game_test.dart
-git commit -m "feat: gate salvage modules by run availability"
+git commit -m "feat: gate run modules by campaign eligibility"
 ```
 
 ---
 
-### Task 3: Connect committed progress to run boundaries and Mission Report reward truth
+## Task 3: Wire committed progress through launch, Replay, and Mission Report reward copy
 
 **Files:**
 - Modify: `lib/game/ui/orion_game_page.dart`
 - Modify: `test/widget_test.dart`
 
 **Interfaces:**
-- Consumes `RunModuleUnlocks.availableFor(_committedProgress)`.
-- Reuses the existing `_missionPriorResult`, `_missionStageId`, `_missionSaveState`, and `MissionRewardFact`.
-- Adds one private `_missionBlueprintReward()` helper; no new public DTO or state field.
+- Consumes `RunModuleUnlocks.availableFor(_committedProgress)` for both normal stage launch and Mission Report restart.
+- Reuses the existing `MissionRewardFact` parameter on `projectVictoryReport(...)`.
+- Uses `OrionDefenseGame.availableRunModules` only as an `@visibleForTesting` observation to prove page → game Replay wiring.
+- Does not change `_persistSave(...)`, `CampaignSave`, or Mission Report DTO/widget APIs.
 
-- [ ] **Step 1: Add first-clear reward-state widget tests**
+- [ ] **Step 1: Write a failing launch-availability widget test**
 
-Use the existing controllable campaign store in `test/widget_test.dart` and cover these observable states:
+Add `run_module_unlocks.dart` to `test/widget_test.dart` imports. Use the existing `storeWithResults(...)`, `startStageFromBriefing(...)`, and `onGameCreated` seam:
+
+```dart
+testWidgets('stage launch derives run modules from committed progress', (
+  tester,
+) async {
+  final store = await storeWithResults({
+    OrionCampaign.stageOneId: const StageResult(
+      medal: StageMedal.clear,
+      bestBaseHealth: 5,
+    ),
+  });
+  OrionDefenseGame? game;
+
+  await tester.pumpWidget(
+    MaterialApp(
+      home: OrionGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+  expect(
+    game!.availableRunModules,
+    contains(RunModuleId.relayCalibration),
+  );
+});
+```
+
+This proves `_startStage` uses committed progress rather than the fixed base list.
+
+- [ ] **Step 2: Write the critical committed first-clear → Replay wiring regression**
+
+Extend the existing Mission Report save/replay integration pattern in `test/widget_test.dart` (it already captures `OrionDefenseGame`, waits for a controlled save completion, taps the `Replay Mission` tooltip, and verifies the report closes).
+
+For a fresh store:
+
+1. start Outpost Alpha;
+2. assert `game.availableRunModules` does **not** contain Relay Calibration;
+3. publish a first-clear victory with the existing `publishVictory(...)` helper;
+4. while the controlled save is unresolved, assert the report says `Blueprint recovery pending` and the game still has six eligible IDs;
+5. complete the store save and pump;
+6. assert `Blueprint recovered: Relay Calibration`;
+7. tap the Mission Report `Replay Mission` action;
+8. assert the **same game object** now reports Relay Calibration as eligible.
+
+Core assertions:
+
+```dart
+final firstAttemptGame = game!;
+expect(
+  firstAttemptGame.availableRunModules,
+  isNot(contains(RunModuleId.relayCalibration)),
+);
+
+await publishVictory(
+  tester,
+  firstAttemptGame,
+  result: const StageResult(
+    medal: StageMedal.silver,
+    bestBaseHealth: 14,
+  ),
+);
+
+expect(find.text('Blueprint recovery pending'), findsOneWidget);
+expect(
+  firstAttemptGame.availableRunModules,
+  isNot(contains(RunModuleId.relayCalibration)),
+);
+
+await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+store.saveCompletions.single.complete();
+await tester.pumpAndSettle();
+
+expect(find.text('Blueprint recovered: Relay Calibration'), findsOneWidget);
+
+await tester.tap(find.byTooltip('Replay Mission'));
+await tester.pumpAndSettle();
+
+expect(identical(game, firstAttemptGame), isTrue);
+expect(
+  firstAttemptGame.availableRunModules,
+  contains(RunModuleId.relayCalibration),
+);
+expect(find.text('Start Wave'), findsOneWidget);
+```
+
+Use the existing controlled/failing campaign-store test helper already used by Mission Report persistence tests rather than adding another persistence fake.
+
+This is the required automated proof for the riskiest lifecycle. Do not defer it to Task 5's human check.
+
+- [ ] **Step 3: Write reward-state tests before production wiring**
+
+Add focused widget assertions for the existing first-clear save states:
 
 ```text
-fresh Outpost Alpha clear + pending store write
-  → Blueprint recovery pending
-  → Relay Calibration unlocks after this result is saved.
-
-successful write
-  → Blueprint recovered: Relay Calibration
-  → Available in Salvage Module drafts on future runs.
-
-failed write
-  → Blueprint not recovered
-  → Retry Save to keep this first-clear reward.
-
-Retry Save succeeds
-  → recovered copy replaces failed copy
-
-already-cleared Outpost Alpha replay
-  → no pending/recovered/not-recovered blueprint reward block
+fresh first clear + saving  → Blueprint recovery pending
+fresh first clear + failed  → Blueprint not recovered
+failed Retry Save + success → Blueprint recovered: Relay Calibration
+already-cleared replay      → no blueprint recovery reward section
 ```
 
-Also keep the existing HPA-525 save-state assertions so blueprint copy cannot replace or obscure `Saving result…`, `Saved.`, or `Save failed — progress unchanged.`.
+For the replay/no-duplicate case, start from `storeWithResults({OrionCampaign.stageOneId: ...})`, publish an improved or retained result, and assert:
 
-- [ ] **Step 2: Verify the report tests fail before integration**
+```dart
+expect(find.textContaining('Blueprint recover'), findsNothing);
+expect(find.text('Blueprint recovery pending'), findsNothing);
+expect(find.text('Blueprint not recovered'), findsNothing);
+```
+
+- [ ] **Step 4: Verify Task 3 tests are red**
 
 ```bash
-flutter test test/widget_test.dart --plain-name "blueprint"
+flutter test test/widget_test.dart
 ```
 
-Expected: the new blueprint assertions fail because the report still passes `reward: null`.
+Expected: the new launch/replay availability and reward-copy assertions fail because `OrionGamePage` still constructs/restarts with the default six and passes `reward: null`.
 
-- [ ] **Step 3: Derive launch availability from committed progress**
+- [ ] **Step 5: Derive availability from committed progress on normal launch**
 
-Import `run_module_unlocks.dart` in `orion_game_page.dart`.
-
-In `_startStage`, pass:
+Import `run_module_unlocks.dart` in `orion_game_page.dart` and change `_startStage(...)`:
 
 ```dart
 final game = OrionDefenseGame(
@@ -543,11 +757,17 @@ final game = OrionDefenseGame(
 );
 ```
 
-Use `_committedProgress`, not `_progress`, for the availability input.
+Keep `_progress` for visible result/briefing state, but use `_committedProgress` for ownership-derived availability.
 
-- [ ] **Step 4: Refresh the pool on every Mission Report restart boundary**
+- [ ] **Step 6: Refresh availability on Mission Report Replay**
 
-In `_restartFromMissionReport`, keep the current mission-state reset logic, but replace the bare restart call with:
+Replace the current bare call:
+
+```dart
+game.restart();
+```
+
+with:
 
 ```dart
 game.restart(
@@ -555,30 +775,26 @@ game.restart(
 );
 ```
 
-This is required for the immediate first-clear → Replay Mission flow because HPA-525 reuses the same game object.
+Do not create a new game object. HPA-525 intentionally reuses the same game/session; the restart parameter is the run-boundary refresh.
 
-- [ ] **Step 5: Project the reward fact from existing mission state**
+- [ ] **Step 7: Add one private reward projector**
 
-Add this private helper:
+In `_OrionGamePageState`, add:
 
 ```dart
-MissionRewardFact? _missionBlueprintReward() {
+MissionRewardFact? _missionRewardFact() {
   if (_missionStageId != OrionCampaign.stageOneId ||
       _missionPriorResult != null) {
     return null;
   }
 
-  final module = runModuleDefinition(
-    RunModuleUnlocks.firstBlueprintModuleId,
-  );
-
   return switch (_missionSaveState) {
-    MissionSaveState.saving => MissionRewardFact(
+    MissionSaveState.saving => const MissionRewardFact(
       title: 'Blueprint recovery pending',
-      detail: '${module.title} unlocks after this result is saved.',
+      detail: 'Relay Calibration unlocks after this result is saved.',
     ),
-    MissionSaveState.saved => MissionRewardFact(
-      title: 'Blueprint recovered: ${module.title}',
+    MissionSaveState.saved => const MissionRewardFact(
+      title: 'Blueprint recovered: Relay Calibration',
       detail: 'Available in Salvage Module drafts on future runs.',
     ),
     MissionSaveState.failed => const MissionRewardFact(
@@ -590,39 +806,32 @@ MissionRewardFact? _missionBlueprintReward() {
 }
 ```
 
-Change the existing victory projection call from:
+Then replace the current `reward: null` in the victory report with:
 
 ```dart
-reward: null,
+reward: _missionRewardFact(),
 ```
 
-to:
+Do not add a reward enum/registry. `_missionPriorResult == null` is the already-captured first-clear fact; after Replay, `_restartFromMissionReport` refreshes `_missionPriorResult` from saved progress, preventing duplicate recovery copy.
 
-```dart
-reward: _missionBlueprintReward(),
-```
-
-Do not modify `MissionReportContent` or `MissionReportPanel`.
-
-- [ ] **Step 6: Run Mission Report integration tests**
+- [ ] **Step 8: Run Task 3 tests**
 
 ```bash
-flutter test test/widget_test.dart --plain-name "blueprint"
-flutter test test/game/mission_report_content_test.dart test/widget/mission_report_panel_test.dart
+flutter test test/widget_test.dart
 ```
 
-Expected: PASS, including existing report projection/panel behavior.
+Expected: PASS, including the explicit save commit → Replay → same-game eligible-ID assertion.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 9: Commit**
 
 ```bash
 git add lib/game/ui/orion_game_page.dart test/widget_test.dart
-git commit -m "feat: surface first blueprint recovery"
+git commit -m "feat: connect blueprint reward to mission saves"
 ```
 
 ---
 
-### Task 4: Add the compact campaign surfaces and reset regression
+## Task 4: Add the compact Outpost Alpha campaign surfaces and reset regression
 
 **Files:**
 - Modify: `lib/game/ui/world_map_view.dart`
@@ -630,140 +839,160 @@ git commit -m "feat: surface first blueprint recovery"
 - Modify: `test/widget_test.dart`
 
 **Interfaces:**
-- World map derives the Outpost Alpha blueprint status from the `CampaignProgress` it already receives.
-- `_StageBriefingSheet` derives the recovered line from its existing `stage` + `result` inputs.
-- No new campaign-surface abstraction is introduced.
+- World map derives blueprint status directly from `progress.isCleared(OrionCampaign.stageOneId)`.
+- Stage briefing receives the same existing `StageResult? result`; no new reward model is required.
+- No use of `stageRewardLabel` or `CampaignReward` for this main-stage blueprint.
 
-- [ ] **Step 1: Write campaign-surface tests**
+- [ ] **Step 1: Add map/briefing widget assertions**
 
-Add widget coverage for:
+For fresh progress:
+
+```dart
+expect(find.text('Blueprint • Locked'), findsOneWidget);
+```
+
+For `storeWithResults({OrionCampaign.stageOneId: ...})`:
+
+```dart
+expect(find.text('Blueprint • Recovered'), findsOneWidget);
+await tester.tap(find.text('Alpha'));
+await tester.pumpAndSettle();
+expect(find.text('Blueprint recovered: Relay Calibration'), findsOneWidget);
+```
+
+Also assert no other stage node gets a blueprint line. Use the existing seven-stage map fixture and expect exactly one blueprint status string across the map.
+
+- [ ] **Step 2: Add a compact-layout regression before changing layout constants**
+
+At 360×640:
+
+```dart
+tester.view.physicalSize = const Size(360, 640);
+tester.view.devicePixelRatio = 1;
+addTearDown(tester.view.reset);
+```
+
+Pump the world map with Outpost Alpha recovered and assert:
+
+```dart
+expect(find.text('Blueprint • Recovered'), findsOneWidget);
+expect(tester.takeException(), isNull);
+```
+
+This test must run in Task 4, not only in the final human pass.
+
+- [ ] **Step 3: Render one blueprint line on the Alpha node**
+
+In `_StageNode`, derive only the Outpost Alpha copy. Either pass a small optional `blueprintLabel` from `_StageMap` or derive it from `stage.id` + `status`; do not introduce a generalized reward surface.
+
+The displayed text is exactly:
 
 ```text
-fresh progress:
-  Outpost Alpha node shows "Blueprint • Locked"
-
-committed Outpost Alpha result:
-  Outpost Alpha node shows "Blueprint • Recovered"
-  opening Outpost Alpha briefing shows "Blueprint recovered: Relay Calibration"
-
-campaign reset after a recovered blueprint:
-  Outpost Alpha returns to "Blueprint • Locked"
-  recovered briefing copy disappears
+Blueprint • Locked
 ```
 
-Use the existing 360×640 test surface for at least the recovered map/briefing case and assert no overflow exceptions.
+before clear and:
 
-- [ ] **Step 2: Verify red**
+```text
+Blueprint • Recovered
+```
+
+after clear.
+
+Reuse the existing `FittedBox`/small-label treatment used by `rewardLabel` so the narrow node remains readable.
+
+- [ ] **Step 4: Treat node-height adjustment as in-scope if the 360×640 test overflows**
+
+The current map uses:
+
+```dart
+const nodeHeight = 124.0;
+```
+
+Adding a fourth text row may make that too tight. First run the compact test after adding the line. If `tester.takeException()` reports a `RenderFlex` overflow, change the constant in this same task to:
+
+```dart
+const nodeHeight = 132.0;
+```
+
+and rerun the compact map tests. Because `_StageMap` already computes `availableHeight` from `nodeHeight`, no coordinate-system redesign is needed.
+
+If 132 still overflows, keep 132 and reduce only the node's vertical gaps/padding by the smallest amount needed; do not add scrolling, variable-height nodes, or a new layout system.
+
+This contingency is explicitly in scope and must not be deferred as a separate UI issue.
+
+- [ ] **Step 5: Add the recovered briefing line**
+
+In `_StageBriefingSheet`, when:
+
+```dart
+stage.id == OrionCampaign.stageOneId && result != null
+```
+
+render:
+
+```text
+Blueprint recovered: Relay Calibration
+```
+
+Do not render the full effect sentence here. The draft card remains the detailed description surface.
+
+- [ ] **Step 6: Extend the existing campaign-reset integration test**
+
+After reset succeeds, assert:
+
+```dart
+expect(find.text('Blueprint • Locked'), findsOneWidget);
+expect(find.text('Blueprint • Recovered'), findsNothing);
+```
+
+Start Outpost Alpha after reset, capture the game, and assert:
+
+```dart
+expect(
+  game!.availableRunModules,
+  isNot(contains(RunModuleId.relayCalibration)),
+);
+```
+
+This proves reset removes both presentation and actual eligibility through the same empty `CampaignProgress`, with no ownership cleanup path.
+
+- [ ] **Step 7: Run Task 4 focused tests**
 
 ```bash
-flutter test test/widget_test.dart --plain-name "Blueprint •"
+flutter test test/widget_test.dart
 ```
 
-Expected: the new map/briefing copy is absent.
+Expected: PASS at the normal fixture size and 360×640 without overflow.
 
-- [ ] **Step 3: Add the one-stage world-map status**
-
-In `_StageNode.build`, derive an optional blueprint label only for Outpost Alpha:
-
-```dart
-final blueprintLabel = stage.id == OrionCampaign.stageOneId
-    ? status == StageProgressStatus.cleared
-          ? 'Blueprint • Recovered'
-          : 'Blueprint • Locked'
-    : null;
-```
-
-Render it with the same compact `FittedBox` pattern already used for stage reward labels:
-
-```dart
-if (blueprintLabel != null) ...[
-  const SizedBox(height: 2),
-  FittedBox(
-    fit: BoxFit.scaleDown,
-    child: Text(
-      blueprintLabel,
-      style: theme.textTheme.labelSmall?.copyWith(
-        color: colors.foreground,
-      ),
-    ),
-  ),
-],
-```
-
-Import `orion_campaign.dart`. Do not add blueprint labels to other stages.
-
-- [ ] **Step 4: Add the recovered briefing line**
-
-Inside `_StageBriefingSheet`, compute:
-
-```dart
-final hasRecoveredBlueprint =
-    stage.id == OrionCampaign.stageOneId && result != null;
-```
-
-When true, render exactly:
-
-```dart
-Text(
-  'Blueprint recovered: ${runModuleDefinition(RunModuleUnlocks.firstBlueprintModuleId).title}',
-),
-```
-
-Do not render the effect sentence here; the draft card remains the detailed explanation surface.
-
-- [ ] **Step 5: Run campaign-surface and reset tests**
-
-```bash
-flutter test test/widget_test.dart --plain-name "blueprint"
-```
-
-Expected: PASS, with no layout exceptions at 360×640.
-
-- [ ] **Step 6: Run the full focused HPA-528 set**
-
-```bash
-flutter test \
-  test/game/run_module_unlocks_test.dart \
-  test/game/run_module_rules_test.dart \
-  test/game/game_session_test.dart \
-  test/game/orion_defense_game_test.dart \
-  test/game/mission_report_content_test.dart \
-  test/widget/mission_report_panel_test.dart \
-  test/widget_test.dart
-```
-
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
 git add \
   lib/game/ui/world_map_view.dart \
   lib/game/ui/orion_game_page.dart \
   test/widget_test.dart
-git commit -m "feat: show blueprint status on campaign surfaces"
+git commit -m "feat: show first recovered blueprint"
 ```
 
 ---
 
-### Task 5: Final verification and one human reward-loop check
+## Task 5: Run final verification and the one product proof
 
 **Files:**
-- No planned production files beyond Tasks 1–4.
-- Update implementation only if verification exposes a concrete defect in HPA-528 behavior.
+- No intended production changes; fix only defects exposed by these gates.
 
-**Interfaces:**
-- Validates the complete first-clear → committed reward → next-run option loop.
-
-- [ ] **Step 1: Format check**
+- [ ] **Step 1: Run formatting**
 
 ```bash
 dart format --output=none --set-exit-if-changed .
 ```
 
-Expected: exit 0, no files changed.
+Expected: exit 0 with no formatting changes required.
 
-- [ ] **Step 2: Static analysis**
+If it reports files needing format, run `dart format .`, inspect the diff, then rerun the strict command.
+
+- [ ] **Step 2: Run static analysis**
 
 ```bash
 flutter analyze
@@ -771,33 +1000,72 @@ flutter analyze
 
 Expected: no issues.
 
-- [ ] **Step 3: Full test suite**
+- [ ] **Step 3: Re-run the focused blueprint tests together**
+
+```bash
+flutter test \
+  test/game/run_module_unlocks_test.dart \
+  test/game/run_module_rules_test.dart \
+  test/game/module_offer_picker_test.dart \
+  test/game/game_session_test.dart \
+  test/game/orion_defense_game_test.dart \
+  test/widget_test.dart
+```
+
+Expected: PASS.
+
+- [ ] **Step 4: Run the complete suite**
 
 ```bash
 flutter test
 ```
 
-Expected: all tests pass.
+Expected: all current tests pass. There should be no surprise catalog-length failure because `module_offer_picker_test.dart` was migrated in Task 1.
 
-- [ ] **Step 4: Human mobile flow**
+- [ ] **Step 5: Perform one human first-clear → next-run proof**
 
-On a fresh campaign at the normal 1× speed:
+Use a fresh campaign and perform:
 
 ```text
-1. Confirm Outpost Alpha shows Blueprint • Locked.
-2. Start Outpost Alpha and confirm ordinary drafts use only the original six modules.
-3. Clear the Relay Breaker.
-4. While the result is saving, confirm Blueprint recovery pending.
-5. After save success, confirm Blueprint recovered: Relay Calibration.
-6. Tap Replay Mission.
-7. Reach the next Salvage Module draft and confirm Relay Calibration can appear,
-   reads "All towers gain 8% range; attack interval drops 8%.", and is easy to understand.
-8. Return to the map and confirm Blueprint • Recovered / briefing copy.
-9. Reset the campaign and confirm the blueprint returns to Locked.
+Fresh save
+→ start Outpost Alpha
+→ confirm the first run uses only the original six-module pool
+→ clear the stage
+→ while saving, observe "Blueprint recovery pending"
+→ after save success, observe "Blueprint recovered: Relay Calibration"
+→ tap Replay Mission
+→ reach the first Salvage Module draft
+→ confirm Relay Calibration is eligible/can appear and its card copy is understandable
+→ return to the map and confirm Alpha shows "Blueprint • Recovered"
 ```
 
-This is one product proof, not a balance matrix. If Relay Calibration feels unnoticeable, adjust only its two tuning constants before expanding architecture.
+The automated Task 3 regression already proves the Replay wiring. This human pass answers only the product question: is the reward noticeable and understandable?
 
-- [ ] **Step 5: Commit verification-only fixes if any**
+- [ ] **Step 6: Commit any verification-only correction if required**
 
-If no fixes were required, do not create an empty commit. If a concrete HPA-528 defect was fixed during verification, stage only that fix and its regression test, then commit with a specific message describing the defect.
+If the gates expose a real defect, make the smallest scoped correction, rerun the failing focused test plus the full relevant gate, and commit only that correction. If no correction is required, do not create an empty verification commit.
+
+---
+
+## Acceptance Checklist
+
+Before marking HPA-528 implementation complete, verify all of the following:
+
+- [ ] Fresh campaign availability is exactly `initialRunModuleIds` (six IDs).
+- [ ] `runModuleCatalog` contains exactly seven unique definitions and the only catalog entry outside the base pool is `relayCalibration`.
+- [ ] A committed Outpost Alpha clear derives Relay Calibration without a save-schema field.
+- [ ] Relay Calibration changes only range (+8%) and fire interval (-8%) through existing run-module rules.
+- [ ] Candidate generation filters by the per-attempt eligible set before existing affinity preference/fallback.
+- [ ] Eligibility is frozen across an attempt and changes only at construction/restart.
+- [ ] The completed first-clear attempt remains on six eligible IDs while its save is pending.
+- [ ] Save failure leaves the blueprint unavailable and shows `Blueprint not recovered`.
+- [ ] Retry Save success changes the report to recovered and makes the next run eligible.
+- [ ] Automated widget coverage proves `_restartFromMissionReport` refreshes the **same** `OrionDefenseGame` from `_committedProgress` after save success.
+- [ ] Replay of an already-cleared stage does not repeat blueprint recovery copy.
+- [ ] Outpost Alpha alone shows the compact locked/recovered campaign line.
+- [ ] Recovered Outpost Alpha briefing shows one short blueprint line.
+- [ ] 360×640 map/report surfaces have no overflow; the node-height contingency is resolved in Task 4 if needed.
+- [ ] Campaign reset removes both the recovered UI and actual module availability.
+- [ ] No blueprint registry, ownership collection, save migration, new combat stat, Codex section, or event bus was added.
+- [ ] `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, and full `flutter test` pass.
+- [ ] One human first-clear → next-run product flow confirms the reward is noticeable and understandable.
