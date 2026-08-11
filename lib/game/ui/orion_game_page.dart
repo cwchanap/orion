@@ -287,7 +287,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
       useSafeArea: true,
       builder: (context) => _StageBriefingSheet(
         stage: stage,
-        result: _progress.resultFor(stage.id),
+        // Aligned with the rest of the committed-state pattern: the briefing
+        // sheet's Start/Replay label, reward-earned flag, best-result line,
+        // and HPA-528 blueprint-recovered signal are all first-clear facts
+        // sourced from disk, not the optimistic `_progress` aggregate.
+        result: _committedProgress.resultFor(stage.id),
       ),
     );
 
