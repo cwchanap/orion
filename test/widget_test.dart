@@ -610,6 +610,244 @@ void main() {
     expect(game!.snapshot.phase, GamePhase.build);
   });
 
+  testWidgets(
+    'stage launch derives module eligibility from committed progress',
+    (tester) async {
+      final store = await storeWithResults({
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 5,
+        ),
+      });
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+      expect(game!.availableRunModules, contains(RunModuleId.relayCalibration));
+    },
+  );
+
+  // The primary HPA-528 lifecycle proof: a first-clear attempt must NOT carry
+  // Relay Calibration, the pending/saved reward copy must surface, and after
+  // commit a Replay on the SAME game object must refresh module eligibility.
+  testWidgets(
+    'first-clear commit then same-game Replay refreshes module eligibility',
+    (tester) async {
+      final store = _TestCampaignProgressStore(delaySaves: true);
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+
+      final firstAttemptGame = game!;
+      expect(
+        firstAttemptGame.availableRunModules,
+        isNot(contains(RunModuleId.relayCalibration)),
+      );
+
+      await publishVictory(
+        tester,
+        firstAttemptGame,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      expect(find.text('Blueprint recovery pending'), findsOneWidget);
+      expect(
+        firstAttemptGame.availableRunModules,
+        isNot(contains(RunModuleId.relayCalibration)),
+      );
+
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.text('Blueprint recovered: Relay Calibration'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.pumpAndSettle();
+
+      expect(identical(game, firstAttemptGame), isTrue);
+      expect(
+        firstAttemptGame.availableRunModules,
+        contains(RunModuleId.relayCalibration),
+      );
+      expect(find.text('Start Wave'), findsOneWidget);
+    },
+  );
+
+  // Pre-existing stale-reward-on-replay regression, now fixed by the same
+  // run-boundary rule that refreshes blueprints: Salvage Rift's bonus gold
+  // must apply on the Replay after its first clear commits.
+  testWidgets(
+    'Salvage Rift first clear refreshes bonus gold on same-game Replay',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Rift',
+        actionLabel: 'Start Mission',
+      );
+
+      expect(game!.snapshot.gold, GameBalance.startingGold);
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.pumpAndSettle();
+
+      expect(
+        game!.snapshot.gold,
+        GameBalance.startingGold + GameBalance.salvageRiftGoldBonus,
+      );
+    },
+  );
+
+  testWidgets(
+    'fresh first-clear save failure reports Blueprint not recovered',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        saveError: StateError('save failed'),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint not recovered'), findsOneWidget);
+    },
+  );
+
+  testWidgets('failed Retry Save then success reports Blueprint recovered', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      delaySaves: true,
+      failOnSaveIndices: {0},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+    );
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Blueprint not recovered'), findsOneWidget);
+    expect(find.byTooltip('Retry Save'), findsOneWidget);
+    store.failOnSaveIndices.clear();
+
+    await tester.tap(find.byTooltip('Retry Save'));
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Blueprint recovered: Relay Calibration'), findsOneWidget);
+  });
+
+  testWidgets('already-cleared replay suppresses blueprint reward copy', (
+    tester,
+  ) async {
+    final store = await storeWithResults({
+      OrionCampaign.stageOneId: const StageResult(
+        medal: StageMedal.gold,
+        bestBaseHealth: 20,
+      ),
+    });
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    // A worse result on a cleared stage is retained — no first-clear reward.
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Blueprint recovery pending'), findsNothing);
+    expect(find.text('Blueprint not recovered'), findsNothing);
+    expect(find.text('Blueprint recovered: Relay Calibration'), findsNothing);
+  });
+
   testWidgets('mission save composes with a subsequent tech-tree purchase', (
     tester,
   ) async {
