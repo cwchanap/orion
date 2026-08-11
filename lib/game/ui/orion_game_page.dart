@@ -850,6 +850,11 @@ class _StageBriefingSheet extends StatelessWidget {
               'Best: ${result!.medal.label} • '
               '${result!.bestBaseHealth} base health',
             ),
+          // HPA-528: a committed Outpost Alpha clear also recovers the
+          // Relay Calibration blueprint; surface that fact on the briefing
+          // sheet using the existing committed `result` as the signal.
+          if (stage.id == OrionCampaign.stageOneId && result != null)
+            const Text('Blueprint recovered: Relay Calibration'),
           const SizedBox(height: 16),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
