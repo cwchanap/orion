@@ -2344,6 +2344,158 @@ void main() {
       );
     },
   );
+
+  // HPA-528 Task 4: the Outpost Alpha node on the world map surfaces the
+  // first blueprint recovery as a compact fourth row that re-uses the
+  // existing reward-row treatment. The label reflects committed progress
+  // only — a fresh campaign shows "Blueprint • Locked"; a cleared Alpha
+  // shows "Blueprint • Recovered". Exactly one such row exists across all
+  // seven stage nodes.
+  testWidgets(
+    'fresh world map shows Alpha blueprint locked and no recovered row',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(home: OrionGamePage(progressStore: store)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint • Locked'), findsOneWidget);
+      expect(find.text('Blueprint • Recovered'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'cleared Alpha world map shows blueprint recovered and no locked row',
+    (tester) async {
+      final store = await storeWithResults({
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(home: OrionGamePage(progressStore: store)),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint • Recovered'), findsOneWidget);
+      expect(find.text('Blueprint • Locked'), findsNothing);
+    },
+  );
+
+  testWidgets('Alpha briefing shows blueprint recovered line when committed', (
+    tester,
+  ) async {
+    final store = await storeWithResults({
+      OrionCampaign.stageOneId: const StageResult(
+        medal: StageMedal.clear,
+        bestBaseHealth: 1,
+      ),
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Blueprint recovered: Relay Calibration'), findsOneWidget);
+  });
+
+  testWidgets('fresh Alpha briefing omits the blueprint recovered line', (
+    tester,
+  ) async {
+    SharedPreferences.setMockInitialValues({});
+    final store = InMemoryCampaignProgressStore(
+      knownStages: OrionCampaign.stages,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Blueprint recovered: Relay Calibration'), findsNothing);
+  });
+
+  testWidgets('Alpha blueprint row fits at 360x640 with nodeHeight 124', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final store = await storeWithResults({
+      OrionCampaign.stageOneId: const StageResult(
+        medal: StageMedal.clear,
+        bestBaseHealth: 1,
+      ),
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: OrionGamePage(progressStore: store)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Blueprint • Recovered'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  // Reset proof (HPA-528 Task 4 Step 6): after a campaign reset the derived
+  // blueprint unlock must disappear from BOTH surfaces — the Alpha map node
+  // reverts to "Blueprint • Locked", and a fresh game launched on Alpha no
+  // longer carries the Relay Calibration run module.
+  testWidgets(
+    'reset wipes first blueprint from map and run module eligibility',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+          'aurora-gate',
+        }),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint • Recovered'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Reset Campaign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint • Locked'), findsOneWidget);
+      expect(find.text('Blueprint • Recovered'), findsNothing);
+
+      await startStageFromBriefing(tester);
+      expect(
+        game!.availableRunModules,
+        isNot(contains(RunModuleId.relayCalibration)),
+      );
+    },
+  );
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {

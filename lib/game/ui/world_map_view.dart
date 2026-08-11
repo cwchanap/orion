@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
+import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_reward_label.dart';
 
@@ -246,6 +247,17 @@ class _StageNode extends StatelessWidget {
       stage,
       isCleared: status == StageProgressStatus.cleared,
     );
+    // HPA-528: Outpost Alpha is the first stage to recover a blueprint
+    // (Relay Calibration). The map surfaces this as a compact fourth row
+    // that re-uses the existing reward-row treatment. The label reflects
+    // committed progress only — `status == cleared` is equivalent to
+    // `progress.isCleared(OrionCampaign.stageOneId)` because statusFor
+    // derives from the same bestResultsByStageId map.
+    final blueprintLabel = stage.id == OrionCampaign.stageOneId
+        ? status == StageProgressStatus.cleared
+              ? 'Blueprint • Recovered'
+              : 'Blueprint • Locked'
+        : null;
 
     return Material(
       color: colors.background,
@@ -286,6 +298,19 @@ class _StageNode extends StatelessWidget {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     rewardLabel,
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: colors.foreground,
+                    ),
+                  ),
+                ),
+              ],
+              if (blueprintLabel != null) ...[
+                const SizedBox(height: 2),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    blueprintLabel,
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: colors.foreground,
                     ),
