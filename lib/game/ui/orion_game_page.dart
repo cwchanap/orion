@@ -10,6 +10,7 @@ import '../campaign/stage_modifier_metadata.dart';
 import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
+import '../rules/run_module_unlocks.dart';
 import '../util/format.dart';
 import 'codex_view.dart';
 import 'mission_report_content.dart';
@@ -257,7 +258,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                         result: _missionVictoryResult!,
                         priorSavedResult: _missionPriorResult,
                         saveState: _missionSaveState!,
-                        reward: null,
+                        reward: _missionRewardFact(),
                       ),
                       onReplay: _missionSaveState == MissionSaveState.saved
                           ? _restartFromMissionReport
@@ -295,6 +296,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
+  // Run inputs (campaign modifiers and module eligibility) are derived from
+  // the last-known committed disk state, not the optimistic `_progress`
+  // aggregate. One attempt freezes committed run inputs; a same-object
+  // Replay refreshes ALL committed run inputs together (HPA-528).
+  CampaignModifiers _committedCampaignModifiers() =>
+      CampaignModifiers.fromProgress(
+        _committedProgress,
+        OrionCampaign.stages,
+        _committedTechTree,
+      );
+
   void _startStage(StageDefinition stage) {
     if (_isSavingProgress || _isResetting) {
       setState(() {
@@ -310,18 +322,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    final campaignModifiers = CampaignModifiers.fromProgress(
-      _progress,
-      OrionCampaign.stages,
-      _techTree,
-    );
-    _missionPriorResult = _progress.resultFor(stage.id);
+    final campaignModifiers = _committedCampaignModifiers();
+    _missionPriorResult = _committedProgress.resultFor(stage.id);
     _missionVictoryResult = null;
     _missionStageId = stage.id;
     _missionSaveState = null;
     final game = OrionDefenseGame(
       stage: stage,
       campaignModifiers: campaignModifiers,
+      availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
       onStageWon: _handleStageWon,
       onReturnToMap: _returnFromMissionReport,
     );
@@ -533,6 +542,35 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
+  // The blueprint recovery reward is a first-clear fact for stage one only.
+  // Because _missionPriorResult was captured from committed progress at
+  // attempt start, a successful save can advance _committedProgress without
+  // changing the first-clear fact for the completed attempt. Replay
+  // recaptures _missionPriorResult from committed progress (now non-null)
+  // and suppresses duplicate celebration (HPA-528).
+  MissionRewardFact? _missionRewardFact() {
+    if (_missionStageId != OrionCampaign.stageOneId ||
+        _missionPriorResult != null) {
+      return null;
+    }
+
+    return switch (_missionSaveState) {
+      MissionSaveState.saving => const MissionRewardFact(
+        title: 'Blueprint recovery pending',
+        detail: 'Relay Calibration unlocks after this result is saved.',
+      ),
+      MissionSaveState.saved => const MissionRewardFact(
+        title: 'Blueprint recovered: Relay Calibration',
+        detail: 'Available in Salvage Module drafts on future runs.',
+      ),
+      MissionSaveState.failed => const MissionRewardFact(
+        title: 'Blueprint not recovered',
+        detail: 'Retry Save to keep this first-clear reward.',
+      ),
+      null => null,
+    };
+  }
+
   void _returnToMap() {
     if (_missionSaveState == MissionSaveState.saving) {
       return;
@@ -562,7 +600,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    _missionPriorResult = _progress.resultFor(_missionStageId!);
+    _missionPriorResult = _committedProgress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
     _missionSaveState = null;
     // _missionStageId represents the currently running stage, not per-attempt
@@ -570,7 +608,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // Clearing it broke loss → Retry → loss → Retry: a loss never calls
     // _handleStageWon (the only other re-setter besides _startStage), so the
     // second retry hit the `_missionStageId!` null check above.
-    game.restart();
+    game.restart(
+      campaignModifiers: _committedCampaignModifiers(),
+      availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
+    );
   }
 
   Future<void> _confirmResetCampaign() async {
