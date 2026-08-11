@@ -7,9 +7,6 @@ const _unlockStageByModule = <RunModuleId, String>{
 };
 
 abstract final class RunModuleUnlocks {
-  static bool hasFirstBlueprint(CampaignProgress progress) =>
-      progress.isCleared(OrionCampaign.stageOneId);
-
   static Set<RunModuleId> availableFor(CampaignProgress progress) =>
       Set<RunModuleId>.unmodifiable(
         runModuleCatalog.map((definition) => definition.id).where((id) {
