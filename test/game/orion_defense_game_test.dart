@@ -15,6 +15,7 @@ import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/enemy_overlay_state.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
+import 'package:orion/game/rules/run_module_unlocks.dart';
 
 import 'game_test_fixtures.dart';
 
@@ -1970,6 +1971,26 @@ void main() {
         expect(game.snapshot.gold, adjustedStartingGold);
       },
     );
+
+    test('restart forwards refreshed run inputs to the same game session', () {
+      final game = OrionDefenseGame();
+      const refreshed = CampaignModifiers(bonusGold: 25);
+
+      game.restart(
+        campaignModifiers: refreshed,
+        availableRunModules: {
+          ...RunModuleUnlocks.baseModules,
+          RunModuleId.relayCalibration,
+        },
+      );
+
+      expect(game.campaignModifiers, refreshed);
+      expect(game.snapshot.gold, GameBalance.startingGold + 25);
+      expect(game.availableRunModules, contains(RunModuleId.relayCalibration));
+      expect(game.snapshot.acquiredRunModules, isEmpty);
+      expect(game.snapshot.pendingRunModuleOffer, isNull);
+      expect(game.snapshot.phase, GamePhase.build);
+    });
 
     test(
       'boss summons minions that path from its position and block completion',
