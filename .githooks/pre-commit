@@ -1,6 +1,14 @@
 #!/usr/bin/env sh
 set -eu
 
+# Git exposes GIT_DIR (and friends) to hooks, which leaks into child processes
+# that invoke git themselves. Flutter determines its SDK version via its own
+# `git describe`; a leaked GIT_DIR pointing at the host repo makes it report
+# `0.0.0-unknown`, so the SDK-constraint solve in `flutter analyze` fails.
+# Drop these so dart/flutter see their own checkouts.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_QUARANTINE_PATH \
+  GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
+
 if ! command -v dart >/dev/null 2>&1; then
   echo "dart is required to run the pre-commit hook." >&2
   exit 127
