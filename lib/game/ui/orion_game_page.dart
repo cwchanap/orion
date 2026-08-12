@@ -8,11 +8,14 @@ import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_modifier_metadata.dart';
 import '../campaign/tech_tree.dart';
+import '../feedback/feedback_preferences.dart';
+import '../feedback/game_feedback.dart';
 import '../models/game_models.dart';
 import '../orion_defense_game.dart';
 import '../rules/run_module_unlocks.dart';
 import '../util/format.dart';
 import 'codex_view.dart';
+import 'feedback_settings_sheet.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
 import 'run_module_draft_panel.dart';
@@ -32,11 +35,15 @@ class OrionGamePage extends StatefulWidget {
     super.key,
     this.progressStore,
     this.progressStoreLoader,
+    this.feedbackPreferencesStore,
+    this.gameFeedback,
     this.onGameCreated,
   });
 
   final CampaignProgressStore? progressStore;
   final Future<CampaignProgressStore> Function()? progressStoreLoader;
+  final FeedbackPreferencesStore? feedbackPreferencesStore;
+  final GameFeedback? gameFeedback;
   final ValueChanged<OrionDefenseGame>? onGameCreated;
 
   @override
@@ -57,6 +64,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
   CampaignProgressStore? _store;
   String? _mapFeedback;
   String? _techTreeFeedback;
+  FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
+  FeedbackPreferencesStore? _feedbackPreferencesStore;
+  late final GameFeedback _gameFeedback;
   _ShellView _activeView = _ShellView.worldMap;
   bool _isLoading = true;
   int _progressGeneration = 0;
@@ -72,24 +82,45 @@ class _OrionGamePageState extends State<OrionGamePage> {
   @override
   void initState() {
     super.initState();
+    _gameFeedback =
+        widget.gameFeedback ??
+        PlatformGameFeedback(
+          soundEffectsEnabled: () => _feedbackPreferences.soundEffectsEnabled,
+          hapticsEnabled: () => _feedbackPreferences.hapticsEnabled,
+        );
+    // Ownership contract: an injected service is used as-is; otherwise the
+    // page builds the platform default. Reads the field so the contract is
+    // explicit at construction time (the service is wired into the game
+    // instance by a later task).
+    assert(
+      identical(_gameFeedback, widget.gameFeedback) ||
+          widget.gameFeedback == null,
+    );
     _loadProgress();
   }
 
   Future<void> _loadProgress() async {
     CampaignProgressStore? store = widget.progressStore;
+    FeedbackPreferencesStore? feedbackStore = widget.feedbackPreferencesStore;
 
     try {
+      if (store == null && widget.progressStoreLoader == null) {
+        // Campaign falls back to the default SharedPreferences-backed store.
+        // When the feedback store is also defaulted, one SharedPreferences
+        // instance backs both.
+        final preferences = await SharedPreferences.getInstance();
+        store = SharedPreferencesCampaignProgressStore(
+          preferences: preferences,
+          knownStages: OrionCampaign.stages,
+        );
+        feedbackStore ??= SharedPreferencesFeedbackPreferencesStore(
+          preferences: preferences,
+        );
+      }
+
       if (store == null) {
         final loader = widget.progressStoreLoader;
-        if (loader != null) {
-          store = await loader();
-        } else {
-          final preferences = await SharedPreferences.getInstance();
-          store = SharedPreferencesCampaignProgressStore(
-            preferences: preferences,
-            knownStages: OrionCampaign.stages,
-          );
-        }
+        store = await loader!();
       }
 
       final save = await store.load();
@@ -119,6 +150,43 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committedTechTree = CampaignTechTree();
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
+      });
+    }
+
+    // Feedback preferences load independently of campaign progress: a
+    // feedback failure (including default-store construction) falls back to
+    // defaults and never erases (or is erased by) campaign loading.
+    if (feedbackStore == null) {
+      try {
+        final preferences = await SharedPreferences.getInstance();
+        feedbackStore = SharedPreferencesFeedbackPreferencesStore(
+          preferences: preferences,
+        );
+      } catch (_) {
+        feedbackStore = null;
+      }
+    }
+
+    if (feedbackStore == null) {
+      return;
+    }
+
+    try {
+      final loaded = await feedbackStore.load();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _feedbackPreferences = loaded;
+        _feedbackPreferencesStore = feedbackStore;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _feedbackPreferences = const FeedbackPreferences();
+        _feedbackPreferencesStore = feedbackStore;
       });
     }
   }
@@ -166,6 +234,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         onResetCampaign: _confirmResetCampaign,
         onOpenTechTree: _openTechTree,
         onOpenCodex: _openCodex,
+        onOpenSettings: _openFeedbackSettings,
       ),
     );
   }
@@ -285,6 +354,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      sheetAnimationStyle: _sheetAnimationStyle(context),
       builder: (context) => _StageBriefingSheet(
         stage: stage,
         // Aligned with the rest of the committed-state pattern: the briefing
@@ -297,6 +367,65 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     if (shouldStart == true && mounted) {
       _startStage(stage);
+    }
+  }
+
+  // Bottom sheets skip their transition when the platform requests reduced
+  // motion via MediaQuery. Only the stage briefing and feedback settings
+  // sheets use this — module-draft and Mission Report overlays stay static.
+  AnimationStyle? _sheetAnimationStyle(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context)
+      ? AnimationStyle.noAnimation
+      : null;
+
+  Future<void> _openFeedbackSettings() async {
+    final updated = await showModalBottomSheet<FeedbackPreferences>(
+      context: context,
+      useSafeArea: true,
+      isScrollControlled: true,
+      sheetAnimationStyle: _sheetAnimationStyle(context),
+      builder: (context) => FeedbackSettingsSheet(
+        initialPreferences: _feedbackPreferences,
+        reduceMotion: MediaQuery.disableAnimationsOf(context),
+      ),
+    );
+
+    if (updated == null || updated == _feedbackPreferences) {
+      return;
+    }
+    await _saveFeedbackPreferences(updated);
+  }
+
+  Future<void> _saveFeedbackPreferences(FeedbackPreferences updated) async {
+    final store = _feedbackPreferencesStore;
+    if (store == null) {
+      // No store: keep the prior effective value and surface a breadcrumb
+      // like the campaign persistence failure path.
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mapFeedback = 'Could not save feedback settings.';
+      });
+      return;
+    }
+    try {
+      await store.save(updated);
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _feedbackPreferences = updated;
+      });
+    } catch (_) {
+      // Keep the prior effective value; surface a breadcrumb like the
+      // campaign persistence failure path.
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _mapFeedback = 'Could not save feedback settings.';
+      });
     }
   }
 
