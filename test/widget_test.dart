@@ -8,13 +8,34 @@ import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
+import 'package:orion/game/feedback/feedback_preferences.dart';
+import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/world_map_view.dart';
-import 'package:orion/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+/// Common page shell for widget tests. Defaults to a no-op feedback service
+/// so ordinary tests never touch the native audio/haptics layer.
+Widget testGamePage({
+  CampaignProgressStore? progressStore,
+  Future<CampaignProgressStore> Function()? progressStoreLoader,
+  FeedbackPreferencesStore? feedbackPreferencesStore,
+  ValueChanged<OrionDefenseGame>? onGameCreated,
+  GameFeedback gameFeedback = const NoOpGameFeedback(),
+}) {
+  return MaterialApp(
+    home: OrionGamePage(
+      progressStore: progressStore,
+      progressStoreLoader: progressStoreLoader,
+      feedbackPreferencesStore: feedbackPreferencesStore,
+      onGameCreated: onGameCreated,
+      gameFeedback: gameFeedback,
+    ),
+  );
+}
 
 Future<void> startStageFromBriefing(
   WidgetTester tester, {
@@ -44,10 +65,18 @@ Future<InMemoryCampaignProgressStore> storeWithResults(
 }
 
 void main() {
+  // The page now builds a default SharedPreferences-backed feedback store
+  // whenever a test does not inject one, so every test needs the in-memory
+  // plugin mock. Tests that seed specific values call setMockInitialValues
+  // themselves after this, overriding the empty default.
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('boots into the Orion world map first', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
-    await tester.pumpWidget(const OrionApp());
+    await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
     expect(find.text('Orion Sector Map'), findsOneWidget);
@@ -60,13 +89,11 @@ void main() {
   ) async {
     OrionDefenseGame? createdGame;
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: InMemoryCampaignProgressStore(
-            knownStages: OrionCampaign.stages,
-          ),
-          onGameCreated: (game) => createdGame = game,
+      testGamePage(
+        progressStore: InMemoryCampaignProgressStore(
+          knownStages: OrionCampaign.stages,
         ),
+        onGameCreated: (game) => createdGame = game,
       ),
     );
     await tester.pumpAndSettle();
@@ -95,11 +122,9 @@ void main() {
     });
     OrionDefenseGame? createdGame;
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (game) => createdGame = game,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (game) => createdGame = game,
       ),
     );
     await tester.pumpAndSettle();
@@ -121,9 +146,7 @@ void main() {
         stage.id: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
     };
     final store = await storeWithResults(results);
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     for (final stage in OrionCampaign.stages.skip(1)) {
@@ -159,9 +182,7 @@ void main() {
       for (final stage in OrionCampaign.stages)
         stage.id: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
     });
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Core'));
@@ -182,11 +203,9 @@ void main() {
     });
     OrionDefenseGame? game;
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (value) => game = value,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (value) => game = value,
       ),
     );
     await tester.pumpAndSettle();
@@ -207,7 +226,7 @@ void main() {
   testWidgets('starts an unlocked stage from the world map', (tester) async {
     SharedPreferences.setMockInitialValues({});
 
-    await tester.pumpWidget(const OrionApp());
+    await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
     await startStageFromBriefing(tester);
@@ -228,7 +247,7 @@ void main() {
   ) async {
     SharedPreferences.setMockInitialValues({});
 
-    await tester.pumpWidget(const OrionApp());
+    await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
     await startStageFromBriefing(tester);
@@ -248,9 +267,7 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(onGameCreated: (created) => game = created),
-      ),
+      testGamePage(onGameCreated: (created) => game = created),
     );
     await tester.pumpAndSettle();
 
@@ -272,9 +289,7 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(onGameCreated: (created) => game = created),
-      ),
+      testGamePage(onGameCreated: (created) => game = created),
     );
     await tester.pumpAndSettle();
 
@@ -318,9 +333,7 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(onGameCreated: (created) => game = created),
-        ),
+        testGamePage(onGameCreated: (created) => game = created),
       );
       await tester.pumpAndSettle();
 
@@ -368,9 +381,7 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(onGameCreated: (created) => game = created),
-      ),
+      testGamePage(onGameCreated: (created) => game = created),
     );
     await tester.pumpAndSettle();
 
@@ -426,9 +437,7 @@ void main() {
     OrionDefenseGame? createdGame;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(onGameCreated: (game) => createdGame = game),
-      ),
+      testGamePage(onGameCreated: (game) => createdGame = game),
     );
     await tester.pumpAndSettle();
 
@@ -457,7 +466,7 @@ void main() {
       ),
     });
 
-    await tester.pumpWidget(const OrionApp());
+    await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
     expect(find.text('Core'), findsOneWidget);
@@ -483,12 +492,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: _TestCampaignProgressStore(
-            loadError: StateError('no'),
-          ),
-        ),
+      testGamePage(
+        progressStore: _TestCampaignProgressStore(loadError: StateError('no')),
       ),
     );
     await tester.pumpAndSettle();
@@ -509,11 +514,9 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
         ),
       );
       await tester.pumpAndSettle();
@@ -543,11 +546,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -579,11 +580,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -622,11 +621,9 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
         ),
       );
       await tester.pumpAndSettle();
@@ -646,11 +643,9 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
         ),
       );
       await tester.pumpAndSettle();
@@ -707,11 +702,9 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
         ),
       );
       await tester.pumpAndSettle();
@@ -751,11 +744,9 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
         ),
       );
       await tester.pumpAndSettle();
@@ -782,11 +773,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -825,11 +814,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -862,11 +849,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -906,11 +891,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -942,11 +925,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -989,11 +970,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1038,11 +1017,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1088,11 +1065,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1125,11 +1100,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1158,11 +1131,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1194,11 +1165,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1241,11 +1210,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1283,9 +1250,7 @@ void main() {
       saveError: StateError('save failed'),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Tech Tree'));
@@ -1328,9 +1293,7 @@ void main() {
         delaySaves: true,
       );
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Tech Tree'));
@@ -1366,9 +1329,7 @@ void main() {
         failOnSaveIndices: {0},
       );
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Tech Tree'));
@@ -1402,11 +1363,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1445,9 +1404,7 @@ void main() {
         resetResults: [StateError('reset failed')],
       );
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Tech Tree'));
@@ -1498,9 +1455,7 @@ void main() {
       delaySaves: true,
     );
 
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Tech Tree'));
@@ -1531,10 +1486,8 @@ void main() {
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStoreLoader: () async => throw StateError('no store'),
-        ),
+      testGamePage(
+        progressStoreLoader: () async => throw StateError('no store'),
       ),
     );
     await tester.pumpAndSettle();
@@ -1566,11 +1519,9 @@ void main() {
     OrionDefenseGame? createdGame;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStore: store,
-          onGameCreated: (game) => createdGame = game,
-        ),
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (game) => createdGame = game,
       ),
     );
     await tester.pumpAndSettle();
@@ -1621,9 +1572,7 @@ void main() {
         saveError: StateError('save failed'),
       );
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Tech Tree'));
@@ -1661,9 +1610,7 @@ void main() {
         failOnSaveIndices: {0},
       );
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Tech Tree'));
@@ -1707,11 +1654,9 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(
-          progressStoreLoader: () async => throw StateError('no store'),
-          onGameCreated: (created) => game = created,
-        ),
+      testGamePage(
+        progressStoreLoader: () async => throw StateError('no store'),
+        onGameCreated: (created) => game = created,
       ),
     );
     await tester.pumpAndSettle();
@@ -1821,7 +1766,7 @@ void main() {
     (tester) async {
       SharedPreferences.setMockInitialValues({});
 
-      await tester.pumpWidget(const OrionApp());
+      await tester.pumpWidget(testGamePage());
       await tester.pumpAndSettle();
 
       // Sanity: button is present on the world map header.
@@ -1981,9 +1926,7 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(onGameCreated: (created) => game = created),
-        ),
+        testGamePage(onGameCreated: (created) => game = created),
       );
       await tester.pumpAndSettle();
       await startStageFromBriefing(tester);
@@ -2036,9 +1979,7 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(onGameCreated: (created) => game = created),
-      ),
+      testGamePage(onGameCreated: (created) => game = created),
     );
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester);
@@ -2085,9 +2026,7 @@ void main() {
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(onGameCreated: (created) => game = created),
-      ),
+      testGamePage(onGameCreated: (created) => game = created),
     );
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester);
@@ -2141,9 +2080,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: OrionGamePage(onGameCreated: (created) => game = created),
-      ),
+      testGamePage(onGameCreated: (created) => game = created),
     );
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester);
@@ -2214,11 +2151,9 @@ void main() {
 
       OrionDefenseGame? game;
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
         ),
       );
       await tester.pumpAndSettle();
@@ -2246,9 +2181,7 @@ void main() {
       knownStages: OrionCampaign.stages,
     );
 
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     expect(find.text('Reward: +30 Gold'), findsOneWidget);
@@ -2284,9 +2217,7 @@ void main() {
       ),
     );
 
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     expect(find.text('+30 Gold'), findsOneWidget);
@@ -2333,9 +2264,7 @@ void main() {
         ),
       );
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       expect(
@@ -2359,9 +2288,7 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       expect(find.text('Blueprint • Locked'), findsOneWidget);
@@ -2379,9 +2306,7 @@ void main() {
         ),
       });
 
-      await tester.pumpWidget(
-        MaterialApp(home: OrionGamePage(progressStore: store)),
-      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
       expect(find.text('Blueprint • Recovered'), findsOneWidget);
@@ -2399,9 +2324,7 @@ void main() {
       ),
     });
 
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Alpha'));
@@ -2418,9 +2341,7 @@ void main() {
       knownStages: OrionCampaign.stages,
     );
 
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Alpha'));
@@ -2443,9 +2364,7 @@ void main() {
       ),
     });
 
-    await tester.pumpWidget(
-      MaterialApp(home: OrionGamePage(progressStore: store)),
-    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
     expect(find.text('Blueprint • Recovered'), findsOneWidget);
@@ -2470,11 +2389,9 @@ void main() {
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: OrionGamePage(
-            progressStore: store,
-            onGameCreated: (created) => game = created,
-          ),
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
         ),
       );
       await tester.pumpAndSettle();
@@ -2496,6 +2413,131 @@ void main() {
       );
     },
   );
+
+  testWidgets(
+    'feedback settings reflect loaded preferences and persist toggles',
+    (tester) async {
+      final feedbackStore = InMemoryFeedbackPreferencesStore(
+        value: const FeedbackPreferences(
+          soundEffectsEnabled: false,
+          hapticsEnabled: true,
+        ),
+      );
+
+      await tester.pumpWidget(
+        testGamePage(feedbackPreferencesStore: feedbackStore),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+
+      SwitchListTile soundSwitch() => tester.widget<SwitchListTile>(
+        find.widgetWithText(SwitchListTile, 'Sound Effects'),
+      );
+      SwitchListTile hapticsSwitch() => tester.widget<SwitchListTile>(
+        find.widgetWithText(SwitchListTile, 'Haptics'),
+      );
+      expect(soundSwitch().value, isFalse);
+      expect(hapticsSwitch().value, isTrue);
+
+      // Toggle only Haptics off, then Done persists the draft.
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
+      await tester.pump();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      expect(
+        feedbackStore.value,
+        const FeedbackPreferences(
+          soundEffectsEnabled: false,
+          hapticsEnabled: false,
+        ),
+      );
+
+      // Reopening Settings shows the effective saved state.
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      expect(soundSwitch().value, isFalse);
+      expect(hapticsSwitch().value, isFalse);
+    },
+  );
+
+  testWidgets('failed feedback save keeps values and shows breadcrumb', (
+    tester,
+  ) async {
+    final feedbackStore = _FailingFeedbackPreferencesStore(
+      value: const FeedbackPreferences(
+        soundEffectsEnabled: true,
+        hapticsEnabled: true,
+      ),
+    );
+
+    await tester.pumpWidget(
+      testGamePage(feedbackPreferencesStore: feedbackStore),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    // Effective values stay unchanged; the failure surfaces as a breadcrumb.
+    expect(find.text('Could not save feedback settings.'), findsOneWidget);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    final soundSwitch = tester.widget<SwitchListTile>(
+      find.widgetWithText(SwitchListTile, 'Sound Effects'),
+    );
+    expect(soundSwitch.value, isTrue);
+  });
+
+  testWidgets('campaign reset leaves feedback preferences untouched', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+        'aurora-gate',
+      }),
+    );
+    final feedbackStore = InMemoryFeedbackPreferencesStore(
+      value: const FeedbackPreferences(
+        soundEffectsEnabled: false,
+        hapticsEnabled: false,
+      ),
+    );
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        feedbackPreferencesStore: feedbackStore,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Blueprint • Recovered'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Reset Campaign'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    // Campaign reset while the non-default feedback preferences survive.
+    expect(find.text('Blueprint • Locked'), findsOneWidget);
+    expect(find.text('Blueprint • Recovered'), findsNothing);
+    expect(
+      feedbackStore.value,
+      const FeedbackPreferences(
+        soundEffectsEnabled: false,
+        hapticsEnabled: false,
+      ),
+    );
+  });
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
@@ -2666,5 +2708,19 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
 
     progress = CampaignProgress();
     techTree = CampaignTechTree();
+  }
+}
+
+class _FailingFeedbackPreferencesStore implements FeedbackPreferencesStore {
+  _FailingFeedbackPreferencesStore({this.value = const FeedbackPreferences()});
+
+  FeedbackPreferences value;
+
+  @override
+  Future<FeedbackPreferences> load() async => value;
+
+  @override
+  Future<void> save(FeedbackPreferences preferences) async {
+    throw StateError('feedback save failed');
   }
 }

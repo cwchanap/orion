@@ -19,6 +19,7 @@ class WorldMapView extends StatelessWidget {
     required this.onResetCampaign,
     this.onOpenTechTree,
     this.onOpenCodex,
+    this.onOpenSettings,
   });
 
   final List<StageDefinition> stages;
@@ -32,6 +33,7 @@ class WorldMapView extends StatelessWidget {
   final VoidCallback onResetCampaign;
   final VoidCallback? onOpenTechTree;
   final VoidCallback? onOpenCodex;
+  final VoidCallback? onOpenSettings;
 
   bool get _isBusy => isSavingProgress || isResetting;
 
@@ -59,6 +61,8 @@ class WorldMapView extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Orion Sector Map',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: theme.textTheme.headlineSmall?.copyWith(
                       fontWeight: FontWeight.w700,
                     ),
@@ -81,6 +85,12 @@ class WorldMapView extends StatelessWidget {
                   onPressed: _isBusy ? null : onResetCampaign,
                   icon: const Icon(Icons.restart_alt),
                 ),
+                if (onOpenSettings != null)
+                  IconButton(
+                    tooltip: 'Settings',
+                    onPressed: _isBusy ? null : onOpenSettings,
+                    icon: const Icon(Icons.settings),
+                  ),
               ],
             ),
             if (effectiveFeedback != null) ...[
