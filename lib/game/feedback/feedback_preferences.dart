@@ -91,9 +91,10 @@ FeedbackPreferences _decode(String? source) {
     );
   } on FormatException {
     return const FeedbackPreferences();
-  } on TypeError {
-    return const FeedbackPreferences();
   }
+  // A TypeError here (e.g. an unexpected runtime type surfaced by jsonDecode)
+  // propagates to load()'s `on TypeError` handler, which falls back to
+  // defaults — so a duplicate catch here would be unreachable.
 }
 
 class InMemoryFeedbackPreferencesStore implements FeedbackPreferencesStore {

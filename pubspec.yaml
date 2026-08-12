@@ -52,6 +52,10 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  # Declared so tests can stub SharedPreferences' platform store (e.g. to
+  # simulate a rejected write). It is a transitive dependency of
+  # shared_preferences; pinning it here satisfies depend_on_referenced_packages.
+  shared_preferences_platform_interface: ^2.4.2
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
