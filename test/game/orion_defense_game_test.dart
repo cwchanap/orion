@@ -10,6 +10,7 @@ import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/gravity_field_component.dart';
 import 'package:orion/game/components/projectile_component.dart';
 import 'package:orion/game/components/tower_component.dart';
+import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
@@ -18,6 +19,32 @@ import 'package:orion/game/rules/module_offer_picker.dart';
 import 'package:orion/game/rules/run_module_unlocks.dart';
 
 import 'game_test_fixtures.dart';
+
+enum _RecordedFeedbackCall {
+  towerConfirmed,
+  waveCleared,
+  moduleSelected,
+  bossDefeated,
+  missionVictory,
+  baseDefeated,
+}
+
+final class _RecordingGameFeedback implements GameFeedback {
+  final calls = <_RecordedFeedbackCall>[];
+
+  @override
+  void towerConfirmed() => calls.add(_RecordedFeedbackCall.towerConfirmed);
+  @override
+  void waveCleared() => calls.add(_RecordedFeedbackCall.waveCleared);
+  @override
+  void moduleSelected() => calls.add(_RecordedFeedbackCall.moduleSelected);
+  @override
+  void bossDefeated() => calls.add(_RecordedFeedbackCall.bossDefeated);
+  @override
+  void missionVictory() => calls.add(_RecordedFeedbackCall.missionVictory);
+  @override
+  void baseDefeated() => calls.add(_RecordedFeedbackCall.baseDefeated);
+}
 
 final class _FixedModuleOfferPicker implements ModuleOfferPicker {
   _FixedModuleOfferPicker(this.offers);
@@ -456,6 +483,162 @@ void main() {
         );
       },
     );
+
+    test('successful place, upgrade, and specialize each confirm once', () {
+      final feedback = _RecordingGameFeedback();
+      final game = OrionDefenseGame(
+        stage: stageWithWaveCount(2),
+        // bonusGold covers place(50) + upgrade(70) + specialize(120) = 240.
+        campaignModifiers: const CampaignModifiers(bonusGold: 100),
+        gameFeedback: feedback,
+      );
+      game.onGameResize(Vector2(800, 1200));
+
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+
+      expect(feedback.calls, [_RecordedFeedbackCall.towerConfirmed]);
+
+      _tapCell(game, const GridPosition(0, 1));
+      game.upgradeSelectedTower();
+
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.towerConfirmed,
+        _RecordedFeedbackCall.towerConfirmed,
+      ]);
+
+      _tapCell(game, const GridPosition(0, 1));
+      game.specializeSelectedTower(TowerSpecialization.prismLaser);
+
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.towerConfirmed,
+        _RecordedFeedbackCall.towerConfirmed,
+        _RecordedFeedbackCall.towerConfirmed,
+      ]);
+    });
+
+    test('rejected or unselected tower actions stay silent', () {
+      final feedback = _RecordingGameFeedback();
+      final game = OrionDefenseGame(
+        stage: stageWithWaveCount(2),
+        gameFeedback: feedback,
+      );
+
+      // No cell selected / no tower selected → no cue.
+      game.placeTower(TowerType.laser);
+      game.upgradeSelectedTower();
+      game.specializeSelectedTower(TowerSpecialization.prismLaser);
+      expect(feedback.calls, isEmpty);
+
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+      expect(feedback.calls, [_RecordedFeedbackCall.towerConfirmed]);
+
+      // Specializing before upgrading is rejected → silent.
+      _tapCell(game, const GridPosition(0, 1)); // select the placed tower
+      game.specializeSelectedTower(TowerSpecialization.prismLaser);
+      expect(feedback.calls, [_RecordedFeedbackCall.towerConfirmed]);
+
+      // Upgrade succeeds once; the maxed second upgrade is rejected → silent.
+      game.upgradeSelectedTower();
+      expect(feedback.calls, hasLength(2));
+      game.upgradeSelectedTower();
+      expect(feedback.calls, hasLength(2));
+    });
+
+    test('module selection confirms once and stale repeats stay silent', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+      ]);
+      final feedback = _RecordingGameFeedback();
+      final game = OrionDefenseGame(
+        stage: stageWithWaveCount(8),
+        moduleOfferPicker: picker,
+        gameFeedback: feedback,
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0); // wave 1
+      game.startWave();
+      game.update(0); // wave 2 opens the draft
+      final offer = game.snapshot.pendingRunModuleOffer!;
+
+      game.selectRunModule(offer.offerId, RunModuleId.heavyCaliber);
+
+      // Waves 1-2 were cleared on the way to the draft.
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.waveCleared,
+        _RecordedFeedbackCall.waveCleared,
+        _RecordedFeedbackCall.moduleSelected,
+      ]);
+
+      // Re-selecting the already-resolved offer is a stale no-op → silent.
+      game.selectRunModule(offer.offerId, RunModuleId.heavyCaliber);
+
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.waveCleared,
+        _RecordedFeedbackCall.waveCleared,
+        _RecordedFeedbackCall.moduleSelected,
+      ]);
+    });
+
+    test(
+      'non-terminal clears confirm waveCleared and the final clear wins',
+      () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(2),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        game.startWave();
+        game.update(0); // clear wave 1 → non-terminal
+
+        expect(feedback.calls, [_RecordedFeedbackCall.waveCleared]);
+
+        game.startWave();
+        game.update(0); // clear wave 2 → terminal victory
+
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveCleared,
+          _RecordedFeedbackCall.missionVictory,
+        ]);
+        expect(game.snapshot.phase, GamePhase.won);
+
+        game.update(0);
+
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveCleared,
+          _RecordedFeedbackCall.missionVictory,
+        ]);
+      },
+    );
+
+    test('resize and lifecycle processing cannot replay feedback cues', () {
+      final feedback = _RecordingGameFeedback();
+      final game = OrionDefenseGame(
+        stage: stageWithWaveCount(2),
+        gameFeedback: feedback,
+      );
+      game.onGameResize(Vector2(800, 1200));
+      game.startWave();
+      game.update(0); // clear wave 1 → one waveCleared
+      expect(feedback.calls, [_RecordedFeedbackCall.waveCleared]);
+
+      game.onGameResize(Vector2(390, 640));
+      game.processLifecycleEvents();
+      game.update(0);
+
+      expect(feedback.calls, [_RecordedFeedbackCall.waveCleared]);
+    });
 
     test(
       'update during a pending draft clears any stale auto-start countdown',
@@ -2123,8 +2306,176 @@ void main() {
       },
     );
 
+    test('killing a boss fires bossDefeated exactly once', () async {
+      final feedback = _RecordingGameFeedback();
+      final game = OrionDefenseGame(
+        stage: _bossSummonStage(),
+        gameFeedback: feedback,
+      );
+      game.onGameResize(Vector2(800, 1200));
+      await game.onLoad();
+      // FlameGame is never mounted in unit tests (no GameWidget drives the
+      // lifecycle), so removeFromParent() during super.update modifies the
+      // children set immediately instead of enqueueing — causing concurrent
+      // modification when the projectile lands and removes itself mid-
+      // iteration. setMounted() puts the game into the mounted state so
+      // removals enqueue.
+      // ignore: invalid_use_of_internal_member
+      game.setMounted();
+      game.startWave();
+      game.update(0.01);
+      game.processLifecycleEvents();
+      final boss = game.children.whereType<EnemyComponent>().single;
+      expect(boss.stats, isA<BossDefinition>());
+
+      // Advance the boss past firstDelay so minions are alive when it dies.
+      // The survivors block wave completion, keeping the clear non-terminal
+      // (no waveCleared) and isolating the bossDefeated cue.
+      game.update(0.5 + 0.01);
+      game.processLifecycleEvents();
+      expect(
+        game.children.whereType<EnemyComponent>().where((e) => e != boss),
+        isNotEmpty,
+        reason: 'summoned minions must block wave completion',
+      );
+
+      // Mount a real lethal projectile 50 units from the boss so it does NOT
+      // land on update(0) (50 > max(0, 11)) but DOES land on update(1)
+      // (50 <= projectileSpeed * 1). damage=5000 exceeds the boss's 5000
+      // health cap via maxHealth.
+      const projectileStats = TowerStats(
+        type: TowerType.laser,
+        level: 1,
+        cost: 0,
+        upgradeCost: 0,
+        specializationCost: 0,
+        range: 100,
+        damage: 5000,
+        fireInterval: 1,
+        projectileSpeed: 10000,
+        splashRadius: 0,
+        slowMultiplier: 1,
+        slowDuration: 0,
+        corrosionDamagePerSecond: 0,
+        corrosionDuration: 0,
+        armorShred: 0,
+      );
+      game.add(
+        ProjectileComponent(
+          stats: projectileStats,
+          target: boss,
+          startPosition: boss.position + Vector2(50, 0),
+          enemiesProvider: () => game.children.whereType<EnemyComponent>(),
+          priority: 30,
+        ),
+      );
+      game.update(0);
+      game.processLifecycleEvents();
+      expect(
+        feedback.calls,
+        isEmpty,
+        reason: 'projectile must not land on the mount frame',
+      );
+
+      game.update(1);
+      game.processLifecycleEvents();
+
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.bossDefeated,
+      ], reason: 'the kill resolves during super.update');
+      // Minions survive so the wave is not complete — phase stays wave.
+      expect(game.snapshot.phase, GamePhase.wave);
+
+      // Lifecycle/update work after resolution appends nothing.
+      game.update(0);
+      game.processLifecycleEvents();
+      expect(feedback.calls, [_RecordedFeedbackCall.bossDefeated]);
+    });
+
+    test(
+      'final-boss kill and mission victory fire in one frame in order',
+      () async {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _singleBossVictoryStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // FlameGame is never mounted in unit tests (no GameWidget drives the
+        // lifecycle), so removeFromParent() during super.update modifies the
+        // children set immediately instead of enqueueing — causing concurrent
+        // modification when the projectile lands and removes itself mid-
+        // iteration. setMounted() puts the game into the mounted state so
+        // removals enqueue.
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final boss = game.children.whereType<EnemyComponent>().single;
+        expect(boss.stats, isA<BossDefinition>());
+
+        // Lethal projectile 50 units from the boss: lands on update(1) during
+        // super.update (kill → bossDefeated), then _finishWaveIfComplete runs
+        // later in the SAME frame (victory → missionVictory).
+        const projectileStats = TowerStats(
+          type: TowerType.laser,
+          level: 1,
+          cost: 0,
+          upgradeCost: 0,
+          specializationCost: 0,
+          range: 100,
+          damage: 1000,
+          fireInterval: 1,
+          projectileSpeed: 10000,
+          splashRadius: 0,
+          slowMultiplier: 1,
+          slowDuration: 0,
+          corrosionDamagePerSecond: 0,
+          corrosionDuration: 0,
+          armorShred: 0,
+        );
+        game.add(
+          ProjectileComponent(
+            stats: projectileStats,
+            target: boss,
+            startPosition: boss.position + Vector2(50, 0),
+            enemiesProvider: () => game.children.whereType<EnemyComponent>(),
+            priority: 30,
+          ),
+        );
+        // update(0) mounts the projectile without it landing (scaledDt=0,
+        // 50 > max(0, radius=11)).
+        game.update(0);
+        game.processLifecycleEvents();
+        // dt=1: the projectile lands during super.update, killing the boss.
+        // _finishWaveIfComplete then clears the only wave → victory.
+        game.update(1);
+        game.processLifecycleEvents();
+
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.bossDefeated,
+          _RecordedFeedbackCall.missionVictory,
+        ]);
+        expect(game.snapshot.phase, GamePhase.won);
+
+        // Follow-up frames must not replay or add a waveCleared token.
+        game.update(0);
+        game.processLifecycleEvents();
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.bossDefeated,
+          _RecordedFeedbackCall.missionVictory,
+        ]);
+      },
+    );
+
     test('defeat mid-tick stops ticking remaining enemies', () {
-      final game = OrionDefenseGame(stage: _twoEnemyDefeatStage());
+      final feedback = _RecordingGameFeedback();
+      final game = OrionDefenseGame(
+        stage: _twoEnemyDefeatStage(),
+        gameFeedback: feedback,
+      );
       game.onGameResize(Vector2(800, 1200));
       game.startWave();
       game.update(0.01);
@@ -2142,6 +2493,11 @@ void main() {
       game.update(60);
       game.processLifecycleEvents();
       expect(game.snapshot.phase, GamePhase.lost);
+      expect(
+        feedback.calls,
+        [_RecordedFeedbackCall.baseDefeated],
+        reason: 'base defeat fires exactly once on the wave → lost transition',
+      );
       // reach-base never rewards gold; a spurious onKilled for the trailing
       // enemy would have called rewardKill and increased gold.
       expect(game.snapshot.gold, goldBefore);
@@ -2149,6 +2505,12 @@ void main() {
       // post-tick phase guard prevents _spawnWaveEnemies from repopulating the
       // board. No remainder enemy may survive or be freshly spawned.
       expect(game.children.whereType<EnemyComponent>(), isEmpty);
+
+      // A follow-up frame after defeat must not replay the cue.
+      game.update(0);
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.baseDefeated,
+      ], reason: 'post-defeat updates must not replay base defeat');
     });
 
     test(
@@ -2447,6 +2809,39 @@ StageDefinition _bossSummonStage() {
       ),
       // A trailing empty wave so clearing the boss wave lands in build phase.
       WaveDefinition(groups: [], clearBonus: 0),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _singleBossVictoryStage() {
+  return StageDefinition(
+    id: 'single-boss-victory-stage',
+    name: 'Single Boss Victory Stage',
+    mapLabel: 'Boss',
+    description: 'One boss for same-frame victory feedback tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 1,
+            enemyStats: BossDefinition(
+              health: 50,
+              speed: 0,
+              baseDamage: 1,
+              goldReward: 0,
+              sprite: BossSprite.swarmQueen,
+              name: 'Test Boss',
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
     ],
     unlockDependencies: const [],
     isMainPath: true,
