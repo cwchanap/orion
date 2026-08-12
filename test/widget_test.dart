@@ -74,8 +74,6 @@ void main() {
   });
 
   testWidgets('boots into the Orion world map first', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-
     await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
@@ -224,8 +222,6 @@ void main() {
   });
 
   testWidgets('starts an unlocked stage from the world map', (tester) async {
-    SharedPreferences.setMockInitialValues({});
-
     await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
@@ -245,8 +241,6 @@ void main() {
   testWidgets('mission screen exposes pause speed and auto-start controls', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
-
     await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
@@ -263,7 +257,6 @@ void main() {
   testWidgets('victory panel shows earned medal and base health', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
@@ -285,7 +278,6 @@ void main() {
   });
 
   testWidgets('loss panel hides the environment reminder', (tester) async {
-    SharedPreferences.setMockInitialValues({});
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
@@ -329,7 +321,6 @@ void main() {
   testWidgets(
     'next wave panel stays visible while planning and hides in wave',
     (tester) async {
-      SharedPreferences.setMockInitialValues({});
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
@@ -377,7 +368,6 @@ void main() {
   );
 
   testWidgets('next wave panel omits zero clear bonus text', (tester) async {
-    SharedPreferences.setMockInitialValues({});
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
@@ -433,7 +423,6 @@ void main() {
   testWidgets('locked stage tap shows feedback and stays on map', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
     OrionDefenseGame? createdGame;
 
     await tester.pumpWidget(
@@ -1764,8 +1753,6 @@ void main() {
   testWidgets(
     'tapping Tech Tree button opens TechTreeView and back returns to map',
     (tester) async {
-      SharedPreferences.setMockInitialValues({});
-
       await tester.pumpWidget(testGamePage());
       await tester.pumpAndSettle();
 
@@ -1922,7 +1909,6 @@ void main() {
   testWidgets(
     'selected tower panel shows targeting chips reflecting the current mode',
     (tester) async {
-      SharedPreferences.setMockInitialValues({});
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
@@ -1975,7 +1961,6 @@ void main() {
   );
 
   testWidgets('targeting chips are disabled during wave phase', (tester) async {
-    SharedPreferences.setMockInitialValues({});
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
@@ -2022,7 +2007,6 @@ void main() {
   testWidgets('tapping a targeting chip invokes game.setTargetingMode', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
@@ -2072,7 +2056,6 @@ void main() {
   testWidgets('selected tower panel stacks summary and actions when narrow', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
     OrionDefenseGame? game;
 
     tester.view.physicalSize = const Size(400, 1200);
@@ -2123,7 +2106,6 @@ void main() {
   testWidgets(
     'starting a stage after clearing salvage rift applies bonus gold',
     (tester) async {
-      SharedPreferences.setMockInitialValues({});
       final store = InMemoryCampaignProgressStore(
         knownStages: OrionCampaign.stages,
       );
@@ -2176,7 +2158,6 @@ void main() {
   testWidgets('world map shows reward teaser on uncleared side stage', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
     final store = InMemoryCampaignProgressStore(
       knownStages: OrionCampaign.stages,
     );
@@ -2191,7 +2172,6 @@ void main() {
   testWidgets('world map shows earned reward label on cleared side stage', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
     final store = InMemoryCampaignProgressStore(
       knownStages: OrionCampaign.stages,
     );
@@ -2226,7 +2206,6 @@ void main() {
   testWidgets(
     'world map shows challenge badge when both side stages are cleared',
     (tester) async {
-      SharedPreferences.setMockInitialValues({});
       final store = InMemoryCampaignProgressStore(
         knownStages: OrionCampaign.stages,
       );
@@ -2283,7 +2262,6 @@ void main() {
   testWidgets(
     'fresh world map shows Alpha blueprint locked and no recovered row',
     (tester) async {
-      SharedPreferences.setMockInitialValues({});
       final store = InMemoryCampaignProgressStore(
         knownStages: OrionCampaign.stages,
       );
@@ -2336,7 +2314,6 @@ void main() {
   testWidgets('fresh Alpha briefing omits the blueprint recovered line', (
     tester,
   ) async {
-    SharedPreferences.setMockInitialValues({});
     final store = InMemoryCampaignProgressStore(
       knownStages: OrionCampaign.stages,
     );

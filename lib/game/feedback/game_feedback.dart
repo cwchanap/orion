@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flame_audio/flame_audio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 abstract interface class GameFeedback {
@@ -33,9 +34,7 @@ final class PlatformGameFeedback implements GameFeedback {
   PlatformGameFeedback({
     required this.soundEffectsEnabled,
     required this.hapticsEnabled,
-  }) {
-    unawaited(_warmAudioCache());
-  }
+  });
 
   static const sounds = [
     'confirm.wav',
@@ -46,6 +45,8 @@ final class PlatformGameFeedback implements GameFeedback {
 
   final bool Function() soundEffectsEnabled;
   final bool Function() hapticsEnabled;
+
+  bool _audioCacheWarmed = false;
 
   @override
   void towerConfirmed() =>
@@ -72,6 +73,10 @@ final class PlatformGameFeedback implements GameFeedback {
 
   void _emit({String? sound, Future<void> Function()? haptic}) {
     if (sound != null && soundEffectsEnabled()) {
+      if (!_audioCacheWarmed) {
+        _audioCacheWarmed = true;
+        unawaited(_warmAudioCache());
+      }
       unawaited(_playSound(sound));
     }
     if (haptic != null && hapticsEnabled()) {
@@ -82,18 +87,24 @@ final class PlatformGameFeedback implements GameFeedback {
   Future<void> _warmAudioCache() async {
     try {
       await FlameAudio.audioCache.loadAll(sounds);
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('PlatformGameFeedback: failed to warm audio cache: $error');
+    }
   }
 
   Future<void> _playSound(String sound) async {
     try {
       await FlameAudio.play(sound);
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('PlatformGameFeedback: failed to play sound "$sound": $error');
+    }
   }
 
   Future<void> _playHaptic(Future<void> Function() haptic) async {
     try {
       await haptic();
-    } catch (_) {}
+    } catch (error) {
+      debugPrint('PlatformGameFeedback: haptic feedback failed: $error');
+    }
   }
 }

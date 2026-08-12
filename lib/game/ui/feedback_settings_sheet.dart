@@ -31,53 +31,64 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'Feedback',
-              style: theme.textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Feedback',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              title: const Text('Sound Effects'),
-              value: _draft.soundEffectsEnabled,
-              onChanged: (enabled) {
-                setState(() {
-                  _draft = _draft.copyWith(soundEffectsEnabled: enabled);
-                });
-              },
-            ),
-            SwitchListTile(
-              title: const Text('Haptics'),
-              value: _draft.hapticsEnabled,
-              onChanged: (enabled) {
-                setState(() {
-                  _draft = _draft.copyWith(hapticsEnabled: enabled);
-                });
-              },
-            ),
-            SwitchListTile(
-              title: const Text('Reduced Motion'),
-              subtitle: Text(
-                widget.reduceMotion
-                    ? 'Follows system • On'
-                    : 'Follows system • Off',
+              const SizedBox(height: 8),
+              SwitchListTile(
+                title: const Text('Sound Effects'),
+                value: _draft.soundEffectsEnabled,
+                onChanged: (enabled) {
+                  setState(() {
+                    _draft = _draft.copyWith(soundEffectsEnabled: enabled);
+                  });
+                },
               ),
-              // Informational only: reduced motion follows the system
-              // MediaQuery setting and is not persisted.
-              value: widget.reduceMotion,
-              onChanged: null,
-            ),
-            const SizedBox(height: 8),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(_draft),
-              child: const Text('Done'),
-            ),
-          ],
+              SwitchListTile(
+                title: const Text('Haptics'),
+                value: _draft.hapticsEnabled,
+                onChanged: (enabled) {
+                  setState(() {
+                    _draft = _draft.copyWith(hapticsEnabled: enabled);
+                  });
+                },
+              ),
+              ListTile(
+                title: const Text('Reduced Motion'),
+                subtitle: Text(
+                  widget.reduceMotion
+                      ? 'Follows system • On'
+                      : 'Follows system • Off',
+                ),
+                // Informational only: reduced motion follows the system
+                // MediaQuery setting and is not persisted. A plain ListTile
+                // with a status icon avoids the disabled-switch look.
+                trailing: Semantics(
+                  label: widget.reduceMotion
+                      ? 'Reduced motion on'
+                      : 'Reduced motion off',
+                  child: Icon(
+                    widget.reduceMotion
+                        ? Icons.check_circle_outline
+                        : Icons.radio_button_unchecked,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              FilledButton(
+                onPressed: () => Navigator.of(context).pop(_draft),
+                child: const Text('Done'),
+              ),
+            ],
+          ),
         ),
       ),
     );

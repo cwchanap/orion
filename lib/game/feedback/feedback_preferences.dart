@@ -47,7 +47,13 @@ class SharedPreferencesFeedbackPreferencesStore
 
   @override
   Future<FeedbackPreferences> load() async {
-    return _decode(preferences.getString(key));
+    try {
+      return _decode(preferences.getString(key));
+    } on TypeError {
+      // A non-string value stored under key (e.g. a stray bool) makes
+      // SharedPreferences.getString throw before _decode is reached.
+      return const FeedbackPreferences();
+    }
   }
 
   @override
