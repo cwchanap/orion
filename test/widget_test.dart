@@ -2495,6 +2495,65 @@ void main() {
     expect(soundSwitch.value, isTrue);
   });
 
+  testWidgets('settings stay disabled while feedback save is in flight', (
+    tester,
+  ) async {
+    // A slow store: save() blocks on a completer the test controls, so the
+    // save stays pending until the test releases it.
+    final feedbackStore = _DelayedFeedbackPreferencesStore(
+      value: const FeedbackPreferences(
+        soundEffectsEnabled: true,
+        hapticsEnabled: true,
+      ),
+    );
+
+    await tester.pumpWidget(
+      testGamePage(feedbackPreferencesStore: feedbackStore),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    // The save is still pending: the Settings button is disabled and the
+    // prior effective value is untouched.
+    IconButton settingsButton() => tester.widget<IconButton>(
+      find.widgetWithIcon(IconButton, Icons.settings),
+    );
+    expect(settingsButton().onPressed, isNull);
+    expect(
+      feedbackStore.value,
+      const FeedbackPreferences(
+        soundEffectsEnabled: true,
+        hapticsEnabled: true,
+      ),
+    );
+
+    // Release the save; the button re-enables and the new value is
+    // effective in the reopened sheet.
+    feedbackStore.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+    expect(settingsButton().onPressed, isNotNull);
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    final soundSwitch = tester.widget<SwitchListTile>(
+      find.widgetWithText(SwitchListTile, 'Sound Effects'),
+    );
+    expect(soundSwitch.value, isFalse);
+    expect(
+      feedbackStore.value,
+      const FeedbackPreferences(
+        soundEffectsEnabled: false,
+        hapticsEnabled: true,
+      ),
+    );
+  });
+
   testWidgets('campaign reset leaves feedback preferences untouched', (
     tester,
   ) async {
@@ -2806,5 +2865,23 @@ class _FailingFeedbackPreferencesStore implements FeedbackPreferencesStore {
   @override
   Future<void> save(FeedbackPreferences preferences) async {
     throw StateError('feedback save failed');
+  }
+}
+
+class _DelayedFeedbackPreferencesStore implements FeedbackPreferencesStore {
+  _DelayedFeedbackPreferencesStore({this.value = const FeedbackPreferences()});
+
+  FeedbackPreferences value;
+  final List<Completer<void>> saveCompletions = [];
+
+  @override
+  Future<FeedbackPreferences> load() async => value;
+
+  @override
+  Future<void> save(FeedbackPreferences preferences) async {
+    final completer = Completer<void>();
+    saveCompletions.add(completer);
+    await completer.future;
+    value = preferences;
   }
 }
