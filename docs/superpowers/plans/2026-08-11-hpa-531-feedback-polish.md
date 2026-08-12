@@ -4,27 +4,30 @@
 
 **Goal:** Add a small set of one-shot sound/haptic cues plus system Reduced Motion support without changing gameplay authority or introducing a generalized feedback platform.
 
-**Architecture:** Keep feedback in the Flame/UI integration layer. `OrionDefenseGame` invokes a six-method `GameFeedback` interface only after existing authoritative mutations/results succeed. `OrionGamePage` owns two persisted feedback booleans and passes one `PlatformGameFeedback` into each game. Reduced Motion follows `MediaQuery.disableAnimations` and only disables the shell bottom-sheet transitions that currently move.
+**Architecture:** Keep feedback in the Flame/UI integration layer. `OrionDefenseGame` invokes a six-method `GameFeedback` interface only after existing authoritative mutations/results succeed. `OrionGamePage` owns two persisted feedback booleans and passes one `PlatformGameFeedback` into each game. Reduced Motion follows `MediaQuery.disableAnimations` and disables only the shell bottom-sheet transitions that currently move.
 
 **Tech Stack:** Dart 3.12+, Flutter 3.44+, Flame 1.37+, `shared_preferences` 2.5.5, `flame_audio` 2.12.2, `flutter_test`.
 
 ## Global Constraints
 
-- Keep the catalog to the six HPA-531 moments: tower confirmation, wave clear, module selection, boss defeat, mission victory, base defeat.
+- Keep the catalog to six HPA-531 moments: tower confirmation, wave clear, module selection, boss defeat, mission victory, base defeat.
 - No per-hit, per-projectile, tower-shot, enemy-spawn, or other high-frequency feedback.
-- No semantic `GameEvent` enum, event bus, queue, scheduler, priority system, dedup layer, or rate-limit framework.
+- No semantic `GameEvent` enum, event bus, queue, scheduler, priority system, dedup layer, rate-limit framework, or lifecycle replay state.
 - No screen shake.
 - Feedback never mutates `GameSession` or any gameplay model.
 - Trigger only after authoritative methods report success.
 - Final-wave victory replaces generic wave-clear feedback.
-- Boss defeat is haptic-only in this first slice to avoid sound overlap with immediate mission victory.
+- Boss defeat is haptic-only in this first slice; the final-boss overlap is covered explicitly rather than solved with a scheduler.
 - Sound and haptics are separately persisted booleans.
+- `FeedbackPreferences` is a value type with `copyWith`, `==`, and `hashCode`.
 - Feedback preferences live outside `CampaignSave`; campaign reset must not remove them.
 - Do not version or migrate the feedback settings.
 - Reduced Motion follows the OS setting; do not persist a third toggle.
+- The Reduced Motion helper and every production call site land in the same task so intermediate commits compile.
 - Existing module-draft and Mission Report overlays stay immediate/static.
 - Audio/haptic failures are swallowed; they never block gameplay or persistence.
 - No blocking audio preload on app startup.
+- Base defeat feedback is keyed to the explicit `GamePhase.wave → GamePhase.lost` edge, not merely `phase == lost` after damage.
 - Target the existing 360×640 logical-pixel mobile baseline.
 - Final gates: `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, focused tests, full `flutter test`, and one native simulator/device smoke check.
 
@@ -32,7 +35,7 @@
 
 ### Create
 
-- `lib/game/feedback/feedback_preferences.dart` — two booleans plus SharedPreferences/in-memory stores.
+- `lib/game/feedback/feedback_preferences.dart` — two booleans, value equality, SharedPreferences/in-memory stores.
 - `lib/game/feedback/game_feedback.dart` — six-method interface and best-effort Flame/Flutter implementation.
 - `lib/game/ui/feedback_settings_sheet.dart` — compact two-switch settings sheet plus system Reduced Motion status.
 - `assets/audio/confirm.wav` — shared tower/module confirmation cue.
@@ -40,7 +43,7 @@
 - `assets/audio/victory.wav` — mission-victory cue.
 - `assets/audio/defeat.wav` — base-defeat cue.
 - `assets/audio/README.md` — short asset source/license note.
-- `test/game/feedback_preferences_test.dart` — defaults and independent persistence.
+- `test/game/feedback_preferences_test.dart` — value semantics, defaults, and independent persistence.
 
 ### Modify
 
@@ -49,7 +52,7 @@
 - `lib/game/orion_defense_game.dart` — optional `GameFeedback` input and authoritative call sites.
 - `lib/game/ui/orion_game_page.dart` — preference loading/saving, production feedback service, settings sheet, Reduced Motion sheet style.
 - `lib/game/ui/world_map_view.dart` — gear-button callback.
-- `test/game/orion_defense_game_test.dart` — recording fake and one-shot trigger coverage.
+- `test/game/orion_defense_game_test.dart` — recording fake, loss edge, and same-frame final-boss coverage.
 - `test/widget_test.dart` — settings, reset isolation, Reduced Motion, and 360×640 smoke coverage.
 
 ### No intended changes
@@ -68,7 +71,7 @@
 
 ---
 
-## Task 1: Persist two feedback preferences outside the campaign save
+## Task 1: Persist two value-semantic feedback preferences outside the campaign save
 
 **Files:**
 - Create: `lib/game/feedback/feedback_preferences.dart`
@@ -90,6 +93,12 @@ class FeedbackPreferences {
     bool? soundEffectsEnabled,
     bool? hapticsEnabled,
   });
+
+  @override
+  bool operator ==(Object other);
+
+  @override
+  int get hashCode;
 }
 
 abstract interface class FeedbackPreferencesStore {
@@ -98,10 +107,41 @@ abstract interface class FeedbackPreferencesStore {
 }
 ```
 
-### Step 1: Write red persistence tests
+### Step 1: Write red value/persistence tests
 
-- [ ] Create `test/game/feedback_preferences_test.dart` with `SharedPreferences.setMockInitialValues(...)` in each test.
-- [ ] Cover missing-key defaults:
+- [ ] Create `test/game/feedback_preferences_test.dart`.
+- [ ] Add value-equality coverage first:
+
+```dart
+test('preferences compare by value', () {
+  const a = FeedbackPreferences(
+    soundEffectsEnabled: false,
+    hapticsEnabled: true,
+  );
+  const b = FeedbackPreferences(
+    soundEffectsEnabled: false,
+    hapticsEnabled: true,
+  );
+
+  expect(a, b);
+  expect(a.hashCode, b.hashCode);
+});
+
+test('copyWith can change and restore a draft to its original value', () {
+  const original = FeedbackPreferences(
+    soundEffectsEnabled: false,
+    hapticsEnabled: true,
+  );
+
+  final changed = original.copyWith(hapticsEnabled: false);
+  final restored = changed.copyWith(hapticsEnabled: true);
+
+  expect(changed, isNot(original));
+  expect(restored, original);
+});
+```
+
+- [ ] Add missing-key defaults:
 
 ```dart
 test('defaults both feedback channels to enabled', () async {
@@ -111,19 +151,11 @@ test('defaults both feedback channels to enabled', () async {
     preferences: preferences,
   );
 
-  expect(
-    await store.load(),
-    const FeedbackPreferences(
-      soundEffectsEnabled: true,
-      hapticsEnabled: true,
-    ),
-  );
+  expect(await store.load(), const FeedbackPreferences());
 });
 ```
 
-- [ ] Add a Sound-only disable case and assert Haptics remains enabled after reload.
-- [ ] Add a Haptics-only disable case and assert Sound remains enabled after reload.
-- [ ] Add a both-disabled round-trip case.
+- [ ] Add Sound-only disabled, Haptics-only disabled, and both-disabled round trips.
 
 ### Step 2: Verify the tests are red
 
@@ -135,10 +167,52 @@ flutter test test/game/feedback_preferences_test.dart
 
 Expected: compile failure because the feedback preference types do not exist.
 
-### Step 3: Implement the value and stores
+### Step 3: Implement the value type
 
-- [ ] Create `lib/game/feedback/feedback_preferences.dart`.
-- [ ] Use exactly two keys:
+- [ ] Create `lib/game/feedback/feedback_preferences.dart` with:
+
+```dart
+class FeedbackPreferences {
+  const FeedbackPreferences({
+    this.soundEffectsEnabled = true,
+    this.hapticsEnabled = true,
+  });
+
+  final bool soundEffectsEnabled;
+  final bool hapticsEnabled;
+
+  FeedbackPreferences copyWith({
+    bool? soundEffectsEnabled,
+    bool? hapticsEnabled,
+  }) {
+    return FeedbackPreferences(
+      soundEffectsEnabled:
+          soundEffectsEnabled ?? this.soundEffectsEnabled,
+      hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is FeedbackPreferences &&
+            soundEffectsEnabled == other.soundEffectsEnabled &&
+            hapticsEnabled == other.hapticsEnabled;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    soundEffectsEnabled,
+    hapticsEnabled,
+  );
+}
+```
+
+This follows the existing `GridPosition` / `StageResult` value-type pattern. Do not substitute identity checks at the Settings call site.
+
+### Step 4: Implement the two-key stores
+
+- [ ] Use exactly:
 
 ```dart
 static const soundEffectsKey = 'orion.feedback.soundEffects';
@@ -146,16 +220,17 @@ static const hapticsKey = 'orion.feedback.haptics';
 ```
 
 - [ ] `load()` uses `getBool(...) ?? true` independently.
-- [ ] `save()` uses `setBool(...)` for each key and throws `StateError` if either call reports failure.
-- [ ] Add a tiny `InMemoryFeedbackPreferencesStore` matching the existing campaign-store testing style:
+- [ ] `save()` writes both keys and throws `StateError` if either `setBool` returns false.
+- [ ] Add the small in-memory test store:
 
 ```dart
-class InMemoryFeedbackPreferencesStore implements FeedbackPreferencesStore {
-  FeedbackPreferences value;
-
+class InMemoryFeedbackPreferencesStore
+    implements FeedbackPreferencesStore {
   InMemoryFeedbackPreferencesStore({
     this.value = const FeedbackPreferences(),
   });
+
+  FeedbackPreferences value;
 
   @override
   Future<FeedbackPreferences> load() async => value;
@@ -167,9 +242,9 @@ class InMemoryFeedbackPreferencesStore implements FeedbackPreferencesStore {
 }
 ```
 
-Do not add JSON, a version field, migration helpers, or a generic settings repository.
+Do not add JSON, versioning, migrations, or a generic settings repository.
 
-### Step 4: Run the focused tests
+### Step 5: Run and commit
 
 - [ ] Run:
 
@@ -178,8 +253,6 @@ flutter test test/game/feedback_preferences_test.dart
 ```
 
 Expected: PASS.
-
-### Step 5: Commit
 
 - [ ] Commit:
 
@@ -244,8 +317,7 @@ victory.wav  # stronger positive terminal accent
 defeat.wav   # short negative terminal accent
 ```
 
-- [ ] Keep every clip short enough to be a one-shot UI/game cue; no loops or music.
-- [ ] Add `assets/audio/README.md` with a concise provenance statement, for example:
+- [ ] Add `assets/audio/README.md` recording the actual provenance/license. For project-owned originals:
 
 ```markdown
 # Orion audio assets
@@ -255,7 +327,7 @@ original one-shot sound effects created for Orion. They may be distributed with
 the project.
 ```
 
-If implementation uses a third-party CC0/licensed source instead, replace that note with the actual source URL, author, and license. Do not add multiple near-duplicate variants.
+If a third-party CC0/licensed source is used, record the actual source URL, author, and license instead. No near-duplicate cue variants.
 
 ### Step 3: Implement the six-method service
 
@@ -285,12 +357,10 @@ final class PlatformGameFeedback implements GameFeedback {
 
   final bool Function() _soundEffectsEnabled;
   final bool Function() _hapticsEnabled;
-
-  // six public methods delegate to _emit(...)
 }
 ```
 
-- [ ] Map cues exactly as the design specifies:
+- [ ] Map cues exactly:
 
 ```text
 towerConfirmed  → confirm.wav + selectionClick
@@ -301,7 +371,7 @@ missionVictory  → victory.wav + heavyImpact
 baseDefeated    → defeat.wav  + heavyImpact
 ```
 
-- [ ] Implement `_emit(...)` as fire-and-forget. Wrap plugin calls in private async helpers that catch all audio/haptic errors internally before they escape:
+- [ ] Implement one fire-and-forget `_emit(...)` plus best-effort helpers:
 
 ```dart
 void _emit({
@@ -319,23 +389,19 @@ void _emit({
 Future<void> _playSound(String sound) async {
   try {
     await FlameAudio.play(sound);
-  } catch (_) {
-    // Sensory feedback is best-effort and never gameplay authority.
-  }
+  } catch (_) {}
 }
 
 Future<void> _playHaptic(Future<void> Function() haptic) async {
   try {
     await haptic();
-  } catch (_) {
-    // Unsupported platform/plugin: deliberately silent.
-  }
+  } catch (_) {}
 }
 ```
 
 No lifecycle observer, cache warm-up gate, queue, priority, replay state, or rate limiter.
 
-### Step 4: Verify package/assets compile
+### Step 4: Verify and commit
 
 - [ ] Run:
 
@@ -344,9 +410,7 @@ flutter pub get
 flutter analyze
 ```
 
-Expected: dependency resolves and all registered assets exist.
-
-### Step 5: Commit
+Expected: dependency resolves and registered assets exist.
 
 - [ ] Commit:
 
@@ -359,7 +423,7 @@ git commit -m "feat: add lightweight game feedback service"
 
 ---
 
-## Task 3: Add the small settings sheet and page-owned preferences
+## Task 3: Add page-owned settings and ship the Reduced Motion production bridge with them
 
 **Files:**
 - Create: `lib/game/ui/feedback_settings_sheet.dart`
@@ -367,9 +431,19 @@ git commit -m "feat: add lightweight game feedback service"
 - Modify: `lib/game/ui/orion_game_page.dart`
 - Modify: `test/widget_test.dart`
 
+**Produces:**
+
+```dart
+AnimationStyle? _sheetAnimationStyle(BuildContext context)
+Future<void> _openFeedbackSettings()
+Future<void> _saveFeedbackPreferences(FeedbackPreferences updated)
+```
+
+Both production `showModalBottomSheet(...)` call sites use `_sheetAnimationStyle(...)` before this task commits.
+
 ### Step 1: Write the 360×640 settings UI test first
 
-- [ ] In `test/widget_test.dart`, add a test using:
+- [ ] Add a widget test using:
 
 ```dart
 tester.view.physicalSize = const Size(360, 640);
@@ -377,40 +451,39 @@ tester.view.devicePixelRatio = 1;
 addTearDown(tester.view.reset);
 ```
 
-- [ ] Pump `OrionGamePage` with an `InMemoryCampaignProgressStore` and `InMemoryFeedbackPreferencesStore`.
+- [ ] Pump `OrionGamePage` with `InMemoryCampaignProgressStore` and `InMemoryFeedbackPreferencesStore`.
 - [ ] Assert the world map exposes `Settings` by tooltip.
-- [ ] Tap it and assert the sheet shows exactly:
+- [ ] Tap it and assert:
 
 ```text
 Feedback
 Sound Effects
 Haptics
 Reduced Motion
-Follows system
+Follows system • Off
 Done
 ```
 
-- [ ] Assert there is no overflow/exception on 360×640.
+- [ ] Assert `tester.takeException()` is null.
 
-Expected before implementation: red because the settings callback/sheet do not exist.
+Expected before implementation: red because the callback/sheet do not exist.
 
 ### Step 2: Add the world-map entry point
 
-- [ ] Extend `WorldMapView` with:
+- [ ] Extend `WorldMapView`:
 
 ```dart
 final VoidCallback? onOpenSettings;
 ```
 
-- [ ] Add one `IconButton` with `Icons.settings` and tooltip `Settings` beside Codex / Tech Tree.
-- [ ] Disable it while `_isBusy`, matching the existing shell buttons.
+- [ ] Add one `IconButton` with `Icons.settings`, tooltip `Settings`, beside Codex/Tech Tree.
+- [ ] Disable it while `_isBusy`, matching the existing shell actions.
 
-Do not add a settings shell enum/view.
+Do not add a settings route or `_ShellView.settings` case.
 
 ### Step 3: Create the self-contained settings sheet
 
-- [ ] Create `FeedbackSettingsSheet` as a small `StatefulWidget` that owns only a local draft copied from `initialPreferences`.
-- [ ] Expose:
+- [ ] Create `FeedbackSettingsSheet` as a small `StatefulWidget` with:
 
 ```dart
 FeedbackSettingsSheet({
@@ -419,8 +492,9 @@ FeedbackSettingsSheet({
 });
 ```
 
-- [ ] Two `SwitchListTile`s update the local draft independently.
-- [ ] The Reduced Motion row is informational only:
+- [ ] Copy `initialPreferences` into local `_draft` in state.
+- [ ] Two `SwitchListTile`s update `_draft` independently via `copyWith`.
+- [ ] Reduced Motion is informational only:
 
 ```text
 Reduced Motion
@@ -430,6 +504,7 @@ Follows system • On
 or
 
 ```text
+Reduced Motion
 Follows system • Off
 ```
 
@@ -439,43 +514,63 @@ Follows system • Off
 Navigator.of(context).pop(_draft);
 ```
 
-Do not save from inside the sheet; the page owns persistence.
+Do not persist from the sheet.
 
 ### Step 4: Load feedback preferences independently from campaign progress
 
-- [ ] Extend `OrionGamePage` with optional test seams:
+- [ ] Extend `OrionGamePage` with optional seams:
 
 ```dart
 final FeedbackPreferencesStore? feedbackPreferencesStore;
 final GameFeedback? gameFeedback;
 ```
 
-- [ ] Add page state:
+- [ ] Add state:
 
 ```dart
-FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
+FeedbackPreferences _feedbackPreferences =
+    const FeedbackPreferences();
 FeedbackPreferencesStore? _feedbackPreferencesStore;
 late final GameFeedback _gameFeedback;
 ```
 
-- [ ] Initialize `_gameFeedback` in `initState()`:
+- [ ] Initialize the production service once in `initState()`:
 
 ```dart
 _gameFeedback = widget.gameFeedback ?? PlatformGameFeedback(
-  soundEffectsEnabled: () => _feedbackPreferences.soundEffectsEnabled,
+  soundEffectsEnabled: () =>
+      _feedbackPreferences.soundEffectsEnabled,
   hapticsEnabled: () => _feedbackPreferences.hapticsEnabled,
 );
 ```
 
-- [ ] Refactor the existing load path just enough to obtain `SharedPreferences` once when either default store needs it.
-- [ ] Keep campaign and feedback error handling independent:
-  - campaign load failure retains the existing empty-campaign + map breadcrumb behavior;
-  - feedback load failure uses `const FeedbackPreferences()` and does **not** replace successfully loaded campaign progress.
-- [ ] Existing tests that do not inject a feedback store must still boot if the plugin/store is unavailable; default preferences are sufficient.
+- [ ] Refactor loading only enough to obtain `SharedPreferences` once when either default store needs it.
+- [ ] Keep campaign and feedback load failures independent:
+  - campaign failure retains existing empty-campaign + breadcrumb behavior;
+  - feedback failure falls back to `const FeedbackPreferences()` without replacing successfully loaded campaign progress.
 
-Do not add a new dependency-injection container or app-services object.
+No DI container or app-services object.
 
-### Step 5: Open/save settings from the page
+### Step 5: Add the Reduced Motion helper before any call site uses it
+
+- [ ] Add to `orion_game_page.dart`:
+
+```dart
+AnimationStyle? _sheetAnimationStyle(BuildContext context) =>
+    MediaQuery.disableAnimationsOf(context)
+        ? AnimationStyle.noAnimation
+        : null;
+```
+
+- [ ] In the existing `_showStageBriefing(...)` call, add:
+
+```dart
+sheetAnimationStyle: _sheetAnimationStyle(context),
+```
+
+This production helper and the existing stage-briefing wiring ship in this task rather than waiting for Task 5.
+
+### Step 6: Open and save the settings sheet using the same helper
 
 - [ ] Pass `_openFeedbackSettings` to `WorldMapView`.
 - [ ] Implement:
@@ -493,43 +588,38 @@ Future<void> _openFeedbackSettings() async {
     ),
   );
 
-  if (updated == null || updated == _feedbackPreferences) return;
+  if (updated == null || updated == _feedbackPreferences) {
+    return;
+  }
   await _saveFeedbackPreferences(updated);
 }
 ```
 
-- [ ] Implement save semantics:
-  - if no store exists, keep prior preferences and set `_mapFeedback = 'Could not save feedback settings.'`;
-  - on success, set `_feedbackPreferences = updated`;
-  - on failure, keep prior preferences and show the same breadcrumb.
+Because Task 1 implemented value equality, a separate-but-equal draft and a toggled-then-restored draft correctly skip persistence.
 
-Because `PlatformGameFeedback` reads closures, no service update/recreation is needed after save.
+- [ ] `_saveFeedbackPreferences(...)` semantics:
+  - if no store exists, keep prior effective preferences and set `_mapFeedback = 'Could not save feedback settings.'`;
+  - on success, update `_feedbackPreferences` to the saved value;
+  - on failure, keep prior effective preferences and show the same breadcrumb.
 
-### Step 6: Add preference integration tests
+The live enablement closures make service recreation unnecessary.
 
-- [ ] Add a widget test that starts with Sound off / Haptics on, opens the sheet, toggles only Haptics off, taps Done, and asserts the in-memory store now contains Sound off / Haptics off.
-- [ ] Reopen the sheet and assert both switches reflect the persisted page state.
-- [ ] Add the inverse independence case if the focused store tests do not already make the intent obvious enough.
+### Step 7: Add preference integration/reset tests
 
-### Step 7: Prove campaign reset does not reset feedback settings
+- [ ] Start Sound off / Haptics on, open Settings, toggle only Haptics off, tap Done, and assert the in-memory store is Sound off / Haptics off.
+- [ ] Reopen Settings and assert both switches reflect the effective persisted state.
+- [ ] Start with a non-default feedback combination, run the existing Reset Campaign flow, and assert the campaign store resets while the feedback store is unchanged.
+- [ ] Do not modify `CampaignProgressStore.reset()`.
 
-- [ ] In `test/widget_test.dart`, initialize feedback preferences to a non-default combination.
-- [ ] Perform the existing Reset Campaign flow.
-- [ ] Assert the campaign store resets while the feedback store still contains the same values.
+### Step 8: Run and commit
 
-Do not change `CampaignProgressStore.reset()`.
-
-### Step 8: Run focused UI tests
-
-- [ ] Run the new/updated widget test names with `flutter test --name ...` or the full widget file:
+- [ ] Run:
 
 ```bash
 flutter test test/widget_test.dart
 ```
 
-Expected: PASS.
-
-### Step 9: Commit
+Expected: PASS, including normal-motion stage briefing and settings behavior.
 
 - [ ] Commit:
 
@@ -538,7 +628,7 @@ git add lib/game/ui/feedback_settings_sheet.dart \
   lib/game/ui/world_map_view.dart \
   lib/game/ui/orion_game_page.dart \
   test/widget_test.dart
-git commit -m "feat: add feedback settings"
+git commit -m "feat: add feedback settings and motion bridge"
 ```
 
 ---
@@ -550,9 +640,9 @@ git commit -m "feat: add feedback settings"
 - Modify: `lib/game/ui/orion_game_page.dart`
 - Modify: `test/game/orion_defense_game_test.dart`
 
-### Step 1: Add a recording fake and red success/failure tests
+### Step 1: Add the recording fake
 
-- [ ] Near the existing test-only picker in `test/game/orion_defense_game_test.dart`, add:
+- [ ] Near the existing test-only picker, add:
 
 ```dart
 final class _RecordingGameFeedback implements GameFeedback {
@@ -565,15 +655,23 @@ final class _RecordingGameFeedback implements GameFeedback {
 
   @override
   void towerConfirmed() => towerConfirmedCount += 1;
-  // same pattern for the other five methods
+
+  @override
+  void waveCleared() => waveClearedCount += 1;
+
+  @override
+  void moduleSelected() => moduleSelectedCount += 1;
+
+  @override
+  void bossDefeated() => bossDefeatedCount += 1;
+
+  @override
+  void missionVictory() => missionVictoryCount += 1;
+
+  @override
+  void baseDefeated() => baseDefeatedCount += 1;
 }
 ```
-
-- [ ] Add tests around existing action fixtures:
-  - successful placement increments `towerConfirmedCount` once;
-  - successful upgrade increments it once more;
-  - successful specialization increments it once more;
-  - rejected/no-selection placement/upgrade/specialization does not increment it.
 
 ### Step 2: Thread the optional service into `OrionDefenseGame`
 
@@ -588,31 +686,36 @@ OrionDefenseGame({
 final GameFeedback? feedback;
 ```
 
-Nullable keeps direct low-level construction/tests silent by default; production will pass the page-owned service.
-
-Do not add feedback to `GameSession`.
+Nullable keeps direct low-level construction silent. Do not add feedback to `GameSession`.
 
 ### Step 3: Wire tower confirmation only after success
 
-- [ ] `placeTower(...)`: call `feedback?.towerConfirmed()` only after `_session.placeTower(...)` is allowed.
-- [ ] `upgradeSelectedTower()`: call only after `_session.upgradeTower(...)` returns true.
-- [ ] `specializeSelectedTower(...)`: call only after `_session.specializeTower(...)` returns true.
-- [ ] Do not call for sell, targeting mode, selection, or failed attempts.
+- [ ] Add recording-fake coverage around existing action fixtures:
+  - successful placement increments once;
+  - successful upgrade increments again;
+  - successful specialization increments again;
+  - rejected/no-selection versions leave the count unchanged.
+- [ ] Call `feedback?.towerConfirmed()` only after the matching session mutation succeeds.
+- [ ] Sell, targeting changes, taps, and failures remain silent.
 
-### Step 4: Test and wire module selection
+### Step 4: Wire module selection once
 
-- [ ] Extend the existing valid-module-selection test with a recording fake.
-- [ ] Assert one successful selection increments `moduleSelectedCount` exactly once.
-- [ ] Repeat the same stale `offerId/moduleId` call and assert the count stays unchanged.
-- [ ] Implement the call immediately after `_session.selectRunModule(...)` returns true.
+- [ ] Extend the existing valid-module-selection test with the recording fake.
+- [ ] Successful selection increments `moduleSelectedCount` once.
+- [ ] Repeating the same stale offer submission leaves the count unchanged.
+- [ ] Call `feedback?.moduleSelected()` immediately after `_session.selectRunModule(...)` returns true.
 
-### Step 5: Test and wire wave clear vs victory precedence
+### Step 5: Wire non-terminal wave clear vs terminal victory
 
 - [ ] Reuse `stageWithWaveCount(2)`:
-  - clear wave 1 → `waveClearedCount == 1`, victory == 0;
-  - clear wave 2 → `missionVictoryCount == 1`, `waveClearedCount` stays 1;
-  - call `game.update(0)` again → counts unchanged.
-- [ ] In `_finishWaveIfComplete()` after `_session.finishActiveWave()`:
+
+```text
+clear wave 1 → waveCleared = 1, missionVictory = 0
+clear wave 2 → waveCleared stays 1, missionVictory = 1
+update(0)    → counts unchanged
+```
+
+- [ ] After `_session.finishActiveWave()`:
 
 ```dart
 if (didWin) {
@@ -622,14 +725,12 @@ if (didWin) {
 }
 ```
 
-Keep existing snapshot publication and `onStageWon` semantics intact.
+Keep existing snapshot publication and `onStageWon` ordering unchanged.
 
-### Step 6: Test and wire boss defeat
+### Step 6: Wire boss defeat
 
-- [ ] Reuse the existing boss combat fixture/test path that resolves a `BossDefinition` kill.
-- [ ] Pass `_RecordingGameFeedback` and assert `bossDefeatedCount == 1` after the boss is accepted as killed.
-- [ ] Assert subsequent lifecycle processing/update does not increment it again.
-- [ ] In `_handleEnemyKilled(...)`, after accepting/removing the enemy:
+- [ ] Reuse an existing `BossDefinition` combat fixture for the standalone boss-defeat assertion.
+- [ ] Call after the kill is accepted/removed:
 
 ```dart
 if (enemy.stats is BossDefinition) {
@@ -637,18 +738,71 @@ if (enemy.stats is BossDefinition) {
 }
 ```
 
-Do not add boss sound or terminal-stage special-case logic here.
+- [ ] Subsequent lifecycle/update processing does not increment it again.
+- [ ] Do not add a boss sound or terminal-stage special-case in `_handleEnemyKilled`.
 
-### Step 7: Test and wire base defeat
+### Step 7: Make base defeat an explicit phase edge
 
-- [ ] Reuse the existing reach-base/loss fixture.
-- [ ] Assert the first transition to `GamePhase.lost` increments `baseDefeatedCount` once.
-- [ ] Run another `update(0)` / lifecycle pass and assert the count remains one.
-- [ ] Call `feedback?.baseDefeated()` only inside the existing lost-phase branch after `damageBase(...)`.
+- [ ] Extend the existing `defeat mid-tick stops ticking remaining enemies` test that uses `_twoEnemyDefeatStage()` with a recording fake.
+- [ ] Assert the two lethal enemies are mounted before the lethal update, then:
 
-### Step 8: Prove rebuild/resize does not replay feedback
+```text
+game.update(60)
+→ phase == lost
+→ baseDefeatedCount == 1
+→ trailing same-tick enemy cannot create another cue
+→ game.update(0) keeps baseDefeatedCount == 1
+```
 
-- [ ] After one successful cue in a game test:
+- [ ] In `_handleEnemyReachedBase(...)`, replace the planned post-damage state-only cue with the explicit edge:
+
+```dart
+final phaseBeforeDamage = _session.phase;
+_session.damageBase(enemy.stats.baseDamage);
+final didLose =
+    phaseBeforeDamage == GamePhase.wave &&
+    _session.phase == GamePhase.lost;
+
+if (didLose) {
+  feedback?.baseDefeated();
+  _clearCombatComponents(removeTowers: false);
+  _resetWaveSpawnState();
+  _resetPacing();
+  _layoutBoardIfReady();
+}
+```
+
+- [ ] Keep `_publishSnapshot()` after the branch as today.
+
+This makes one-shot defeat semantics local to the transition rather than depending on `_tickEnemyLogic` breaking later.
+
+### Step 8: Lock the same-frame final-boss → victory overlap contract
+
+- [ ] Add a focused one-wave fixture whose only enemy is a `BossDefinition`. It needs no summon mechanic and uses the normal short path.
+- [ ] Spawn the boss, then use the same real `ProjectileComponent` testing pattern already used by the existing same-frame kill/overrun tests: mount a lethal projectile so the boss dies during `super.update(...)`, not by calling the feedback hook/test helper directly.
+- [ ] In the single update that resolves that projectile and then finishes the wave, assert:
+
+```dart
+expect(feedback.bossDefeatedCount, 1);
+expect(feedback.missionVictoryCount, 1);
+expect(feedback.waveClearedCount, 0);
+expect(game.snapshot.phase, GamePhase.won);
+```
+
+- [ ] Then run:
+
+```dart
+game.update(0);
+game.processLifecycleEvents();
+```
+
+and assert all three counts are unchanged.
+
+This is the exact overlap case that justifies boss haptic-only + victory sound/haptic. Do not solve it with a scheduler.
+
+### Step 9: Prove resize/lifecycle work does not replay cues
+
+- [ ] After one successful cue test path, run:
 
 ```dart
 game.onGameResize(Vector2(390, 640));
@@ -656,13 +810,13 @@ game.processLifecycleEvents();
 game.update(0);
 ```
 
-- [ ] Assert every recording count is unchanged.
+- [ ] Assert all previously recorded counts are unchanged.
 
-No production deduplication state should be required; the absence of observer-driven trigger paths is the guarantee.
+No production dedup state is expected.
 
-### Step 9: Pass the service from the page
+### Step 10: Pass the service from the page
 
-- [ ] In `_startStage(...)` add:
+- [ ] In `_startStage(...)`:
 
 ```dart
 final game = OrionDefenseGame(
@@ -671,9 +825,9 @@ final game = OrionDefenseGame(
 );
 ```
 
-- [ ] `restart(...)` reuses the same game/service instance automatically; do not recreate feedback on Retry/Replay.
+- [ ] Replay/Retry reuses the same game/service instance; do not recreate feedback during `restart()`.
 
-### Step 10: Run focused game + widget tests
+### Step 11: Run and commit
 
 - [ ] Run:
 
@@ -683,8 +837,6 @@ flutter test test/widget_test.dart
 ```
 
 Expected: PASS.
-
-### Step 11: Commit
 
 - [ ] Commit:
 
@@ -698,38 +850,14 @@ git commit -m "feat: trigger authoritative game feedback"
 
 ---
 
-## Task 5: Bridge system Reduced Motion without an accessibility framework
+## Task 5: Lock system Reduced Motion behavior with widget regressions
 
 **Files:**
-- Modify: `lib/game/ui/orion_game_page.dart`
 - Modify: `test/widget_test.dart`
 
-### Step 1: Add the system preference helper
+Task 3 already ships `_sheetAnimationStyle(...)` and applies it to both stage briefing and feedback settings. This task adds only the focused accessibility regression; it must not introduce a second production helper or another preference.
 
-- [ ] Add one private helper in `orion_game_page.dart`:
-
-```dart
-AnimationStyle? _sheetAnimationStyle(BuildContext context) =>
-    MediaQuery.disableAnimationsOf(context)
-        ? AnimationStyle.noAnimation
-        : null;
-```
-
-Do not create a motion service or persist this value.
-
-### Step 2: Apply it to the existing stage briefing
-
-- [ ] Add to the existing `_showStageBriefing(...)` `showModalBottomSheet` call:
-
-```dart
-sheetAnimationStyle: _sheetAnimationStyle(context),
-```
-
-- [ ] The settings sheet added in Task 3 uses the same helper.
-
-No changes are needed in `RunModuleDraftPanel` or `MissionReportPanel`; both are already immediate static overlays.
-
-### Step 3: Add a Reduced Motion widget regression
+### Step 1: Add the Reduced Motion regression
 
 - [ ] Pump the page inside:
 
@@ -739,17 +867,25 @@ MediaQuery(
     size: Size(360, 640),
     disableAnimations: true,
   ),
-  child: MaterialApp(...),
+  child: MaterialApp(
+    home: OrionGamePage(
+      progressStore: campaignStore,
+      feedbackPreferencesStore: feedbackStore,
+    ),
+  ),
 )
 ```
 
-- [ ] Tap `Alpha`, call a normal `pump()` rather than `pumpAndSettle()`, and assert the briefing content/action is already visible.
-- [ ] Open Settings and assert `Follows system • On`.
-- [ ] Repeat the status assertion with `disableAnimations: false` → `Follows system • Off`.
+- [ ] Tap `Alpha`, use a normal `pump()` rather than `pumpAndSettle()`, and assert briefing content / `Start Mission` is already visible.
+- [ ] Dismiss the briefing, open Settings, use a normal `pump()`, and assert `Follows system • On` is already visible.
 
-The test should validate behavior/state, not animation-controller internals.
+### Step 2: Lock the normal system state too
 
-### Step 4: Run focused tests
+- [ ] Pump the same page with `disableAnimations: false` and open Settings.
+- [ ] Assert `Follows system • Off`.
+- [ ] This test validates observable behavior/status, not internal animation-controller state.
+
+### Step 3: Run and commit
 
 - [ ] Run:
 
@@ -759,13 +895,11 @@ flutter test test/widget_test.dart
 
 Expected: PASS.
 
-### Step 5: Commit
-
 - [ ] Commit:
 
 ```bash
-git add lib/game/ui/orion_game_page.dart test/widget_test.dart
-git commit -m "feat: follow system reduced motion"
+git add test/widget_test.dart
+git commit -m "test: lock system reduced motion behavior"
 ```
 
 ---
@@ -823,13 +957,13 @@ flutter devices
 flutter run -d <device-id>
 ```
 
-- [ ] On a normal campaign attempt:
+- [ ] Exercise:
   1. place and upgrade a tower;
   2. clear enough waves to select a Salvage Module;
   3. hear/feel the expected confirmation cues;
-  4. finish one mission victory or force one base defeat;
-  5. confirm terminal cue occurs once;
-  6. resize/rotate only if the target permits it and confirm no old cue replays;
+  4. clear a non-terminal wave;
+  5. finish one mission victory or force one base defeat;
+  6. confirm terminal feedback occurs once;
   7. background/foreground and confirm no old cue replays.
 
 - [ ] Settings matrix:
@@ -840,14 +974,14 @@ Sound OFF / Haptics ON  → haptic only
 Sound ON  / Haptics OFF → audio only
 ```
 
-- [ ] Turn the operating-system Reduce Motion setting on and confirm stage briefing / feedback settings appear without a sliding transition and remain immediately interactive.
+- [ ] Turn the OS Reduce Motion setting on and confirm stage briefing / feedback settings appear without sliding movement and remain immediately interactive.
 - [ ] Reset Campaign and reopen Settings; confirm Sound/Haptics choices remain unchanged.
 
 ### Step 6: Record evidence, do not build a harness
 
-- [ ] Add the native target, result, and any observed audio/haptic limitation to the implementation PR and HPA-531 Linear comment.
+- [ ] Add native target, result, and any observed audio/haptic limitation to the implementation PR and HPA-531 Linear comment.
 - [ ] If a cue feels noisy or redundant, narrow/remove that cue rather than adding scheduler infrastructure.
-- [ ] If a platform has no haptic effect but does not crash, treat that as acceptable per HPA-531.
+- [ ] Unsupported haptics without a crash are acceptable per HPA-531.
 
 ### Step 7: Final diff check
 
@@ -868,11 +1002,9 @@ git diff --check
 
 ## Expected final shape
 
-The implementation should remain approximately:
-
 ```text
 feedback_preferences.dart
-  two booleans + two stores
+  two booleans + copyWith + value equality + two stores
 
 game_feedback.dart
   six methods + best-effort platform calls
@@ -881,10 +1013,12 @@ feedback_settings_sheet.dart
   two switches + system Reduced Motion status
 
 orion_defense_game.dart
-  direct success/result call sites only
+  direct success/result call sites
+  explicit wave → lost defeat edge
 
 orion_game_page.dart
-  owns prefs, passes service, disables bottom-sheet motion
+  owns prefs, passes service
+  one shared bottom-sheet motion helper
 
 assets/audio/
   four one-shot clips + one provenance note
