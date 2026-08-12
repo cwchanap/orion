@@ -88,14 +88,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
           soundEffectsEnabled: () => _feedbackPreferences.soundEffectsEnabled,
           hapticsEnabled: () => _feedbackPreferences.hapticsEnabled,
         );
-    // Ownership contract: an injected service is used as-is; otherwise the
-    // page builds the platform default. Reads the field so the contract is
-    // explicit at construction time (the service is wired into the game
-    // instance by a later task).
-    assert(
-      identical(_gameFeedback, widget.gameFeedback) ||
-          widget.gameFeedback == null,
-    );
     _loadProgress();
   }
 
@@ -466,6 +458,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
       onStageWon: _handleStageWon,
       onReturnToMap: _returnFromMissionReport,
+      gameFeedback: _gameFeedback,
     );
     widget.onGameCreated?.call(game);
 
