@@ -30,6 +30,11 @@ enum _ShellView { worldMap, codex, techTree, stage }
 /// clear the stale map breadcrumb without re-string-literalizing it.
 const String _persistenceFailureMessage = 'Could not save campaign progress.';
 
+/// Feedback-failure breadcrumb surfaced on the world map. Hoisted to a
+/// top-level constant so a later successful save can match and clear the
+/// stale breadcrumb without re-string-literalizing it.
+const String _feedbackSaveFailureMessage = 'Could not save feedback settings.';
+
 class OrionGamePage extends StatefulWidget {
   const OrionGamePage({
     super.key,
@@ -66,6 +71,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   String? _techTreeFeedback;
   FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
   FeedbackPreferencesStore? _feedbackPreferencesStore;
+  bool _isSavingFeedback = false;
   late final GameFeedback _gameFeedback;
   _ShellView _activeView = _ShellView.worldMap;
   bool _isLoading = true;
@@ -221,6 +227,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         feedback: _mapFeedback,
         isSavingProgress: _isSavingProgress,
         isResetting: _isResetting,
+        isSavingFeedback: _isSavingFeedback,
         onStageSelected: _showStageBriefing,
         onLockedStageSelected: _showLockedStageFeedback,
         onResetCampaign: _confirmResetCampaign,
@@ -371,6 +378,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
       : null;
 
   Future<void> _openFeedbackSettings() async {
+    if (_isSavingFeedback) {
+      return;
+    }
     final updated = await showModalBottomSheet<FeedbackPreferences>(
       context: context,
       useSafeArea: true,
@@ -389,15 +399,21 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   Future<void> _saveFeedbackPreferences(FeedbackPreferences updated) async {
+    _isSavingFeedback = true;
+    if (mounted) {
+      setState(() {});
+    }
+
     final store = _feedbackPreferencesStore;
     if (store == null) {
       // No store: keep the prior effective value and surface a breadcrumb
       // like the campaign persistence failure path.
+      _isSavingFeedback = false;
       if (!mounted) {
         return;
       }
       setState(() {
-        _mapFeedback = 'Could not save feedback settings.';
+        _mapFeedback = _feedbackSaveFailureMessage;
       });
       return;
     }
@@ -408,6 +424,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
       setState(() {
         _feedbackPreferences = updated;
+        if (_mapFeedback == _feedbackSaveFailureMessage) {
+          _mapFeedback = null;
+        }
       });
     } catch (_) {
       // Keep the prior effective value; surface a breadcrumb like the
@@ -416,8 +435,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return;
       }
       setState(() {
-        _mapFeedback = 'Could not save feedback settings.';
+        _mapFeedback = _feedbackSaveFailureMessage;
       });
+    } finally {
+      _isSavingFeedback = false;
+      if (mounted) {
+        setState(() {});
+      }
     }
   }
 

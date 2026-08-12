@@ -14,6 +14,7 @@ class WorldMapView extends StatelessWidget {
     required this.feedback,
     this.isSavingProgress = false,
     this.isResetting = false,
+    this.isSavingFeedback = false,
     required this.onStageSelected,
     this.onLockedStageSelected,
     required this.onResetCampaign,
@@ -28,6 +29,7 @@ class WorldMapView extends StatelessWidget {
   final String? feedback;
   final bool isSavingProgress;
   final bool isResetting;
+  final bool isSavingFeedback;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
   final VoidCallback onResetCampaign;
@@ -88,7 +90,9 @@ class WorldMapView extends StatelessWidget {
                 if (onOpenSettings != null)
                   IconButton(
                     tooltip: 'Settings',
-                    onPressed: _isBusy ? null : onOpenSettings,
+                    onPressed: (_isBusy || isSavingFeedback)
+                        ? null
+                        : onOpenSettings,
                     icon: const Icon(Icons.settings),
                   ),
               ],
