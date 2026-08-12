@@ -134,43 +134,42 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'dismissing via the barrier returns null (draft not persisted)',
-    (tester) async {
-      FeedbackPreferences? popped;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (context) => Scaffold(
-              body: Center(
-                child: FilledButton(
-                  onPressed: () async {
-                    popped = await showModalBottomSheet<FeedbackPreferences>(
-                      context: context,
-                      builder: (context) => const FeedbackSettingsSheet(
-                        initialPreferences: FeedbackPreferences(),
-                        reduceMotion: false,
-                      ),
-                    );
-                  },
-                  child: const Text('Open'),
-                ),
+  testWidgets('dismissing via the barrier returns null (draft not persisted)', (
+    tester,
+  ) async {
+    FeedbackPreferences? popped;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: FilledButton(
+                onPressed: () async {
+                  popped = await showModalBottomSheet<FeedbackPreferences>(
+                    context: context,
+                    builder: (context) => const FeedbackSettingsSheet(
+                      initialPreferences: FeedbackPreferences(),
+                      reduceMotion: false,
+                    ),
+                  );
+                },
+                child: const Text('Open'),
               ),
             ),
           ),
         ),
-      );
-      await tester.tap(find.text('Open'));
-      await tester.pumpAndSettle();
+      ),
+    );
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
 
-      // Toggle Sound Effects off in the draft, then dismiss without Done.
-      await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
-      await tester.pump();
-      await tester.tapAt(const Offset(10, 10));
-      await tester.pumpAndSettle();
+    // Toggle Sound Effects off in the draft, then dismiss without Done.
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+    await tester.pump();
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
 
-      expect(popped, isNull);
-      expect(tester.takeException(), isNull);
-    },
-  );
+    expect(popped, isNull);
+    expect(tester.takeException(), isNull);
+  });
 }
