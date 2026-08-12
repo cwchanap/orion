@@ -29,7 +29,7 @@ HPA-531 is blocked only by HPA-527, which is complete. The HPA-527 human runs re
 
 Make a few important moments feel clearer and more rewarding without changing gameplay authority or slowing the player down.
 
-The implementation should remain invisible to game rules:
+The implementation remains invisible to game rules:
 
 ```text
 existing authoritative action/result
@@ -51,7 +51,7 @@ Keep the catalog to the six product moments already named by HPA-531. Reuse soun
 | Non-terminal wave cleared | `clear.wav` | light impact | `_finishWaveIfComplete()` after `finishActiveWave()` |
 | Boss defeated | none in first slice | medium impact | `_handleEnemyKilled(...)` when stats are `BossDefinition` |
 | Mission victory | `victory.wav` | heavy impact | terminal branch of `_finishWaveIfComplete()` |
-| Base defeated | `defeat.wav` | heavy impact | first transition to `GamePhase.lost` in `_handleEnemyReachedBase(...)` |
+| Base defeated | `defeat.wav` | heavy impact | the `GamePhase.wave → GamePhase.lost` edge in `_handleEnemyReachedBase(...)` |
 
 ### Why boss defeat is haptic-only initially
 
@@ -63,7 +63,17 @@ The existing boss death visual plus a medium haptic is enough for this slice. If
 
 A winning final wave fires **mission victory**, not the generic wave-clear cue. This prevents two wave-result sounds from stacking.
 
-A boss-defeat haptic may still precede the victory haptic when the final enemy is a boss; both are separate authoritative moments and require no queue or replay mechanism.
+A boss-defeat haptic may still precede the victory haptic when the final enemy is a boss. This deliberate same-frame contract must be covered by one combined game test:
+
+```text
+final boss killed on a one-wave stage in one update
+→ bossDefeated exactly once
+→ missionVictory exactly once
+→ waveCleared never fires
+→ another update(0) changes no counts
+```
+
+No queue, sound-priority rule, or replay state is added for this overlap.
 
 ## Feedback service boundary
 
@@ -80,7 +90,7 @@ abstract interface class GameFeedback {
 }
 ```
 
-Production uses `PlatformGameFeedback`. Tests can pass a tiny recording fake.
+Production uses `PlatformGameFeedback`. Tests pass a tiny recording fake.
 
 `PlatformGameFeedback` receives two live predicates:
 
@@ -111,8 +121,6 @@ dependencies:
   flame_audio: ^2.12.2
 ```
 
-The planned app toolchain (Dart 3.12+, Flutter 3.44+) satisfies the current package minimums at the time of this design.
-
 Register the directory once:
 
 ```yaml
@@ -132,13 +140,13 @@ assets/audio/defeat.wav
 assets/audio/README.md
 ```
 
-The four WAV files should be short project-owned/self-created one-shots. `README.md` records that provenance and any generation/source notes in a few lines.
+The four WAV files are short project-owned/self-created one-shots. `README.md` records provenance and any generation/source notes in a few lines.
 
 Do not pre-load audio on the critical startup path. `PlatformGameFeedback` starts playback fire-and-forget; a missing/unsupported asset is treated as feedback failure, not gameplay failure.
 
 ## Preferences
 
-Add a tiny value object and store:
+Add one small value object and store. The value object must have value equality because the Settings flow intentionally skips persistence when the returned draft equals the currently effective preferences.
 
 ```dart
 class FeedbackPreferences {
@@ -149,6 +157,28 @@ class FeedbackPreferences {
 
   final bool soundEffectsEnabled;
   final bool hapticsEnabled;
+
+  FeedbackPreferences copyWith({
+    bool? soundEffectsEnabled,
+    bool? hapticsEnabled,
+  }) => FeedbackPreferences(
+    soundEffectsEnabled:
+        soundEffectsEnabled ?? this.soundEffectsEnabled,
+    hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is FeedbackPreferences &&
+          soundEffectsEnabled == other.soundEffectsEnabled &&
+          hapticsEnabled == other.hapticsEnabled;
+
+  @override
+  int get hashCode => Object.hash(
+    soundEffectsEnabled,
+    hapticsEnabled,
+  );
 }
 
 abstract interface class FeedbackPreferencesStore {
@@ -156,6 +186,8 @@ abstract interface class FeedbackPreferencesStore {
   Future<void> save(FeedbackPreferences preferences);
 }
 ```
+
+This matches the existing value-type style used by `GridPosition` and `StageResult`. A draft that is toggled and then restored compares equal to the original and does not create an unnecessary write.
 
 Production storage reuses the already-installed `shared_preferences` package with two independent keys:
 
@@ -173,9 +205,9 @@ Do not add:
 - migration code;
 - a generic app-settings repository.
 
-The existing campaign reset removes only `orion.campaign.progress`, so these separate preference keys survive campaign reset naturally.
+The existing campaign reset removes only the campaign key, so these separate preference keys survive campaign reset naturally.
 
-An `InMemoryFeedbackPreferencesStore` can mirror the existing campaign-store testing pattern.
+An `InMemoryFeedbackPreferencesStore` mirrors the existing campaign-store testing pattern.
 
 ## Loading and ownership
 
@@ -211,7 +243,13 @@ It opens a small `FeedbackSettingsSheet` containing:
 
 The sheet edits a local `FeedbackPreferences` draft. `Done` returns the final value to `OrionGamePage`, which persists it once and updates the page-owned preference state only after save succeeds.
 
-This avoids a settings controller and avoids half-updated UI if persistence fails.
+Because `FeedbackPreferences` has value equality, this guard is meaningful:
+
+```dart
+if (updated == null || updated == _feedbackPreferences) return;
+```
+
+If the player toggles a switch and restores it before Done, there is no write.
 
 If save fails, keep the prior effective preferences and surface a short map breadcrumb such as `Could not save feedback settings.`
 
@@ -229,7 +267,7 @@ No persisted Reduced Motion key is needed.
 
 The current Salvage Module draft and Mission Report overlays are already immediate/static; they contain no custom entrance controller or large card movement. Do not add animation to them.
 
-The current stage briefing does use `showModalBottomSheet(...)`. Add one narrow helper:
+The current stage briefing and the new settings UI use modal bottom sheets. Add one narrow helper as part of the settings/sheet integration work, not as a later dependency:
 
 ```dart
 AnimationStyle? _sheetAnimationStyle(BuildContext context) =>
@@ -238,12 +276,12 @@ AnimationStyle? _sheetAnimationStyle(BuildContext context) =>
         : null;
 ```
 
-Use it for:
+Use it immediately for:
 
 - the existing stage-briefing bottom sheet;
 - the new feedback-settings bottom sheet.
 
-This makes the only relevant shell-level large transition immediate when the operating system requests reduced motion. It adds no animation framework and never delays input or hides state.
+This keeps each intermediate implementation commit compiling and makes the only relevant shell-level large transitions immediate when the operating system requests reduced motion. It adds no animation framework and never delays input or hides state.
 
 ## Authoritative trigger wiring
 
@@ -284,13 +322,26 @@ Then keep the existing snapshot publication and `onStageWon` callback ordering i
 
 ### Base defeat
 
-In `_handleEnemyReachedBase(...)`, call `baseDefeated()` only inside the branch where the damage call has transitioned the session to `GamePhase.lost`.
+Make the loss cue an explicit phase edge, not a post-damage state check. Capture the pre-damage phase, apply authoritative damage, then enter defeat cleanup/feedback only for `wave → lost`:
 
-The update loop already stops combat once phase leaves `wave`, so no second defeat cue is generated by later enemies.
+```dart
+final phaseBeforeDamage = _session.phase;
+_session.damageBase(enemy.stats.baseDamage);
+final didLose =
+    phaseBeforeDamage == GamePhase.wave &&
+    _session.phase == GamePhase.lost;
+
+if (didLose) {
+  feedback?.baseDefeated();
+  // existing defeat cleanup
+}
+```
+
+This documents the one-shot contract directly. The existing update loop still breaks once combat leaves `wave`, but the cue no longer relies on that secondary control-flow fact for deduplication.
 
 ## Testing strategy
 
-### Preference store tests
+### Preference store/value tests
 
 Create focused tests for:
 
@@ -298,6 +349,8 @@ Create focused tests for:
 - disabling Sound does not change Haptics;
 - disabling Haptics does not change Sound;
 - a save/load round-trip preserves both booleans;
+- two separately constructed preferences with the same booleans compare equal and have the same hash code;
+- `copyWith` can change one toggle and restore a draft to equality with its original value;
 - campaign reset remains scoped to the campaign key in the page integration test.
 
 ### Game feedback trigger tests
@@ -312,6 +365,8 @@ Verify:
 - final empty-wave clear calls victory once and does not call wave-clear;
 - boss kill calls boss-defeat once;
 - base loss calls defeat once;
+- the existing `_twoEnemyDefeatStage` path proves the first enemy's `wave → lost` edge fires defeat once and the second same-tick enemy cannot duplicate it;
+- one one-wave final-boss fixture kills the final `BossDefinition` via a real same-frame combat path and proves boss-defeat = 1, mission-victory = 1, wave-clear = 0, with a follow-up `update(0)` leaving all counts unchanged;
 - subsequent `update(0)`, resize, lifecycle processing, or snapshot publication does not replay prior cues.
 
 These tests verify the important contract without testing native audio or haptic plugins.
@@ -324,7 +379,8 @@ Cover:
 - settings sheet shows two independent switches and system Reduced Motion status;
 - saving settings updates the persisted test store;
 - campaign reset leaves feedback preferences unchanged;
-- with `MediaQueryData(disableAnimations: true)`, stage briefing becomes visible without waiting for a transition.
+- with `MediaQueryData(disableAnimations: true)`, stage briefing becomes visible without waiting for a transition;
+- settings sheet reports `Follows system • On/Off` from the same system preference.
 
 ### Native smoke
 
@@ -358,5 +414,5 @@ Record the result in the implementation PR/Linear comment. Do not build automate
 - **Gameplay authority unchanged:** feedback lives only in the Flame/UI integration layer and never mutates `GameSession`.
 - **Sound/Haptics independently optional:** separate booleans and keys gate separate channels.
 - **Reduced Motion:** direct system bridge disables shell bottom-sheet movement; existing result/module overlays remain immediate.
-- **One-shot cues do not replay:** calls occur only at successful mutations/result transitions; no rebuild/lifecycle observer exists.
+- **One-shot cues do not replay:** success/result transitions are explicit, loss is edge-detected, and no rebuild/lifecycle observer exists.
 - **Thin implementation:** two small feedback files, one small settings sheet, direct call sites, four assets, and no platform architecture.
