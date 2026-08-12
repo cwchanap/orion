@@ -2538,6 +2538,90 @@ void main() {
       ),
     );
   });
+
+  testWidgets(
+    'reduced motion: briefing and settings sheets appear instantly on the '
+    '360x640 view',
+    (tester) async {
+      // Geometry comes from the actual 360x640 test view, never from a
+      // MediaQueryData.size wrapper above MaterialApp.
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final campaignStore = InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      );
+      final feedbackStore = InMemoryFeedbackPreferencesStore();
+
+      // Inject only the accessibility state through MediaQuery; the explicit
+      // no-op feedback keeps the native audio/haptics layer untouched.
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: MaterialApp(
+            home: OrionGamePage(
+              progressStore: campaignStore,
+              feedbackPreferencesStore: feedbackStore,
+              gameFeedback: const NoOpGameFeedback(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.view.physicalSize, const Size(360, 640));
+
+      // The briefing sheet is already fully visible after a single pump — no
+      // slide transition under reduced motion.
+      await tester.tap(find.text('Alpha'));
+      await tester.pump();
+      expect(find.text('Outpost Alpha'), findsOneWidget);
+      expect(find.text('Start Mission'), findsOneWidget);
+
+      // Dismiss without starting the mission.
+      await tester.tap(find.text('Dismiss'));
+      await tester.pumpAndSettle();
+      expect(find.text('Start Mission'), findsNothing);
+
+      // The Settings sheet is also visible immediately.
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pump();
+      expect(find.text('Follows system • On'), findsOneWidget);
+
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'reduced motion status shows Off when system animations are enabled',
+    (tester) async {
+      final campaignStore = InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      );
+      final feedbackStore = InMemoryFeedbackPreferencesStore();
+
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: false),
+          child: MaterialApp(
+            home: OrionGamePage(
+              progressStore: campaignStore,
+              feedbackPreferencesStore: feedbackStore,
+              gameFeedback: const NoOpGameFeedback(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      expect(find.text('Follows system • Off'), findsOneWidget);
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
