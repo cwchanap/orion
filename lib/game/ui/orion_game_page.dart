@@ -71,6 +71,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   String? _techTreeFeedback;
   FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
   FeedbackPreferencesStore? _feedbackPreferencesStore;
+  bool _feedbackPreferencesLoaded = false;
   bool _isSavingFeedback = false;
   late final GameFeedback _gameFeedback;
   _ShellView _activeView = _ShellView.worldMap;
@@ -175,16 +176,25 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return;
       }
       setState(() {
-        _feedbackPreferences = loaded;
+        // A save that committed during the load window owns the
+        // in-memory value; discard this stale result. The store and
+        // loaded flag always advance so a later save can persist.
+        if (!_feedbackPreferencesLoaded) {
+          _feedbackPreferences = loaded;
+        }
         _feedbackPreferencesStore = feedbackStore;
+        _feedbackPreferencesLoaded = true;
       });
     } catch (_) {
       if (!mounted) {
         return;
       }
       setState(() {
-        _feedbackPreferences = const FeedbackPreferences();
+        if (!_feedbackPreferencesLoaded) {
+          _feedbackPreferences = const FeedbackPreferences();
+        }
         _feedbackPreferencesStore = feedbackStore;
+        _feedbackPreferencesLoaded = true;
       });
     }
   }
@@ -378,7 +388,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       : null;
 
   Future<void> _openFeedbackSettings() async {
-    if (_isSavingFeedback) {
+    if (_isSavingFeedback || !_feedbackPreferencesLoaded) {
       return;
     }
     final updated = await showModalBottomSheet<FeedbackPreferences>(
@@ -424,6 +434,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
       setState(() {
         _feedbackPreferences = updated;
+        _feedbackPreferencesLoaded = true;
         if (_mapFeedback == _feedbackSaveFailureMessage) {
           _mapFeedback = null;
         }

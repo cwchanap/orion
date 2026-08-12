@@ -97,5 +97,20 @@ void main() {
         expect(await store.load(), const FeedbackPreferences());
       }
     });
+
+    // Regression: a non-string value stored under the key (e.g. a stray
+    // bool) makes SharedPreferences.getString throw a TypeError before
+    // _decode is ever reached. load() must absorb that and fall back.
+    test('non-string persisted value falls back to defaults', () async {
+      SharedPreferences.setMockInitialValues({
+        SharedPreferencesFeedbackPreferencesStore.key: true,
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final store = SharedPreferencesFeedbackPreferencesStore(
+        preferences: preferences,
+      );
+
+      expect(await store.load(), const FeedbackPreferences());
+    });
   });
 }
