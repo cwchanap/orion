@@ -35,7 +35,8 @@ dependencies:
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
-  flame: ^1.37.0
+  flame: ^1.38.0
+  flame_audio: ^2.12.2
   shared_preferences: ^2.5.5
 
 dev_dependencies:
@@ -69,6 +70,10 @@ flutter:
     - assets/images/orion_terrain_background.png
     - assets/images/orion_path_tiles.png
     - assets/images/orion_boss_sheet.png
+    - assets/audio/confirm.wav
+    - assets/audio/clear.wav
+    - assets/audio/victory.wav
+    - assets/audio/defeat.wav
 
   # To add assets to your application, add an assets section, like this:
   # assets:
