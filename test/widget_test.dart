@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
@@ -2575,6 +2576,129 @@ void main() {
     );
   });
 
+  testWidgets('feedback preferences load failure falls back to defaults', (
+    tester,
+  ) async {
+    // A store whose load() throws must not block the page: defaults become
+    // effective and settings still opens (with both toggles on), while the
+    // store is wired so a later save can persist.
+    final feedbackStore = _LoadFailingFeedbackPreferencesStore();
+
+    await tester.pumpWidget(
+      testGamePage(feedbackPreferencesStore: feedbackStore),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Sound Effects'),
+          )
+          .value,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<SwitchListTile>(
+            find.widgetWithText(SwitchListTile, 'Haptics'),
+          )
+          .value,
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('successful feedback save clears a stale failure breadcrumb', (
+    tester,
+  ) async {
+    final feedbackStore = _FlakyFeedbackPreferencesStore(
+      value: const FeedbackPreferences(
+        soundEffectsEnabled: true,
+        hapticsEnabled: true,
+      ),
+    )..failSave = true;
+
+    await tester.pumpWidget(
+      testGamePage(feedbackPreferencesStore: feedbackStore),
+    );
+    await tester.pumpAndSettle();
+
+    // First save fails -> the breadcrumb appears on the world map.
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not save feedback settings.'), findsOneWidget);
+
+    // Second save succeeds -> the matching breadcrumb is cleared.
+    feedbackStore.failSave = false;
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+    await tester.pump();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('Could not save feedback settings.'), findsNothing);
+  });
+
+  testWidgets('default platform feedback reads the live preference toggles', (
+    tester,
+  ) async {
+    // No gameFeedback is injected, so the page builds a PlatformGameFeedback
+    // whose enabled-closures read _feedbackPreferences. Stub the audio and
+    // haptic channels so the detached emit futures complete (with errors
+    // PlatformGameFeedback swallows) instead of hanging on a missing
+    // engine.
+    final binding = TestWidgetsFlutterBinding.instance;
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('xyz.luan/audioplayers.global'),
+      (MethodCall call) async => null,
+    );
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      const MethodChannel('xyz.luan/audioplayers'),
+      (MethodCall call) async => throw Exception('audioplayers unavailable'),
+    );
+    binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async => null,
+    );
+
+    final feedbackStore = InMemoryFeedbackPreferencesStore(
+      value: const FeedbackPreferences(
+        soundEffectsEnabled: true,
+        hapticsEnabled: true,
+      ),
+    );
+    OrionDefenseGame? capturedGame;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionGamePage(
+          progressStore: InMemoryCampaignProgressStore(
+            knownStages: OrionCampaign.stages,
+          ),
+          feedbackPreferencesStore: feedbackStore,
+          onGameCreated: (game) => capturedGame = game,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await startStageFromBriefing(tester);
+
+    // Driving a feedback event exercises the page's PlatformGameFeedback
+    // closures (soundEffectsEnabled/hapticsEnabled) without letting audio
+    // or haptic failures escape.
+    capturedGame!.gameFeedback.towerConfirmed();
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'reduced motion: briefing and settings sheets appear instantly on the '
     '360x640 view',
@@ -2859,6 +2983,33 @@ class _DelayedFeedbackPreferencesStore implements FeedbackPreferencesStore {
     final completer = Completer<void>();
     saveCompletions.add(completer);
     await completer.future;
+    value = preferences;
+  }
+}
+
+class _LoadFailingFeedbackPreferencesStore implements FeedbackPreferencesStore {
+  @override
+  Future<FeedbackPreferences> load() async =>
+      throw StateError('feedback load failed');
+
+  @override
+  Future<void> save(FeedbackPreferences preferences) async {}
+}
+
+class _FlakyFeedbackPreferencesStore implements FeedbackPreferencesStore {
+  _FlakyFeedbackPreferencesStore({this.value = const FeedbackPreferences()});
+
+  FeedbackPreferences value;
+  bool failSave = false;
+
+  @override
+  Future<FeedbackPreferences> load() async => value;
+
+  @override
+  Future<void> save(FeedbackPreferences preferences) async {
+    if (failSave) {
+      throw StateError('feedback save failed');
+    }
     value = preferences;
   }
 }

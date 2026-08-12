@@ -1,6 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
+
+/// An in-memory store whose [setValue] always reports failure, so the
+/// SharedPreferences-backed save path surfaces a `false` persistence result.
+class _FailingSetValueSharedPreferencesStore
+    extends InMemorySharedPreferencesStore {
+  _FailingSetValueSharedPreferencesStore() : super.empty();
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      false;
+}
 
 void main() {
   group('FeedbackPreferences', () {
@@ -111,6 +123,33 @@ void main() {
       );
 
       expect(await store.load(), const FeedbackPreferences());
+    });
+
+    // SharedPreferences.setString returns false when the platform store
+    // rejects the write; the store must surface that as a StateError so
+    // callers can route it through the persistence-failure breadcrumb.
+    test('save throws when SharedPreferences rejects the write', () async {
+      SharedPreferences.setMockInitialValues({});
+      SharedPreferencesStorePlatform.instance =
+          _FailingSetValueSharedPreferencesStore();
+      addTearDown(() {
+        // Restore the default in-memory store so later tests are unaffected.
+        SharedPreferences.setMockInitialValues({});
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final store = SharedPreferencesFeedbackPreferencesStore(
+        preferences: preferences,
+      );
+
+      await expectLater(
+        store.save(
+          const FeedbackPreferences(
+            soundEffectsEnabled: false,
+            hapticsEnabled: true,
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
     });
   });
 }
