@@ -14,9 +14,14 @@ void main() {
   testWidgets('places a tower and starts a wave', (tester) async {
     await tester.runAsync(() async {
       final preferences = await SharedPreferences.getInstance();
-      await SharedPreferencesFeedbackPreferencesStore(
+      final store = SharedPreferencesFeedbackPreferencesStore(
         preferences: preferences,
-      ).save(
+      );
+      // Capture the user's real feedback preferences so they can be
+      // restored after the test overwrites them with the disabled set.
+      final originalPreferences = await store.load();
+      addTearDown(() => store.save(originalPreferences));
+      await store.save(
         const FeedbackPreferences(
           soundEffectsEnabled: false,
           hapticsEnabled: false,
