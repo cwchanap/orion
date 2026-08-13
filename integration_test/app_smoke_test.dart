@@ -1,7 +1,9 @@
 import 'package:flame/game.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/main.dart';
@@ -11,6 +13,15 @@ void main() {
 
   testWidgets('places a tower and starts a wave', (tester) async {
     await tester.runAsync(() async {
+      final preferences = await SharedPreferences.getInstance();
+      await SharedPreferencesFeedbackPreferencesStore(
+        preferences: preferences,
+      ).save(
+        const FeedbackPreferences(
+          soundEffectsEnabled: false,
+          hapticsEnabled: false,
+        ),
+      );
       await tester.pumpWidget(const OrionApp());
     });
 
