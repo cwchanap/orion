@@ -31,10 +31,17 @@ final class NoOpGameFeedback implements GameFeedback {
 }
 
 final class PlatformGameFeedback implements GameFeedback {
+  // Best-effort cache warm-up at construction time, so the first semantic
+  // cue does not pay the uncached first-play latency. The design explicitly
+  // specifies this fires when the service is constructed, not lazily on the
+  // first emit (which would defeat the warm-up for the very cue it is meant
+  // to help). Errors are swallowed by _warmAudioCache.
   PlatformGameFeedback({
     required this.soundEffectsEnabled,
     required this.hapticsEnabled,
-  });
+  }) {
+    unawaited(_warmAudioCache());
+  }
 
   static const sounds = [
     'confirm.wav',
@@ -45,8 +52,6 @@ final class PlatformGameFeedback implements GameFeedback {
 
   final bool Function() soundEffectsEnabled;
   final bool Function() hapticsEnabled;
-
-  bool _audioCacheWarmed = false;
 
   @override
   void towerConfirmed() =>
@@ -73,10 +78,6 @@ final class PlatformGameFeedback implements GameFeedback {
 
   void _emit({String? sound, Future<void> Function()? haptic}) {
     if (sound != null && soundEffectsEnabled()) {
-      if (!_audioCacheWarmed) {
-        _audioCacheWarmed = true;
-        unawaited(_warmAudioCache());
-      }
       unawaited(_playSound(sound));
     }
     if (haptic != null && hapticsEnabled()) {

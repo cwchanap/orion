@@ -65,6 +65,32 @@ Future<InMemoryCampaignProgressStore> storeWithResults(
   return store;
 }
 
+/// A [FeedbackPreferencesStore] whose [load] completes only when [complete]
+/// is called, so a test can observe the window between campaign loading
+/// finishing (_isLoading clearing) and the feedback preference store
+/// resolving (_feedbackPreferencesLoaded flipping). The existing
+/// [_DelayedFeedbackPreferencesStore] delays save, not load; this is the
+/// load-side counterpart for the lifecycle-race regression.
+class _LoadDelayedFeedbackPreferencesStore implements FeedbackPreferencesStore {
+  _LoadDelayedFeedbackPreferencesStore(this._value);
+
+  final FeedbackPreferences _value;
+  final Completer<FeedbackPreferences> _loadCompleter =
+      Completer<FeedbackPreferences>();
+
+  void complete() {
+    if (!_loadCompleter.isCompleted) {
+      _loadCompleter.complete(_value);
+    }
+  }
+
+  @override
+  Future<FeedbackPreferences> load() => _loadCompleter.future;
+
+  @override
+  Future<void> save(FeedbackPreferences preferences) async {}
+}
+
 void main() {
   // The page now builds a default SharedPreferences-backed feedback store
   // whenever a test does not inject one, so every test needs the in-memory
@@ -2698,6 +2724,86 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'delayed feedback preference load: cues stay silent until the store '
+    'resolves even when stored preferences are off',
+    (tester) async {
+      // Regression for the lifecycle race between campaign loading
+      // (_isLoading clearing) and the feedback preference store resolving
+      // (_feedbackPreferencesLoaded flipping). _feedbackPreferences defaults
+      // to both-enabled; without gating the predicates on the loaded flag,
+      // a cue fired during that window would honor the default true values
+      // and violate a user's saved soundEffectsEnabled:false /
+      // hapticsEnabled:false choice.
+      final binding = TestWidgetsFlutterBinding.instance;
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('xyz.luan/audioplayers.global'),
+        (MethodCall call) async => null,
+      );
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        const MethodChannel('xyz.luan/audioplayers'),
+        (MethodCall call) async => throw Exception('audioplayers unavailable'),
+      );
+      final hapticCalls = <Object?>[];
+      binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        (MethodCall call) async {
+          if (call.method == 'HapticFeedback.vibrate') {
+            hapticCalls.add(call.arguments);
+          }
+          return null;
+        },
+      );
+
+      final feedbackStore = _LoadDelayedFeedbackPreferencesStore(
+        const FeedbackPreferences(
+          soundEffectsEnabled: false,
+          hapticsEnabled: false,
+        ),
+      );
+      OrionDefenseGame? capturedGame;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: OrionGamePage(
+            progressStore: InMemoryCampaignProgressStore(
+              knownStages: OrionCampaign.stages,
+            ),
+            feedbackPreferencesStore: feedbackStore,
+            onGameCreated: (game) => capturedGame = game,
+          ),
+        ),
+      );
+      // Advance past campaign loading so _isLoading clears and the world map
+      // becomes interactive — but the feedback store load is still pending
+      // on the completer, so _feedbackPreferencesLoaded is still false.
+      await tester.pumpAndSettle();
+
+      await startStageFromBriefing(tester);
+      final game = capturedGame;
+      expect(game, isNotNull);
+
+      // A cue fired during the pre-resolution window must be suppressed by
+      // the loaded-flag gate, even though _feedbackPreferences still holds
+      // the default both-enabled value.
+      game!.gameFeedback.towerConfirmed();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(hapticCalls, isEmpty);
+
+      // Now resolve the store with both channels off. Cues must still be
+      // silent — the loaded flag is now true, but the persisted values are
+      // false.
+      feedbackStore.complete();
+      await tester.pumpAndSettle();
+      game.gameFeedback.towerConfirmed();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(hapticCalls, isEmpty);
+
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets(
     'reduced motion: briefing and settings sheets appear instantly on the '
