@@ -92,8 +92,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _gameFeedback =
         widget.gameFeedback ??
         PlatformGameFeedback(
-          soundEffectsEnabled: () => _feedbackPreferences.soundEffectsEnabled,
-          hapticsEnabled: () => _feedbackPreferences.hapticsEnabled,
+          // Suppress both channels until the persisted preference store has
+          // resolved. _feedbackPreferences defaults to both-enabled, so
+          // without this gate a delayed store load (e.g. a slow first
+          // SharedPreferences read) would let cues fire against the default
+          // true values during the window between _isLoading clearing and
+          // _feedbackPreferencesLoaded flipping — violating a user's saved
+          // soundEffectsEnabled:false / hapticsEnabled:false choice. Gameplay
+          // itself is not blocked: only feedback is held until preferences
+          // resolve (or fail and defaults are intentionally adopted).
+          soundEffectsEnabled: () =>
+              _feedbackPreferencesLoaded &&
+              _feedbackPreferences.soundEffectsEnabled,
+          hapticsEnabled: () =>
+              _feedbackPreferencesLoaded && _feedbackPreferences.hapticsEnabled,
         );
     _loadProgress();
   }

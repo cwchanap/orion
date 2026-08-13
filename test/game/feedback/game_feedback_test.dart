@@ -91,6 +91,31 @@ void main() {
 
   group('PlatformGameFeedback', () {
     testWidgets(
+      'warms the audio cache at construction, before any semantic cue is '
+      'fired',
+      (tester) async {
+        // The design specifies the best-effort loadAll warm-up fires when
+        // the service is constructed, not lazily on the first emit —
+        // otherwise the very first cue pays the uncached first-play latency
+        // the warm-up exists to avoid.
+        final feedback = PlatformGameFeedback(
+          soundEffectsEnabled: () => true,
+          hapticsEnabled: () => true,
+        );
+
+        // Flush only the constructor's unawaited warm-up microtask. No cue
+        // has been fired yet.
+        await flush(tester);
+
+        expect(recordingCache.loadedSounds, PlatformGameFeedback.sounds);
+        expect(tester.takeException(), isNull);
+        // Reference feedback so the linter does not complain; the cue
+        // methods are exercised by the other tests below.
+        feedback.towerConfirmed();
+      },
+    );
+
+    testWidgets(
       'emits each event, warms the cache once, and fires every haptic when '
       'enabled',
       (tester) async {
@@ -119,8 +144,8 @@ void main() {
 
         await flush(tester);
 
-        // The cache warms exactly once with the full sound list, even though
-        // five events emit sounds.
+        // The cache warms exactly once with the full sound list (at
+        // construction), even though five events emit sounds.
         expect(recordingCache.loadedSounds, PlatformGameFeedback.sounds);
         // Every event carries a haptic.
         expect(hapticCalls, hasLength(6));
@@ -129,7 +154,8 @@ void main() {
     );
 
     testWidgets(
-      'skips sound and cache warming when sound effects are disabled',
+      'skips sound playback when sound effects are disabled but still warms '
+      'the cache at construction',
       (tester) async {
         final hapticCalls = <Object?>[];
         TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
@@ -150,7 +176,9 @@ void main() {
         feedback.towerConfirmed();
         await flush(tester);
 
-        expect(recordingCache.loadedSounds, isEmpty);
+        // Warming is unconditional (best-effort, construction-time); only
+        // playback is gated by the enabled flag.
+        expect(recordingCache.loadedSounds, PlatformGameFeedback.sounds);
         expect(hapticCalls, hasLength(1));
         expect(tester.takeException(), isNull);
       },
@@ -176,46 +204,50 @@ void main() {
       feedback.towerConfirmed();
       await flush(tester);
 
-      // Sound still warms the cache; haptic is suppressed.
+      // Cache warms at construction; haptic is suppressed.
       expect(recordingCache.loadedSounds, PlatformGameFeedback.sounds);
       expect(hapticCalls, isEmpty);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('boss defeated emits a haptic only (no sound, no warming)', (
-      tester,
-    ) async {
-      final hapticCalls = <Object?>[];
-      TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(SystemChannels.platform, (
-            MethodCall call,
-          ) async {
-            if (call.method == 'HapticFeedback.vibrate') {
-              hapticCalls.add(call.arguments);
-            }
-            return null;
-          });
+    testWidgets(
+      'boss defeated emits a haptic only (cache warms at construction '
+      'regardless of which cue fires)',
+      (tester) async {
+        final hapticCalls = <Object?>[];
+        TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(SystemChannels.platform, (
+              MethodCall call,
+            ) async {
+              if (call.method == 'HapticFeedback.vibrate') {
+                hapticCalls.add(call.arguments);
+              }
+              return null;
+            });
 
-      final feedback = PlatformGameFeedback(
-        soundEffectsEnabled: () => true,
-        hapticsEnabled: () => true,
-      );
+        final feedback = PlatformGameFeedback(
+          soundEffectsEnabled: () => true,
+          hapticsEnabled: () => true,
+        );
 
-      feedback.bossDefeated();
-      await flush(tester);
+        feedback.bossDefeated();
+        await flush(tester);
 
-      expect(recordingCache.loadedSounds, isEmpty);
-      expect(hapticCalls, hasLength(1));
-      expect(tester.takeException(), isNull);
-    });
+        // Warming is construction-time and unconditional; bossDefeated
+        // itself carries no sound, only a haptic.
+        expect(recordingCache.loadedSounds, PlatformGameFeedback.sounds);
+        expect(hapticCalls, hasLength(1));
+        expect(tester.takeException(), isNull);
+      },
+    );
 
     testWidgets('absorbs audio cache warm, sound play, and haptic failures', (
       tester,
     ) async {
-      // Throwing cache -> _warmAudioCache swallows. Throwing haptics mock ->
-      // _playHaptic swallows. Per-player audioplayers mock (set in setUp)
-      // throws -> FlameAudio.play errors -> _playSound swallows. Nothing
-      // escapes.
+      // Throwing cache -> _warmAudioCache (now fired at construction)
+      // swallows. Throwing haptics mock -> _playHaptic swallows. Per-player
+      // audioplayers mock (set in setUp) throws -> FlameAudio.play errors
+      // -> _playSound swallows. Nothing escapes.
       FlameAudio.audioCache = _RecordingAudioCache(
         loadAllError: StateError('warm failed'),
       );
