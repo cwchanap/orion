@@ -270,7 +270,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
         onResetCampaign: _confirmResetCampaign,
         onOpenTechTree: _openTechTree,
         onOpenCodex: _openCodex,
-        onOpenSettings: _feedbackPreferencesLoaded ? _openFeedbackSettings : null,
+        onOpenSettings: _feedbackPreferencesLoaded
+            ? _openFeedbackSettings
+            : null,
       ),
     );
   }
