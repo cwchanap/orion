@@ -17,6 +17,7 @@ import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 /// Common page shell for widget tests. Defaults to a no-op feedback service
 /// so ordinary tests never touch the native audio/haptics layer.
@@ -2636,6 +2637,53 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'feedback store construction failure falls back to defaults',
+    (tester) async {
+      // When no feedbackPreferencesStore is injected and SharedPreferences
+      // cannot be constructed (both getInstance attempts throw), the page
+      // must adopt const FeedbackPreferences() and mark preferences loaded
+      // — otherwise the sound/haptic predicates stay gated on
+      // _feedbackPreferencesLoaded=false forever, and the Settings gear
+      // renders inert (tappable but _openFeedbackSettings silently returns).
+      // Provide a campaign store so campaign loading doesn't touch
+      // SharedPreferences; only the feedback store construction path does.
+      SharedPreferencesStorePlatform.instance =
+          _ThrowingSharedPreferencesStore();
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: InMemoryCampaignProgressStore(
+            knownStages: OrionCampaign.stages,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The Settings gear is visible and active: _feedbackPreferencesLoaded
+      // is true, so onOpenSettings is non-null.
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.widgetWithText(SwitchListTile, 'Sound Effects'),
+            )
+            .value,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<SwitchListTile>(
+              find.widgetWithText(SwitchListTile, 'Haptics'),
+            )
+            .value,
+        isTrue,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('successful feedback save clears a stale failure breadcrumb', (
     tester,
   ) async {
@@ -3118,4 +3166,24 @@ class _FlakyFeedbackPreferencesStore implements FeedbackPreferencesStore {
     }
     value = preferences;
   }
+}
+
+/// A SharedPreferencesStorePlatform whose getAll() always throws, simulating
+/// a platform-side storage failure. Used to test the feedback store
+/// construction-failure path (both SharedPreferences.getInstance() attempts
+/// fail) without injecting a FeedbackPreferencesStore.
+class _ThrowingSharedPreferencesStore extends SharedPreferencesStorePlatform {
+  @override
+  Future<bool> clear() async => true;
+
+  @override
+  Future<Map<String, Object>> getAll() async =>
+      throw StateError('shared preferences unavailable');
+
+  @override
+  Future<bool> remove(String key) async => true;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async =>
+      true;
 }

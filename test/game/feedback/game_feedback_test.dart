@@ -98,7 +98,7 @@ void main() {
         // the service is constructed, not lazily on the first emit —
         // otherwise the very first cue pays the uncached first-play latency
         // the warm-up exists to avoid.
-        final feedback = PlatformGameFeedback(
+        PlatformGameFeedback(
           soundEffectsEnabled: () => true,
           hapticsEnabled: () => true,
         );
@@ -109,9 +109,6 @@ void main() {
 
         expect(recordingCache.loadedSounds, PlatformGameFeedback.sounds);
         expect(tester.takeException(), isNull);
-        // Reference feedback so the linter does not complain; the cue
-        // methods are exercised by the other tests below.
-        feedback.towerConfirmed();
       },
     );
 
