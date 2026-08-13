@@ -179,6 +179,21 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     if (feedbackStore == null) {
+      // No store could be constructed (both SharedPreferences attempts
+      // failed). Honor the documented "falls back to defaults" contract:
+      // adopt the default preferences and mark the preference state loaded
+      // so the sound/haptic predicates can resolve. The store stays null,
+      // so a later Settings change surfaces the save-failure breadcrumb
+      // via _saveFeedbackPreferences' null-store branch.
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        if (!_feedbackPreferencesLoaded) {
+          _feedbackPreferences = const FeedbackPreferences();
+        }
+        _feedbackPreferencesLoaded = true;
+      });
       return;
     }
 
@@ -255,7 +270,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         onResetCampaign: _confirmResetCampaign,
         onOpenTechTree: _openTechTree,
         onOpenCodex: _openCodex,
-        onOpenSettings: _openFeedbackSettings,
+        onOpenSettings: _feedbackPreferencesLoaded ? _openFeedbackSettings : null,
       ),
     );
   }
