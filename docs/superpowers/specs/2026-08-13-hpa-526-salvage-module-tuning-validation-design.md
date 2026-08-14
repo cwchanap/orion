@@ -4,94 +4,41 @@
 
 Treat the current seven-module catalog as the **candidate final catalog** and make HPA-526 validation-first.
 
-Do not add modules, picker rules, blueprint rewards, Codex surfaces, or new stat/effect seams up front. The two HPA-527 human runs already reported positive draft comprehension and pacing with no mandatory, dead, or repetition problem. Expanding from seven modules merely because the ticket permits 10–12 would manufacture scope rather than answer an observed player need.
+Do not add modules, picker rules, blueprint rewards, Codex surfaces, or new stat/effect seams up front. HPA-527 already recorded two positive human 1× runs with no mandatory, dead-card, or repetition problem. Expanding merely because HPA-526 allows 10–12 modules would manufacture scope rather than answer an observed need.
 
-HPA-526 therefore executes as one continuous assembled-product check:
+HPA-526 is one continuous assembled-product check:
 
 ```text
-verify the current implementation and hidden unlock/replay contracts
+prove existing hidden contracts with tests
 → reset campaign progress once if needed
-→ use that same campaign save for the entire validation
-→ Outpost Alpha first clear doubles as the HPA-528 human product check and validation row
-→ continue through all seven stages in campaign order at ordinary 1×
-→ allow normal tech purchases and let side-stage rewards stack naturally
-→ record first-attempt results plus enough build/tech context to interpret them
-→ no concrete problem? keep the seven-module catalog unchanged and finish
-→ concrete problem? create one focused follow-up issue and rerun only affected stages after that fix
+→ play one continuous campaign save at 1×
+→ record first-attempt rows with offers/build/tech context
+→ no concrete problem? keep seven and finish with zero runtime code
+→ concrete problem? create a focused follow-up with the smallest deterministic regression
 ```
 
-The planning PR contains documentation only. Runtime changes require a concrete observation first.
+The planning PR remains documentation-only. Runtime changes require a concrete observation first.
 
-## Why this is the next task
+## Product question
 
-The product milestones have reached the point where another feature is less valuable than checking whether the assembled game still feels comfortable end to end:
+The remaining question is not “what else can we add?” It is:
 
-- HPA-527 shipped the six starter Salvage Modules and recorded two human 1× wins.
-- HPA-525 shipped the compact Mission Report.
-- HPA-528 shipped the first blueprint-gated module, Relay Calibration.
-- HPA-531 shipped the lightweight sound, haptics, and Reduced Motion pass.
-- HPA-523's standalone seven-stage balance pass was intentionally merged into HPA-526.
+> Is the current assembled campaign varied, readable, and comfortably clearable while the Salvage Module loop creates useful run identity?
 
-That leaves HPA-526 as the unfinished M2 gameplay child. The next question is not “what else can we add?” but “is the current assembled campaign varied, readable, and comfortably clearable?”
+The current product already includes:
 
-## Evidence entering M2
+- six starter Salvage Modules from HPA-527;
+- Relay Calibration as the first committed-progress blueprint reward from HPA-528;
+- the Mission Report from HPA-525;
+- stage modifiers, side-stage rewards, tech purchases, bosses, and feedback polish.
 
-### Salvage Module vertical slice
-
-The HPA-527 implementation PR recorded two live iOS Simulator runs at strict 1×:
-
-- **Outpost Alpha**: victory after all eight waves, base 4/20; Heavy Caliber, Emergency Salvage, Long Sight.
-- **Nebula Relay**: victory after all eight waves, base 9/20; Heavy Caliber, Emergency Salvage, Overclock Relay.
-
-The recorded conclusion was positive draft comprehension and pacing, with no mandatory/dead-card or third-draft repetition issue observed.
-
-That evidence is enough to reject speculative catalog expansion before the final campaign pass.
-
-### Blueprint implementation proof
-
-HPA-528 is implemented and the hidden lifecycle contract is already automated:
-
-- `test/game/game_session_test.dart` proves the eligible module set stays frozen during one attempt.
-- `test/game/run_module_unlocks_test.dart` proves a committed Outpost Alpha clear unlocks Relay Calibration.
-- `test/widget_test.dart` proves first-clear commit then **same-game Replay** refreshes module eligibility.
-
-The human HPA-528 check should therefore judge only player-visible behavior and product value. It must not ask the player to infer an internal eligible set that the HUD does not expose.
-
-The human outcome is one of:
-
-- **Proceed** — the permanent option unlock is understandable and rewarding;
-- **Narrow** — keep the one proven blueprint but do not expand blueprint progression;
-- **Stop** — do not add more boss-blueprint rewards.
-
-This decision affects only future blueprint expansion. It does not justify picker bias or guaranteed appearance.
-
-## Alternatives considered
-
-### 1. Validation-first, current seven-module catalog — chosen
-
-Keep the current catalog and picker unchanged while running the whole campaign on one save. This is the cheapest way to learn whether the game actually has a variety, readability, or balance problem.
-
-Benefits:
-
-- directly follows HPA-526's “expand only when justified” gate;
-- validates the real campaign stacking behavior rather than isolated stage sandboxes;
-- preserves the already-working session and picker architecture;
-- gives later changes a concrete player-facing reason;
-- can legitimately finish with zero runtime code.
-
-### 2. Pre-author 3–5 additional modules — rejected
-
-Growing to 10–12 now would optimize for catalog size rather than player value. It would also increase the chance of duplicating existing tower specializations or campaign tech without evidence that seven choices are insufficient.
-
-### 3. Generalized draft/effect/evidence infrastructure — rejected
-
-Versioned draft algorithms, offer fingerprints, seed sweeps, event/effect registries, analytics exports, and generalized evidence models are unnecessary for this stage. Human notes in HPA-526 are sufficient.
+The validation must exercise those systems together rather than as isolated stage sandboxes.
 
 ## Existing architecture to preserve
 
-### Catalog and effect data
+### Module catalog and effects
 
-`lib/game/models/game_models.dart` defines the seven current `RunModuleId` values and `runModuleCatalog` entries:
+`lib/game/models/game_models.dart` owns the seven current modules:
 
 1. Heavy Caliber
 2. Overclock Relay
@@ -101,238 +48,258 @@ Versioned draft algorithms, offer fingerprints, seed sweeps, event/effect regist
 6. Rocket Fusing
 7. Relay Calibration
 
-The first six are base-eligible. Relay Calibration is the first blueprint-gated option.
-
-Do not split the catalog into a registry or configuration layer for HPA-526.
-
-### Rule application
-
-`lib/game/rules/run_module_rules.dart` applies current modules through existing tower stat fields. It already covers ordinary damage, Nanite corrosion damage, Drone Bay drone damage, attack interval, range, Rocket splash, and Cryo slow duration.
-
-A future module belongs only in a focused follow-up when an observed need can be expressed cleanly through these existing seams. If the useful effect requires a new combat-event model, command graph, recursion guard, or broad new stat plumbing, stop and design that separately.
+`lib/game/rules/run_module_rules.dart` applies their stat effects. Do not split this into a registry or generalized effect engine.
 
 ### Unlocks
 
-`lib/game/rules/run_module_unlocks.dart` derives available modules from the catalog and committed campaign progress. Relay Calibration is gated by Outpost Alpha; there is no separate persisted blueprint collection.
-
-Do not add another save field or migration.
+`lib/game/rules/run_module_unlocks.dart` derives Relay Calibration availability from committed Outpost Alpha progress. There is no blueprint collection and no persistence migration to add.
 
 ### Offer selection
 
-`lib/game/rules/game_session.dart` already:
+`GameSession._moduleCandidates()` owns candidate policy: available/unacquired modules, placed-family preference, unlocked-family fallback, then remaining candidates. `ModuleOfferPicker` remains a policy-free injectable shuffle/take seam.
 
-- excludes acquired and unavailable modules;
-- prefers universal cards and affinities for already placed tower families;
-- falls back to currently unlocked tower-family affinities when needed;
-- produces a three-card offer when at least three candidates exist.
-
-`lib/game/rules/module_offer_picker.dart` remains a tiny injectable picker: production shuffles normally; tests can inject exact behavior.
-
-No anti-repeat history, weighted ranking, pity rule, or deterministic protocol should be added unless the campaign pass exposes a concrete offer problem.
+No anti-repeat history, weighting, pity, offer fingerprint, or seeded protocol is justified by this pass.
 
 ### Campaign stacking
 
-The validation must exercise the real persisted campaign rather than seven unrelated stage runs.
+`CampaignSave` stores stage progress and tech purchases together. `CampaignModifiers.fromProgress(...)` derives side-stage and tech effects from committed state.
 
-`CampaignSave` stores stage progress and tech purchases together. `CampaignModifiers.fromProgress(...)` derives campaign-wide effects from that committed state, including side-stage rewards and purchased tech.
-
-Use one save and the normal campaign order:
+Use one save in this order:
 
 ```text
-Outpost Alpha
-→ Nebula Relay
-→ Salvage Rift
-→ Asteroid Foundry
-→ Aurora Gate
-→ Void Bastion
-→ Singularity Core
+Outpost Alpha (main)
+→ Nebula Relay (main)
+→ Salvage Rift (side)
+→ Asteroid Foundry (main)
+→ Aurora Gate (main)
+→ Void Bastion (side)
+→ Singularity Core (main)
 ```
 
-This order deliberately exercises:
+This deliberately exercises:
 
-- Relay Calibration after the committed Outpost Alpha clear;
-- Salvage Rift bonus gold on Foundry and later stages if Rift is cleared;
-- Void Bastion bonus health on Singularity Core if Bastion is cleared;
-- any tech upgrades purchased through normal play.
+- Relay Calibration after committed Outpost Alpha progress;
+- Salvage Rift bonus gold on later stages when earned;
+- Void Bastion bonus health on Singularity Core when earned;
+- normal player-selected tech purchases.
 
-Reset at most once before Outpost Alpha. Do not reset between stages or between the HPA-528 check and the seven-stage pass.
+Reset at most once before Outpost Alpha. Do not reset between validation stages.
 
-## Human HPA-528 product gate
+## Credit existing automation instead of re-testing it by eye
 
-Outpost Alpha's first-clear attempt is also the first HPA-526 validation row.
+The human pass must not reproduce facts the existing tests already prove.
 
-The human checks only player-visible behavior:
+Existing automated coverage owns these contracts:
 
-1. Start from an uncleared Outpost Alpha state on the validation save.
-2. Clear Outpost Alpha at 1×.
-3. Confirm the Mission Report shows **Blueprint recovery pending** while persistence is in flight.
-4. Confirm successful save changes the reward to **Blueprint recovered: Relay Calibration**.
-5. Choose Replay on the same page/game shell and confirm a clean new run starts normally.
-6. Judge whether the pending → recovered → future-run story is understandable and rewarding.
-7. Record Proceed / Narrow / Stop plus one sentence explaining why.
-8. Return to the world map and continue the same campaign save.
+- `game_session_test.dart`: the eligible module set stays frozen during one attempt;
+- `run_module_unlocks_test.dart`: a committed Outpost Alpha clear unlocks Relay Calibration;
+- `widget_test.dart`: the first-clear delayed-save journey renders **Blueprint recovery pending**, then **Blueprint recovered: Relay Calibration**, and same-game Replay refreshes eligibility;
+- `widget_test.dart`: a first-clear save failure renders **Blueprint not recovered**;
+- `widget_test.dart`: Retry Save can transition that failure to **Blueprint recovered: Relay Calibration**.
 
-Do not require the human to verify `availableRunModules`; it is not published through `GameSnapshot` or a player-facing eligible-pool UI. Do not require Relay Calibration to appear in the first random offer.
+The pending state is intentionally tested with a delayed store. A real local save may finish too quickly for a human to see the transient pending copy. Missing that transient frame is therefore **not** a human failure.
 
-If Relay Calibration naturally appears in a later validation draft, note it as ordinary observation only.
+### Human HPA-528 verdict
 
-## Seven-stage validation pass
+Outpost Alpha's first clear is also the first HPA-526 validation row. The human records only the product judgment automation cannot provide:
 
-Run one continuous human campaign at **1× speed** using normal player behavior.
+```text
+Blueprint reward understandable/rewarding: Yes / No
+Verdict: Proceed / Narrow / Stop
+Reason: one sentence
+```
 
-- Do not inject gold, health, kills, wave clears, progress, tech, or preferred module offers.
-- Tech purchases are allowed when the player would normally choose them.
+Meanings:
+
+- **Proceed** — another blueprint may be considered later only if the campaign pass exposes a specific progression reason.
+- **Narrow** — keep Relay Calibration as the one proof and do not expand blueprint progression in HPA-526.
+- **Stop** — do not add more boss-blueprint rewards.
+
+Do not require the human to verify `availableRunModules`, see a transient pending frame, or observe Relay Calibration in a random offer.
+
+## Human campaign protocol
+
+Run one continuous campaign at ordinary **1×** with normal player inputs and random offers.
+
+- Do not inject progress, gold, health, tech, wave results, or preferred offers.
+- Tech purchases are allowed when they are choices the player would normally make.
 - Side-stage rewards remain in the same save and affect later stages naturally.
-- The first attempt is always the authoritative observation row.
+- The first attempt is always the authoritative observation.
 
 ### Retry contract
 
-A first-attempt loss is meaningful product evidence; never replace it silently with a later clear.
+A loss is product evidence and must not be overwritten by a later clear.
 
-- Record the first-attempt loss and failed wave in the row.
+- Record the first-attempt loss and failed wave.
 - Allow at most **one** comfort retry after a small ordinary strategy adjustment.
-- Record the retry outcome separately; the row's primary result remains the first attempt.
-- A first-attempt loss on a main-path stage is automatically a focused follow-up candidate.
-- If the one retry clears, continue the same campaign save and describe the stage as “clearable after a small adjustment,” not “comfortable first try.”
-- If the one retry also loses on a main-path stage, stop brute-force play. Open a blocking focused follow-up; HPA-526 remains open until that gate is fixed/retested and the campaign can continue.
-- If the one retry also loses on an optional side stage, continue the main path without that side-stage reward. That missing reward is part of the actual campaign state and should be reflected in later observations.
+- Record the retry separately.
+- A first-attempt main-path loss is a focused follow-up candidate even if the retry clears.
+- If the retry clears, continue the same campaign and describe the stage as “clearable after a small adjustment,” not “comfortable first try.”
+- If a main-path stage loses twice, stop brute-force play and open a blocking focused follow-up before later locked stages can be validated.
+- If a side stage loses twice, continue the main path without its reward; that missing reward is part of the actual later campaign context.
 
-## Observation schema
+## Observation contract
 
-Record one row per stage directly in HPA-526 using these fields:
+Each stage row records:
 
 | Field | What to record |
 | --- | --- |
 | First attempt | Clear, or loss with failed wave |
 | Retry | Not used, or the one comfort-retry result |
 | Length | Short / comfortable / long |
-| Difficulty | 1–5 perceived difficulty for the first attempt |
+| Difficulty | 1–5 perceived difficulty on the first attempt |
 | Towers | Tower types used plus any level-3 specializations |
-| Tech at launch | Purchased campaign tech owned when the stage started |
+| Tech at launch | Purchased campaign tech when the stage started |
+| Offers seen | All three drafts, e.g. `D1 Heavy/Long/Cryo → Long; D2 ...; D3 ...` |
 | Modules | Selected Salvage Modules |
-| Offer quality | Whether each offer was understandable and useful |
-| Card problems | Any dead, mandatory, repetitive, or confusing card |
-| Stage identity | Whether the environmental modifier and boss were noticeable |
-| Mobile UX | Any readability or control problem |
-| Comfort | One sentence interpreting first-attempt comfort and any retry |
+| Offer quality | Concise note on whether the offers were understandable/useful |
+| Card problems | Dead / mandatory / repetitive / confusing card, or None |
+| Stage identity | Whether the modifier and boss were noticeable |
+| Mobile UX | Readability/control problem, or None |
+| Comfort | First-attempt interpretation plus explicit confound check |
 
-The Towers + Tech context is required because triage compares module complaints against existing specializations and campaign tech. Without it, “mandatory Emergency Salvage” and “no economy tech purchased” or “Cryo Reservoir duplication” and “Cryo-only build with Cryo Coolant” are not distinguishable from the row itself.
+### Why `Offers seen` is required
 
-Do not capture exact economy reconciliation, per-wave health tables, seeds, machine exports, screenshots for every wave, or formal evidence artifacts.
+Offers are random and cannot be reconstructed after the run. Selected modules alone cannot answer whether multiple offers collapsed into the same decision or whether a harmful repetition occurred.
 
-## Decision rules after the pass
+Recording the three card names shown in each draft is direct observation, not offer-history infrastructure.
 
-### No concrete problem
+### Comfort/confound sentence
 
-If the seven stages remain comfortably clearable and there is no repeated weak/mandatory/confusing module pattern:
+Every Comfort entry must explicitly answer:
 
-- keep all seven module definitions and values unchanged;
-- keep the picker unchanged;
-- keep only the Relay Calibration blueprint;
-- do not add a Codex Modules section;
-- publish the compact HPA-526 summary and finish the ticket.
+> Could the tower/specialization or tech choice, rather than the module itself, explain the observed weakness/strength/mandatory feeling?
 
-Zero runtime code is a successful HPA-526 outcome.
+Use `Confound: No`, `Confound: Yes`, or `Confound: Unclear` with a short reason.
 
-### Concrete value or balance problem
+A module balance issue may be opened only when the observed signal cannot reasonably be explained by build/tech context. If the answer is Yes or Unclear, preserve it as an observation rather than spending the n=1 qualitative signal as a tuning change.
 
-If a module is repeatedly too weak, too strong, effectively mandatory, or confusing, open a focused Linear follow-up containing:
+Do not capture per-wave economy tables, seeds, generated evidence files, exhaustive screenshots, or statistical claims.
 
-- affected stage(s);
-- exact module;
-- first-attempt symptom;
-- tower/specialization context;
-- tech-at-launch context;
-- smallest proposed value/copy change.
+## Triage rules
 
-That follow-up should modify only the existing catalog/rule seam needed for the observed issue and add focused tests for the changed contract. Rerun only stages materially affected by the accepted fix.
+### Keep seven by default
 
-### Concrete offer-quality problem
+If the campaign remains comfortably clearable and no evidence-backed module/offer problem appears:
 
-If the pass records impossible, pivot-only, or clearly harmful repetition, open a focused follow-up for the smallest candidate-selection correction. Prefer changing `GameSession` candidate filtering before changing `ModuleOfferPicker`; the picker should remain policy-free unless the defect is specifically about random selection behavior.
+- keep all seven module values unchanged;
+- keep `GameSession._moduleCandidates()` and `ModuleOfferPicker` unchanged;
+- keep Relay Calibration as the only blueprint reward;
+- do not add a Modules Codex;
+- finish HPA-526 with zero runtime code.
 
-Do not add complete offer history or weighted ranking merely because one run happens to repeat a card.
+### Module value problem
 
-### Genuine missing build pattern
+Open a focused balance issue only when a named module is repeatedly weak/mandatory/confusing **and** the recorded build/tech context does not plausibly explain it.
 
-If the pass identifies a distinct missing strategic choice, first compare it against:
+The issue records stage, module, first-attempt symptom, tower/specialization context, tech-at-launch context, and the smallest proposed rule/value change.
 
-- the seven current run modules;
+### Offer problem
+
+Open an offer issue only when the recorded `Offers seen` data demonstrates an actual bad state such as impossible/pivot-only choices or clearly harmful repetition.
+
+Repair order remains:
+
+```text
+1. GameSession candidate eligibility/policy
+2. ModuleOfferPicker only when the defect is genuinely random-selection policy
+```
+
+Do not infer a picker problem from one ordinary repeated card.
+
+### Missing strategic purpose
+
+Before proposing a new module, compare the observed gap against:
+
+- seven current run modules;
 - all tower specializations;
 - campaign tech upgrades;
 - side-stage rewards.
 
-Only then create one focused feature issue around the missing player-facing purpose. Reuse current `RunModuleDefinition` fields if possible. If the desired effect needs a new rule seam, write a small focused design for that seam before implementation rather than broadening HPA-526 implicitly.
+Only a distinct missing player-facing purpose earns a focused feature issue. Reuse current `RunModuleDefinition` fields when possible. A new combat/event seam requires its own focused design.
 
-### Blueprint expansion
+### Blueprint and Codex expansion
 
-Additional boss blueprints are not part of the default plan. Consider one only if the human HPA-528 verdict is **Proceed** and the campaign pass provides a specific progression reason that another option unlock would improve.
+Additional blueprints require both an HPA-528 **Proceed** verdict and a specific progression gap from the campaign pass. “Reward every boss” is not sufficient.
 
-Even then, ownership must still derive from committed stage clears and presentation must reuse the existing Mission Report/world-map pattern.
+A Modules Codex requires an observed comprehension problem. Seven cards plus draft/Mission Report copy do not justify it by themselves.
 
-## Codex decision
+## Post-fix validation and comparability
 
-Do not add a Modules section now.
+The original validation row is immutable evidence. A post-fix run never overwrites it.
 
-Seven cards already have short effect copy in the draft and selected modules are repeated in the Mission Report. The HPA-527 playtests did not report comprehension problems. A Codex section becomes justified only if repeated validation shows that players cannot understand or remember the choices.
+### Deterministic regression first
 
-## Testing policy
+Every accepted code fix owns a deterministic regression at the **smallest relevant layer**:
 
-The software baseline should prove the contracts this ticket actually depends on rather than rely on a manual source audit.
+- module arithmetic/value contract → `run_module_rules_test.dart` or focused catalog/rule test;
+- candidate eligibility/policy → `game_session_test.dart`;
+- unlock/progression lifecycle → `run_module_unlocks_test.dart` and/or the focused widget lifecycle test;
+- assembled stage/wave interaction → a focused `orion_defense_game_test.dart` journey, driving `game.update(dt)` where appropriate.
 
-Run:
+Do **not** require a headless full-game journey for a defect that a smaller pure-rule regression proves better.
+
+### Human rerun only when product feel needs it
+
+If an accepted fix changes player-facing balance/feel, rerun only the materially affected stage. Record it as a **new post-fix row/note** with its actual tech and reward context. Never replace the original first-attempt row or pretend the contexts are identical.
+
+For a twice-failed main-path blocker, fix and regress the defect first, then rerun the blocked stage on the existing validation save so the campaign can continue. Record actual launch context again.
+
+For nonblocking fixes discovered after later campaign progress, the deterministic regression is mandatory; a manual 1× rerun is optional unless the fix changes product feel enough to require human confirmation.
+
+## Software baseline
+
+Before the human pass run:
 
 ```bash
 dart format --output=none --set-exit-if-changed .
 flutter analyze
 flutter test test/game/game_session_test.dart test/game/run_module_unlocks_test.dart test/game/module_offer_picker_test.dart test/game/run_module_rules_test.dart
 flutter test test/widget_test.dart --plain-name "first-clear commit then same-game Replay refreshes module eligibility"
+flutter test test/widget_test.dart --plain-name "fresh first-clear save failure reports Blueprint not recovered"
+flutter test test/widget_test.dart --plain-name "failed Retry Save then success reports Blueprint recovered"
 flutter test
 ```
 
-The focused tests cover attempt freeze, unlock derivation, offer behavior, module rules, and same-object Replay eligibility refresh. The full suite remains mandatory.
-
-If a focused follow-up changes code, that follow-up owns the failing test for its concrete defect plus final format/analyze/full-suite checks.
-
-Do not add thousand-seed sweeps or release-certification matrices.
+The focused tests explicitly credit hidden eligibility and reward-state behavior. The full suite remains mandatory.
 
 ## Final deliverable
 
 Post one compact HPA-526 summary containing:
 
-- seven stage rows from the one continuous campaign save;
-- first-attempt result and optional one-retry outcome;
-- tower/specialization and tech-at-launch context for each row;
+- all seven original stage rows from the continuous campaign;
+- any separate post-fix rows/notes without overwriting originals;
+- first-attempt/retry results;
+- offers shown;
+- tower/specialization and tech-at-launch context;
 - overall comfort and clearability verdict;
-- any module repeatedly perceived as weak, mandatory, repetitive, or confusing;
-- stages that felt too long, too easy, too hard, or visually dense;
-- the HPA-528 Proceed / Narrow / Stop verdict;
-- links to focused follow-up issues, if any;
-- explicit final catalog decision: **keep seven** or a separately justified future expansion.
+- module/offer problems that survive the confound check;
+- HPA-528 Proceed / Narrow / Stop verdict;
+- focused follow-up links, if any;
+- final catalog decision: keep seven or a separately justified future expansion.
 
 ## Risks and guardrails
 
-### A single campaign pass is qualitative
+### This is qualitative evidence
 
-One human campaign is enough for this product gate but not enough for statistical claims. Treat observations as concrete UX/balance signals, not proof of exact pick rates or win rates.
+One player's continuous campaign is enough for this product gate but not for statistical balance claims. Do not tune from a signal that remains plausibly explained by build/tech choice.
 
-### Random offers can look repetitive by chance
+### Random offers are unrecoverable
 
-One repeated card is not evidence for anti-repeat infrastructure. Require a clearly harmful offer state or repeated player-facing complaint before changing picker behavior.
+Record the cards shown while playing. Do not build runtime offer logging to solve this documentation problem.
 
 ### Validation can become endless tuning
 
-Do not optimize for equal usage among towers/modules. Open follow-ups only for problems that hurt clarity, comfort, or meaningful choice. HPA-526 ends after the complete campaign pass and triage, except when a twice-failed main-path stage blocks reaching later stages.
+Do not optimize for equal tower/module usage. HPA-526 closes after the complete pass and triage unless a twice-failed main-path stage blocks reaching later stages.
 
 ## Non-goals
 
 - Mandatory growth to 10–12 modules
-- Implementing all remaining boss blueprints
-- A Modules Codex without a comprehension problem
-- Versioned/deterministic draft protocol
-- Cross-platform seed fixtures or statistical sweeps
+- All remaining boss blueprints
+- Modules Codex without a comprehension problem
+- Draft history, weighting, pity, deterministic seeds, or statistical sweeps
 - Generic combat-event/effect architecture
-- Persistent run history or telemetry
-- Rarity, decks, rerolls, consumables, or module upgrades
-- New tower families, maps, online services, or daily modes
+- Persistent run history, telemetry, or evidence schema
+- Rarity, decks, rerolls, consumables, module upgrades
+- New tower families, maps, online services, daily modes
 - Exhaustive balance certification
