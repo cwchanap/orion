@@ -19,6 +19,8 @@ prove existing hidden contracts with tests
 
 The planning PR remains documentation-only. Runtime changes require a concrete observation first.
 
+This specification is the normative product/validation contract. The implementation plan repeats only the operational rules needed to execute it safely without requiring an implementer to reconstruct the protocol from multiple files.
+
 ## Product question
 
 The remaining question is not “what else can we add?” It is:
