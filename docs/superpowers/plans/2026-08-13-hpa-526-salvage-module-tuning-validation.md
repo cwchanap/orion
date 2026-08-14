@@ -17,9 +17,9 @@
 - Tech purchases are allowed; side-stage rewards stack naturally in the same save.
 - First attempt is always the primary observation; at most one comfort retry after a loss.
 - Original rows are immutable. Post-fix runs append new context; they never overwrite original evidence.
-- No mandatory 10–12 module target.
-- No picker history/weighting/pity/seeds, generic effect engine, new persistence model, telemetry/evidence schema, Modules Codex, or extra blueprint by default.
-- Additional blueprints require HPA-528 `Proceed` plus a concrete progression gap.
+- Do not target a mandatory 10–12 module count.
+- Do not add picker history/weighting/pity/seeds, a generic effect engine, new persistence model, telemetry/evidence schema, Modules Codex, or extra blueprint by default.
+- Additional blueprints require HPA-528 **Proceed** plus a concrete progression gap.
 - A module balance follow-up requires a signal that cannot reasonably be explained by tower/specialization or tech choice.
 
 ---
@@ -301,7 +301,7 @@ For a twice-failed main-path blocker, fix + regression first, then rerun the blo
 
 For nonblocking fixes discovered after later campaign progress, deterministic regression is mandatory; manual 1× rerun is required only when player feel needs revalidation.
 
-No repository commit is required for HPA-526 itself.
+No repository commit is required for HPA-526 itself; any accepted focused follow-up owns its own implementation commit/PR.
 
 ---
 
@@ -361,7 +361,7 @@ Expected: all pass.
 
 - [ ] **Step 5: Complete HPA-526 when the campaign pass and triage are complete**
 
-Move HPA-526 to Done after all reachable seven-stage evidence, final verdict, and follow-up links are recorded. Focused follow-ups own their fixes and regressions.
+Move HPA-526 to Done after all seven stage rows, final verdict, and follow-up links are recorded. Focused follow-ups own their fixes and regressions.
 
 Exception: a twice-failed main-path stage that blocks later stages keeps HPA-526 open until the blocking fix/retest allows the continuous campaign pass to finish.
 
