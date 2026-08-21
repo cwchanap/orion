@@ -21,7 +21,7 @@ class CommandToast extends StatefulWidget {
 
 class _CommandToastState extends State<CommandToast> {
   Timer? _timer;
-  final ValueNotifier<bool> _renderText = ValueNotifier(false);
+  GlobalKey<_CommandToastMessageState>? _messageKey;
   String? _lastInput;
   String? _latchedMessage;
   bool _visible = false;
@@ -45,11 +45,14 @@ class _CommandToastState extends State<CommandToast> {
     }
     if (_lastInput == input) return;
 
+    final wasVisible = _visible;
     void updateState() {
       _lastInput = input;
       _latchedMessage = input;
       _visible = true;
-      _renderText.value = true;
+      if (!wasVisible || _messageKey == null) {
+        _messageKey = GlobalKey<_CommandToastMessageState>();
+      }
     }
 
     if (notify) {
@@ -60,10 +63,8 @@ class _CommandToastState extends State<CommandToast> {
     _timer?.cancel();
     _timer = Timer(widget.visibleDuration, () {
       if (!mounted) return;
-      setState(() {
-        _visible = false;
-        _renderText.value = false;
-      });
+      _messageKey?.currentState?.hideText();
+      setState(() => _visible = false);
     });
   }
 
@@ -81,44 +82,36 @@ class _CommandToastState extends State<CommandToast> {
       _ToastTone.neutral => uiTheme.systemCyan,
     };
 
+    final toast = _visible && message != null
+        ? _CommandToastMessage(
+            key: _messageKey,
+            message: message,
+            toneColor: toneColor,
+            textScaler: textScaler,
+          )
+        : const SizedBox.shrink(key: ValueKey('command-toast-hidden'));
+
+    final maxToastWidth = (MediaQuery.sizeOf(context).width - 32)
+        .clamp(0.0, double.infinity)
+        .toDouble();
+
     return IgnorePointer(
-      child: AnimatedSwitcher(
-        duration: orionMotionDuration(
-          context,
-          const Duration(milliseconds: 160),
+      child: Align(
+        alignment: Alignment.center,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxToastWidth),
+          child: AnimatedSwitcher(
+            duration: orionMotionDuration(
+              context,
+              const Duration(milliseconds: 160),
+            ),
+            reverseDuration: orionMotionDuration(
+              context,
+              const Duration(milliseconds: 140),
+            ),
+            child: toast,
+          ),
         ),
-        reverseDuration: orionMotionDuration(
-          context,
-          const Duration(milliseconds: 140),
-        ),
-        child: _visible && message != null
-            ? CommandFrame(
-                key: const ValueKey('command-toast'),
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                color: uiTheme.hullBlack,
-                borderColor: toneColor,
-                emphasized: true,
-                child: ValueListenableBuilder<bool>(
-                  valueListenable: _renderText,
-                  builder: (context, renderText, _) => renderText
-                      ? Text(
-                          message,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          textScaler: textScaler,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: toneColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                        )
-                      : const SizedBox.shrink(),
-                ),
-              )
-            : const SizedBox.shrink(key: ValueKey('command-toast-hidden')),
       ),
     );
   }
@@ -139,8 +132,55 @@ class _CommandToastState extends State<CommandToast> {
   @override
   void dispose() {
     _timer?.cancel();
-    _renderText.dispose();
     super.dispose();
+  }
+}
+
+class _CommandToastMessage extends StatefulWidget {
+  const _CommandToastMessage({
+    super.key,
+    required this.message,
+    required this.toneColor,
+    required this.textScaler,
+  });
+
+  final String message;
+  final Color toneColor;
+  final TextScaler textScaler;
+
+  @override
+  State<_CommandToastMessage> createState() => _CommandToastMessageState();
+}
+
+class _CommandToastMessageState extends State<_CommandToastMessage> {
+  bool _renderText = true;
+
+  void hideText() {
+    if (!mounted || !_renderText) return;
+    setState(() => _renderText = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CommandFrame(
+      key: const ValueKey('command-toast'),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      color: OrionUiTheme.of(context).hullBlack,
+      borderColor: widget.toneColor,
+      emphasized: true,
+      child: _renderText
+          ? Text(
+              widget.message,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textScaler: widget.textScaler,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: widget.toneColor,
+                fontWeight: FontWeight.w700,
+              ),
+            )
+          : const SizedBox.shrink(),
+    );
   }
 }
 

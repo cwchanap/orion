@@ -431,6 +431,10 @@ void main() {
   });
 
   testWidgets('mission toast latches through null republishes', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
     OrionDefenseGame? game;
     await tester.pumpWidget(
       testGamePage(onGameCreated: (created) => game = created),
@@ -438,11 +442,16 @@ void main() {
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester);
 
-    const feedback = 'Not enough gold.';
+    const feedback =
+        'Not enough gold. This long mission feedback copy checks the portrait toast width cap.';
     game!.overrideFeedback(feedback);
     await tester.pump();
     expect(find.byKey(const ValueKey('mission-command-toast')), findsOneWidget);
     expect(find.text(feedback), findsOneWidget);
+    expect(
+      tester.getRect(find.byKey(const ValueKey('command-toast'))).width,
+      lessThanOrEqualTo(328),
+    );
 
     game!.setSpeedMultiplier(2);
     await tester.pump();
