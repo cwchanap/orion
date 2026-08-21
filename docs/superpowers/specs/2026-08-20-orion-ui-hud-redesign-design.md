@@ -55,7 +55,7 @@ Out of scope:
 - Mission overlays stay at the top and bottom edges.
 - The idle command dock collapses to the smallest useful state.
 - Expanded panels have explicit maximum heights and never become full-screen during active play.
-- The next-wave scanner expands into the upper-right corner and can be collapsed by the player.
+- The next-wave scanner starts as a compact upper-right radar control and expands only when the player asks for detail.
 
 ### State is never color alone
 
@@ -122,6 +122,7 @@ Use the platform font already supplied by Flutter. Do not add a font dependency.
 - Feedback toast: 160 ms entrance, 140 ms exit, visible for 2.4 seconds.
 - A subtle pulse may identify an unlocked, uncleared stage, but it must not animate continuously when reduced motion is enabled.
 - With `MediaQuery.disableAnimations`, replace all movement and size animation with an immediate state change or a zero-duration fade.
+- Extend the existing `_sheetAnimationStyle` reduced-motion behavior into shared UI motion helpers; sheet and widget animation decisions must use the same `MediaQuery.disableAnimationsOf(context)` predicate rather than maintaining two independent policies.
 
 ## Local Art System
 
@@ -135,16 +136,16 @@ The first implementation uses only assets already declared in `pubspec.yaml`:
 
 No image is downloaded at runtime.
 
-### Reusable atlas widget
+### Reusable atlas rendering
 
-Add a presentation-only `OrionAtlasSprite` widget backed by a small immutable art descriptor:
+Keep the new exhaustive `OrionArt` mapping, backed by a small immutable art descriptor:
 
-- asset path
+- Flame asset file name
 - source-rectangle resolver bound to an existing sheet `sourceRectFor` helper
 - semantic label
-- optional fit, tint, and opacity
+- fallback icon
 
-The widget resolves the cached asset image, asks the descriptor for the `ui.Rect` computed by the existing `GameSpriteSheet.sourceRectFor`, `GameTowerVarietySheet.sourceRectFor`, or `GameBossSheet.sourceRectFor` helper, and draws that source rectangle into the available box. It performs no row/column arithmetic of its own. The tested loader helpers remain the single owners of grid translation.
+Each canonical descriptor resolves its `Sprite` once through `Flame.images`: load the image by the loader's existing `fileName`, ask the descriptor for the `ui.Rect` computed by `GameSpriteSheet.sourceRectFor`, `GameTowerVarietySheet.sourceRectFor`, or `GameBossSheet.sourceRectFor`, and construct the cropped Flame `Sprite`. A thin `OrionAtlasSprite` future/fallback wrapper then renders the ready sprite with Flame's existing `SpriteWidget`; it does not own an `ImageStream`, `ImageInfo`, `CustomPainter`, or `drawImageRect` implementation. The tested loader helpers remain the single owners of grid translation, and Flame remains the owner of image caching and sprite painting.
 
 Presentation factories provide the supported mappings:
 
@@ -155,7 +156,9 @@ Presentation factories provide the supported mappings:
 
 Unknown tower and boss enum cases are compile-time exhaustive, not runtime fallback states. Only asset load/decode failure falls back to the existing `towerIcon`, stage icon, or generic enemy icon. Locked art is desaturated and darkened by the presentation layer. The source PNGs are never modified.
 
-Flutter's image cache should own UI asset reuse. Precache the terrain, tower sheets, and boss sheet when the corresponding map or mission shell becomes active. Do not decode a new image per card rebuild.
+The exact boss-name match deliberately preserves the presentation-only/model-frozen boundary: `WavePreviewGroup` and `GameSnapshot` gain no field. A projection-seam test must construct the preview through `GameBalance.wavePreview` from each real `BossDefinition`, then verify `OrionArt.previewGroup` returns that boss sprite. If `_enemyLabelForStats` later decorates or localizes boss labels, this test fails instead of silently degrading to generic art.
+
+Flame's `Images` cache owns UI atlas-sheet reuse. Warm the tower and boss sheets once by loader `fileName` when the corresponding map or mission shell becomes active. The full-bleed terrain remains a Flutter `Image.asset` and is warmed once with `precacheImage`; do not create a new decode or load per card rebuild.
 
 ## World Map
 
@@ -181,7 +184,8 @@ The terrain image uses `BoxFit.cover`, a dark navy overlay, and restrained cyan/
 
 - Keep the authored `mapColumn` and `mapRow` coordinates as the source of node placement.
 - Reserve 52 dp on the right for the utility rail and 12 dp horizontal safe padding.
-- Normalize the five map columns and three rows into the remaining `LayoutBuilder` bounds. At 375 dp, the plotting width is `375 - 24 - 52 = 299` dp; placing 56 dp node envelopes between 28 dp edge insets leaves `(299 - 56) / 4 = 60.75` dp between main-path centers, so the five hit targets do not overlap.
+- Derive `maxColumn` and `maxRow` from the supplied stage list, then normalize authored coordinates into the remaining `LayoutBuilder` bounds. For the current 0–4 main-path columns at 375 dp, the plotting width is `375 - 24 - 52 = 299` dp; distributing the 56 dp envelopes across the remaining width yields `(299 - 56) / 4 = 60.75` dp between main-path left edges, so the five current hit targets do not overlap. A future column 5 must automatically change the divisor rather than render beyond the utility rail.
+- Preserve the existing empty-stage branch and visible `No stages available` fallback before deriving coordinate maxima.
 - Paint each route from the dependency stage center to the destination center. Main-path routes are solid; optional branches use a short dash pattern.
 - A route is bright cyan when its destination is unlocked or cleared, steel when locked, and gold at the destination end when the best result is Gold.
 - Routes are visual only and never become independent tap targets.
@@ -204,7 +208,7 @@ The full stage name, status, medal, reward, and Outpost Alpha blueprint state re
 
 ### Header and utility rail
 
-The header contains the compact title “ORION SECTOR,” current campaign completion count, and the challenge badge when earned. The previous large completion and challenge cards become icon-led header badges.
+The header contains the compact title “ORION SECTOR,” current campaign completion count, and the challenge badge when earned. The previous large completion and challenge cards become icon-led header badges. The challenge badge keeps `Challenge Badge Earned - All side stages cleared` as its tooltip/semantic contract even if the visible badge is shortened.
 
 The right rail contains 48 dp icon buttons for:
 
@@ -248,12 +252,12 @@ The module draft and mission report remain modal and must obscure/disable the co
 
 ### Top-overlay hit testing
 
-The current top column is entirely wrapped by `IgnorePointer(ignoring: true)`. The redesign must split that ownership:
+The current top column is entirely wrapped by `IgnorePointer(ignoring: true)`. Replace it with one flow-based `Positioned(left: 12, right: 12, top: 12) > Column`; do not coordinate top surfaces with absolute `top` offsets or placeholder spacers that stand in for another panel's height. Small ordinary flow gaps remain appropriate.
 
-- Numeric HUD anchors and the acquired-module strip remain pass-through under `IgnorePointer(ignoring: true)` so board cells beneath them keep receiving taps.
-- The pacing strip and scanner are separate interactive siblings outside that wrapper. Their render boxes, not a full-width invisible parent, define the hit-test area.
+- Wrap only the numeric HUD and acquired-module strip in their own `IgnorePointer(ignoring: true)` widgets so board cells beneath them keep receiving taps.
+- Place the pacing strip next in the column and the acquired-module/scanner row after it. The column and row have no gesture recognizer, so gaps remain pass-through; only interactive children's painted render boxes consume taps.
 - The collapsed scanner intentionally consumes only its 48 × 48 dp control area.
-- The expanded scanner intentionally consumes its painted area up to 212 × 168 dp in the upper-right corner; this is a documented board dead zone while open.
+- The expanded scanner consumes its painted area up to 212 × 168 dp only after the player explicitly opens it. It starts collapsed for every preview and automatically collapses when `selectedCell` or `selectedTower` becomes non-null, so the default build flow never opens a large board dead zone.
 - Existing widget assertions remain pass-through for numeric HUD content and are inverted only for the pacing/scanner controls.
 
 ### Top HUD
@@ -285,7 +289,7 @@ The strip uses the existing `isPaused`, `speedMultiplier`, `autoStartEnabled`, a
 
 ### Next-wave scanner
 
-When `nextWavePreview` is present, show a scanner control anchored below the HUD at the upper right.
+When `nextWavePreview` is present, show a scanner control in the trailing side of the flow-based row below the pacing strip.
 
 Collapsed state:
 
@@ -301,7 +305,7 @@ Expanded state, maximum 212 dp wide and 168 dp high:
 - Recommended tower portraits when present.
 - Environment/modifier icon derived from the existing stage modifiers.
 
-The scanner is expanded on mission entry and whenever a new preview wave appears. The player may collapse it for the rest of that build phase. It is hidden during an active wave, won/lost state, or a modal module draft. Expansion state is widget-local and resets from `nextWavePreview.waveNumber`; it is not added to `GameSnapshot`. Preview portraits use the exact boss-name/heavy/basic mapping defined by the Local Art System, including Swarm Queen as boss art even though that boss does not carry the heavy trait.
+The scanner starts collapsed on mission entry and resets to collapsed whenever a new preview wave appears. A warning/pulse on the 48 dp radar control announces the new preview; the player explicitly expands it. It auto-collapses when a cell or tower is selected and cannot re-expand until that selection clears, keeping the build rail/inspector interaction free of the large dead zone. It is hidden during an active wave, won/lost state, or a modal module draft. Expansion state is widget-local and keyed by `nextWavePreview.waveNumber`; it is not added to `GameSnapshot`. Preview portraits use the exact boss-name/heavy/basic mapping defined by the Local Art System, including Swarm Queen as boss art even though that boss does not carry the heavy trait.
 
 ## Bottom Command Dock
 
@@ -350,7 +354,7 @@ The inspector contains:
 - Upgrade action at level 1, two specialization choices at level 2, or a max-level badge at level 3.
 - A visually separated Sell action with refund value and destructive styling.
 
-All displayed combat values and upgrade/specialization costs come from `snapshot.selectedTowerStats`. The redesign removes the inspector's current second `GameBalance.towerStats` lookup. Sell refund remains sourced from the existing `GameBalance.refundValue(tower)` domain helper because it is not a `TowerStats` field.
+All displayed combat values and upgrade/specialization costs come from `snapshot.selectedTowerStats`. The redesign removes the inspector's current second `GameBalance.towerStats` lookup. Sell refund remains sourced from the existing `GameBalance.refundValue(tower)` domain helper because it is not a `TowerStats` field. A resolver contract test pins runtime `upgradeCost` and `specializationCost` to the values `GameSession` charges from base `GameBalance`, across every tower progression entry and all current modifiers.
 
 Stat-bar fill uses a closed presentation scale per `TowerType`, derived only from `GameBalance.towerStats` for level 1, level 2, and both valid level-3 specializations:
 
@@ -361,7 +365,7 @@ Stat-bar fill uses a closed presentation scale per `TowerType`, derived only fro
 
 Campaign tech, stage modifiers, and run modules are deliberately excluded from these denominators. The runtime numerator is still the resolved `selectedTowerStats` value, may exceed the base-progression scale, and is clamped to a full bar. The exact resolved number always appears beside the bar. The scale catalog is derived from `GameBalance` rather than containing duplicated tuning literals, and tests cover every `TowerType` and both specializations.
 
-Upgrade, specialization, targeting, and sell callbacks remain unchanged. Phase and affordability failures continue to be enforced by the game and surfaced as feedback.
+Upgrade, specialization, targeting, and sell callbacks remain unchanged. The inspector computes `canMutate = snapshot.phase == GamePhase.build` and disables all four action families outside build phase. Tower selection and resolved-stat display remain available mid-wave, while the existing no-mutation regressions stay intact. Within build phase, upgrade and specialization also retain level and affordability gates; the game remains the final authority.
 
 ## Feedback Presentation
 
@@ -425,7 +429,7 @@ The redesign is presentation-only.
 Recommended presentation boundaries:
 
 - `orion_ui_theme.dart`: theme extension, spacing, type, and motion tokens.
-- `orion_atlas_sprite.dart`: generic atlas crop and art mapping factories.
+- `orion_atlas_sprite.dart`: Flame-backed sprite resolution, thin `SpriteWidget` fallback wrapper, and art mapping factories.
 - `command_frame.dart`: shared chamfered frame and reactor treatment.
 - `command_toast.dart`: transient mission feedback.
 - `world_map_view.dart`: sector composition, routes, nodes, and utility rail.
@@ -456,7 +460,7 @@ Small private widgets may remain colocated until reuse or file size justifies ex
 
 ## Performance
 
-- Precache each required sheet once when its map or mission shell becomes active and render through Flutter's shared image cache. A card rebuild must not trigger another asset decode.
+- Warm each required atlas sheet once through `Flame.images` when its map or mission shell becomes active and render ready sprites through Flame's `SpriteWidget`; warm the Flutter-rendered terrain through `precacheImage`. A card rebuild must not trigger another asset decode.
 - `GameWidget` retains the same game instance across snapshot-driven overlay rebuilds; this is an architecture invariant rather than a request for speculative micro-optimization.
 
 ## Delivery Slices and Risks
@@ -467,7 +471,7 @@ Deliver the redesign as two independently reviewable PRs. If implementation rema
 
 - Add `OrionUiTheme`, `CommandFrame`, source-rect-backed atlas art/factories, and their tests.
 - Redesign `WorldMapView`, dependency routes, stage nodes, blueprint glyph, utility rail, campaign feedback strip, stage briefing, and reset dialog.
-- Update intentionally changed copy/finders in the same PR, including `Orion Sector Map` → `ORION SECTOR` and fresh-stage `Start Mission` → `Launch Mission`.
+- Update intentionally changed copy/finders in the same PR, including `Orion Sector Map` → `ORION SECTOR` and fresh-stage `Start Mission` → `Launch Mission`. Preserve the challenge-badge semantic sentence and the busy-derived `Saving campaign progress…` / `Resetting campaign…` status strings.
 - Run focused component/widget tests, full `flutter test`, `flutter analyze`, and screenshot QA at all three portrait sizes before review.
 
 ### PR 2: Interactive mission chrome and modal integration
@@ -480,10 +484,11 @@ Deliver the redesign as two independently reviewable PRs. If implementation rema
 
 | Risk | Required mitigation and runnable checkpoint |
 | --- | --- |
-| Interactive top controls block board taps | Keep HUD/acquired modules under `IgnorePointer`; test that pacing/scanner are interactive and numeric HUD remains pass-through; test the expanded scanner's intentional dead zone. |
+| Interactive top controls block board taps | Use one flow-based top column with per-child `IgnorePointer`; start the scanner collapsed, auto-collapse it on board/tower selection, and test both pass-through gaps and the explicitly expanded painted bounds. |
+| Top surfaces overlap at larger text scales | Avoid absolute inter-panel top offsets; pump the complete top flow at text scales 1.3 and 2.0 and assert ordered, non-overlapping bounds with essential controls reachable. |
 | Null snapshots erase a toast immediately | Widget-test that a non-null message remains visible after a null republish and exits only after 2.4 seconds. |
-| Atlas UI drifts from Flame crop math | Factories call the existing `sourceRectFor` helpers; test every tower, every boss, boss-name preview matching, heavy/basic fallback, and asset-load fallback. |
-| Five map nodes overlap beside the rail at compact width | Pump 375 × 812 and assert distinct 56 dp hit rectangles, in-bounds centers, and successful taps for each main-path node. |
+| Atlas UI duplicates Flame image lifecycle or drifts from crop math | Resolve canonical sprites through `Flame.images` and existing `sourceRectFor` helpers, render with `SpriteWidget`, and test every tower/boss/preview mapping plus load fallback. |
+| Map geometry freezes the current 5 × 3 campaign shape | Derive coordinate divisors from stages, preserve the empty-state branch, and test current compact geometry plus a synthetic sixth column in bounds. |
 | Blueprint progress disappears in an art-led node | Keep locked/recovered glyph semantics and the committed briefing line; preserve the existing reset regressions. |
 | Modal Material cards clash with the command deck | Include acquired strip, module draft, mission report, and reset dialog in their owning PR and test their token/frame use. |
 | Text-based widget finders fail for intentional copy changes | Update finders in the same PR as each copy change and replace presentation-only text assertions with keys/semantics where appropriate. |
@@ -496,10 +501,10 @@ Preserve the existing behavioral tests and update text/finders only where visibl
 
 - Every `TowerType` resolves through the correct existing sheet mapping and `sourceRectFor` helper.
 - Every campaign stage resolves to its final `BossDefinition.sprite` through `GameBossSheet.sourceRectFor`.
-- A preview group whose label exactly matches each `GameBalance.bosses.name` resolves to that boss; a non-boss heavy group resolves to the heavy drone; another non-boss group resolves to the basic drone.
+- A preview produced through `GameBalance.wavePreview` for every real boss resolves to that boss sprite; a non-boss heavy group resolves to the heavy drone; another non-boss group resolves to the basic drone.
 - Armor, shield, and regen badges resolve to the existing variety-sheet indicator cells; swarm and heavy use the established shape fallbacks.
 - An asset load/decode failure renders the icon fallback.
-- Atlas cards render without overflow at 64 dp and do not create one asset decode per rebuild.
+- Art cards render through Flame `SpriteWidget`, remain overflow-free at 64 dp, and reuse the same descriptor sprite future/cache entry across rebuilds.
 - Command frames and reactor buttons expose the expected semantic labels and minimum tap bounds.
 
 ### World map and briefing
@@ -508,11 +513,14 @@ Preserve the existing behavioral tests and update text/finders only where visibl
 - Locked, unlocked, Clear, Silver, and Gold states expose distinct icon/ring/semantic states.
 - Route painting follows `unlockDependencies`, including both optional branches.
 - At 375 × 812, all five main-path hit rectangles are distinct, in bounds, and individually tappable beside the 52 dp rail.
+- Empty stage data preserves `No stages available`; a synthetic sixth map column also normalizes within the plotting bounds.
 - Locked tap shows feedback and does not open a briefing.
 - Unlocked tap opens the correct briefing.
 - Outpost Alpha exposes `Blueprint • Locked` or `Blueprint • Recovered` semantics from committed progress, reset returns it to locked, and the briefing retains the committed `Blueprint recovered: Relay Calibration` line.
 - Briefing retains stage description, modifiers, reward, best result, blueprint state, launch/replay callback, and compact scrolling behavior.
 - Busy state disables stage nodes and utility actions.
+- Null feedback while saving/resetting still projects `Saving campaign progress…` / `Resetting campaign…` into the sticky strip.
+- The compact challenge badge retains `Challenge Badge Earned - All side stages cleared` in tooltip/semantics.
 - Codex, Tech Tree, Settings, and Reset callbacks remain wired.
 - Reset confirmation uses command-deck tokens without changing confirmation or persistence behavior.
 
@@ -521,9 +529,10 @@ Preserve the existing behavioral tests and update text/finders only where visibl
 - HUD shows base current/maximum, credits, stage, phase beacon, and wave progress from a snapshot.
 - Low and critical health states use the correct icon/color state without changing the numeric value.
 - Pause, 1x/2x/3x, auto-start, and countdown states remain selectable and correctly labeled.
-- Numeric HUD and acquired-module content retain an active `IgnorePointer(ignoring: true)` ancestor; pacing and scanner controls do not.
+- Numeric HUD and acquired-module content retain an active `IgnorePointer(ignoring: true)` ancestor; pacing and scanner controls do not, while gaps in their shared flow container remain pass-through.
 - Tapping through numeric HUD reaches the game layer, while the collapsed scanner consumes only 48 × 48 dp and the expanded scanner consumes its documented painted bounds.
-- Scanner expands on a new preview, collapses on tap, resets for the next preview, and hides during waves or modal drafts.
+- Scanner starts and resets collapsed, expands only on explicit tap, auto-collapses and stays collapsed while a cell/tower is selected, and hides during waves or modal drafts.
+- At text scales 1.3 and 2.0, HUD, pacing, and the acquired/scanner row remain ordered and non-overlapping without absolute top offsets.
 - Preview group counts, traits, clear bonus, recommendations, and environment remain discoverable through visible UI or semantics.
 
 ### Command dock
@@ -534,6 +543,8 @@ Preserve the existing behavioral tests and update text/finders only where visibl
 - Horizontal rail and selected-tower inspector do not overflow at 375 × 812, 390 × 844, or 430 × 932.
 - Inspector uses `selectedTowerStats` for damage, fire, range, and type-specific values.
 - Inspector upgrade/specialization copy and enabled states use `selectedTowerStats.upgradeCost` and `selectedTowerStats.specializationCost`; the old extra base-stat lookup is absent.
+- Inspector targeting, upgrade, specialization, and sell controls are disabled outside `GamePhase.build`, including the existing active-wave sell regression.
+- `TowerStatsResolver` preserves the base upgrade/specialization costs charged by `GameSession` for every tower progression entry under all current modifiers.
 - Presentation scales cover every tower type, level 1, level 2, and both level-3 specializations, exclude campaign/stage/run modifiers, normalize fire as shots per second, and clamp resolved values above the base maximum.
 - Targeting selection, upgrade, both specialization choices, max state, and sell remain wired.
 - Acquired modules, module draft, and mission report use command-deck tokens/frames; the modal overlays remain above and block the dock.
@@ -565,10 +576,13 @@ flutter test
 - Outpost Alpha retains a compact locked/recovered blueprint glyph and the existing committed blueprint briefing contract.
 - The mission playfield remains the dominant surface and is not relaid out by overlay state changes.
 - Numeric HUD and acquired-module content remain tap-through; pacing and scanner controls are interactive only inside their visible bounds.
+- The top overlay reflows without overlap at text scales 1.3 and 2.0; no HUD/pacing/scanner relationship depends on absolute vertical offsets.
 - Base health, credits, stage/wave, pacing, auto-start, and next-wave threat are readable at a glance.
+- The next-wave scanner starts collapsed, expands only on request, and stays collapsed while a board cell or tower is selected.
 - Selecting a build cell opens an art-led horizontal tower dock using the existing tower sheets.
 - All tower types are visible; unlock and affordability states are unambiguous and existing placement rules remain authoritative.
 - Selecting a tower exposes its resolved stats, targeting, upgrade/specialization, and sell actions without changing their behavior.
+- All inspector mutations remain disabled outside build phase.
 - Inspector combat values and upgrade/specialization costs come from `selectedTowerStats`; bars use the documented modifier-free base-progression scales.
 - Mission feedback latches across null snapshot republishes, exits on its timer, and does not consume permanent HUD space; campaign persistence errors remain readable.
 - Acquired-module, module-draft, mission-report, and reset-confirmation surfaces use the command-deck tokens without changing their content or callbacks.

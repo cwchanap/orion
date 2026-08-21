@@ -4,7 +4,7 @@
 
 **Goal:** Deliver PR 2 of the Orion Command Deck redesign: interactive mission chrome, an art-led three-state command dock, correctly latched feedback, and cohesive mission modal surfaces.
 
-**Architecture:** Build on PR 1's `OrionUiTheme`, `CommandFrame`, and loader-owned `OrionAtlasSprite` APIs. Split the current top overlay into pass-through numeric/module status and narrowly hit-tested pacing/scanner siblings. Extract mission HUD, scanner, dock, inspector scale, and toast widgets so `OrionGamePage` remains the overlay/state orchestrator and all game actions still flow through `OrionDefenseGame`.
+**Architecture:** Build on PR 1's `OrionUiTheme`, `CommandFrame`, and loader-owned `OrionAtlasSprite` APIs. Replace the current top overlay with one flow-based column whose non-interactive children opt out of hit testing individually and whose pacing/scanner children consume only their painted bounds. Extract mission HUD, scanner, dock, inspector scale, and toast widgets so `OrionGamePage` remains the overlay/state orchestrator and all game actions still flow through `OrionDefenseGame`.
 
 **Tech Stack:** Dart `^3.12.0`, Flutter, Flame `^1.38.0`, Material 3, `flutter_test`; PR 1 local art/theme components; no new packages.
 
@@ -17,11 +17,12 @@
 - This is PR 2 only: mission HUD, pacing, scanner, dock, inspector, toast, acquired modules, module draft, and mission report.
 - Do not change `GameSession`, `GameSnapshot`, `OrionDefenseGame` gameplay ownership, board layout, pacing rules, placement rules, tower balance, campaign persistence, or modal content/callbacks.
 - `GameWidget` remains `Positioned.fill` with the same game instance.
-- Numeric HUD and acquired modules stay under active `IgnorePointer(ignoring: true)`; pacing and scanner are outside it and consume only painted bounds.
-- Expanded scanner's maximum 212 × 168 dp area is an intentional board dead zone; the collapsed scanner consumes only 48 × 48 dp.
+- Numeric HUD and acquired modules each stay under `IgnorePointer(ignoring: true)`; pacing and scanner share the same layout flow but consume only their painted bounds. The column itself has no recognizer, so gaps remain pass-through.
+- The scanner starts collapsed for every preview. Its 48 × 48 dp control is the default dead zone; the maximum 212 × 168 dp expanded area is created only after an explicit tap and auto-collapses when a board cell or tower becomes selected.
 - Scanner, toast, and dock animation state are Flutter widget-local; no new snapshot fields.
 - Every tower is visible in the build rail. Locked cards never place; unaffordable unlocked cards remain tappable so the game can publish insufficient-gold feedback.
 - Inspector numbers and upgrade/specialization costs come from `snapshot.selectedTowerStats`; sell refund keeps `GameBalance.refundValue`.
+- Inspector upgrade, specialization, targeting, and sell actions are all disabled unless `snapshot.phase == GamePhase.build`.
 - Stat-scale denominators derive from unmodified level 1, level 2, and both level-3 specialization values; campaign/stage/run modifiers never enter the denominator.
 - Toast visibility latches through null snapshots and exits only on its 2.4-second timer.
 - Acquired modules, module draft, and mission report use PR 1 tokens/frames without changing content or callbacks.
@@ -31,10 +32,11 @@
 
 ## Risks
 
-- **Board hit testing:** test pass-through and dead-zone behavior with a real stack before replacing the page overlay.
+- **Board hit testing:** use one reflowing top stack, start the scanner collapsed, and test pass-through gaps plus explicit expansion/collapse with a real stack before replacing the page overlay.
+- **Text scaling:** avoid inter-panel `top` constants; verify ordered, non-overlapping bounds at 1.3 and 2.0 text scale.
 - **Toast lifetime:** separate last input from latched display and timer state; null only re-arms.
 - **Preview identity:** exact boss-name matching must run before heavy/basic fallback.
-- **Inspector drift:** keep scale derivation in one pure catalog and keep the inspector free of a second base-stat lookup.
+- **Inspector drift:** keep scale derivation in one pure catalog, keep the inspector free of a second base-stat lookup, pin resolver cost parity, and preserve the build-phase mutation gate.
 - **Copy-based tests:** retire old HUD/picker presentation finders in the same tasks and replace them with stable keys/semantics.
 - **Modal mismatch:** restyle acquired modules, module draft, and mission report before the PR closes.
 
@@ -54,7 +56,7 @@
 - `test/widget/tower_stat_scale_test.dart`
 - `test/widget/tower_inspector_test.dart`
 - `test/widget/command_toast_test.dart`
-- `test/widget/support/command_deck_fixtures.dart` — shared snapshot and preview builders for focused component tests.
+- `test/support/command_deck_fixtures.dart` — the single shared snapshot and preview constructor for widget and pure-projection tests.
 
 ### Modify
 
@@ -63,6 +65,8 @@
 - `lib/game/ui/mission_report_panel.dart` — command-deck tokens/frames for end-state surface/actions.
 - `test/widget_test.dart` — mission integration, hit testing, retired copy, reduced motion, and modal layering.
 - `test/widget/sell_button_test.dart` — inspector integration and resolved-stat/cost expectations.
+- `test/game/tower_stats_resolver_test.dart` — runtime/base upgrade and specialization cost parity across all modifiers.
+- `test/game/mission_report_content_test.dart` — delegate its domain-default snapshot wrapper to the shared fixture.
 - `test/widget/run_module_draft_panel_test.dart` — token/frame assertions while retaining callback tests.
 - `test/widget/mission_report_panel_test.dart` — token/frame assertions while retaining save/action tests.
 
@@ -82,8 +86,10 @@
 **Files:**
 - Create: `lib/game/ui/mission_command_hud.dart`
 - Create: `test/widget/mission_command_hud_test.dart`
-- Create: `test/widget/support/command_deck_fixtures.dart`
+- Create: `test/support/command_deck_fixtures.dart`
 - Modify: `lib/game/ui/orion_game_page.dart`
+- Modify: `test/game/mission_report_content_test.dart`
+- Modify: `test/widget/mission_report_panel_test.dart`
 - Modify: `test/widget_test.dart`
 
 **Interfaces:**
@@ -93,7 +99,7 @@
 
 - [ ] **Step 1: Add one exact snapshot/preview fixture for focused tests**
 
-Create `test/widget/support/command_deck_fixtures.dart`:
+Create `test/support/command_deck_fixtures.dart`:
 
 ```dart
 import 'package:orion/game/models/game_models.dart';
@@ -182,53 +188,41 @@ WavePreview commandDeckPreview({
   );
 }
 
-TowerStats commandDeckTowerStats(
-  TowerStats base, {
-  double? damage,
-  int? upgradeCost,
-  int? specializationCost,
-}) {
-  return TowerStats(
-    type: base.type,
-    level: base.level,
-    specialization: base.specialization,
-    cost: base.cost,
-    upgradeCost: upgradeCost ?? base.upgradeCost,
-    specializationCost: specializationCost ?? base.specializationCost,
-    range: base.range,
-    damage: damage ?? base.damage,
-    fireInterval: base.fireInterval,
-    projectileSpeed: base.projectileSpeed,
-    splashRadius: base.splashRadius,
-    slowMultiplier: base.slowMultiplier,
-    slowDuration: base.slowDuration,
-    pierceCount: base.pierceCount,
-    pierceWidth: base.pierceWidth,
-    chainCount: base.chainCount,
-    chainRange: base.chainRange,
-    chainFalloff: base.chainFalloff,
-    corrosionDamagePerSecond: base.corrosionDamagePerSecond,
-    corrosionDuration: base.corrosionDuration,
-    armorShred: base.armorShred,
-    fieldRadius: base.fieldRadius,
-    fieldDuration: base.fieldDuration,
-    fieldTickInterval: base.fieldTickInterval,
-    droneCount: base.droneCount,
-    droneLifetime: base.droneLifetime,
-    droneDamage: base.droneDamage,
-    droneAttackInterval: base.droneAttackInterval,
-    maxActiveDrones: base.maxActiveDrones,
-    shieldDamageMultiplier: base.shieldDamageMultiplier,
-    armorDamageMultiplier: base.armorDamageMultiplier,
-    slowedDamageMultiplier: base.slowedDamageMultiplier,
-    prismSplitDamageMultiplier: base.prismSplitDamageMultiplier,
-    prismSplitRange: base.prismSplitRange,
-    clusterBurstCount: base.clusterBurstCount,
-    clusterBurstDamageMultiplier: base.clusterBurstDamageMultiplier,
-    clusterBurstRadius: base.clusterBurstRadius,
-  );
-}
 ```
+
+This file is the only direct `GameSnapshot` constructor added by the redesign. Import it into the two existing report tests and reduce their domain-specific wrappers to delegates:
+
+```dart
+GameSnapshot terminalSnapshot({
+  required GamePhase phase,
+  int baseHealth = 14,
+  int waveNumber = 8,
+  List<RunModuleId> modules = const [],
+}) => commandDeckSnapshot(
+  phase: phase,
+  gold: 120,
+  baseHealth: baseHealth,
+  waveNumber: waveNumber,
+  unlockedTowerTypes: const [TowerType.laser, TowerType.cryo],
+  acquiredRunModules: modules,
+);
+
+GameSnapshot _syntheticSnapshot({
+  List<RunModuleId> modules = const [],
+  int baseHealth = 20,
+  int waveNumber = 8,
+  GamePhase phase = GamePhase.won,
+}) => commandDeckSnapshot(
+  phase: phase,
+  gold: 120,
+  baseHealth: baseHealth,
+  waveNumber: waveNumber,
+  unlockedTowerTypes: const [TowerType.laser, TowerType.cryo],
+  acquiredRunModules: modules,
+);
+```
+
+Keep those wrappers because they communicate report-domain defaults; do not add a second general snapshot builder or a field-by-field `TowerStats` copier.
 
 - [ ] **Step 2: Write HUD value, callback, and hit-test tests first**
 
@@ -291,21 +285,23 @@ testWidgets('status passes taps through while pacing consumes them',
             left: 12,
             right: 12,
             top: 12,
-            child: IgnorePointer(
-              child: MissionStatusHud(snapshot: commandDeckSnapshot()),
-            ),
-          ),
-          Positioned(
-            top: 76,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: MissionPacingStrip(
-                snapshot: commandDeckSnapshot(phase: GamePhase.wave),
-                onTogglePause: () {},
-                onSpeedSelected: (_) {},
-                onToggleAutoStart: () {},
-              ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IgnorePointer(
+                  child: MissionStatusHud(snapshot: commandDeckSnapshot()),
+                ),
+                const SizedBox(
+                  key: ValueKey('top-flow-gap'),
+                  height: 6,
+                ),
+                MissionPacingStrip(
+                  snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+                  onTogglePause: () {},
+                  onSpeedSelected: (_) {},
+                  onToggleAutoStart: () {},
+                ),
+              ],
             ),
           ),
         ],
@@ -315,12 +311,14 @@ testWidgets('status passes taps through while pacing consumes them',
 
   await tester.tap(find.byKey(const ValueKey('mission-status-hud')));
   expect(backgroundTaps, 1);
+  await tester.tap(find.byKey(const ValueKey('top-flow-gap')));
+  expect(backgroundTaps, 2);
   await tester.tap(find.byTooltip('Pause'));
-  expect(backgroundTaps, 1);
+  expect(backgroundTaps, 2);
 });
 ```
 
-Add threshold assertions for 51% cyan, 50% orange, and 25% red using a keyed base-health fill/icon. Add a countdown case expecting `Auto-start waves, 3 seconds` semantics from `2.2` seconds.
+Add threshold assertions for 51% cyan, 50% orange, and 25% red using a keyed base-health fill/icon. Add a countdown case expecting `Auto-start waves, 3 seconds` semantics from `2.2` seconds. Pump this complete top flow at text scales 1.3 and 2.0; assert status bottom ≤ pacing top, no overflow exception is reported, and every pacing control remains reachable.
 
 In `test/widget_test.dart`, update the current `_activeIgnorePointerAncestorsOf` checks so the status HUD/acquired strip still have one active ancestor and the pacing strip has none.
 
@@ -372,51 +370,52 @@ final canTogglePause =
 
 Use a compact `CommandFrame` around pause/resume, 1x/2x/3x, and auto-start. The countdown is shown in the auto control's visible/semantic state rather than a separate chip. Duration comes from `orionMotionDuration`.
 
-- [ ] **Step 6: Split `_buildStageScaffold` into pass-through and interactive siblings**
+- [ ] **Step 6: Replace `_buildStageScaffold` top chrome with one reflowing column**
 
-In `orion_game_page.dart`, replace the one top `IgnorePointer` column with:
+In `orion_game_page.dart`, replace the one top `IgnorePointer` column with one positioned flow. `IgnorePointer` belongs only on the non-interactive children; the column and gaps have no recognizer:
 
 ```dart
 Positioned(
   left: 12,
   top: 12,
   right: 12,
-  child: IgnorePointer(
-    ignoring: true,
-    child: Column(
-      children: [
-        MissionStatusHud(snapshot: snapshot),
-        const SizedBox(height: 56),
-        if (snapshot.acquiredRunModules.isNotEmpty)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 132),
-              child: AcquiredRunModuleStrip(
-                moduleIds: snapshot.acquiredRunModules,
+  child: Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IgnorePointer(
+        child: MissionStatusHud(snapshot: snapshot),
+      ),
+      const SizedBox(height: 6),
+      MissionPacingStrip(
+        snapshot: snapshot,
+        onTogglePause: game.togglePause,
+        onSpeedSelected: game.setSpeedMultiplier,
+        onToggleAutoStart: game.toggleAutoStart,
+      ),
+      const SizedBox(height: 6),
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (snapshot.acquiredRunModules.isNotEmpty)
+            Flexible(
+              child: IgnorePointer(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 132),
+                  child: AcquiredRunModuleStrip(
+                    moduleIds: snapshot.acquiredRunModules,
+                  ),
+                ),
               ),
             ),
-          ),
-      ],
-    ),
-  ),
-),
-Positioned(
-  top: 76,
-  left: 0,
-  right: 0,
-  child: Center(
-    child: MissionPacingStrip(
-      snapshot: snapshot,
-      onTogglePause: game.togglePause,
-      onSpeedSelected: game.setSpeedMultiplier,
-      onToggleAutoStart: game.toggleAutoStart,
-    ),
+          const Spacer(),
+        ],
+      ),
+    ],
   ),
 ),
 ```
 
-Do not add a full-width opaque `GestureDetector` or `AbsorbPointer` around the pacing strip. Keep module draft/mission report later in the stack.
+Do not add a full-width opaque `GestureDetector` or `AbsorbPointer` around the pacing strip. Remove the old `_PacingControls` child from `_BottomControls` and delete that private class in this task, so pause/speed/auto-start have exactly one rendered control set. Keep module draft/mission report later in the stack. Add a page assertion that each pacing tooltip/control occurs once.
 
 In the page state, precache the three UI atlas assets once for that mission-shell lifetime:
 
@@ -428,28 +427,28 @@ void didChangeDependencies() {
   super.didChangeDependencies();
   if (_didPrecacheCommandDeckAssets) return;
   _didPrecacheCommandDeckAssets = true;
-  for (final assetPath in const [
-    GameSpriteSheet.assetPath,
-    GameTowerVarietySheet.assetPath,
-    GameBossSheet.assetPath,
+  for (final fileName in const [
+    GameSpriteSheet.fileName,
+    GameTowerVarietySheet.fileName,
+    GameBossSheet.fileName,
   ]) {
-    precacheImage(AssetImage(assetPath), context);
+    Flame.images.load(fileName).ignore();
   }
 }
 ```
 
-This is the only mission-shell performance work in the slice. `OrionAtlasSprite` continues to use Flutter's shared `AssetImage` cache; no card decodes an image during `build`.
+Import `package:flame/flame.dart`. This is the only mission-shell performance work in the slice. `OrionAtlasSprite` and the shell share `Flame.images`; no card creates a new image load during `build`.
 
 - [ ] **Step 7: Run tests and commit**
 
 ```bash
-rtk dart format lib/game/ui/mission_command_hud.dart lib/game/ui/orion_game_page.dart test/widget/mission_command_hud_test.dart test/widget/support/command_deck_fixtures.dart test/widget_test.dart
-rtk flutter test test/widget/mission_command_hud_test.dart test/widget_test.dart
-rtk git add lib/game/ui/mission_command_hud.dart lib/game/ui/orion_game_page.dart test/widget/mission_command_hud_test.dart test/widget/support/command_deck_fixtures.dart test/widget_test.dart
+rtk dart format lib/game/ui/mission_command_hud.dart lib/game/ui/orion_game_page.dart test/support/command_deck_fixtures.dart test/game/mission_report_content_test.dart test/widget/mission_command_hud_test.dart test/widget/mission_report_panel_test.dart test/widget_test.dart
+rtk flutter test test/game/mission_report_content_test.dart test/widget/mission_command_hud_test.dart test/widget/mission_report_panel_test.dart test/widget_test.dart
+rtk git add lib/game/ui/mission_command_hud.dart lib/game/ui/orion_game_page.dart test/support/command_deck_fixtures.dart test/game/mission_report_content_test.dart test/widget/mission_command_hud_test.dart test/widget/mission_report_panel_test.dart test/widget_test.dart
 rtk git commit -m "feat: add interactive Orion mission HUD"
 ```
 
-Expected: status stays pass-through, pacing is interactive, and existing pacing behavior remains green.
+Expected: status and gaps stay pass-through, pacing is interactive, exactly one pacing control set renders, the top flow reflows at both text scales, and existing pacing behavior remains green.
 
 ---
 
@@ -462,7 +461,7 @@ Expected: status stays pass-through, pacing is interactive, and existing pacing 
 - Modify: `test/widget_test.dart`
 
 **Interfaces:**
-- Produces: `NextWaveScanner({required WavePreview preview, required List<String> modifierTitles})` with widget-local expansion keyed by `preview.waveNumber`.
+- Produces: `NextWaveScanner({required WavePreview preview, required List<String> modifierTitles, required bool collapseRequested})` with widget-local expansion/unread state keyed by `preview.waveNumber`.
 - Consumes: PR 1 `OrionArt.previewGroup`, `OrionArt.trait`, `OrionAtlasSprite`, `CommandFrame`, and existing `WavePreview` fields.
 - Parent is responsible for omitting the scanner during waves, ended states, or module drafts.
 
@@ -474,6 +473,7 @@ Create `test/widget/next_wave_scanner_test.dart`:
 Widget scannerHost(
   WavePreview preview, {
   bool disableAnimations = false,
+  bool collapseRequested = false,
 }) {
   return MaterialApp(
     home: MediaQuery(
@@ -483,35 +483,57 @@ Widget scannerHost(
         child: NextWaveScanner(
           preview: preview,
           modifierTitles: const ['Standard Conditions'],
+          collapseRequested: collapseRequested,
         ),
       ),
     ),
   );
 }
 
-testWidgets('scanner expands initially, stays collapsed for one preview, and reopens for the next',
+testWidgets('scanner starts collapsed and a new preview resets it to collapsed',
     (tester) async {
   final first = commandDeckPreview(waveNumber: 1);
   await tester.pumpWidget(scannerHost(first));
-  expect(find.byKey(const ValueKey('next-wave-scanner-expanded')), findsOneWidget);
-
-  await tester.tap(find.byTooltip('Collapse next-wave scanner'));
-  await tester.pumpAndSettle();
   expect(find.byKey(const ValueKey('next-wave-scanner-collapsed')), findsOneWidget);
   expect(
     tester.getSize(find.byKey(const ValueKey('next-wave-scanner-collapsed'))),
     const Size(48, 48),
   );
+  expect(
+    find.bySemanticsLabel(RegExp('New wave preview available')),
+    findsOneWidget,
+  );
+
+  await tester.tap(find.byTooltip('Expand next-wave scanner'));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('next-wave-scanner-expanded')), findsOneWidget);
 
   await tester.pumpWidget(scannerHost(first));
-  expect(find.byKey(const ValueKey('next-wave-scanner-collapsed')), findsOneWidget);
+  expect(find.byKey(const ValueKey('next-wave-scanner-expanded')), findsOneWidget);
 
   await tester.pumpWidget(scannerHost(commandDeckPreview(waveNumber: 2)));
-  expect(find.byKey(const ValueKey('next-wave-scanner-expanded')), findsOneWidget);
+  expect(find.byKey(const ValueKey('next-wave-scanner-collapsed')), findsOneWidget);
 });
 
-testWidgets('Swarm Queen preview uses boss art despite lacking heavy trait',
+testWidgets('selection request collapses an explicitly opened scanner',
     (tester) async {
+  final preview = commandDeckPreview();
+  await tester.pumpWidget(scannerHost(preview));
+  await tester.tap(find.byTooltip('Expand next-wave scanner'));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('next-wave-scanner-expanded')), findsOneWidget);
+
+  await tester.pumpWidget(
+    scannerHost(preview, collapseRequested: true),
+  );
+  await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('next-wave-scanner-collapsed')), findsOneWidget);
+  await tester.tap(find.byKey(const ValueKey('next-wave-scanner-collapsed')));
+  await tester.pumpAndSettle();
+  expect(find.byKey(const ValueKey('next-wave-scanner-collapsed')), findsOneWidget);
+});
+
+testWidgets('Swarm Queen group renders an art-led preview row', (tester) async {
   final bossPreview = commandDeckPreview(
     groups: [
       WavePreviewGroup(
@@ -522,13 +544,21 @@ testWidgets('Swarm Queen preview uses boss art despite lacking heavy trait',
     ],
   );
   await tester.pumpWidget(scannerHost(bossPreview));
+  await tester.tap(find.byTooltip('Expand next-wave scanner'));
+  await tester.pumpAndSettle();
 
   expect(find.bySemanticsLabel('Swarm Queen'), findsOneWidget);
-  expect(find.byKey(const ValueKey('preview-art-boss-swarmQueen')), findsOneWidget);
+  expect(
+    find.descendant(
+      of: find.byKey(const ValueKey('preview-group-0')),
+      matching: find.byType(OrionAtlasSprite),
+    ),
+    findsOneWidget,
+  );
 });
 ```
 
-Also assert expanded size is no larger than 212 × 168; group counts, trait semantics, clear bonus, recommendations, and modifier titles are discoverable; reduced motion collapses after one pump; the collapsed semantics include next wave and total enemy count.
+Also assert expanded size is no larger than 212 × 168; group counts, trait semantics, clear bonus, recommendations, and modifier titles are discoverable; reduced motion expands/collapses after one pump; the collapsed semantics include next wave and total enemy count. PR 1's real `GameBalance.wavePreview` projection test owns the boss-to-sprite mapping; this widget test verifies that the mapped descriptor is actually rendered.
 
 In `test/widget_test.dart`, change the old always-visible panel test into page-level coverage that the scanner exists in build, is outside `IgnorePointer`, and is absent after `game.startWave()` or while a module draft is active.
 
@@ -545,52 +575,79 @@ Expected: compile failure/new scanner assertions fail.
 Create `lib/game/ui/next_wave_scanner.dart` as a `StatefulWidget`:
 
 ```dart
-bool _expanded = true;
+bool _expanded = false;
+bool _hasUnreadPreview = true;
 
 @override
 void didUpdateWidget(covariant NextWaveScanner oldWidget) {
   super.didUpdateWidget(oldWidget);
   if (oldWidget.preview.waveNumber != widget.preview.waveNumber) {
-    _expanded = true;
+    _expanded = false;
+    _hasUnreadPreview = true;
+  } else if (!oldWidget.collapseRequested && widget.collapseRequested) {
+    _expanded = false;
   }
+}
+
+void _toggleExpanded() {
+  if (widget.collapseRequested) return;
+  setState(() {
+    _expanded = !_expanded;
+    if (_expanded) _hasUnreadPreview = false;
+  });
 }
 ```
 
 Use `AnimatedSwitcher`/`AnimatedSize` with `orionMotionDuration(context, const Duration(milliseconds: 180))`.
 
-Collapsed content is exactly a 48 × 48 radar control keyed `next-wave-scanner-collapsed`. Expanded content is a `CommandFrame` keyed `next-wave-scanner-expanded` and constrained to `maxWidth: 212`, `maxHeight: 168`. The expanded body is scrollable if content exceeds 168 dp.
+Collapsed content is exactly a 48 × 48 radar control keyed `next-wave-scanner-collapsed`. When `_hasUnreadPreview` is true, its beacon/pulse and semantics announce `New wave preview available`; explicit expansion clears that unread state. While `collapseRequested` is true, the radar remains visible but exposes disabled semantics and cannot expand until the board/tower selection clears. Expanded content is a `CommandFrame` keyed `next-wave-scanner-expanded` and constrained to `maxWidth: 212`, `maxHeight: 168`. The expanded body is scrollable if content exceeds 168 dp.
 
 For each group, render `OrionAtlasSprite(art: OrionArt.previewGroup(group))`, count, short label, and badges. Use `OrionArt.trait` for armor/shield/regen; use the established square/triangle fallback glyph for heavy/swarm. Render recommended tower art with `OrionArt.tower`.
 
-Give each preview portrait `ValueKey('preview-art-${art.debugName}')`; PR 1 defines Swarm Queen's debug name as `boss-swarmQueen`, producing the tested key `preview-art-boss-swarmQueen`.
+Key each rendered group row by stable projection order (`preview-group-$index`). Art identity stays encapsulated in PR 1's canonical descriptor factories rather than leaking a debug-name string contract into the widget.
 
-- [ ] **Step 4: Add the narrowly positioned scanner sibling**
+- [ ] **Step 4: Add the scanner to the existing flow row**
 
-In the stage stack, add after the pacing strip:
+In the single top column created by Task 1, replace its trailing row with this complete flow. Do not add another `Positioned` or an absolute `top` offset:
 
 ```dart
-if (snapshot.phase == GamePhase.build &&
-    snapshot.nextWavePreview != null &&
-    snapshot.pendingRunModuleOffer == null &&
-    !snapshot.isEnded)
-  Positioned(
-    top: 132,
-    right: 12,
-    child: NextWaveScanner(
-      preview: snapshot.nextWavePreview!,
-      modifierTitles: snapshot.stageModifiers.isEmpty
-          ? [StageModifierMetadata.standardConditions.title]
-          : snapshot.stageModifiers
-                .map(
-                  (modifier) =>
-                      StageModifierMetadata.forModifier(modifier).title,
-                )
-                .toList(growable: false),
-    ),
-  ),
+Row(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    if (snapshot.acquiredRunModules.isNotEmpty)
+      Flexible(
+        child: IgnorePointer(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 132),
+            child: AcquiredRunModuleStrip(
+              moduleIds: snapshot.acquiredRunModules,
+            ),
+          ),
+        ),
+      ),
+    const Spacer(),
+    if (snapshot.phase == GamePhase.build &&
+        snapshot.nextWavePreview != null &&
+        snapshot.pendingRunModuleOffer == null &&
+        !snapshot.isEnded)
+      NextWaveScanner(
+        preview: snapshot.nextWavePreview!,
+        modifierTitles: snapshot.stageModifiers.isEmpty
+            ? [StageModifierMetadata.standardConditions.title]
+            : snapshot.stageModifiers
+                  .map(
+                    (modifier) =>
+                        StageModifierMetadata.forModifier(modifier).title,
+                  )
+                  .toList(growable: false),
+        collapseRequested:
+            snapshot.selectedCell != null || snapshot.selectedTower != null,
+      ),
+  ],
+),
 ```
 
-Do not place it under the status `IgnorePointer`. Its own 48 × 48 or 212 × 168 render box defines the intentional dead zone.
+Do not place it under an `IgnorePointer`. Its own 48 × 48 or explicitly expanded 212 × 168 render box defines the intentional dead zone. At page level, expand it, select a board cell/tower, and assert it collapses before the build rail/inspector becomes the primary interaction. Pump the complete top flow at text scales 1.3 and 2.0 and assert all child rectangles remain ordered and non-overlapping.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -676,7 +733,7 @@ testWidgets('build rail shows every tower and preserves lock/affordability callb
   await tester.tap(find.byKey(const ValueKey('tower-card-railgun')));
   expect(placed, [TowerType.laser]);
   expect(
-    find.bySemanticsLabel(contains('Railgun, locked until wave')),
+    find.bySemanticsLabel(RegExp(r'Railgun, locked until wave')),
     findsOneWidget,
   );
 });
@@ -752,6 +809,7 @@ Expected: callback, lock, affordability, compact-width, idle-action, and reduced
 - Create: `lib/game/ui/tower_inspector.dart`
 - Create: `test/widget/tower_stat_scale_test.dart`
 - Create: `test/widget/tower_inspector_test.dart`
+- Modify: `test/game/tower_stats_resolver_test.dart`
 - Modify: `lib/game/ui/mission_command_dock.dart`
 - Modify: `test/widget/mission_command_dock_test.dart`
 - Modify: `lib/game/ui/orion_game_page.dart`
@@ -824,11 +882,7 @@ testWidgets('inspector uses resolved costs and invokes public callbacks',
     type: TowerType.laser,
     position: GridPosition(2, 3),
   );
-  final resolved = commandDeckTowerStats(
-    GameBalance.towerStats(TowerType.laser, level: 1),
-    damage: 999,
-    upgradeCost: 37,
-  );
+  final resolved = GameBalance.towerStats(TowerType.laser, level: 1);
   var upgrades = 0;
   var sells = 0;
   TowerTargetingMode? targeting;
@@ -837,6 +891,7 @@ testWidgets('inspector uses resolved costs and invokes public callbacks',
     MaterialApp(
       home: TowerInspector(
         snapshot: commandDeckSnapshot(
+          gold: 9999,
           selectedTower: tower,
           selectedTowerStats: resolved,
         ),
@@ -849,8 +904,11 @@ testWidgets('inspector uses resolved costs and invokes public callbacks',
     ),
   );
 
-  expect(find.bySemanticsLabel('Damage 999'), findsOneWidget);
-  expect(find.text('Upgrade 37'), findsOneWidget);
+  expect(
+    find.bySemanticsLabel('Damage ${number(resolved.damage)}'),
+    findsOneWidget,
+  );
+  expect(find.text('Upgrade ${resolved.upgradeCost}'), findsOneWidget);
   expect(find.text('Sell 41'), findsOneWidget);
   await tester.tap(find.byKey(const ValueKey('tower-upgrade')));
   await tester.tap(
@@ -862,6 +920,8 @@ testWidgets('inspector uses resolved costs and invokes public callbacks',
   expect(sells, 1);
 });
 ```
+
+Import `package:orion/game/util/format.dart` and use the production `number` formatter rather than introducing a test-only number format. Add a separate active-wave regression that pumps a level-1 tower and a level-2 tower, taps `tower-upgrade`, both `tower-specialization-${specialization.name}` keys, `tower-target-strongest`, and `tower-sell`, and asserts every callback counter remains zero. Also assert each action exposes disabled semantics during `GamePhase.wave`; this preserves the current mid-wave selection behavior without making mutation legal.
 
 Also assert:
 
@@ -876,10 +936,58 @@ Also assert:
 
 Use public `TowerInspector` callbacks rather than grafting fake game state. Give progression, targeting, and sell actions the exact keys used above plus `tower-specialization-${specialization.name}`.
 
+In `test/game/tower_stats_resolver_test.dart`, add the domain contract that makes snapshot-displayed costs safe to use for gameplay actions:
+
+```dart
+test('all modifiers preserve base progression costs', () {
+  const campaignModifiers = CampaignModifiers(
+    laserDamageFraction: 0.1,
+    cryoSlowDurationBonus: 0.3,
+  );
+
+  for (final type in TowerType.values) {
+    final progression = <({int level, TowerSpecialization? specialization})>[
+      (level: 1, specialization: null),
+      (level: 2, specialization: null),
+      for (final specialization in GameBalance.specializationsFor(type))
+        (level: 3, specialization: specialization),
+    ];
+
+    for (final entry in progression) {
+      final tower = PlacedTower(
+        id: 1,
+        type: type,
+        position: const GridPosition(0, 0),
+        level: entry.level,
+        specialization: entry.specialization,
+      );
+      final base = GameBalance.towerStats(
+        type,
+        level: entry.level,
+        specialization: entry.specialization,
+      );
+      final resolved = TowerStatsResolver.resolve(
+        tower,
+        campaignModifiers: campaignModifiers,
+        stageModifiers: StageModifier.values,
+        runModules: RunModuleId.values,
+      );
+
+      expect(resolved.upgradeCost, base.upgradeCost, reason: '$type $entry');
+      expect(
+        resolved.specializationCost,
+        base.specializationCost,
+        reason: '$type $entry',
+      );
+    }
+  }
+});
+```
+
 - [ ] **Step 3: Run tests to verify RED**
 
 ```bash
-rtk flutter test test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart
+rtk flutter test test/game/tower_stats_resolver_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart
 ```
 
 Expected: compile failure for the new scale/inspector types.
@@ -996,7 +1104,7 @@ Read `final tower = snapshot.selectedTower!; final stats = snapshot.selectedTowe
 - use the passed `sellRefund` for the separated destructive action;
 - cap height at `math.min(210, MediaQuery.sizeOf(context).height * .31)` and use internal scrolling; import `dart:math` as `math`.
 
-Do not call `GameBalance.towerStats` in this file.
+At the start of action projection, compute `final canMutate = snapshot.phase == GamePhase.build`. Gate every upgrade, specialization, targeting, and sell callback with `canMutate`, in addition to the existing level, stats-null, and affordability checks. Disabled semantics must mirror the null callbacks. Selection and stat display remain available during a wave; only mutation is disabled. Do not call `GameBalance.towerStats` in this file.
 
 - [ ] **Step 6: Add three-state dock orchestration and integrate the page**
 
@@ -1068,18 +1176,18 @@ MissionCommandDock(
 
 Update page tests that relied on visible `Build Tower`, `Gold 150`, `Base 20`, or generic button structure to use stable dock/HUD keys and semantic values. Keep exact action-copy assertions for Start Wave, Upgrade, specialization, Sell, and World Map.
 
-Update `sell_button_test.dart` and selected-tower page tests to use the extracted inspector's keys/semantics while retaining all existing resolved-stat and callback regressions.
+Update `sell_button_test.dart` and selected-tower page tests to use the extracted inspector's keys/semantics while retaining all existing resolved-stat and callback regressions. In particular, port the existing active-wave sell regression to `tower-sell` and assert its callback/semantics are disabled rather than deleting or weakening it.
 
 - [ ] **Step 7: Run tests and commit**
 
 ```bash
-rtk dart format lib/game/ui/tower_stat_scale.dart lib/game/ui/tower_inspector.dart lib/game/ui/mission_command_dock.dart lib/game/ui/orion_game_page.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/mission_command_dock_test.dart test/widget/sell_button_test.dart test/widget_test.dart
-rtk flutter test test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/mission_command_dock_test.dart test/widget/sell_button_test.dart test/widget_test.dart
-rtk git add lib/game/ui/tower_stat_scale.dart lib/game/ui/tower_inspector.dart lib/game/ui/mission_command_dock.dart lib/game/ui/orion_game_page.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/mission_command_dock_test.dart test/widget/sell_button_test.dart test/widget_test.dart
+rtk dart format lib/game/ui/tower_stat_scale.dart lib/game/ui/tower_inspector.dart lib/game/ui/mission_command_dock.dart lib/game/ui/orion_game_page.dart test/game/tower_stats_resolver_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/mission_command_dock_test.dart test/widget/sell_button_test.dart test/widget_test.dart
+rtk flutter test test/game/tower_stats_resolver_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/mission_command_dock_test.dart test/widget/sell_button_test.dart test/widget_test.dart
+rtk git add lib/game/ui/tower_stat_scale.dart lib/game/ui/tower_inspector.dart lib/game/ui/mission_command_dock.dart lib/game/ui/orion_game_page.dart test/game/tower_stats_resolver_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/mission_command_dock_test.dart test/widget/sell_button_test.dart test/widget_test.dart
 rtk git commit -m "feat: redesign Orion tower inspector"
 ```
 
-Expected: all resolved-value, cost, scale, targeting, progression, sell, null, and compact-height tests pass.
+Expected: all resolved-value, cost parity, scale, phase gate, targeting, progression, sell, null, and compact-height tests pass.
 
 ---
 
@@ -1379,7 +1487,7 @@ Expected: PR 1 plus PR 2 UI/docs/tests only. No game models, rules, orchestrator
 
 ```bash
 rtk dart format --output=none --set-exit-if-changed lib test
-rtk flutter test test/widget/mission_command_hud_test.dart test/widget/next_wave_scanner_test.dart test/widget/mission_command_dock_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/command_toast_test.dart test/widget/run_module_draft_panel_test.dart test/widget/mission_report_panel_test.dart test/widget/sell_button_test.dart test/widget_test.dart
+rtk flutter test test/game/mission_report_content_test.dart test/game/tower_stats_resolver_test.dart test/widget/mission_command_hud_test.dart test/widget/next_wave_scanner_test.dart test/widget/mission_command_dock_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/command_toast_test.dart test/widget/run_module_draft_panel_test.dart test/widget/mission_report_panel_test.dart test/widget/sell_button_test.dart test/widget_test.dart
 ```
 
 Expected: formatter and all focused tests pass.
@@ -1397,8 +1505,8 @@ Expected: no analyzer issues and the complete suite passes.
 
 At 375 × 812, 390 × 844, and 430 × 932, capture these states to `/tmp/orion-command-deck-pr2/`:
 
-1. idle build HUD with expanded scanner;
-2. collapsed scanner;
+1. idle build HUD with its default collapsed scanner/new-preview beacon;
+2. explicitly expanded scanner;
 3. selected-cell build rail showing locked and unaffordable cards;
 4. selected level-1 tower;
 5. selected level-2 tower with two specializations;
@@ -1413,16 +1521,17 @@ At every size verify:
 - board remains visually dominant and numeric HUD stays readable;
 - status/acquired areas remain pass-through and controls consume only visible bounds;
 - no scanner/pacing overlap;
+- selecting a cell or tower collapses the scanner before the dock changes state;
 - all tower art/cost/lock states are legible and horizontally scrollable;
-- inspector stays within its cap and all consequential actions remain reachable;
+- inspector stays within its cap, all consequential actions remain reachable in build, and all four mutation families are disabled during a wave;
 - toast sits above every dock state and survives null publication;
 - modal surfaces fully obscure/block the underlying dock;
-- 1.3 text scale does not clip actions and reduced motion changes state immediately.
+- 1.3 and 2.0 text scales keep the top flow ordered without overlap or clipped essential actions; reduced motion changes state immediately.
 
 - [ ] **Step 5: Commit only visual-gate fixes, if any**
 
 ```bash
-rtk git add lib/game/ui/mission_command_hud.dart lib/game/ui/next_wave_scanner.dart lib/game/ui/mission_command_dock.dart lib/game/ui/tower_stat_scale.dart lib/game/ui/tower_inspector.dart lib/game/ui/command_toast.dart lib/game/ui/run_module_draft_panel.dart lib/game/ui/mission_report_panel.dart lib/game/ui/orion_game_page.dart test/widget/mission_command_hud_test.dart test/widget/next_wave_scanner_test.dart test/widget/mission_command_dock_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/command_toast_test.dart test/widget/run_module_draft_panel_test.dart test/widget/mission_report_panel_test.dart test/widget/sell_button_test.dart test/widget/support/command_deck_fixtures.dart test/widget_test.dart
+rtk git add lib/game/ui/mission_command_hud.dart lib/game/ui/next_wave_scanner.dart lib/game/ui/mission_command_dock.dart lib/game/ui/tower_stat_scale.dart lib/game/ui/tower_inspector.dart lib/game/ui/command_toast.dart lib/game/ui/run_module_draft_panel.dart lib/game/ui/mission_report_panel.dart lib/game/ui/orion_game_page.dart test/support/command_deck_fixtures.dart test/game/mission_report_content_test.dart test/game/tower_stats_resolver_test.dart test/widget/mission_command_hud_test.dart test/widget/next_wave_scanner_test.dart test/widget/mission_command_dock_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/command_toast_test.dart test/widget/run_module_draft_panel_test.dart test/widget/mission_report_panel_test.dart test/widget/sell_button_test.dart test/widget_test.dart
 rtk git commit -m "fix: close command deck mission visual review"
 ```
 

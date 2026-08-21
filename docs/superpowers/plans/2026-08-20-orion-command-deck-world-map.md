@@ -4,7 +4,7 @@
 
 **Goal:** Deliver PR 1 of the Orion Command Deck redesign: shared local UI primitives plus an illustrated, compact, blueprint-safe campaign map and mission briefing.
 
-**Architecture:** Keep campaign state and callbacks unchanged. Add a narrow `OrionUiTheme`, reusable chamfered frame/reactor control, and an atlas widget whose factories delegate crop math to the existing tested sheet loaders. `WorldMapView` remains the campaign projection, while a pure presentation layout helper turns authored map coordinates/dependencies into testable node rectangles and route records.
+**Architecture:** Keep campaign state and callbacks unchanged. Add a narrow `OrionUiTheme`, reusable chamfered frame/reactor control, and canonical art descriptors whose crop resolvers delegate to the tested sheet loaders before Flame's `SpriteWidget` renders them. `WorldMapView` remains the campaign projection, while a data-derived presentation layout helper turns authored map coordinates/dependencies into testable node rectangles and route records.
 
 **Tech Stack:** Dart `^3.12.0`, Flutter, Flame `^1.38.0`, Material 3, `flutter_test`; existing bundled PNG assets only; no new packages.
 
@@ -27,10 +27,10 @@
 
 ## Risks
 
-- **Crop drift:** factories must call the loader helpers; no duplicated sheet dimensions in individual widgets.
-- **Compact overlap:** geometry is extracted and tested independently before `WorldMapView` is rewritten.
+- **Crop/lifecycle drift:** factories must call the loader helpers and render with Flame `SpriteWidget`; no duplicated sheet dimensions, custom `ImageStream`, or custom sprite painter.
+- **Compact/content growth:** geometry is extracted, derives maxima from the supplied stages, and is tested with both the current campaign and a synthetic sixth column.
 - **Blueprint regression:** node semantics, briefing copy, and reset behavior stay under existing and new widget tests.
-- **Copy churn:** update `Orion Sector Map` and `Start Mission` finders in the same task that changes their visible copy.
+- **Copy churn:** update `Orion Sector Map` and `Start Mission` finders in the same task, preserve the challenge-badge semantic sentence, and pin busy-derived saving/resetting feedback.
 - **Standalone test themes:** `OrionUiTheme.of(context)` must fall back safely under bare `MaterialApp` tests.
 
 ## File Map
@@ -39,7 +39,7 @@
 
 - `lib/game/ui/orion_ui_theme.dart` — command-deck theme extension and reduced-motion duration helper.
 - `lib/game/ui/command_frame.dart` — chamfered hull frame and reactor action.
-- `lib/game/ui/orion_atlas_sprite.dart` — source-rect-backed local art descriptors, factories, cached painter, and icon fallback.
+- `lib/game/ui/orion_atlas_sprite.dart` — source-rect-backed canonical art descriptors, Flame sprite futures, thin `SpriteWidget` wrapper, and icon fallback.
 - `lib/game/ui/sector_map_layout.dart` — pure node geometry and dependency-route projection.
 - `test/widget/orion_ui_theme_test.dart` — fallback/extension/frame/tap-bound coverage.
 - `test/widget/orion_atlas_sprite_test.dart` — exhaustive tower/boss/preview/trait crop mapping and failure fallback.
@@ -49,8 +49,8 @@
 ### Modify
 
 - `lib/main.dart` — register `OrionUiTheme.dark` on the existing dark `ThemeData`.
+- `lib/game/ui/orion_game_page.dart` — reuse shared reduced-motion helpers, then add the art-led briefing/reset treatment in Task 4.
 - `lib/game/ui/world_map_view.dart` — illustrated sector stack, routes, nodes, utility rail, blueprint glyph, and sticky feedback.
-- `lib/game/ui/orion_game_page.dart` — art-led briefing, launch copy, and command-deck reset dialog.
 - `test/widget_test.dart` — briefing/reset/blueprint integration and intentional copy updates.
 - `test/widget/codex_view_test.dart` — update only world-map title expectations exercised by the Codex integration.
 
@@ -73,11 +73,12 @@
 - Create: `lib/game/ui/command_frame.dart`
 - Create: `test/widget/orion_ui_theme_test.dart`
 - Modify: `lib/main.dart`
+- Modify: `lib/game/ui/orion_game_page.dart`
 
 **Interfaces:**
-- Produces: `OrionUiTheme.dark`, `OrionUiTheme.of(BuildContext)`, and `orionMotionDuration(BuildContext, Duration)`.
+- Produces: `OrionUiTheme.dark`, `OrionUiTheme.of(BuildContext)`, `orionMotionDuration(BuildContext, Duration)`, and `orionSheetAnimationStyle(BuildContext)`.
 - Produces: `CommandFrame` and `ReactorButton` for both implementation plans.
-- Consumes: existing Flutter `ThemeData` and `MediaQuery.disableAnimations` only.
+- Extends: the current private `_sheetAnimationStyle` behavior; both sheet and widget helpers use `MediaQuery.disableAnimationsOf(context)`.
 
 - [ ] **Step 1: Write failing theme and component tests**
 
@@ -150,16 +151,18 @@ void main() {
 
   testWidgets('reduced motion returns zero duration', (tester) async {
     late Duration resolved;
+    late AnimationStyle? sheetStyle;
     await tester.pumpWidget(
-      MediaQuery(
-        data: const MediaQueryData(disableAnimations: true),
-        child: MaterialApp(
-          home: Builder(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Builder(
             builder: (context) {
               resolved = orionMotionDuration(
                 context,
                 const Duration(milliseconds: 220),
               );
+              sheetStyle = orionSheetAnimationStyle(context);
               return const CommandFrame(child: Text('Hull'));
             },
           ),
@@ -168,6 +171,7 @@ void main() {
     );
 
     expect(resolved, Duration.zero);
+    expect(sheetStyle, AnimationStyle.noAnimation);
     expect(find.text('Hull'), findsOneWidget);
   });
 }
@@ -302,7 +306,14 @@ final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
 
 Duration orionMotionDuration(BuildContext context, Duration normal) =>
     MediaQuery.disableAnimationsOf(context) ? Duration.zero : normal;
+
+AnimationStyle? orionSheetAnimationStyle(BuildContext context) =>
+    MediaQuery.disableAnimationsOf(context)
+    ? AnimationStyle.noAnimation
+    : null;
 ```
+
+In `orion_game_page.dart`, replace both `_sheetAnimationStyle(context)` calls with `orionSheetAnimationStyle(context)`, import `orion_ui_theme.dart`, and delete the private helper. This extends the existing reduced-motion policy instead of creating a parallel one.
 
 - [ ] **Step 4: Implement the shared chamfered frame and reactor action**
 
@@ -343,9 +354,9 @@ Add the `orion_ui_theme.dart` import. Do not change the current seed or other sc
 - [ ] **Step 6: Run focused tests and commit**
 
 ```bash
-rtk dart format lib/main.dart lib/game/ui/orion_ui_theme.dart lib/game/ui/command_frame.dart test/widget/orion_ui_theme_test.dart
+rtk dart format lib/main.dart lib/game/ui/orion_ui_theme.dart lib/game/ui/command_frame.dart lib/game/ui/orion_game_page.dart test/widget/orion_ui_theme_test.dart
 rtk flutter test test/widget/orion_ui_theme_test.dart
-rtk git add lib/main.dart lib/game/ui/orion_ui_theme.dart lib/game/ui/command_frame.dart test/widget/orion_ui_theme_test.dart
+rtk git add lib/main.dart lib/game/ui/orion_ui_theme.dart lib/game/ui/command_frame.dart lib/game/ui/orion_game_page.dart test/widget/orion_ui_theme_test.dart
 rtk git commit -m "feat: add Orion command deck UI primitives"
 ```
 
@@ -361,8 +372,8 @@ Expected: focused test passes and the commit contains no campaign/gameplay chang
 
 **Interfaces:**
 - Produces: `OrionArtDescriptor`, `OrionArt.tower`, `OrionArt.boss`, `OrionArt.stage`, `OrionArt.previewGroup`, `OrionArt.trait`, and `OrionAtlasSprite`.
-- Consumes: `GameSpriteSheet.sourceRectFor`, `GameTowerVarietySheet.sourceRectFor`, `GameBossSheet.sourceRectFor`, their existing enum factories, and Flutter `AssetImage` caching.
-- Produces the art API consumed by both PR 1 and PR 2; no caller performs sheet arithmetic.
+- Consumes: `GameSpriteSheet.sourceRectFor`, `GameTowerVarietySheet.sourceRectFor`, `GameBossSheet.sourceRectFor`, their existing enum factories/file names, `Flame.images`, and Flame `SpriteWidget`.
+- Produces the art API consumed by both PR 1 and PR 2; no caller performs sheet arithmetic or owns image-stream/painter lifecycle.
 
 - [ ] **Step 1: Write exhaustive descriptor tests first**
 
@@ -429,15 +440,20 @@ void main() {
     }
   });
 
-  test('preview uses exact boss name before heavy/basic fallback', () {
+  test('real wave preview preserves boss art at the projection seam', () {
     for (final boss in GameBalance.bosses) {
-      final group = WavePreviewGroup(
-        enemyCount: 1,
-        label: boss.name,
-        traits: boss.traits,
+      final preview = GameBalance.wavePreview(
+        wave: WaveDefinition(
+          groups: [WaveGroup(enemyCount: 1, enemyStats: boss)],
+          clearBonus: 0,
+        ),
+        waveNumber: 1,
+        waveTotal: 1,
+        unlockedTowerTypes: TowerType.values,
+        effectiveClearBonus: 0,
       );
       expect(
-        OrionArt.previewGroup(group).sourceRectFor(
+        OrionArt.previewGroup(preview.groups.single).sourceRectFor(
           imageWidth: 400,
           imageHeight: 200,
         ),
@@ -466,7 +482,7 @@ void main() {
       traits: const {},
     );
 
-    expect(OrionArt.previewGroup(queen).assetPath, GameBossSheet.assetPath);
+    expect(OrionArt.previewGroup(queen).fileName, GameBossSheet.fileName);
     expect(
       OrionArt.previewGroup(queen).sourceRectFor(
         imageWidth: 400,
@@ -478,8 +494,28 @@ void main() {
         imageHeight: 200,
       ),
     );
-    expect(OrionArt.previewGroup(heavy).debugName, 'heavy-drone');
-    expect(OrionArt.previewGroup(basic).debugName, 'basic-drone');
+    expect(
+      OrionArt.previewGroup(heavy).sourceRectFor(
+        imageWidth: 400,
+        imageHeight: 300,
+      ),
+      GameSpriteSheet.sourceRectFor(
+        GameSprite.heavyDroneEnemy,
+        imageWidth: 400,
+        imageHeight: 300,
+      ),
+    );
+    expect(
+      OrionArt.previewGroup(basic).sourceRectFor(
+        imageWidth: 400,
+        imageHeight: 300,
+      ),
+      GameSpriteSheet.sourceRectFor(
+        GameSprite.basicDroneEnemy,
+        imageWidth: 400,
+        imageHeight: 300,
+      ),
+    );
   });
 
   test('trait art reuses indicator cells and shape fallbacks', () {
@@ -492,7 +528,55 @@ void main() {
 }
 ```
 
-Add a widget test that pumps an `OrionAtlasSprite` with an intentionally missing `assetPath`, supplies `fallbackIcon: Icons.broken_image`, pumps to settle, and expects exactly one broken-image icon rather than an empty box.
+Add these widget regressions, importing `package:flame/widgets.dart`:
+
+```dart
+testWidgets('renders through SpriteWidget and reuses the canonical future',
+    (tester) async {
+  final art = OrionArt.tower(TowerType.laser);
+  final firstSpriteFuture = art.sprite;
+
+  await tester.pumpWidget(
+    MaterialApp(
+      home: OrionAtlasSprite(art: art, size: const Size.square(64)),
+    ),
+  );
+  await tester.pumpAndSettle();
+  expect(find.byType(SpriteWidget), findsOneWidget);
+
+  await tester.pumpWidget(
+    MaterialApp(
+      home: OrionAtlasSprite(
+        art: OrionArt.tower(TowerType.laser),
+        size: const Size.square(64),
+      ),
+    ),
+  );
+  expect(
+    identical(firstSpriteFuture, OrionArt.tower(TowerType.laser).sprite),
+    isTrue,
+  );
+});
+
+testWidgets('asset failure renders the descriptor fallback', (tester) async {
+  final missing = OrionArtDescriptor(
+    fileName: 'missing-command-deck-sheet.png',
+    sourceRectFor: ({required imageWidth, required imageHeight}) =>
+        ui.Rect.fromLTWH(0, 0, imageWidth, imageHeight),
+    semanticLabel: 'Missing command-deck art',
+    fallbackIcon: Icons.broken_image,
+  );
+
+  await tester.pumpWidget(
+    MaterialApp(
+      home: OrionAtlasSprite(art: missing, size: const Size.square(64)),
+    ),
+  );
+  await tester.pumpAndSettle();
+
+  expect(find.byIcon(Icons.broken_image), findsOneWidget);
+});
+```
 
 - [ ] **Step 2: Verify the tests are RED**
 
@@ -514,23 +598,38 @@ typedef OrionSourceRectResolver = ui.Rect Function({
 
 @immutable
 final class OrionArtDescriptor {
-  const OrionArtDescriptor({
-    required this.assetPath,
+  OrionArtDescriptor({
+    required this.fileName,
     required this.sourceRectFor,
     required this.semanticLabel,
-    required this.debugName,
     required this.fallbackIcon,
   });
 
-  final String assetPath;
+  final String fileName;
   final OrionSourceRectResolver sourceRectFor;
   final String semanticLabel;
-  final String debugName;
   final IconData fallbackIcon;
+
+  late final Future<Sprite> sprite = _loadSprite();
+
+  Future<Sprite> _loadSprite() async {
+    final image = await Flame.images.load(fileName);
+    final source = sourceRectFor(
+      imageWidth: image.width.toDouble(),
+      imageHeight: image.height.toDouble(),
+    );
+    return Sprite(
+      image,
+      srcPosition: Vector2(source.left, source.top),
+      srcSize: Vector2(source.width, source.height),
+    );
+  }
 }
 ```
 
-Implement `OrionArt.tower` as an exhaustive `TowerType` switch through the existing `hasTowerSprite`/`spriteForTower` helpers. Implement `boss` through `GameBossSheet.sourceRectFor`. Implement `stage` by validating `stage.waves.last.groups.last.enemyStats is BossDefinition` and delegating to `boss`.
+Import `package:flame/flame.dart`, `package:flame/components.dart`, and `package:flame/widgets.dart`. Implement `OrionArt.tower` as an exhaustive `TowerType` switch through the existing `hasTowerSprite`/`spriteForTower` helpers. Implement `boss` through `GameBossSheet.sourceRectFor`. Implement `stage` by validating `stage.waves.last.groups.last.enemyStats is BossDefinition` and delegating to `boss`.
+
+Factories must return canonical descriptors from static maps/fields rather than allocating on each build. Tower descriptors are keyed by `TowerType`; boss descriptors by `BossSprite`; basic/heavy and armor/shield/regen descriptors are static finals. This makes each descriptor's `sprite` future stable across widget rebuilds.
 
 Implement preview selection exactly:
 
@@ -540,26 +639,54 @@ static OrionArtDescriptor previewGroup(WavePreviewGroup group) {
     if (boss.name == group.label) return OrionArt.boss(boss.sprite);
   }
   return group.traits.contains(EnemyTrait.heavy)
-      ? _gameSprite(GameSprite.heavyDroneEnemy, 'heavy-drone', group.label)
-      : _gameSprite(GameSprite.basicDroneEnemy, 'basic-drone', group.label);
+      ? _heavyDrone
+      : _basicDrone;
 }
 ```
 
 Implement the trait mapping as one exhaustive switch. Armor/shield/regen return variety-sheet descriptors; swarm/heavy return `null` for the shape fallback.
 
-- [ ] **Step 4: Implement cached image resolution and source-rect painting**
+- [ ] **Step 4: Render the resolved sprite through Flame's widget**
 
-`OrionAtlasSprite` is a stateful widget that resolves `AssetImage(widget.art.assetPath)`, listens to its `ImageStream`, and stores one `ImageInfo`. On success, a `CustomPainter` calls:
+`OrionAtlasSprite` is a thin `StatelessWidget`. It owns no `ImageStream`, `ImageInfo`, painter, or lifecycle listener:
 
 ```dart
-final source = art.sourceRectFor(
-  imageWidth: image.image.width.toDouble(),
-  imageHeight: image.image.height.toDouble(),
-);
-canvas.drawImageRect(image.image, source, destination, paint);
+class OrionAtlasSprite extends StatelessWidget {
+  const OrionAtlasSprite({
+    super.key,
+    required this.art,
+    this.size,
+  });
+
+  final OrionArtDescriptor art;
+  final Size? size;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      image: true,
+      label: art.semanticLabel,
+      child: ExcludeSemantics(
+        child: FutureBuilder<Sprite>(
+          future: art.sprite,
+          builder: (context, snapshot) {
+            if (snapshot.hasError) {
+              return Icon(art.fallbackIcon, size: size?.shortestSide);
+            }
+            final sprite = snapshot.data;
+            if (sprite == null) {
+              return SizedBox.fromSize(size: size);
+            }
+            return SpriteWidget(sprite: sprite, size: size);
+          },
+        ),
+      ),
+    );
+  }
+}
 ```
 
-On the image-stream `onError`, render `Icon(widget.art.fallbackIcon, semanticLabel: widget.art.semanticLabel)`. Remove the old listener on `didUpdateWidget` and `dispose`. Wrap the result in `Semantics(image: true, label: widget.art.semanticLabel)` and `ExcludeSemantics` around the fallback icon so the label is announced once.
+The wrapper exists only to bridge a canonical `Future<Sprite>` to semantics/loading/fallback. Flame `SpriteWidget` owns sprite painting, and `Flame.images` owns image caching.
 
 - [ ] **Step 5: Run focused tests and commit**
 
@@ -584,7 +711,7 @@ Expected: all enum/mapping/fallback tests pass without changing the Flame loader
 
 **Interfaces:**
 - Consumes: `OrionUiTheme`, `CommandFrame`, `OrionAtlasSprite`, existing stages/progress/callbacks.
-- Produces: `SectorMapLayout.nodeRect`, `SectorMapLayout.routes`, and `SectorRoute` for deterministic rendering/tests.
+- Produces: `SectorMapLayout.fromStages`, instance `nodeRect`, static `routes`, and `SectorRoute` for deterministic rendering/tests.
 - Preserves: the public `WorldMapView` constructor and sticky `feedback` rendering.
 
 - [ ] **Step 1: Write pure compact-layout and route tests**
@@ -597,14 +724,19 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/ui/sector_map_layout.dart';
 
 void main() {
   test('five main-path hit rectangles are distinct at 375x812', () {
     const size = Size(375, 812);
+    final layout = SectorMapLayout.fromStages(
+      stages: OrionCampaign.stages,
+      size: size,
+    );
     final rects = {
       for (final stage in OrionCampaign.mainStages)
-        stage.id: SectorMapLayout.nodeRect(stage, size),
+        stage.id: layout.nodeRect(stage),
     };
 
     expect(rects.values, hasLength(5));
@@ -622,6 +754,33 @@ void main() {
     for (var index = 1; index < ordered.length; index += 1) {
       expect(ordered[index - 1].overlaps(ordered[index]), isFalse);
     }
+  });
+
+  test('a synthetic sixth column remains inside the plotting bounds', () {
+    const size = Size(375, 812);
+    final source = OrionCampaign.stages.last;
+    final futureStage = StageDefinition(
+      id: 'future-stage',
+      name: 'Future Stage',
+      mapLabel: 'Future',
+      description: 'Synthetic layout coverage only.',
+      pathCells: source.pathCells,
+      waves: source.waves,
+      unlockDependencies: [source.id],
+      isMainPath: false,
+      reward: CampaignReward.bonusGold,
+      mapColumn: 5,
+      mapRow: 1,
+    );
+    final layout = SectorMapLayout.fromStages(
+      stages: [...OrionCampaign.stages, futureStage],
+      size: size,
+    );
+
+    expect(
+      layout.nodeRect(futureStage).right,
+      lessThanOrEqualTo(size.width - SectorMapLayout.railWidth - 12),
+    );
   });
 
   test('routes are derived from unlock dependencies', () {
@@ -667,6 +826,8 @@ CampaignProgress clearedCampaignProgress() => CampaignProgress(
 
 Widget buildMap({
   required CampaignProgress progress,
+  List<StageDefinition>? stages,
+  CampaignModifiers? campaignModifiers,
   ValueChanged<StageDefinition>? onStageSelected,
   ValueChanged<StageDefinition>? onLockedStageSelected,
   String? feedback,
@@ -677,8 +838,9 @@ Widget buildMap({
   return MaterialApp(
     home: Scaffold(
       body: WorldMapView(
-        stages: OrionCampaign.stages,
+        stages: stages ?? OrionCampaign.stages,
         progress: progress,
+        campaignModifiers: campaignModifiers,
         feedback: feedback,
         isSavingProgress: isSavingProgress,
         isResetting: isResetting,
@@ -720,6 +882,7 @@ testWidgets('compact map exposes seven art-led stage targets without overlap',
 
 Also cover:
 
+- an empty stage list preserves the exact `No stages available` state instead of constructing a layout;
 - fresh Alpha has semantics containing `Blueprint • Locked`;
 - cleared Alpha has semantics containing `Blueprint • Recovered`;
 - locked nodes call only `onLockedStageSelected`;
@@ -728,6 +891,44 @@ Also cover:
 - Codex, Tech Tree, Settings, and Reset tooltips invoke the existing callbacks;
 - `isSavingProgress || isResetting` disables all stage and utility actions.
 - `isSavingFeedback` disables Settings only, preserving the current narrower gate.
+
+Pin the copy that comes from state rather than presentation shorthand:
+
+```dart
+testWidgets('busy-derived feedback and challenge semantics remain exact',
+    (tester) async {
+  await tester.pumpWidget(
+    buildMap(progress: CampaignProgress(), isSavingProgress: true),
+  );
+  expect(find.text('Saving campaign progress…'), findsOneWidget);
+
+  await tester.pumpWidget(
+    buildMap(progress: CampaignProgress(), isResetting: true),
+  );
+  expect(find.text('Resetting campaign…'), findsOneWidget);
+
+  await tester.pumpWidget(
+    buildMap(
+      progress: CampaignProgress(),
+      campaignModifiers: const CampaignModifiers(hasChallengeBadge: true),
+    ),
+  );
+  expect(
+    find.bySemanticsLabel(
+      'Challenge Badge Earned - All side stages cleared',
+    ),
+    findsOneWidget,
+  );
+});
+
+testWidgets('empty campaign preserves the existing empty state',
+    (tester) async {
+  await tester.pumpWidget(
+    buildMap(progress: CampaignProgress(), stages: const []),
+  );
+  expect(find.text('No stages available'), findsOneWidget);
+});
+```
 
 - [ ] **Step 3: Verify layout and widget tests are RED**
 
@@ -758,19 +959,49 @@ final class SectorRoute {
   final StageMedal? medal;
 }
 
-abstract final class SectorMapLayout {
+final class SectorMapLayout {
+  const SectorMapLayout._({
+    required Size size,
+    required this.maxColumn,
+    required this.maxRow,
+  }) : _size = size;
+
   static const railWidth = 52.0;
   static const horizontalPadding = 12.0;
   static const nodeSize = Size(56, 80);
   static const plotTop = 76.0;
   static const plotBottomInset = 40.0;
 
-  static Rect nodeRect(StageDefinition stage, Size size) {
-    final plotWidth = size.width - (horizontalPadding * 2) - railWidth;
-    final xStep = (plotWidth - nodeSize.width) / 4;
+  final Size _size;
+  final int maxColumn;
+  final int maxRow;
+
+  factory SectorMapLayout.fromStages({
+    required List<StageDefinition> stages,
+    required Size size,
+  }) {
+    if (stages.isEmpty) {
+      throw ArgumentError.value(stages, 'stages', 'Must not be empty');
+    }
+    return SectorMapLayout._(
+      size: size,
+      maxColumn: stages
+          .map((stage) => stage.mapColumn)
+          .reduce((left, right) => left > right ? left : right),
+      maxRow: stages
+          .map((stage) => stage.mapRow)
+          .reduce((left, right) => left > right ? left : right),
+    );
+  }
+
+  Rect nodeRect(StageDefinition stage) {
+    final plotWidth = _size.width - (horizontalPadding * 2) - railWidth;
+    final xStep = maxColumn == 0
+        ? 0.0
+        : (plotWidth - nodeSize.width) / maxColumn;
     final availableHeight =
-        size.height - plotTop - plotBottomInset - nodeSize.height;
-    final yStep = availableHeight / 2;
+        _size.height - plotTop - plotBottomInset - nodeSize.height;
+    final yStep = maxRow == 0 ? 0.0 : availableHeight / maxRow;
     return Rect.fromLTWH(
       horizontalPadding + (stage.mapColumn * xStep),
       plotTop + (stage.mapRow * yStep),
@@ -802,7 +1033,9 @@ abstract final class SectorMapLayout {
 
 - [ ] **Step 5: Replace the Material-card map with the sector stack**
 
-Convert `WorldMapView` to `StatefulWidget` only to precache `GameTerrain.assetPath` and `GameBossSheet.assetPath` once from `didChangeDependencies`. Preserve every constructor parameter and guard the cache warm-up per state instance:
+Convert `WorldMapView` to `StatefulWidget` only to warm its two local art sources once from `didChangeDependencies`. Preserve every constructor parameter and guard the cache warm-up per state instance. The terrain remains a Flutter `Image.asset`; atlas sheets use Flame's cache:
+
+Import `package:flame/flame.dart` for the boss-sheet warm-up.
 
 ```dart
 bool _didPrecacheMapArt = false;
@@ -813,17 +1046,24 @@ void didChangeDependencies() {
   if (_didPrecacheMapArt) return;
   _didPrecacheMapArt = true;
   precacheImage(const AssetImage(GameTerrain.assetPath), context);
-  precacheImage(const AssetImage(GameBossSheet.assetPath), context);
+  Flame.images.load(GameBossSheet.fileName).ignore();
 }
 ```
 
-Build the `SafeArea > LayoutBuilder > Stack`. At the top of the `LayoutBuilder` callback, derive the two values consumed by the stack:
+Build the `SafeArea > LayoutBuilder > Stack`. Preserve the existing empty-state branch before constructing `SectorMapLayout`, then derive the values consumed by the stack:
 
 ```dart
 final uiTheme = OrionUiTheme.of(context);
+if (widget.stages.isEmpty) {
+  return const Center(child: Text('No stages available'));
+}
+final sectorLayout = SectorMapLayout.fromStages(
+  stages: widget.stages,
+  size: constraints.biggest,
+);
 final nodeRects = {
   for (final stage in widget.stages)
-    stage.id: SectorMapLayout.nodeRect(stage, constraints.biggest),
+    stage.id: sectorLayout.nodeRect(stage),
 };
 ```
 
@@ -846,7 +1086,7 @@ Positioned.fill(
 ),
 for (final stage in widget.stages)
   Positioned.fromRect(
-    rect: SectorMapLayout.nodeRect(stage, constraints.biggest),
+    rect: sectorLayout.nodeRect(stage),
     child: _IllustratedStageNode(
       key: ValueKey('sector-stage-${stage.id}'),
       stage: stage,
@@ -862,7 +1102,7 @@ for (final stage in widget.stages)
   ),
 ```
 
-Add the compact `ORION SECTOR` header, challenge/completion badges, 52 dp right utility rail, minimal medal legend, and sticky campaign feedback strip. Use `CommandFrame`; do not alter callback/busy logic.
+Add the compact `ORION SECTOR` header, challenge/completion badges, 52 dp right utility rail, minimal medal legend, and sticky campaign feedback strip. Use `CommandFrame`; do not alter callback/busy logic. The visible challenge treatment may shorten, but its enclosing `Semantics` or `Tooltip` must retain the exact sentence `Challenge Badge Earned - All side stages cleared`. Preserve the current busy-derived `Saving campaign progress…` and `Resetting campaign…` strings exactly.
 
 `_IllustratedStageNode` uses `OrionAtlasSprite(art: OrionArt.stage(stage))`, full semantics, main/optional shape, status ring, medal glyph, reward glyph, and the Alpha-only blueprint glyph. Keep visible node copy to `mapLabel`; put full name/status/reward/blueprint in semantics and tooltips.
 
@@ -889,7 +1129,7 @@ Expected: seven-node geometry, route, state, blueprint, callback, and busy tests
 **Interfaces:**
 - Consumes: `OrionUiTheme`, `CommandFrame`, `ReactorButton`, and `OrionArt.stage` from Tasks 1–2.
 - Preserves: `_showStageBriefing`, stage launch/replay result, blueprint state, reset persistence, reduced-motion duration, and all campaign callbacks.
-- Changes visible copy only: fresh `Start Mission` becomes `Launch Mission`; map title becomes `ORION SECTOR`.
+- Changes visible copy only: fresh `Start Mission` becomes `Launch Mission`; map title becomes `ORION SECTOR`. The challenge-badge semantic sentence and busy-derived saving/resetting strings remain exact.
 
 - [ ] **Step 1: Update/add briefing and reset tests first**
 
@@ -929,7 +1169,10 @@ testWidgets('reset confirmation uses command frame and keeps behavior',
   expect(find.byType(CommandFrame), findsWidgets);
   await tester.tap(find.text('Reset'));
   await tester.pumpAndSettle();
-  expect(find.bySemanticsLabel(contains('Blueprint • Locked')), findsOneWidget);
+  expect(
+    find.bySemanticsLabel(RegExp(r'Blueprint • Locked')),
+    findsOneWidget,
+  );
 });
 ```
 
