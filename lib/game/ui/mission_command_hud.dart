@@ -323,17 +323,11 @@ class MissionPacingStrip extends StatelessWidget {
       children: [
         IconButton.filledTonal(
           tooltip: snapshot.isPaused ? 'Resume' : 'Pause',
-          visualDensity: VisualDensity.compact,
-          padding: EdgeInsets.zero,
           onPressed: canTogglePause ? onTogglePause : null,
           icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
         ),
         SegmentedButton<double>(
           showSelectedIcon: false,
-          style: const ButtonStyle(
-            visualDensity: VisualDensity.compact,
-            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-          ),
           segments: const [
             ButtonSegment<double>(value: 1.0, label: Text('1x')),
             ButtonSegment<double>(value: 2.0, label: Text('2x')),

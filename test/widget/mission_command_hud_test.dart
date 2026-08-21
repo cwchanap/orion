@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import '../support/command_deck_fixtures.dart';
@@ -52,6 +53,44 @@ void main() {
     await tester.tap(find.byTooltip('Auto-start waves'));
     expect((pauseTaps, speed, autoTaps), (1, 2.0, 1));
   });
+
+  testWidgets(
+    'pacing controls preserve 48dp hit targets while shrink-wrapped',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MissionPacingStrip(
+            snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+            onTogglePause: () {},
+            onSpeedSelected: (_) {},
+            onToggleAutoStart: () {},
+          ),
+        ),
+      );
+
+      const minimumHitTarget = 48.0;
+      final pauseRect = tester.getRect(find.byType(IconButton));
+      expect(pauseRect.width, greaterThanOrEqualTo(minimumHitTarget));
+      expect(pauseRect.height, greaterThanOrEqualTo(minimumHitTarget));
+
+      for (final label in ['1x', '2x', '3x']) {
+        final segment = find.ancestor(
+          of: find.text(label),
+          matching: find.byType(TextButton),
+        );
+        final segmentRect = tester.getRect(segment);
+        expect(segmentRect.width, greaterThanOrEqualTo(minimumHitTarget));
+        expect(segmentRect.height, greaterThanOrEqualTo(minimumHitTarget));
+      }
+
+      final autoRect = tester.getRect(find.byType(FilterChip));
+      expect(autoRect.width, greaterThanOrEqualTo(minimumHitTarget));
+      expect(autoRect.height, greaterThanOrEqualTo(minimumHitTarget));
+
+      final paintedFrameRect = tester.getRect(find.byType(CommandFrame));
+      expect(paintedFrameRect.width, lessThan(800));
+    },
+  );
 
   testWidgets('status passes taps through while pacing consumes them', (
     tester,
