@@ -114,30 +114,32 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+      expect(
+        find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Blueprint • Locked')),
+        findsOneWidget,
+      );
 
-    await tester.pumpWidget(buildMap(progress: CampaignProgress()));
-    expect(
-      find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Blueprint • Locked')),
-      findsOneWidget,
-    );
-
-    await tester.pumpWidget(
-      buildMap(
-        progress: CampaignProgress(
-          bestResultsByStageId: {
-            OrionCampaign.stageOneId: const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 6,
-            ),
-          },
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(
+            bestResultsByStageId: {
+              OrionCampaign.stageOneId: const StageResult(
+                medal: StageMedal.clear,
+                bestBaseHealth: 6,
+              ),
+            },
+          ),
         ),
-      ),
-    );
-    expect(
-      find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Blueprint • Recovered')),
-      findsOneWidget,
-    );
-    semantics.dispose();
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Blueprint • Recovered')),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('locked nodes call only the locked-stage callback', (
@@ -166,38 +168,41 @@ void main() {
     tester,
   ) async {
     final semantics = tester.ensureSemantics();
-    final progress = CampaignProgress(
-      bestResultsByStageId: const {
-        'outpost-alpha': StageResult(
-          medal: StageMedal.clear,
-          bestBaseHealth: 4,
-        ),
-        'nebula-relay': StageResult(
-          medal: StageMedal.silver,
-          bestBaseHealth: 12,
-        ),
-        'asteroid-foundry': StageResult(
-          medal: StageMedal.gold,
-          bestBaseHealth: 20,
-        ),
-      },
-    );
+    try {
+      final progress = CampaignProgress(
+        bestResultsByStageId: const {
+          'outpost-alpha': StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 4,
+          ),
+          'nebula-relay': StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 12,
+          ),
+          'asteroid-foundry': StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+        },
+      );
 
-    await tester.pumpWidget(buildMap(progress: progress));
+      await tester.pumpWidget(buildMap(progress: progress));
 
-    expect(
-      find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Medal • Clear')),
-      findsOneWidget,
-    );
-    expect(
-      find.bySemanticsLabel(RegExp(r'Nebula Relay.*Medal • Silver')),
-      findsOneWidget,
-    );
-    expect(
-      find.bySemanticsLabel(RegExp(r'Asteroid Foundry.*Medal • Gold')),
-      findsOneWidget,
-    );
-    semantics.dispose();
+      expect(
+        find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Medal • Clear')),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'Nebula Relay.*Medal • Silver')),
+        findsOneWidget,
+      );
+      expect(
+        find.bySemanticsLabel(RegExp(r'Asteroid Foundry.*Medal • Gold')),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('feedback remains visible until the harness replaces it', (
@@ -319,16 +324,50 @@ void main() {
     expect(find.text('Resetting campaign…'), findsOneWidget);
 
     final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(),
+          campaignModifiers: const CampaignModifiers(hasChallengeBadge: true),
+        ),
+      );
+      expect(
+        find.bySemanticsLabel(
+          'Challenge Badge Earned - All side stages cleared',
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('map node labels do not overflow under large text scale', (
+    tester,
+  ) async {
     await tester.pumpWidget(
-      buildMap(
-        progress: CampaignProgress(),
-        campaignModifiers: const CampaignModifiers(hasChallengeBadge: true),
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3.0)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: WorldMapView(
+            stages: OrionCampaign.stages,
+            progress: clearedCampaignProgress(),
+            feedback: null,
+            onStageSelected: (_) {},
+            onResetCampaign: () {},
+          ),
+        ),
       ),
     );
-    expect(
-      find.bySemanticsLabel('Challenge Badge Earned - All side stages cleared'),
-      findsOneWidget,
-    );
-    semantics.dispose();
+
+    expect(tester.takeException(), isNull);
+    for (final stage in OrionCampaign.stages) {
+      expect(find.text(stage.mapLabel), findsOneWidget);
+    }
   });
 }

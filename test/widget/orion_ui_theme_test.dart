@@ -70,19 +70,49 @@ void main() {
     // label, once as the tooltip). With excludeFromSemantics on the Tooltip,
     // exactly one semantics node carries the label and its tooltip is empty.
     final handle = tester.ensureSemantics();
-    await tester.pump();
-    expect(find.bySemanticsLabel('Launch Mission'), findsOneWidget);
-    expect(
-      tester.getSemantics(find.bySemanticsLabel('Launch Mission')),
-      matchesSemantics(
-        label: 'Launch Mission',
-        tooltip: '',
-        isButton: true,
-        hasEnabledState: true,
-        isEnabled: true,
+    try {
+      await tester.pump();
+      expect(find.bySemanticsLabel('Launch Mission'), findsOneWidget);
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Launch Mission')),
+        matchesSemantics(
+          label: 'Launch Mission',
+          tooltip: '',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: true,
+        ),
+      );
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets('reactor action does not overflow with large system text scale', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3.0)),
+          child: child!,
+        ),
+        home: const Center(
+          child: ReactorButton(
+            tooltip: 'Launch Mission',
+            label: 'Launch Mission Long Label',
+            icon: Icons.rocket_launch,
+            onPressed: null,
+            size: 48,
+          ),
+        ),
       ),
     );
-    handle.dispose();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Launch Mission Long Label'), findsOneWidget);
   });
 
   testWidgets('reduced motion returns zero duration', (tester) async {

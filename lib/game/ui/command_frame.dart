@@ -122,6 +122,9 @@ class ReactorButton extends StatelessWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             textAlign: TextAlign.center,
+                            textScaler: MediaQuery.textScalerOf(
+                              context,
+                            ).clamp(maxScaleFactor: 1.15),
                             style: Theme.of(context).textTheme.labelSmall
                                 ?.copyWith(
                                   color: foreground,
