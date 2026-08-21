@@ -195,5 +195,54 @@ void main() {
         );
       },
     );
+
+    test('all modifiers preserve base progression costs', () {
+      const campaignModifiers = CampaignModifiers(
+        laserDamageFraction: 0.1,
+        cryoSlowDurationBonus: 0.3,
+      );
+
+      for (final type in TowerType.values) {
+        final progression =
+            <({int level, TowerSpecialization? specialization})>[
+              (level: 1, specialization: null),
+              (level: 2, specialization: null),
+              for (final specialization in GameBalance.specializationsFor(type))
+                (level: 3, specialization: specialization),
+            ];
+
+        for (final entry in progression) {
+          final tower = PlacedTower(
+            id: 1,
+            type: type,
+            position: const GridPosition(0, 0),
+            level: entry.level,
+            specialization: entry.specialization,
+          );
+          final base = GameBalance.towerStats(
+            type,
+            level: entry.level,
+            specialization: entry.specialization,
+          );
+          final resolved = TowerStatsResolver.resolve(
+            tower,
+            campaignModifiers: campaignModifiers,
+            stageModifiers: StageModifier.values,
+            runModules: RunModuleId.values,
+          );
+
+          expect(
+            resolved.upgradeCost,
+            base.upgradeCost,
+            reason: '$type $entry',
+          );
+          expect(
+            resolved.specializationCost,
+            base.specializationCost,
+            reason: '$type $entry',
+          );
+        }
+      }
+    });
   });
 }
