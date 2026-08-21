@@ -153,7 +153,7 @@ void main() {
         WavePreviewGroup(
           enemyCount: 1,
           label: 'Swarm Queen',
-          traits: {EnemyTrait.swarm, EnemyTrait.regen},
+          traits: {EnemyTrait.swarm},
         ),
       ],
     );
@@ -167,6 +167,37 @@ void main() {
         of: find.byKey(const ValueKey('preview-group-0')),
         matching: find.byType(OrionAtlasSprite),
       ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('preview-group-0')),
+        matching: find.byIcon(Icons.change_history),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('mapped trait badges render their atlas descriptors', (
+    tester,
+  ) async {
+    final armoredPreview = commandDeckPreview(
+      groups: [
+        WavePreviewGroup(
+          enemyCount: 4,
+          label: 'Armored Drones',
+          traits: {EnemyTrait.armored},
+        ),
+      ],
+    );
+    await tester.pumpWidget(scannerHost(armoredPreview));
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+
+    final mappedTrait = find.bySemanticsLabel('Armored trait');
+    expect(mappedTrait, findsOneWidget);
+    expect(
+      find.descendant(of: mappedTrait, matching: find.byType(OrionAtlasSprite)),
       findsOneWidget,
     );
   });

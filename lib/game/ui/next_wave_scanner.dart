@@ -459,11 +459,7 @@ class _TraitBadge extends StatelessWidget {
         image: true,
         label: art.semanticLabel,
         child: ExcludeSemantics(
-          child: Icon(
-            art.fallbackIcon,
-            size: 17,
-            color: OrionUiTheme.of(context).systemCyan,
-          ),
+          child: OrionAtlasSprite(art: art, size: const Size.square(17)),
         ),
       );
     }

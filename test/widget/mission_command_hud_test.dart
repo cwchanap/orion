@@ -94,6 +94,68 @@ void main() {
     },
   );
 
+  testWidgets(
+    'pacing frame ends at its controls so the adjacent board stays tappable',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      var backgroundTaps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(2)),
+            child: child!,
+          ),
+          home: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => backgroundTaps += 1,
+                ),
+              ),
+              Positioned(
+                left: 12,
+                right: 12,
+                top: 12,
+                child: MissionPacingStrip(
+                  snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+                  onTogglePause: () {},
+                  onSpeedSelected: (_) {},
+                  onToggleAutoStart: () {},
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final frame = tester.getRect(find.byType(CommandFrame));
+      final controlRects = [
+        tester.getRect(find.byType(IconButton)),
+        tester.getRect(find.byType(SegmentedButton<double>)),
+        tester.getRect(find.byType(FilterChip)),
+      ];
+      final controlsRight = controlRects
+          .map((rect) => rect.right)
+          .reduce((left, right) => left > right ? left : right);
+      expect(frame.right - controlsRight, lessThanOrEqualTo(7));
+
+      final strip = tester.getRect(find.byType(MissionPacingStrip));
+      final pointImmediatelyOutsideFrame = Offset(
+        frame.right + 1,
+        frame.center.dy,
+      );
+      expect(pointImmediatelyOutsideFrame.dx, lessThan(strip.right));
+      await tester.tapAt(pointImmediatelyOutsideFrame);
+      expect(backgroundTaps, 1);
+    },
+  );
+
   testWidgets('status passes taps through while pacing consumes them', (
     tester,
   ) async {
