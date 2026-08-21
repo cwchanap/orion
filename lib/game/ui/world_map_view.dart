@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flame/flame.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -672,7 +674,7 @@ class _StageArtAperture extends StatelessWidget {
     final uiTheme = OrionUiTheme.of(context);
     Widget art = OrionAtlasSprite(
       art: OrionArt.stage(stage),
-      size: const Size.square(48),
+      size: Size.square(stage.isMainPath ? 48 : 34),
     );
     if (isLocked) {
       art = Opacity(
@@ -688,22 +690,25 @@ class _StageArtAperture extends StatelessWidget {
     }
 
     if (!stage.isMainPath) {
-      return Container(
-        width: 52,
-        height: 52,
-        padding: const EdgeInsets.all(2),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: uiTheme.hullBlack,
-          border: Border.all(color: statusColor, width: 2),
-          boxShadow: [
-            BoxShadow(
-              color: statusColor.withValues(alpha: 0.22),
-              blurRadius: 8,
+      return SizedBox.square(
+        dimension: 54,
+        child: Center(
+          child: Transform.rotate(
+            key: ValueKey('optional-stage-aperture-${stage.id}'),
+            angle: math.pi / 4,
+            child: SizedBox.square(
+              dimension: 38,
+              child: CommandFrame(
+                padding: const EdgeInsets.all(2),
+                color: uiTheme.hullBlack,
+                borderColor: statusColor,
+                emphasized: true,
+                chamfer: 4,
+                child: Transform.rotate(angle: -math.pi / 4, child: art),
+              ),
             ),
-          ],
+          ),
         ),
-        child: ClipOval(child: art),
       );
     }
 

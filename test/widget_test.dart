@@ -259,6 +259,57 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'briefing action stays reachable at 1.3x text across approved portraits',
+    (tester) async {
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      for (final size in const [
+        Size(375, 812),
+        Size(390, 844),
+        Size(430, 932),
+      ]) {
+        tester.view.physicalSize = size;
+        await tester.pumpWidget(
+          MediaQuery(
+            data: const MediaQueryData(
+              disableAnimations: true,
+              textScaler: TextScaler.linear(1.3),
+            ),
+            child: MaterialApp(
+              home: OrionGamePage(
+                progressStore: InMemoryCampaignProgressStore(
+                  knownStages: OrionCampaign.stages,
+                ),
+                feedbackPreferencesStore: InMemoryFeedbackPreferencesStore(),
+                gameFeedback: const NoOpGameFeedback(),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Alpha'));
+        await tester.pump();
+        expect(find.text('Outpost Alpha'), findsOneWidget);
+
+        final action = find.text('Launch Mission');
+        await tester.ensureVisible(action);
+        await tester.pump();
+        final actionRect = tester.getRect(action);
+        expect(actionRect.left, greaterThanOrEqualTo(0));
+        expect(actionRect.top, greaterThanOrEqualTo(0));
+        expect(actionRect.right, lessThanOrEqualTo(size.width));
+        expect(actionRect.bottom, lessThanOrEqualTo(size.height));
+        expect(tester.takeException(), isNull);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump();
+      }
+    },
+  );
+
   testWidgets('build intel shows snapshot modifier titles and hides in wave', (
     tester,
   ) async {
