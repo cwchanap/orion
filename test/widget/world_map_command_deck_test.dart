@@ -494,6 +494,28 @@ void main() {
       );
 
       expect(find.byType(SingleChildScrollView), findsOneWidget);
+
+      // The plot actually scrolls horizontally: dragging the route layer
+      // moves the scroll offset away from zero.
+      final scrollFinder = find.descendant(
+        of: find.byType(SingleChildScrollView),
+        matching: find.byType(Scrollable),
+      );
+      final scrollable = tester.state<ScrollableState>(scrollFinder);
+      expect(scrollable.position.pixels, 0);
+
+      await tester.drag(
+        find.byKey(const ValueKey('sector-route-layer')),
+        const Offset(-80, 0),
+        // The route layer sits behind the stage nodes in the plot Stack, so
+        // its center is occluded by a node; the drag still reaches the
+        // Scrollable's gesture handler through the hit-test chain.
+        warnIfMissed: false,
+      );
+      await tester.pump();
+      expect(scrollable.position.pixels, greaterThan(0));
+
+      // The first stage remains tappable after scrolling and still selects.
       await tester.tap(
         find.byKey(const ValueKey('sector-stage-outpost-alpha')),
       );
