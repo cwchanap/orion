@@ -65,15 +65,6 @@ class MissionCommandDock extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (snapshot.feedback case final feedback?) ...[
-            Text(
-              feedback,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(context).colorScheme.secondary,
-              ),
-            ),
-            const SizedBox(height: 6),
-          ],
           AnimatedSwitcher(
             key: const ValueKey('mission-command-dock-transition'),
             duration: orionMotionDuration(

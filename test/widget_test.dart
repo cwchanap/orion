@@ -430,6 +430,37 @@ void main() {
     expect(find.text('Start Wave'), findsOneWidget);
   });
 
+  testWidgets('mission toast latches through null republishes', (tester) async {
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+
+    const feedback = 'Not enough gold.';
+    game!.overrideFeedback(feedback);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('mission-command-toast')), findsOneWidget);
+    expect(find.text(feedback), findsOneWidget);
+
+    game!.setSpeedMultiplier(2);
+    await tester.pump();
+    expect(find.text(feedback), findsOneWidget);
+
+    await tester.pump(const Duration(milliseconds: 2399));
+    expect(find.text(feedback), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump(const Duration(milliseconds: 140));
+    expect(find.text(feedback), findsNothing);
+
+    game!.setSpeedMultiplier(1);
+    await tester.pump();
+    game!.overrideFeedback(feedback);
+    await tester.pump();
+    expect(find.text(feedback), findsOneWidget);
+  });
+
   testWidgets('mission screen exposes pause speed and auto-start controls', (
     tester,
   ) async {

@@ -20,6 +20,7 @@ import '../rules/run_module_unlocks.dart';
 import 'codex_view.dart';
 import 'campaign_presentation.dart';
 import 'command_frame.dart';
+import 'command_toast.dart';
 import 'feedback_settings_sheet.dart';
 import 'mission_command_hud.dart';
 import 'mission_command_dock.dart';
@@ -384,15 +385,25 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   left: 12,
                   right: 12,
                   bottom: 12,
-                  child: MissionCommandDock(
-                    snapshot: snapshot,
-                    onWorldMap: game.returnToMap,
-                    onStartWave: game.startWave,
-                    onPlaceTower: game.placeTower,
-                    onUpgrade: game.upgradeSelectedTower,
-                    onSpecialize: game.specializeSelectedTower,
-                    onTargetingChanged: game.setTargetingMode,
-                    onSell: game.sellSelectedTower,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CommandToast(
+                        key: const ValueKey('mission-command-toast'),
+                        feedback: snapshot.feedback,
+                      ),
+                      const SizedBox(height: 8),
+                      MissionCommandDock(
+                        snapshot: snapshot,
+                        onWorldMap: game.returnToMap,
+                        onStartWave: game.startWave,
+                        onPlaceTower: game.placeTower,
+                        onUpgrade: game.upgradeSelectedTower,
+                        onSpecialize: game.specializeSelectedTower,
+                        onTargetingChanged: game.setTargetingMode,
+                        onSell: game.sellSelectedTower,
+                      ),
+                    ],
                   ),
                 ),
                 if (snapshot.pendingRunModuleOffer case final offer?)
