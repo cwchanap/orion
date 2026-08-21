@@ -55,12 +55,7 @@ final class SectorMapLayout {
   }
 
   Rect nodeRect(StageDefinition stage) {
-    final plotWidth = _size.width - (horizontalPadding * 2) - railWidth;
-    final availableWidth = (plotWidth - nodeSize.width).clamp(
-      0.0,
-      double.infinity,
-    );
-    final xStep = maxColumn == 0 ? 0.0 : availableWidth / maxColumn;
+    final xStep = _horizontalStep;
     final availableHeight =
         (_size.height - plotTop - plotBottomInset - nodeSize.height).clamp(
           0.0,
@@ -73,6 +68,31 @@ final class SectorMapLayout {
       nodeSize.width,
       nodeSize.height,
     );
+  }
+
+  /// Horizontal step between adjacent columns. Never falls below
+  /// [nodeSize.width] so neighboring nodes cannot overlap; when the viewport
+  /// cannot fit all columns at that minimum, [plotContentWidth] exceeds the
+  /// available plot width and the view scrolls horizontally.
+  double get _horizontalStep {
+    final plotWidth = _size.width - (horizontalPadding * 2) - railWidth;
+    final availableWidth = (plotWidth - nodeSize.width).clamp(
+      0.0,
+      double.infinity,
+    );
+    final naturalStep = maxColumn == 0 ? 0.0 : availableWidth / maxColumn;
+    return naturalStep < nodeSize.width ? nodeSize.width : naturalStep;
+  }
+
+  /// Total width the plot content occupies (left padding + last column right
+  /// edge + right padding). When this exceeds the viewport's plot width the
+  /// caller should wrap the plot in a horizontal scroll.
+  double get plotContentWidth {
+    final xStep = _horizontalStep;
+    return horizontalPadding +
+        (maxColumn * xStep) +
+        nodeSize.width +
+        horizontalPadding;
   }
 
   static List<SectorRoute> routes(
