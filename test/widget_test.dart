@@ -14,6 +14,8 @@ import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/game_session.dart';
+import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -41,13 +43,22 @@ Widget testGamePage({
 Future<void> startStageFromBriefing(
   WidgetTester tester, {
   String mapLabel = 'Alpha',
-  String actionLabel = 'Start Mission',
+  String actionLabel = 'Launch Mission',
 }) async {
   await tester.tap(find.text(mapLabel));
   await tester.pumpAndSettle();
   expect(find.text(actionLabel), findsOneWidget);
   await tester.tap(find.text(actionLabel));
   await tester.pump();
+}
+
+void expectSemanticsLabel(WidgetTester tester, Pattern label, Matcher matcher) {
+  final handle = tester.ensureSemantics();
+  try {
+    expect(find.bySemanticsLabel(label), matcher);
+  } finally {
+    handle.dispose();
+  }
 }
 
 Future<InMemoryCampaignProgressStore> storeWithResults(
@@ -104,7 +115,7 @@ void main() {
     await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
-    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
   });
@@ -131,7 +142,7 @@ void main() {
     expect(find.text('No environmental modifiers'), findsOneWidget);
     expect(createdGame, isNull);
 
-    await tester.tap(find.text('Start Mission'));
+    await tester.tap(find.text('Launch Mission'));
     await tester.pump();
     expect(createdGame?.stage.id, 'outpost-alpha');
   });
@@ -162,6 +173,33 @@ void main() {
     await tester.pumpAndSettle();
     expect(createdGame, isNull);
   });
+
+  testWidgets(
+    'briefing uses stage art and preserves committed blueprint copy',
+    (tester) async {
+      final store = await storeWithResults({
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 5,
+        ),
+      });
+      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+
+      await tester.tap(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+      expect(
+        find.text('Blueprint recovered: Relay Calibration'),
+        findsOneWidget,
+      );
+      expect(find.text('Replay Mission'), findsOneWidget);
+      expect(find.byType(OrionAtlasSprite), findsWidgets);
+    },
+  );
 
   testWidgets('every modified stage shows its accepted briefing copy', (
     tester,
@@ -194,6 +232,8 @@ void main() {
           findsOneWidget,
         );
       }
+      await tester.ensureVisible(find.text('Dismiss'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Dismiss'));
       await tester.pumpAndSettle();
     }
@@ -462,7 +502,7 @@ void main() {
 
     expect(find.text('Singularity Core is locked.'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Start Mission'), findsNothing);
+    expect(find.text('Launch Mission'), findsNothing);
     expect(find.text('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
   });
@@ -486,7 +526,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Core'), findsOneWidget);
-    expect(find.text('Open'), findsWidgets);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Singularity Core.*Open'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byTooltip('Reset Campaign'));
     await tester.pumpAndSettle();
@@ -500,8 +544,37 @@ void main() {
     expect(find.text('Campaign reset.'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Core'), findsOneWidget);
-    expect(find.text('Locked'), findsWidgets);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Singularity Core.*Locked'),
+      findsOneWidget,
+    );
     expect(find.text('Start Wave'), findsNothing);
+  });
+
+  testWidgets('reset confirmation uses command frame and keeps behavior', (
+    tester,
+  ) async {
+    final store = await storeWithResults({
+      OrionCampaign.stageOneId: const StageResult(
+        medal: StageMedal.clear,
+        bestBaseHealth: 5,
+      ),
+    });
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Reset Campaign'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsOneWidget);
+    expect(find.byType(CommandFrame), findsWidgets);
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Outpost Alpha.*Blueprint • Locked'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('falls back to empty world map when progress load fails', (
@@ -514,7 +587,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Could not load campaign progress.'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
@@ -727,7 +800,7 @@ void main() {
       await startStageFromBriefing(
         tester,
         mapLabel: 'Rift',
-        actionLabel: 'Start Mission',
+        actionLabel: 'Launch Mission',
       );
 
       expect(game!.snapshot.gold, GameBalance.startingGold);
@@ -1165,7 +1238,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Saving result…'), findsOneWidget);
-    expect(find.text('Orion Sector Map'), findsNothing);
+    expect(find.text('ORION SECTOR'), findsNothing);
 
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
@@ -1199,7 +1272,7 @@ void main() {
     await tester.tap(find.byTooltip('World Map (Unsaved)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Mission result was not saved.'), findsOneWidget);
     expect(
       store.progress.resultFor('outpost-alpha'),
@@ -1211,8 +1284,16 @@ void main() {
     // would show the unsaved Gold medal here while every store assertion
     // above stays green. Alpha must still display the previously committed
     // Clear result.
-    expect(find.text('Clear'), findsOneWidget);
-    expect(find.text('Gold'), findsNothing);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Outpost Alpha.*Medal • Clear'),
+      findsOneWidget,
+    );
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Outpost Alpha.*Medal • Gold'),
+      findsNothing,
+    );
   });
 
   testWidgets('Mission delayed failure after disposal is setState safe', (
@@ -1280,9 +1361,9 @@ void main() {
     await tester.tap(find.text('Relay'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Start Mission'), findsNothing);
+    expect(find.text('Launch Mission'), findsNothing);
     expect(find.text('Replay Mission'), findsNothing);
 
     store.saveCompletions.single.complete();
@@ -1554,7 +1635,7 @@ void main() {
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
-    expect(find.text('Start Mission'), findsNothing);
+    expect(find.text('Launch Mission'), findsNothing);
     expect(find.text('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
 
@@ -1607,7 +1688,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
-      expect(find.text('Orion Sector Map'), findsOneWidget);
+      expect(find.text('ORION SECTOR'), findsOneWidget);
     },
   );
 
@@ -1659,7 +1740,7 @@ void main() {
       await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Orion Sector Map'), findsOneWidget);
+      expect(find.text('ORION SECTOR'), findsOneWidget);
       expect(find.text('Could not save campaign progress.'), findsNothing);
     },
   );
@@ -1792,13 +1873,13 @@ void main() {
       // TechTreeView is now rendered (T12): its header appears and the
       // world-map header is replaced.
       expect(find.text('Campaign Tech Tree'), findsOneWidget);
-      expect(find.text('Orion Sector Map'), findsNothing);
+      expect(find.text('ORION SECTOR'), findsNothing);
 
       // The back arrow returns the player to the world map.
       await tester.tap(find.byTooltip('Back'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Orion Sector Map'), findsOneWidget);
+      expect(find.text('ORION SECTOR'), findsOneWidget);
       expect(find.text('Campaign Tech Tree'), findsNothing);
     },
   );
@@ -1828,13 +1909,21 @@ void main() {
       ),
     );
 
-    expect(find.text('Orion Sector Map'), findsOneWidget);
+    expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Relay'), findsOneWidget);
     expect(find.text('Core'), findsOneWidget);
-    expect(find.text('Gold'), findsOneWidget);
-    expect(find.text('Open'), findsWidgets);
-    expect(find.text('Locked'), findsWidgets);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Outpost Alpha.*Medal • Gold'),
+      findsOneWidget,
+    );
+    expectSemanticsLabel(tester, RegExp(r'Nebula Relay.*Open'), findsOneWidget);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Singularity Core.*Locked'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('locked stage tap uses locked callback only when locked', (
@@ -2192,8 +2281,16 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    expect(find.text('Reward: +30 Gold'), findsOneWidget);
-    expect(find.text('Reward: +5 HP'), findsOneWidget);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Salvage Rift.*Reward: \+30 Gold'),
+      findsOneWidget,
+    );
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Void Bastion.*Reward: \+5 HP'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('world map shows earned reward label on cleared side stage', (
@@ -2227,7 +2324,11 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    expect(find.text('+30 Gold'), findsOneWidget);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Salvage Rift.*\+30 Gold'),
+      findsOneWidget,
+    );
   });
 
   testWidgets(
@@ -2273,19 +2374,18 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      expect(
-        find.text('Challenge Badge Earned - All side stages cleared'),
+      expectSemanticsLabel(
+        tester,
+        'Challenge Badge Earned - All side stages cleared',
         findsOneWidget,
       );
     },
   );
 
-  // HPA-528 Task 4: the Outpost Alpha node on the world map surfaces the
-  // first blueprint recovery as a compact fourth row that re-uses the
-  // existing reward-row treatment. The label reflects committed progress
-  // only — a fresh campaign shows "Blueprint • Locked"; a cleared Alpha
-  // shows "Blueprint • Recovered". Exactly one such row exists across all
-  // seven stage nodes.
+  // HPA-528 Task 4: the Outpost Alpha node exposes the first blueprint
+  // recovery through its compact glyph semantics. The label reflects
+  // committed progress only — a fresh campaign reports Locked and a cleared
+  // Alpha reports Recovered. Exactly one such signal exists across the map.
   testWidgets(
     'fresh world map shows Alpha blueprint locked and no recovered row',
     (tester) async {
@@ -2296,8 +2396,16 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      expect(find.text('Blueprint • Locked'), findsOneWidget);
-      expect(find.text('Blueprint • Recovered'), findsNothing);
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Outpost Alpha.*Blueprint • Locked'),
+        findsOneWidget,
+      );
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Blueprint • Recovered'),
+        findsNothing,
+      );
     },
   );
 
@@ -2314,8 +2422,12 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      expect(find.text('Blueprint • Recovered'), findsOneWidget);
-      expect(find.text('Blueprint • Locked'), findsNothing);
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Outpost Alpha.*Blueprint • Recovered'),
+        findsOneWidget,
+      );
+      expectSemanticsLabel(tester, RegExp(r'Blueprint • Locked'), findsNothing);
     },
   );
 
@@ -2354,9 +2466,7 @@ void main() {
     expect(find.text('Blueprint recovered: Relay Calibration'), findsNothing);
   });
 
-  testWidgets('Alpha blueprint row fits at 360x640 with nodeHeight 124', (
-    tester,
-  ) async {
+  testWidgets('Alpha blueprint glyph fits at 360x640', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -2371,7 +2481,11 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    expect(find.text('Blueprint • Recovered'), findsOneWidget);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Outpost Alpha.*Blueprint • Recovered'),
+      findsOneWidget,
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -2400,15 +2514,27 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Blueprint • Recovered'), findsOneWidget);
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Outpost Alpha.*Blueprint • Recovered'),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byTooltip('Reset Campaign'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Blueprint • Locked'), findsOneWidget);
-      expect(find.text('Blueprint • Recovered'), findsNothing);
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Outpost Alpha.*Blueprint • Locked'),
+        findsOneWidget,
+      );
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Blueprint • Recovered'),
+        findsNothing,
+      );
 
       await startStageFromBriefing(tester);
       expect(
@@ -2526,7 +2652,7 @@ void main() {
     // The save is still pending: the Settings button is disabled and the
     // prior effective value is untouched.
     IconButton settingsButton() => tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.settings),
+      find.widgetWithIcon(IconButton, Icons.settings_rounded),
     );
     expect(settingsButton().onPressed, isNull);
     expect(
@@ -2583,7 +2709,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('Blueprint • Recovered'), findsOneWidget);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Outpost Alpha.*Blueprint • Recovered'),
+      findsOneWidget,
+    );
 
     await tester.tap(find.byTooltip('Reset Campaign'));
     await tester.pumpAndSettle();
@@ -2591,8 +2721,16 @@ void main() {
     await tester.pumpAndSettle();
 
     // Campaign reset while the non-default feedback preferences survive.
-    expect(find.text('Blueprint • Locked'), findsOneWidget);
-    expect(find.text('Blueprint • Recovered'), findsNothing);
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Outpost Alpha.*Blueprint • Locked'),
+      findsOneWidget,
+    );
+    expectSemanticsLabel(
+      tester,
+      RegExp(r'Blueprint • Recovered'),
+      findsNothing,
+    );
     expect(
       feedbackStore.value,
       const FeedbackPreferences(
@@ -2843,12 +2981,12 @@ void main() {
       await tester.tap(find.text('Alpha'));
       await tester.pump();
       expect(find.text('Outpost Alpha'), findsOneWidget);
-      expect(find.text('Start Mission'), findsOneWidget);
+      expect(find.text('Launch Mission'), findsOneWidget);
 
       // Dismiss without starting the mission.
       await tester.tap(find.text('Dismiss'));
       await tester.pumpAndSettle();
-      expect(find.text('Start Mission'), findsNothing);
+      expect(find.text('Launch Mission'), findsNothing);
 
       // The Settings sheet is also visible immediately.
       await tester.tap(find.byTooltip('Settings'));
