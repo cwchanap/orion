@@ -15,6 +15,7 @@ import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
+import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
@@ -314,7 +315,7 @@ void main() {
     },
   );
 
-  testWidgets('mission status replaces the legacy build intel panel', (
+  testWidgets('next-wave scanner follows the build interaction flow', (
     tester,
   ) async {
     final store = await storeWithResults({
@@ -335,9 +336,66 @@ void main() {
     await tester.pump();
 
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+    expect(find.byType(NextWaveScanner), findsOneWidget);
+    expect(
+      _activeIgnorePointerAncestorsOf(find.byType(NextWaveScanner)),
+      findsNothing,
+    );
     expect(find.textContaining('Environment:'), findsNothing);
+
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsOneWidget,
+    );
+
+    final buildSnapshot = game!.snapshot;
+    game!.stateNotifier.value = GameSnapshot(
+      phase: GamePhase.build,
+      gold: buildSnapshot.gold,
+      baseHealth: buildSnapshot.baseHealth,
+      startingBaseHealth: buildSnapshot.startingBaseHealth,
+      waveNumber: buildSnapshot.waveNumber,
+      waveTotal: buildSnapshot.waveTotal,
+      stageId: buildSnapshot.stageId,
+      stageName: buildSnapshot.stageName,
+      stageLabel: buildSnapshot.stageLabel,
+      unlockedTowerTypes: buildSnapshot.unlockedTowerTypes,
+      stageModifiers: buildSnapshot.stageModifiers,
+      nextWavePreview: buildSnapshot.nextWavePreview,
+      selectedCell: const GridPosition(1, 1),
+      selectedTower: buildSnapshot.selectedTower,
+      selectedTowerStats: buildSnapshot.selectedTowerStats,
+      feedback: buildSnapshot.feedback,
+      isPaused: buildSnapshot.isPaused,
+      speedMultiplier: buildSnapshot.speedMultiplier,
+      autoStartEnabled: buildSnapshot.autoStartEnabled,
+      autoStartCountdownRemaining: buildSnapshot.autoStartCountdownRemaining,
+      pendingRunModuleOffer: buildSnapshot.pendingRunModuleOffer,
+      acquiredRunModules: buildSnapshot.acquiredRunModules,
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      findsOneWidget,
+    );
+
     game!.startWave();
     await tester.pump();
+    expect(find.byType(NextWaveScanner), findsNothing);
+
+    game!.stateNotifier.value = commandDeckSnapshot(
+      pendingRunModuleOffer: RunModuleOffer(
+        offerId: 1,
+        draftNumber: 1,
+        draftTotal: 3,
+        moduleIds: const [RunModuleId.heavyCaliber],
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(RunModuleDraftPanel), findsOneWidget);
+    expect(find.byType(NextWaveScanner), findsNothing);
     expect(find.textContaining('Environment:'), findsNothing);
   });
 

@@ -25,6 +25,7 @@ import 'feedback_settings_sheet.dart';
 import 'mission_command_hud.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
+import 'next_wave_scanner.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
@@ -351,6 +352,30 @@ class _OrionGamePageState extends State<OrionGamePage> {
                               ),
                             ),
                           const Spacer(),
+                          if (snapshot.phase == GamePhase.build &&
+                              snapshot.nextWavePreview != null &&
+                              snapshot.pendingRunModuleOffer == null &&
+                              !snapshot.isEnded)
+                            NextWaveScanner(
+                              preview: snapshot.nextWavePreview!,
+                              modifierTitles: snapshot.stageModifiers.isEmpty
+                                  ? [
+                                      StageModifierMetadata
+                                          .standardConditions
+                                          .title,
+                                    ]
+                                  : snapshot.stageModifiers
+                                        .map(
+                                          (modifier) =>
+                                              StageModifierMetadata.forModifier(
+                                                modifier,
+                                              ).title,
+                                        )
+                                        .toList(growable: false),
+                              collapseRequested:
+                                  snapshot.selectedCell != null ||
+                                  snapshot.selectedTower != null,
+                            ),
                         ],
                       ),
                     ],
