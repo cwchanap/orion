@@ -18,6 +18,7 @@ import 'codex_view.dart';
 import 'feedback_settings_sheet.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
+import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
 import 'tech_tree_view.dart';
 import 'tower_icons.dart';
@@ -392,7 +393,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
-      sheetAnimationStyle: _sheetAnimationStyle(context),
+      sheetAnimationStyle: orionSheetAnimationStyle(context),
       builder: (context) => _StageBriefingSheet(
         stage: stage,
         // Aligned with the rest of the committed-state pattern: the briefing
@@ -408,14 +409,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
-  // Bottom sheets skip their transition when the platform requests reduced
-  // motion via MediaQuery. Only the stage briefing and feedback settings
-  // sheets use this — module-draft and Mission Report overlays stay static.
-  AnimationStyle? _sheetAnimationStyle(BuildContext context) =>
-      MediaQuery.disableAnimationsOf(context)
-      ? AnimationStyle.noAnimation
-      : null;
-
   Future<void> _openFeedbackSettings() async {
     if (_isSavingFeedback || !_feedbackPreferencesLoaded) {
       return;
@@ -424,7 +417,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
-      sheetAnimationStyle: _sheetAnimationStyle(context),
+      sheetAnimationStyle: orionSheetAnimationStyle(context),
       builder: (context) => FeedbackSettingsSheet(
         initialPreferences: _feedbackPreferences,
         reduceMotion: MediaQuery.disableAnimationsOf(context),
