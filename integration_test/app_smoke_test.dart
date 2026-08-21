@@ -31,18 +31,18 @@ void main() {
     });
 
     // 1. World map is showing with the first stage ("Alpha").
-    await _pumpUntil(tester, () => tester.any(find.text('Orion Sector Map')));
+    await _pumpUntil(tester, () => tester.any(find.text('ORION SECTOR')));
     expect(find.text('Alpha'), findsOneWidget);
 
     // 2. Enter the first stage.
     await tester.tap(find.text('Alpha'));
-    await _pumpUntil(tester, () => tester.any(find.text('Start Mission')));
+    await _pumpUntil(tester, () => tester.any(find.text('Launch Mission')));
     expect(find.text('Outpost Alpha'), findsOneWidget);
     expect(find.text('Standard Conditions'), findsOneWidget);
     expect(find.text('No environmental modifiers'), findsOneWidget);
-    await tester.ensureVisible(find.text('Start Mission'));
+    await tester.ensureVisible(find.text('Launch Mission'));
     await tester.pump();
-    await tester.tap(find.text('Start Mission'));
+    await tester.tap(find.text('Launch Mission'));
     await _pumpUntil(tester, () => tester.any(find.text('Build')));
     expect(find.text('Build'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
