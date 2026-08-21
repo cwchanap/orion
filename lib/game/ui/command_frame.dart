@@ -78,6 +78,7 @@ class ReactorButton extends StatelessWidget {
 
     return Tooltip(
       message: tooltip,
+      excludeFromSemantics: true,
       child: Semantics(
         button: true,
         enabled: enabled,
