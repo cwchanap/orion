@@ -83,6 +83,7 @@ class ReactorButton extends StatelessWidget {
         button: true,
         enabled: enabled,
         label: tooltip,
+        onTap: onPressed,
         excludeSemantics: true,
         child: SizedBox.square(
           dimension: resolvedSize,

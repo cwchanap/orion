@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -139,6 +140,59 @@ void main() {
       );
     } finally {
       semantics.dispose();
+    }
+  });
+
+  testWidgets('stage semantics tap action selects the stage', (tester) async {
+    // excludeSemantics: true on the stage node replaces descendant semantics,
+    // so the InkWell's tap action is dropped. The outer Semantics must carry
+    // its own onTap or VoiceOver/TalkBack cannot activate the stage.
+    final handle = tester.ensureSemantics();
+    try {
+      final selected = <String>[];
+      await tester.pumpWidget(
+        buildMap(
+          progress: clearedCampaignProgress(),
+          onStageSelected: (stage) => selected.add(stage.id),
+        ),
+      );
+      final data = tester.getSemantics(
+        find.bySemanticsLabel(RegExp(r'Outpost Alpha')),
+      );
+      // ignore: deprecated_member_use
+      tester.binding.pipelineOwner.semanticsOwner!.performAction(
+        data.id,
+        SemanticsAction.tap,
+      );
+      expect(selected, [OrionCampaign.stageOneId]);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets('locked stage semantics tap action invokes locked callback', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    try {
+      final locked = <String>[];
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(),
+          onLockedStageSelected: (stage) => locked.add(stage.id),
+        ),
+      );
+      final data = tester.getSemantics(
+        find.bySemanticsLabel(RegExp(r'Singularity Core')),
+      );
+      // ignore: deprecated_member_use
+      tester.binding.pipelineOwner.semanticsOwner!.performAction(
+        data.id,
+        SemanticsAction.tap,
+      );
+      expect(locked, ['singularity-core']);
+    } finally {
+      handle.dispose();
     }
   });
 
@@ -342,32 +396,40 @@ void main() {
     }
   });
 
-  testWidgets('map node labels do not overflow under large text scale', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(3.0)),
-          child: child!,
-        ),
-        home: Scaffold(
-          body: WorldMapView(
-            stages: OrionCampaign.stages,
-            progress: clearedCampaignProgress(),
-            feedback: null,
-            onStageSelected: (_) {},
-            onResetCampaign: () {},
+  testWidgets(
+    'map node captions clamp text scale so dense layout never overflows',
+    (tester) async {
+      // The map node captions cap textScaler at 1.15x (see world_map_view.dart).
+      // This is a deliberate trade-off for the dense 56x80 node grid: the
+      // captions are short labels, and unbounded scaling would overflow the
+      // fixed node aperture. This test verifies the clamp prevents overflow at
+      // an extreme system scale — it is NOT a claim that the map supports
+      // large-text accessibility. Real large-text support for this view is
+      // tracked separately.
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3.0)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: WorldMapView(
+              stages: OrionCampaign.stages,
+              progress: clearedCampaignProgress(),
+              feedback: null,
+              onStageSelected: (_) {},
+              onResetCampaign: () {},
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    expect(tester.takeException(), isNull);
-    for (final stage in OrionCampaign.stages) {
-      expect(find.text(stage.mapLabel), findsOneWidget);
-    }
-  });
+      expect(tester.takeException(), isNull);
+      for (final stage in OrionCampaign.stages) {
+        expect(find.text(stage.mapLabel), findsOneWidget);
+      }
+    },
+  );
 }

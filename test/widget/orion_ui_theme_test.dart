@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/ui/command_frame.dart';
@@ -81,6 +83,7 @@ void main() {
           isButton: true,
           hasEnabledState: true,
           isEnabled: true,
+          hasTapAction: true,
         ),
       );
     } finally {
@@ -88,32 +91,107 @@ void main() {
     }
   });
 
-  testWidgets('reactor action does not overflow with large system text scale', (
-    tester,
-  ) async {
+  testWidgets('reactor semantics tap action fires onPressed', (tester) async {
+    // excludeSemantics: true replaces the InkResponse's tap action, so the
+    // outer Semantics must carry its own onTap or screen readers cannot
+    // activate the button via the accessibility double-tap.
+    var taps = 0;
     await tester.pumpWidget(
       MaterialApp(
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(3.0)),
-          child: child!,
-        ),
-        home: const Center(
+        home: Center(
           child: ReactorButton(
             tooltip: 'Launch Mission',
-            label: 'Launch Mission Long Label',
+            label: 'Launch',
             icon: Icons.rocket_launch,
-            onPressed: null,
-            size: 48,
+            onPressed: () => taps += 1,
           ),
         ),
       ),
     );
 
-    expect(tester.takeException(), isNull);
-    expect(find.text('Launch Mission Long Label'), findsOneWidget);
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      final data = tester.getSemantics(find.bySemanticsLabel('Launch Mission'));
+      // ignore: deprecated_member_use
+      tester.binding.pipelineOwner.semanticsOwner!.performAction(
+        data.id,
+        SemanticsAction.tap,
+      );
+      expect(taps, 1);
+    } finally {
+      handle.dispose();
+    }
   });
+
+  testWidgets('disabled reactor semantics carries no tap action', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: const Center(
+          child: ReactorButton(
+            tooltip: 'Launch Mission',
+            label: 'Launch',
+            icon: Icons.rocket_launch,
+            onPressed: null,
+          ),
+        ),
+      ),
+    );
+
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(
+        tester.getSemantics(find.bySemanticsLabel('Launch Mission')),
+        matchesSemantics(
+          label: 'Launch Mission',
+          tooltip: '',
+          isButton: true,
+          hasEnabledState: true,
+          isEnabled: false,
+          hasTapAction: false,
+        ),
+      );
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets(
+    'reactor caption clamps text scale so the button never overflows',
+    (tester) async {
+      // The reactor caption caps textScaler at 1.15x (see command_frame.dart).
+      // This is a deliberate trade-off for the compact 48dp button: unbounded
+      // scaling would overflow the fixed frame. This test verifies the clamp
+      // prevents overflow at an extreme system scale — it is NOT a claim that
+      // the button supports large-text accessibility. Real large-text support
+      // is tracked separately.
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3.0)),
+            child: child!,
+          ),
+          home: const Center(
+            child: ReactorButton(
+              tooltip: 'Launch Mission',
+              label: 'Launch Mission Long Label',
+              icon: Icons.rocket_launch,
+              onPressed: null,
+              size: 48,
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('Launch Mission Long Label'), findsOneWidget);
+    },
+  );
 
   testWidgets('reduced motion returns zero duration', (tester) async {
     late Duration resolved;
