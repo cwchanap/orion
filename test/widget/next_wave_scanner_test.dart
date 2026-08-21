@@ -94,6 +94,57 @@ void main() {
     );
   });
 
+  testWidgets(
+    'selection collapse releases the former expanded hit area immediately',
+    (tester) async {
+      var backgroundTaps = 0;
+      final preview = commandDeckPreview();
+      Widget host({required bool collapseRequested}) {
+        return MaterialApp(
+          home: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () => backgroundTaps += 1,
+                ),
+              ),
+              Align(
+                alignment: Alignment.topRight,
+                child: NextWaveScanner(
+                  preview: preview,
+                  modifierTitles: const ['Standard Conditions'],
+                  collapseRequested: collapseRequested,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      await tester.pumpWidget(host(collapseRequested: false));
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+      final formerExpandedRect = tester.getRect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      );
+
+      await tester.pumpWidget(host(collapseRequested: true));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+        findsOneWidget,
+      );
+
+      await tester.tapAt(formerExpandedRect.center);
+      expect(backgroundTaps, 1);
+    },
+  );
+
   testWidgets('Swarm Queen group renders an art-led preview row', (
     tester,
   ) async {

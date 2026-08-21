@@ -58,6 +58,12 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
       duration: duration,
       switchInCurve: Curves.easeOut,
       switchOutCurve: Curves.easeIn,
+      // Keep only the current child in the layout while switching. The
+      // default Stack layout keeps the outgoing expanded detector hit-testable
+      // for the fade duration, even after a board/tower selection requests an
+      // immediate collapse.
+      layoutBuilder: (currentChild, _) =>
+          currentChild ?? const SizedBox.shrink(),
       child: child,
     );
   }
