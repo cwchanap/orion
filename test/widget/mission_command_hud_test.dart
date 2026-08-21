@@ -3,7 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
+import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
+import 'package:orion/game/ui/run_module_draft_panel.dart';
 import '../support/command_deck_fixtures.dart';
 
 void main() {
@@ -255,6 +257,112 @@ void main() {
         expect(rect.right, lessThanOrEqualTo(360));
         expect(rect.bottom, lessThanOrEqualTo(640));
       }
+    });
+
+    testWidgets('complete top flow stays ordered at text scale $scale', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final snapshot = commandDeckSnapshot(
+        phase: GamePhase.build,
+        acquiredRunModules: const [RunModuleId.heavyCaliber],
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Stack(
+            children: [
+              Positioned(
+                left: 12,
+                right: 12,
+                top: 12,
+                child: Column(
+                  key: const ValueKey('complete-top-flow'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IgnorePointer(child: MissionStatusHud(snapshot: snapshot)),
+                    const SizedBox(height: 6),
+                    MissionPacingStrip(
+                      snapshot: snapshot,
+                      onTogglePause: () {},
+                      onSpeedSelected: (_) {},
+                      onToggleAutoStart: () {},
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      key: const ValueKey('complete-top-flow-row'),
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Flexible(
+                          child: IgnorePointer(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 132),
+                              child: AcquiredRunModuleStrip(
+                                moduleIds: snapshot.acquiredRunModules,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const Spacer(),
+                        NextWaveScanner(
+                          preview: commandDeckPreview(),
+                          modifierTitles: const ['Standard Conditions'],
+                          collapseRequested: false,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      final status = tester.getRect(
+        find.byKey(const ValueKey('mission-status-hud')),
+      );
+      final pacing = tester.getRect(find.byType(MissionPacingStrip));
+      final modules = tester.getRect(find.byType(AcquiredRunModuleStrip));
+      final scanner = tester.getRect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      );
+      final flow = tester.getRect(
+        find.byKey(const ValueKey('complete-top-flow')),
+      );
+
+      expect(status.bottom, lessThanOrEqualTo(pacing.top));
+      expect(pacing.bottom, lessThanOrEqualTo(modules.top));
+      expect(modules.right, lessThanOrEqualTo(scanner.left));
+      expect(status.overlaps(pacing), isFalse);
+      expect(pacing.overlaps(modules), isFalse);
+      expect(modules.overlaps(scanner), isFalse);
+      expect(flow.left, greaterThanOrEqualTo(0));
+      expect(flow.right, lessThanOrEqualTo(360));
+      expect(flow.bottom, lessThanOrEqualTo(640));
+      for (final finder in [
+        find.byTooltip('Pause'),
+        find.text('1x'),
+        find.text('2x'),
+        find.text('3x'),
+        find.byTooltip('Auto-start waves'),
+        find.byTooltip('Expand next-wave scanner'),
+      ]) {
+        final rect = tester.getRect(finder.first);
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(360));
+        expect(rect.bottom, lessThanOrEqualTo(640));
+      }
+      expect(tester.takeException(), isNull);
     });
   }
 }

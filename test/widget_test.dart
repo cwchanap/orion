@@ -349,6 +349,9 @@ void main() {
       find.byKey(const ValueKey('next-wave-scanner-expanded')),
       findsOneWidget,
     );
+    final formerExpandedRect = tester.getRect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+    );
 
     final buildSnapshot = game!.snapshot;
     game!.stateNotifier.value = GameSnapshot(
@@ -375,11 +378,23 @@ void main() {
       pendingRunModuleOffer: buildSnapshot.pendingRunModuleOffer,
       acquiredRunModules: buildSnapshot.acquiredRunModules,
     );
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 1));
     expect(
       find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       findsOneWidget,
     );
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsNothing,
+    );
+    // The old expanded detector must be gone before the fade settles, so the
+    // board/build rail receives taps in the former 212 x 168 area.
+    await tester.tapAt(formerExpandedRect.center);
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      findsOneWidget,
+    );
+    await tester.pumpAndSettle();
 
     game!.startWave();
     await tester.pump();
