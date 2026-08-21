@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import '../support/command_deck_fixtures.dart';
@@ -279,6 +280,9 @@ Future<void> _pumpPanel(
       ),
     ),
   );
+
+  expect(find.byKey(const ValueKey('mission-report-frame')), findsOneWidget);
+  expect(find.byType(CommandFrame), findsWidgets);
 }
 
 GameSnapshot _syntheticSnapshot({
