@@ -316,28 +316,34 @@ class MissionPacingStrip extends StatelessWidget {
         ? 'Auto-start waves'
         : 'Auto-start waves, ${countdown.ceil()} seconds';
 
-    final controls = Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      crossAxisAlignment: WrapCrossAlignment.center,
+    final controls = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        IconButton.filledTonal(
-          tooltip: snapshot.isPaused ? 'Resume' : 'Pause',
-          onPressed: canTogglePause ? onTogglePause : null,
-          icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
-        ),
-        SegmentedButton<double>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment<double>(value: 1.0, label: Text('1x')),
-            ButtonSegment<double>(value: 2.0, label: Text('2x')),
-            ButtonSegment<double>(value: 3.0, label: Text('3x')),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton.filledTonal(
+              tooltip: snapshot.isPaused ? 'Resume' : 'Pause',
+              onPressed: canTogglePause ? onTogglePause : null,
+              icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
+            ),
+            const SizedBox(width: 4),
+            SegmentedButton<double>(
+              showSelectedIcon: false,
+              segments: const [
+                ButtonSegment<double>(value: 1.0, label: Text('1x')),
+                ButtonSegment<double>(value: 2.0, label: Text('2x')),
+                ButtonSegment<double>(value: 3.0, label: Text('3x')),
+              ],
+              selected: {snapshot.speedMultiplier},
+              onSelectionChanged: canUsePacing
+                  ? (selection) => onSpeedSelected(selection.single)
+                  : null,
+            ),
           ],
-          selected: {snapshot.speedMultiplier},
-          onSelectionChanged: canUsePacing
-              ? (selection) => onSpeedSelected(selection.single)
-              : null,
         ),
+        const SizedBox(height: 4),
         AnimatedSwitcher(
           duration: orionMotionDuration(
             context,
@@ -383,18 +389,13 @@ class MissionPacingStrip extends StatelessWidget {
               constraints: BoxConstraints(
                 maxWidth: maxWidth.isFinite ? maxWidth - 12 : double.infinity,
               ),
-              child: IntrinsicWidth(
-                child: CommandFrame(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 4,
-                  ),
-                  color: OrionUiTheme.of(context).hullBlack,
-                  borderColor: OrionUiTheme.of(context).frameSteel,
-                  child: Material(
-                    type: MaterialType.transparency,
-                    child: controls,
-                  ),
+              child: CommandFrame(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                color: OrionUiTheme.of(context).hullBlack,
+                borderColor: OrionUiTheme.of(context).frameSteel,
+                child: Material(
+                  type: MaterialType.transparency,
+                  child: controls,
                 ),
               ),
             ),
