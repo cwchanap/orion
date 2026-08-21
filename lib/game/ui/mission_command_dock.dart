@@ -4,6 +4,91 @@ import '../models/game_models.dart';
 import 'command_frame.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
+import 'tower_inspector.dart';
+
+class MissionCommandDock extends StatelessWidget {
+  const MissionCommandDock({
+    super.key,
+    required this.snapshot,
+    required this.onWorldMap,
+    required this.onStartWave,
+    required this.onPlaceTower,
+    required this.onUpgrade,
+    required this.onSpecialize,
+    required this.onTargetingChanged,
+    required this.onSell,
+  });
+
+  final GameSnapshot snapshot;
+  final VoidCallback onWorldMap;
+  final VoidCallback onStartWave;
+  final ValueChanged<TowerType> onPlaceTower;
+  final VoidCallback onUpgrade;
+  final ValueChanged<TowerSpecialization> onSpecialize;
+  final ValueChanged<TowerTargetingMode> onTargetingChanged;
+  final VoidCallback onSell;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget content;
+    final Key contentKey;
+    if (snapshot.selectedTower != null) {
+      contentKey = const ValueKey('command-dock-tower');
+      content = TowerInspector(
+        snapshot: snapshot,
+        onUpgrade: onUpgrade,
+        onSpecialize: onSpecialize,
+        onTargetingChanged: onTargetingChanged,
+        onSell: onSell,
+        sellRefund: GameBalance.refundValue(snapshot.selectedTower!),
+      );
+    } else if (snapshot.selectedCell != null) {
+      contentKey = const ValueKey('command-dock-build');
+      content = TowerBuildRail(
+        phase: snapshot.phase,
+        gold: snapshot.gold,
+        unlockedTowerTypes: snapshot.unlockedTowerTypes,
+        onPlaceTower: onPlaceTower,
+      );
+    } else {
+      contentKey = const ValueKey('command-dock-idle');
+      content = IdleCommandBar(
+        snapshot: snapshot,
+        onWorldMap: onWorldMap,
+        onStartWave: onStartWave,
+      );
+    }
+
+    return CommandFrame(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (snapshot.feedback case final feedback?) ...[
+            Text(
+              feedback,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.secondary,
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
+          AnimatedSwitcher(
+            key: const ValueKey('mission-command-dock-transition'),
+            duration: orionMotionDuration(
+              context,
+              const Duration(milliseconds: 180),
+            ),
+            layoutBuilder: (currentChild, previousChildren) =>
+                currentChild ?? const SizedBox.shrink(),
+            child: KeyedSubtree(key: contentKey, child: content),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class IdleCommandBar extends StatelessWidget {
   const IdleCommandBar({
@@ -27,7 +112,7 @@ class IdleCommandBar extends StatelessWidget {
     final stateLabel = _stateLabel(snapshot, countdown);
     final uiTheme = OrionUiTheme.of(context);
 
-    return CommandFrame(
+    return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
       child: Row(
         mainAxisSize: MainAxisSize.min,

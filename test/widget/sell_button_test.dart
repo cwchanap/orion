@@ -20,7 +20,7 @@ void main() {
     );
 
     expect(game!.snapshot.phase, GamePhase.build);
-    expect(find.text('Sell +35'), findsOneWidget);
+    expect(find.text('Sell 35'), findsOneWidget);
   });
 
   testWidgets('Sell button is enabled during build phase', (tester) async {
@@ -33,11 +33,8 @@ void main() {
       ),
     );
 
-    final sellButton = tester.widget<FilledButton>(
-      find.ancestor(
-        of: find.text('Sell +35'),
-        matching: find.byType(FilledButton),
-      ),
+    final sellButton = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('tower-sell')),
     );
     expect(sellButton.onPressed, isNotNull);
   });
@@ -53,11 +50,8 @@ void main() {
       phase: GamePhase.wave,
     );
 
-    final sellButton = tester.widget<FilledButton>(
-      find.ancestor(
-        of: find.text('Sell +35'),
-        matching: find.byType(FilledButton),
-      ),
+    final sellButton = tester.widget<OutlinedButton>(
+      find.byKey(const ValueKey('tower-sell')),
     );
     expect(sellButton.onPressed, isNull);
   });
@@ -72,7 +66,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('Sell +35'));
+    await tester.tap(find.byKey(const ValueKey('tower-sell')));
     await tester.pump();
 
     // The faked snapshot has a selectedTower but the real session has none, so
@@ -96,7 +90,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Sell +35'), findsOneWidget);
+    expect(find.text('Sell 35'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -117,7 +111,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Sell +84'), findsOneWidget);
+      expect(find.text('Sell 84'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -134,7 +128,23 @@ void main() {
       selectedTowerStats: stats,
     );
 
-    expect(find.text('Drone dmg ${number(stats.droneDamage)}'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('tower-inspector-scroll')),
+      const Offset(0, -300),
+    );
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-secondary')),
+          matching: find.text(number(stats.droneDamage)),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('selected laser shows resolved damage, fire, and range', (
@@ -151,14 +161,37 @@ void main() {
       selectedTowerStats: stats,
     );
 
-    expect(
-      find.text(
-        'Damage ${number(stats.damage)} • '
-        'Fire ${cadence(stats.fireInterval)}s • '
-        'Range ${number(stats.range)}',
-      ),
-      findsOneWidget,
+    await tester.drag(
+      find.byKey(const ValueKey('tower-inspector-scroll')),
+      const Offset(0, -300),
     );
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-damage')),
+          matching: find.text(number(stats.damage)),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-fire')),
+          matching: find.text(cadence(stats.fireInterval)),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-range')),
+          matching: find.text(number(stats.range)),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('selected cryo shows slow duration secondary stat', (
@@ -175,7 +208,23 @@ void main() {
       selectedTowerStats: stats,
     );
 
-    expect(find.text('Slow ${number(stats.slowDuration)}s'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('tower-inspector-scroll')),
+      const Offset(0, -300),
+    );
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-secondary')),
+          matching: find.text('${number(stats.slowDuration)}s'),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('selected rocket shows splash radius secondary stat', (
@@ -192,7 +241,23 @@ void main() {
       selectedTowerStats: stats,
     );
 
-    expect(find.text('Splash ${number(stats.splashRadius)}'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('tower-inspector-scroll')),
+      const Offset(0, -300),
+    );
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-secondary')),
+          matching: find.text(number(stats.splashRadius)),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('selected nanite shows corrosion secondary stat', (tester) async {
@@ -207,10 +272,23 @@ void main() {
       selectedTowerStats: stats,
     );
 
-    expect(
-      find.text('Corrosion ${number(stats.corrosionDamagePerSecond)}/s'),
-      findsOneWidget,
+    await tester.drag(
+      find.byKey(const ValueKey('tower-inspector-scroll')),
+      const Offset(0, -300),
     );
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-secondary')),
+          matching: find.text('${number(stats.corrosionDamagePerSecond)}/s'),
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets('acquired run modules strip renders in the HUD', (tester) async {

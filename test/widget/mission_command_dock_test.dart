@@ -285,4 +285,85 @@ void main() {
     );
     expect(switcher.duration, Duration.zero);
   });
+
+  testWidgets('dock prioritizes selected tower over selected cell and idle', (
+    tester,
+  ) async {
+    const tower = PlacedTower(
+      id: 7,
+      type: TowerType.laser,
+      position: GridPosition(2, 3),
+    );
+    final callbacks = <String, VoidCallback>{
+      'worldMap': () {},
+      'startWave': () {},
+      'placeTower': () {},
+      'upgrade': () {},
+      'specialize': () {},
+      'targeting': () {},
+      'sell': () {},
+    };
+
+    Widget dock(GameSnapshot snapshot) {
+      return MaterialApp(
+        home: MissionCommandDock(
+          snapshot: snapshot,
+          onWorldMap: callbacks['worldMap']!,
+          onStartWave: callbacks['startWave']!,
+          onPlaceTower: (_) => callbacks['placeTower']!(),
+          onUpgrade: callbacks['upgrade']!,
+          onSpecialize: (_) => callbacks['specialize']!(),
+          onTargetingChanged: (_) => callbacks['targeting']!(),
+          onSell: callbacks['sell']!,
+        ),
+      );
+    }
+
+    await tester.pumpWidget(
+      dock(
+        commandDeckSnapshot(
+          selectedCell: const GridPosition(1, 1),
+          selectedTower: tower,
+          selectedTowerStats: GameBalance.towerStats(
+            tower.type,
+            level: tower.level,
+          ),
+        ),
+      ),
+    );
+    expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
+
+    await tester.pumpWidget(
+      dock(commandDeckSnapshot(selectedCell: const GridPosition(1, 1))),
+    );
+    expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+
+    await tester.pumpWidget(dock(commandDeckSnapshot()));
+    expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
+  });
+
+  testWidgets('dock transition honors reduced motion', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: MissionCommandDock(
+            snapshot: commandDeckSnapshot(),
+            onWorldMap: () {},
+            onStartWave: () {},
+            onPlaceTower: (_) {},
+            onUpgrade: () {},
+            onSpecialize: (_) {},
+            onTargetingChanged: (_) {},
+            onSell: () {},
+          ),
+        ),
+      ),
+    );
+
+    final switcher = tester.widget<AnimatedSwitcher>(
+      find.byKey(const ValueKey('mission-command-dock-transition')),
+    );
+    expect(switcher.duration, Duration.zero);
+  });
 }

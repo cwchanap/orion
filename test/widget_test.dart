@@ -422,10 +422,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('Outpost Alpha'), findsOneWidget);
-    expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('20/20'), findsOneWidget);
-    expect(find.text('150'), findsOneWidget);
-    expect(find.text('1/8'), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+    expectSemanticsLabel(tester, 'Base 20 of 20', findsOneWidget);
+    expectSemanticsLabel(tester, 'Credits 150', findsOneWidget);
+    expectSemanticsLabel(tester, 'Wave 1 of 8', findsOneWidget);
     expect(find.textContaining('Next Wave'), findsNothing);
     expect(find.text('Start Wave'), findsOneWidget);
   });
