@@ -15,9 +15,11 @@ import '../orion_defense_game.dart';
 import '../rules/run_module_unlocks.dart';
 import '../util/format.dart';
 import 'codex_view.dart';
+import 'command_frame.dart';
 import 'feedback_settings_sheet.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
+import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
 import 'tech_tree_view.dart';
@@ -393,6 +395,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      backgroundColor: Colors.transparent,
       sheetAnimationStyle: orionSheetAnimationStyle(context),
       builder: (context) => _StageBriefingSheet(
         stage: stage,
@@ -806,19 +809,67 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final shouldReset = await showDialog<bool>(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Reset Campaign'),
-          content: const Text('Clear all campaign progress?'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancel'),
+        final uiTheme = OrionUiTheme.of(context);
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 380),
+            child: CommandFrame(
+              key: const ValueKey('reset-campaign-dialog'),
+              borderColor: uiTheme.dangerRed,
+              color: uiTheme.hullBlack,
+              emphasized: true,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.warning_amber_rounded,
+                        color: uiTheme.dangerRed,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Reset Campaign',
+                          style: Theme.of(context).textTheme.titleLarge
+                              ?.copyWith(
+                                color: uiTheme.textPrimary,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Clear all campaign progress?',
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodyMedium?.copyWith(color: uiTheme.textMuted),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.of(context).pop(false),
+                        child: const Text('Cancel'),
+                      ),
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: uiTheme.dangerRed,
+                        ),
+                        onPressed: () => Navigator.of(context).pop(true),
+                        child: const Text('Reset'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Reset'),
-            ),
-          ],
+          ),
         );
       },
     );
@@ -998,59 +1049,304 @@ class _StageBriefingSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
     final metadata = stage.modifiers.isEmpty
         ? [StageModifierMetadata.standardConditions]
         : stage.modifiers
               .map(StageModifierMetadata.forModifier)
               .toList(growable: false);
-    final actionLabel = result == null ? 'Start Mission' : 'Replay Mission';
+    final actionLabel = result == null ? 'Launch Mission' : 'Replay Mission';
+    final isOptional = !stage.isMainPath;
 
     return SingleChildScrollView(
       padding: EdgeInsets.fromLTRB(
-        24,
-        24,
-        24,
-        24 + MediaQuery.viewInsetsOf(context).bottom,
+        12,
+        12,
+        12,
+        12 + MediaQuery.viewInsetsOf(context).bottom,
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(stage.name, style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 8),
-          Text(stage.description),
-          const SizedBox(height: 16),
-          for (final entry in metadata) ...[
-            Text(entry.title, style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 4),
-            Text(entry.description),
-            const SizedBox(height: 12),
-          ],
-          if (stage.reward != null)
-            Text(_briefingRewardLabel(stage.reward!, earned: result != null)),
-          if (result != null)
-            Text(
-              'Best: ${result!.medal.label} • '
-              '${result!.bestBaseHealth} base health',
+      child: CommandFrame(
+        key: const ValueKey('stage-briefing'),
+        padding: const EdgeInsets.all(14),
+        color: uiTheme.hullBlack,
+        borderColor: isOptional ? uiTheme.systemViolet : uiTheme.systemCyan,
+        emphasized: true,
+        chamfer: 14,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: SizedBox.square(
+                dimension: 112,
+                child: CommandFrame(
+                  padding: const EdgeInsets.all(4),
+                  color: uiTheme.panelBlue,
+                  borderColor: isOptional
+                      ? uiTheme.systemViolet
+                      : uiTheme.systemCyan,
+                  emphasized: true,
+                  chamfer: isOptional ? 28 : 16,
+                  child: OrionAtlasSprite(
+                    art: OrionArt.stage(stage),
+                    size: const Size.square(104),
+                  ),
+                ),
+              ),
             ),
-          // HPA-528: a committed Outpost Alpha clear also recovers the
-          // Relay Calibration blueprint; surface that fact on the briefing
-          // sheet using the existing committed `result` as the signal.
-          if (stage.id == OrionCampaign.stageOneId && result != null)
-            const Text('Blueprint recovered: Relay Calibration'),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(actionLabel),
+            const SizedBox(height: 12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text(
+                    stage.name,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      color: uiTheme.textPrimary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _BriefingBadge(
+                  label: isOptional ? 'OPTIONAL' : 'PRIMARY',
+                  color: isOptional ? uiTheme.systemViolet : uiTheme.systemCyan,
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              stage.description,
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(color: uiTheme.textMuted),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'MISSION INTEL',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: uiTheme.systemCyan,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 1.1,
+              ),
+            ),
+            const SizedBox(height: 7),
+            for (final entry in metadata) ...[
+              _BriefingIntelRow(
+                icon: Icons.radar_rounded,
+                color: uiTheme.systemCyan,
+                title: entry.title,
+                detail: entry.description,
+              ),
+              const SizedBox(height: 7),
+            ],
+            if (stage.reward != null) ...[
+              _BriefingIntelRow(
+                icon: _briefingRewardIcon(stage.reward!),
+                color: uiTheme.creditGold,
+                title: 'SALVAGE',
+                detail: _briefingRewardLabel(
+                  stage.reward!,
+                  earned: result != null,
+                ),
+              ),
+              const SizedBox(height: 7),
+            ],
+            if (result != null) ...[
+              _BriefingIntelRow(
+                icon: _briefingMedalIcon(result!.medal),
+                color: _briefingMedalColor(uiTheme, result!.medal),
+                title: 'BEST RESULT',
+                detail:
+                    'Best: ${result!.medal.label} • '
+                    '${result!.bestBaseHealth} base health',
+              ),
+              const SizedBox(height: 7),
+            ],
+            // HPA-528: a committed Outpost Alpha clear also recovers the
+            // Relay Calibration blueprint; the existing committed `result`
+            // remains the signal rather than transient sheet state.
+            if (stage.id == OrionCampaign.stageOneId && result != null) ...[
+              _BriefingIntelRow(
+                icon: Icons.memory_rounded,
+                color: uiTheme.systemViolet,
+                title: 'BLUEPRINT',
+                detail: 'Blueprint recovered: Relay Calibration',
+              ),
+              const SizedBox(height: 7),
+            ],
+            const SizedBox(height: 7),
+            CommandFrame(
+              padding: EdgeInsets.zero,
+              color: uiTheme.panelBlue,
+              borderColor: uiTheme.systemCyan,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => Navigator.of(context).pop(true),
+                  splashColor: uiTheme.systemCyan.withValues(alpha: 0.18),
+                  highlightColor: uiTheme.systemCyan.withValues(alpha: 0.10),
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      children: [
+                        ReactorButton(
+                          tooltip: actionLabel,
+                          label: result == null ? 'Launch' : 'Replay',
+                          icon: result == null
+                              ? Icons.rocket_launch_rounded
+                              : Icons.replay_rounded,
+                          size: 72,
+                          onPressed: () => Navigator.of(context).pop(true),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                actionLabel,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(
+                                      color: uiTheme.textPrimary,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                result == null
+                                    ? 'Deploy to this sector'
+                                    : 'Run this sector again',
+                                style: Theme.of(context).textTheme.labelMedium
+                                    ?.copyWith(color: uiTheme.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 4),
+            TextButton.icon(
+              onPressed: () => Navigator.of(context).pop(false),
+              icon: const Icon(Icons.close_rounded),
+              label: const Text('Dismiss'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _BriefingBadge extends StatelessWidget {
+  const _BriefingBadge({required this.label, required this.color});
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        border: Border.all(color: color.withValues(alpha: 0.72)),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 0.8,
           ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Dismiss'),
+        ),
+      ),
+    );
+  }
+}
+
+class _BriefingIntelRow extends StatelessWidget {
+  const _BriefingIntelRow({
+    required this.icon,
+    required this.color,
+    required this.title,
+    required this.detail,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String title;
+  final String detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return CommandFrame(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+      color: uiTheme.panelBlue,
+      borderColor: color.withValues(alpha: 0.62),
+      chamfer: 7,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 21, color: color),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: color,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: uiTheme.textPrimary),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
+}
+
+IconData _briefingRewardIcon(CampaignReward reward) {
+  return switch (reward) {
+    CampaignReward.bonusGold => Icons.savings_rounded,
+    CampaignReward.bonusHealth => Icons.favorite_rounded,
+    CampaignReward.challengeBadge => Icons.stars_rounded,
+  };
+}
+
+IconData _briefingMedalIcon(StageMedal medal) {
+  return switch (medal) {
+    StageMedal.clear => Icons.check_circle,
+    StageMedal.silver => Icons.military_tech,
+    StageMedal.gold => Icons.emoji_events,
+  };
+}
+
+Color _briefingMedalColor(OrionUiTheme uiTheme, StageMedal medal) {
+  return switch (medal) {
+    StageMedal.clear => uiTheme.naniteGreen,
+    StageMedal.silver => uiTheme.textMuted,
+    StageMedal.gold => uiTheme.creditGold,
+  };
 }
 
 String _briefingRewardLabel(CampaignReward reward, {required bool earned}) {
