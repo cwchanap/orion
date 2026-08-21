@@ -66,6 +66,7 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(find.byKey(const ValueKey('tower-sell')));
     await tester.tap(find.byKey(const ValueKey('tower-sell')));
     await tester.pump();
 

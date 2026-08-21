@@ -401,7 +401,7 @@ class _TargetingActions extends StatelessWidget {
                     onSelected: canMutate
                         ? (_) => onTargetingChanged(mode)
                         : null,
-                    visualDensity: VisualDensity.compact,
+                    materialTapTargetSize: MaterialTapTargetSize.padded,
                   ),
                 ),
               ],

@@ -50,6 +50,7 @@ void main() {
       expect(find.text('Sell 41'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('tower-upgrade')));
       await tester.tap(find.byKey(const ValueKey('tower-target-strongest')));
+      await tester.ensureVisible(find.byKey(const ValueKey('tower-sell')));
       await tester.tap(find.byKey(const ValueKey('tower-sell')));
       expect(upgrades, 1);
       expect(targeting, TowerTargetingMode.strongest);
@@ -169,6 +170,7 @@ void main() {
               .getSemanticsData()
               .flagsCollection;
           expect(flags.isEnabled, Tristate.isFalse, reason: key);
+          await tester.ensureVisible(action);
           await tester.tap(action);
         }
 
@@ -293,5 +295,13 @@ void main() {
     );
     expect(inspector.height, lessThanOrEqualTo(210));
     expect(find.byType(Scrollable), findsWidgets);
+
+    for (final mode in TowerTargetingMode.values) {
+      final chip = tester.getRect(
+        find.byKey(ValueKey('tower-target-${mode.name}')),
+      );
+      expect(chip.width, greaterThanOrEqualTo(48), reason: mode.name);
+      expect(chip.height, greaterThanOrEqualTo(48), reason: mode.name);
+    }
   });
 }
