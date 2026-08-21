@@ -64,6 +64,25 @@ void main() {
     expect(rect.height, greaterThanOrEqualTo(48));
     await tester.tap(find.byTooltip('Launch Mission'));
     expect(taps, 1);
+
+    // The Tooltip must not duplicate the explicit Semantics label, or
+    // VoiceOver/TalkBack will announce "Launch Mission" twice (once as the
+    // label, once as the tooltip). With excludeFromSemantics on the Tooltip,
+    // exactly one semantics node carries the label and its tooltip is empty.
+    final handle = tester.ensureSemantics();
+    await tester.pump();
+    expect(find.bySemanticsLabel('Launch Mission'), findsOneWidget);
+    expect(
+      tester.getSemantics(find.bySemanticsLabel('Launch Mission')),
+      matchesSemantics(
+        label: 'Launch Mission',
+        tooltip: '',
+        isButton: true,
+        hasEnabledState: true,
+        isEnabled: true,
+      ),
+    );
+    handle.dispose();
   });
 
   testWidgets('reduced motion returns zero duration', (tester) async {
