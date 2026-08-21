@@ -109,9 +109,15 @@ class _WorldMapViewState extends State<WorldMapView> {
               stage.id: sectorLayout.nodeRect(stage),
           };
 
-          return Stack(
+          // At narrow widths the minimum non-overlapping column step makes the
+          // plot wider than the viewport; wrap routes + nodes in a horizontal
+          // scroll so adjacent targets stay tappable. Header, utility rail and
+          // medal legend remain fixed above the scrollable plot.
+          final contentWidth = sectorLayout.plotContentWidth;
+          final needsScroll = contentWidth > constraints.biggest.width;
+
+          Widget plotLayers = Stack(
             children: [
-              const Positioned.fill(child: _SectorBackdrop()),
               Positioned.fill(
                 child: CustomPaint(
                   key: const ValueKey('sector-route-layer'),
@@ -141,6 +147,23 @@ class _WorldMapViewState extends State<WorldMapView> {
                     onLockedStageSelected: widget.onLockedStageSelected,
                   ),
                 ),
+            ],
+          );
+          if (needsScroll) {
+            plotLayers = SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: contentWidth,
+                height: constraints.biggest.height,
+                child: plotLayers,
+              ),
+            );
+          }
+
+          return Stack(
+            children: [
+              const Positioned.fill(child: _SectorBackdrop()),
+              Positioned.fill(child: plotLayers),
               Positioned(
                 left: SectorMapLayout.horizontalPadding,
                 top: 8,

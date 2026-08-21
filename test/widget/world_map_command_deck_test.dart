@@ -432,4 +432,72 @@ void main() {
       }
     },
   );
+
+  testWidgets(
+    'at 320 logical pixels neighboring stage targets do not overlap and '
+    'stage selection still works',
+    (tester) async {
+      await tester.binding.setSurfaceSize(const Size(320, 568));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final selected = <String>[];
+      await tester.pumpWidget(
+        buildMap(
+          progress: clearedCampaignProgress(),
+          onStageSelected: (stage) => selected.add(stage.id),
+        ),
+      );
+
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+
+      // Every stage node is rendered and sized 56x80.
+      final rects = <Rect>[];
+      for (final stage in OrionCampaign.stages) {
+        final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
+        expect(finder, findsOneWidget);
+        expect(tester.getSize(finder), const Size(56, 80));
+        rects.add(tester.getRect(finder));
+      }
+
+      // No two nodes overlap at 320px: the column step floors at nodeSize.width
+      // so adjacent targets stay tappable.
+      for (var i = 0; i < rects.length; i += 1) {
+        for (var j = i + 1; j < rects.length; j += 1) {
+          expect(rects[i].overlaps(rects[j]), isFalse);
+        }
+      }
+
+      // Tapping each stage still selects it.
+      for (final stage in OrionCampaign.stages) {
+        await tester.tap(find.byKey(ValueKey('sector-stage-${stage.id}')));
+      }
+      expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
+    },
+  );
+
+  testWidgets(
+    'below the minimum non-overlapping width the plot scrolls horizontally '
+    'and stage selection still works',
+    (tester) async {
+      // 280px is narrower than the plot's minimum content width (304px), so the
+      // view wraps the plot in a horizontal scroll. The first stage remains
+      // visible at scroll offset zero and is tappable.
+      await tester.binding.setSurfaceSize(const Size(280, 568));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+
+      final selected = <String>[];
+      await tester.pumpWidget(
+        buildMap(
+          progress: clearedCampaignProgress(),
+          onStageSelected: (stage) => selected.add(stage.id),
+        ),
+      );
+
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      await tester.tap(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      expect(selected, [OrionCampaign.stageOneId]);
+    },
+  );
 }

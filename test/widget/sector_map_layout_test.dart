@@ -35,7 +35,8 @@ void main() {
     }
   });
 
-  test('a synthetic sixth column remains inside the plotting bounds', () {
+  test('a synthetic sixth column overflows the viewport without overlapping '
+      'its column-4 neighbor at 375px', () {
     const size = Size(375, 812);
     final source = OrionCampaign.stages.last;
     final futureStage = StageDefinition(
@@ -56,9 +57,20 @@ void main() {
       size: size,
     );
 
+    // At 375px six columns cannot fit without overlap, so the step floors at
+    // nodeSize.width and the plot content overflows the viewport (caller
+    // wraps it in a horizontal scroll).
+    final futureRect = layout.nodeRect(futureStage);
+    final columnFour = OrionCampaign.stages
+        .where((stage) => stage.mapColumn == 4)
+        .map((stage) => layout.nodeRect(stage))
+        .toList(growable: false);
+    for (final neighbor in columnFour) {
+      expect(neighbor.overlaps(futureRect), isFalse);
+    }
     expect(
-      layout.nodeRect(futureStage).right,
-      lessThanOrEqualTo(size.width - SectorMapLayout.railWidth - 12),
+      layout.plotContentWidth,
+      greaterThan(size.width - SectorMapLayout.railWidth),
     );
   });
 
@@ -95,15 +107,27 @@ void main() {
     expect(routes, isEmpty);
   });
 
-  test('nodeRect clamps steps to zero when available span is constrained', () {
-    const tinySize = Size(50, 100);
-    final layout = SectorMapLayout.fromStages(
-      stages: OrionCampaign.stages,
-      size: tinySize,
-    );
-    final rect = layout.nodeRect(OrionCampaign.stages.last);
-    expect(rect.left, SectorMapLayout.horizontalPadding);
-    expect(rect.top, SectorMapLayout.plotTop);
-    expect(rect.size, const Size(56, 80));
-  });
+  test(
+    'nodeRect floors the horizontal step at nodeSize.width and overflows when '
+    'the viewport is too narrow, while the vertical step still clamps to zero',
+    () {
+      const tinySize = Size(50, 100);
+      final layout = SectorMapLayout.fromStages(
+        stages: OrionCampaign.stages,
+        size: tinySize,
+      );
+      final rect = layout.nodeRect(OrionCampaign.stages.last);
+      // Vertical span is constrained, so yStep clamps to zero and the row
+      // collapses to plotTop.
+      expect(rect.top, SectorMapLayout.plotTop);
+      expect(rect.size, const Size(56, 80));
+      // Horizontal step floors at nodeSize.width so neighbors never overlap;
+      // the last stage sits at column 4, so its left is hPad + 4 * nodeWidth.
+      expect(
+        rect.left,
+        SectorMapLayout.horizontalPadding + 4 * SectorMapLayout.nodeSize.width,
+      );
+      expect(layout.plotContentWidth, greaterThan(tinySize.width));
+    },
+  );
 }
