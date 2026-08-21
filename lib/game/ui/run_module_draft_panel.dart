@@ -71,6 +71,9 @@ class _RunModuleCard extends StatelessWidget {
     return Semantics(
       button: true,
       enabled: true,
+      label:
+          '${definition.title}. ${definition.effectText} '
+          'Affinity: ${definition.affinity.label}',
       onTap: onPressed,
       excludeSemantics: true,
       child: CommandFrame(
