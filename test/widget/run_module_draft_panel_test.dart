@@ -52,6 +52,22 @@ void main() {
     );
     expect(find.byType(CommandFrame), findsWidgets);
 
+    final semanticsHandle = tester.ensureSemantics();
+    try {
+      for (final id in offer.moduleIds) {
+        final definition = runModuleDefinition(id);
+        expect(
+          find.bySemanticsLabel(
+            '${definition.title}. ${definition.effectText} '
+            'Affinity: ${definition.affinity.label}',
+          ),
+          findsOneWidget,
+        );
+      }
+    } finally {
+      semanticsHandle.dispose();
+    }
+
     await tester.tap(find.text('Heavy Caliber'));
     await tester.pump();
     expect(selectedCount, 1);
