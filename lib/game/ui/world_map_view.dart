@@ -556,6 +556,7 @@ class _IllustratedStageNode extends StatelessWidget {
       button: true,
       enabled: onTap != null,
       label: semanticsLabel,
+      onTap: onTap,
       excludeSemantics: true,
       child: Tooltip(
         message: semanticsLabel,
