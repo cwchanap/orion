@@ -70,6 +70,21 @@ void main() {
     expect(find.text('Hold'), findsNothing);
   });
 
+  testWidgets(
+    'expired copy does not reappear when a replacement arrives during exit',
+    (tester) async {
+      await tester.pumpWidget(toastHost('Expired'));
+      await tester.pump(const Duration(milliseconds: 2399));
+      await tester.pump(const Duration(milliseconds: 1));
+      await tester.pump(const Duration(milliseconds: 70));
+
+      await tester.pumpWidget(toastHost('Replacement', revision: 1));
+
+      expect(find.text('Expired'), findsNothing);
+      expect(find.text('Replacement'), findsOneWidget);
+    },
+  );
+
   testWidgets('different feedback replaces the latched copy', (tester) async {
     await tester.pumpWidget(toastHost('First'));
     await tester.pumpWidget(toastHost('Second', revision: 1));
@@ -126,6 +141,21 @@ void main() {
     final text = tester.widget<Text>(find.text(feedback));
     expect(text.maxLines, 2);
     expect(text.overflow, TextOverflow.ellipsis);
+  });
+
+  testWidgets('toast width is capped to viewport minus 32dp', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    const feedback =
+        'This deliberately long feedback copy must wrap within the safe portrait viewport width.';
+    await tester.pumpWidget(toastHost(feedback));
+
+    final frameRect = tester.getRect(
+      find.byKey(const ValueKey('command-toast')),
+    );
+    expect(frameRect.width, lessThanOrEqualTo(328));
   });
 
   testWidgets('reduced motion removes toast transitions', (tester) async {
