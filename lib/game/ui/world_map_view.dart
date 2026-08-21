@@ -10,6 +10,7 @@ import '../campaign/campaign_progress.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_reward_label.dart';
+import 'campaign_presentation.dart';
 import 'command_frame.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
@@ -126,7 +127,7 @@ class _WorldMapViewState extends State<WorldMapView> {
               ),
               for (final stage in widget.stages)
                 Positioned.fromRect(
-                  rect: sectorLayout.nodeRect(stage),
+                  rect: nodeRects[stage.id]!,
                   child: _IllustratedStageNode(
                     key: ValueKey('sector-stage-${stage.id}'),
                     stage: stage,
@@ -585,15 +586,15 @@ class _IllustratedStageNode extends StatelessWidget {
                         Align(
                           alignment: Alignment.topRight,
                           child: _NodeGlyph(
-                            icon: _medalIcon(result!.medal),
-                            color: _medalColor(uiTheme, result!.medal),
+                            icon: medalIcon(result!.medal),
+                            color: medalColor(uiTheme, result!.medal),
                           ),
                         ),
                       if (stage.reward != null)
                         Align(
                           alignment: Alignment.bottomRight,
                           child: _NodeGlyph(
-                            icon: _rewardIcon(stage.reward!),
+                            icon: rewardIcon(stage.reward!),
                             color: status == StageProgressStatus.cleared
                                 ? uiTheme.naniteGreen
                                 : uiTheme.textMuted,
@@ -628,6 +629,9 @@ class _IllustratedStageNode extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
+                      textScaler: MediaQuery.textScalerOf(
+                        context,
+                      ).clamp(maxScaleFactor: 1.15),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: isLocked
                             ? uiTheme.textMuted
@@ -901,36 +905,12 @@ Color _statusColor(
   StageResult? result,
 ) {
   if (status == StageProgressStatus.cleared && result != null) {
-    return _medalColor(uiTheme, result.medal);
+    return medalColor(uiTheme, result.medal);
   }
   return switch (status) {
     StageProgressStatus.cleared => uiTheme.naniteGreen,
     StageProgressStatus.unlocked => uiTheme.systemCyan,
     StageProgressStatus.locked => uiTheme.frameSteel,
-  };
-}
-
-Color _medalColor(OrionUiTheme uiTheme, StageMedal medal) {
-  return switch (medal) {
-    StageMedal.clear => uiTheme.naniteGreen,
-    StageMedal.silver => uiTheme.textMuted,
-    StageMedal.gold => uiTheme.creditGold,
-  };
-}
-
-IconData _medalIcon(StageMedal medal) {
-  return switch (medal) {
-    StageMedal.clear => Icons.check_circle,
-    StageMedal.silver => Icons.military_tech,
-    StageMedal.gold => Icons.emoji_events,
-  };
-}
-
-IconData _rewardIcon(CampaignReward reward) {
-  return switch (reward) {
-    CampaignReward.bonusGold => Icons.savings_rounded,
-    CampaignReward.bonusHealth => Icons.favorite_rounded,
-    CampaignReward.challengeBadge => Icons.stars_rounded,
   };
 }
 

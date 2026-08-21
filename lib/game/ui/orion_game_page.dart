@@ -15,6 +15,7 @@ import '../orion_defense_game.dart';
 import '../rules/run_module_unlocks.dart';
 import '../util/format.dart';
 import 'codex_view.dart';
+import 'campaign_presentation.dart';
 import 'command_frame.dart';
 import 'feedback_settings_sheet.dart';
 import 'mission_report_content.dart';
@@ -1142,7 +1143,7 @@ class _StageBriefingSheet extends StatelessWidget {
             ],
             if (stage.reward != null) ...[
               _BriefingIntelRow(
-                icon: _briefingRewardIcon(stage.reward!),
+                icon: rewardIcon(stage.reward!),
                 color: uiTheme.creditGold,
                 title: 'SALVAGE',
                 detail: _briefingRewardLabel(
@@ -1154,8 +1155,8 @@ class _StageBriefingSheet extends StatelessWidget {
             ],
             if (result != null) ...[
               _BriefingIntelRow(
-                icon: _briefingMedalIcon(result!.medal),
-                color: _briefingMedalColor(uiTheme, result!.medal),
+                icon: medalIcon(result!.medal),
+                color: medalColor(uiTheme, result!.medal),
                 title: 'BEST RESULT',
                 detail:
                     'Best: ${result!.medal.label} • '
@@ -1176,54 +1177,66 @@ class _StageBriefingSheet extends StatelessWidget {
               const SizedBox(height: 7),
             ],
             const SizedBox(height: 7),
-            CommandFrame(
-              padding: EdgeInsets.zero,
-              color: uiTheme.panelBlue,
-              borderColor: uiTheme.systemCyan,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => Navigator.of(context).pop(true),
-                  splashColor: uiTheme.systemCyan.withValues(alpha: 0.18),
-                  highlightColor: uiTheme.systemCyan.withValues(alpha: 0.10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      children: [
-                        ReactorButton(
-                          tooltip: actionLabel,
-                          label: result == null ? 'Launch' : 'Replay',
-                          icon: result == null
-                              ? Icons.rocket_launch_rounded
-                              : Icons.replay_rounded,
-                          size: 72,
-                          onPressed: () => Navigator.of(context).pop(true),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                actionLabel,
-                                style: Theme.of(context).textTheme.titleMedium
-                                    ?.copyWith(
-                                      color: uiTheme.textPrimary,
-                                      fontWeight: FontWeight.w900,
-                                    ),
+            Tooltip(
+              message: actionLabel,
+              excludeFromSemantics: true,
+              child: Semantics(
+                button: true,
+                label: actionLabel,
+                child: CommandFrame(
+                  padding: EdgeInsets.zero,
+                  color: uiTheme.panelBlue,
+                  borderColor: uiTheme.systemCyan,
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () => Navigator.of(context).pop(true),
+                      splashColor: uiTheme.systemCyan.withValues(alpha: 0.18),
+                      highlightColor: uiTheme.systemCyan.withValues(
+                        alpha: 0.10,
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Row(
+                          children: [
+                            _BriefingReactorBadge(
+                              label: result == null ? 'Launch' : 'Replay',
+                              icon: result == null
+                                  ? Icons.rocket_launch_rounded
+                                  : Icons.replay_rounded,
+                              size: 72,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    actionLabel,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .titleMedium
+                                        ?.copyWith(
+                                          color: uiTheme.textPrimary,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    result == null
+                                        ? 'Deploy to this sector'
+                                        : 'Run this sector again',
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelMedium
+                                        ?.copyWith(color: uiTheme.textMuted),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                result == null
-                                    ? 'Deploy to this sector'
-                                    : 'Run this sector again',
-                                style: Theme.of(context).textTheme.labelMedium
-                                    ?.copyWith(color: uiTheme.textMuted),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
                 ),
@@ -1325,28 +1338,67 @@ class _BriefingIntelRow extends StatelessWidget {
   }
 }
 
-IconData _briefingRewardIcon(CampaignReward reward) {
-  return switch (reward) {
-    CampaignReward.bonusGold => Icons.savings_rounded,
-    CampaignReward.bonusHealth => Icons.favorite_rounded,
-    CampaignReward.challengeBadge => Icons.stars_rounded,
-  };
-}
+class _BriefingReactorBadge extends StatelessWidget {
+  const _BriefingReactorBadge({
+    required this.label,
+    required this.icon,
+    this.size = 68,
+  });
 
-IconData _briefingMedalIcon(StageMedal medal) {
-  return switch (medal) {
-    StageMedal.clear => Icons.check_circle,
-    StageMedal.silver => Icons.military_tech,
-    StageMedal.gold => Icons.emoji_events,
-  };
-}
+  final String label;
+  final IconData icon;
+  final double size;
 
-Color _briefingMedalColor(OrionUiTheme uiTheme, StageMedal medal) {
-  return switch (medal) {
-    StageMedal.clear => uiTheme.naniteGreen,
-    StageMedal.silver => uiTheme.textMuted,
-    StageMedal.gold => uiTheme.creditGold,
-  };
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final resolvedSize = size < 48 ? 48.0 : size;
+    final foreground = uiTheme.textPrimary;
+    final accent = uiTheme.systemCyan;
+
+    return SizedBox.square(
+      dimension: resolvedSize,
+      child: CommandFrame(
+        padding: const EdgeInsets.all(3),
+        borderColor: accent,
+        color: uiTheme.hullBlack,
+        emphasized: true,
+        chamfer: 12,
+        child: CommandFrame(
+          padding: EdgeInsets.zero,
+          borderColor: accent.withValues(alpha: 0.68),
+          color: uiTheme.panelBlue,
+          chamfer: 8,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, color: foreground, size: 22),
+                const SizedBox(height: 2),
+                Flexible(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    textScaler: MediaQuery.textScalerOf(
+                      context,
+                    ).clamp(maxScaleFactor: 1.15),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: foreground,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 String _briefingRewardLabel(CampaignReward reward, {required bool earned}) {

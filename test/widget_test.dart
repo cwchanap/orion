@@ -272,19 +272,20 @@ void main() {
       ]) {
         tester.view.physicalSize = size;
         await tester.pumpWidget(
-          MediaQuery(
-            data: const MediaQueryData(
-              disableAnimations: true,
-              textScaler: TextScaler.linear(1.3),
-            ),
-            child: MaterialApp(
-              home: OrionGamePage(
-                progressStore: InMemoryCampaignProgressStore(
-                  knownStages: OrionCampaign.stages,
-                ),
-                feedbackPreferencesStore: InMemoryFeedbackPreferencesStore(),
-                gameFeedback: const NoOpGameFeedback(),
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(context).copyWith(
+                disableAnimations: true,
+                textScaler: const TextScaler.linear(1.3),
               ),
+              child: child!,
+            ),
+            home: OrionGamePage(
+              progressStore: InMemoryCampaignProgressStore(
+                knownStages: OrionCampaign.stages,
+              ),
+              feedbackPreferencesStore: InMemoryFeedbackPreferencesStore(),
+              gameFeedback: const NoOpGameFeedback(),
             ),
           ),
         );

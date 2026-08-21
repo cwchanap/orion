@@ -315,6 +315,8 @@ testWidgets('status passes taps through while pacing consumes them',
   expect(backgroundTaps, 2);
   await tester.tap(find.byTooltip('Pause'));
   expect(backgroundTaps, 2);
+  await tester.tapAt(tester.getTopLeft(find.byType(MissionPacingStrip)));
+  expect(backgroundTaps, 3);
 });
 ```
 
@@ -368,7 +370,7 @@ final canTogglePause =
         snapshot.isPaused);
 ```
 
-Use a compact `CommandFrame` around pause/resume, 1x/2x/3x, and auto-start. The countdown is shown in the auto control's visible/semantic state rather than a separate chip. Duration comes from `orionMotionDuration`.
+Use a compact `CommandFrame` around pause/resume, 1x/2x/3x, and auto-start. The root layout of `MissionPacingStrip` must shrink-wrap its painted controls (using `MainAxisSize.min` or an equivalent width constraint) so transparent horizontal space outside the controls does not intercept board taps. The countdown is shown in the auto control's visible/semantic state rather than a separate chip. Duration comes from `orionMotionDuration`.
 
 - [ ] **Step 6: Replace `_buildStageScaffold` top chrome with one reflowing column**
 
@@ -1486,7 +1488,8 @@ Expected: PR 1 plus PR 2 UI/docs/tests only. No game models, rules, orchestrator
 - [ ] **Step 2: Run strict format and every new focused suite**
 
 ```bash
-rtk dart format --output=none --set-exit-if-changed lib test
+rtk dart format --output=none --set-exit-if-changed lib test integration_test
+rtk flutter test integration_test/app_smoke_test.dart
 rtk flutter test test/game/mission_report_content_test.dart test/game/tower_stats_resolver_test.dart test/widget/mission_command_hud_test.dart test/widget/next_wave_scanner_test.dart test/widget/mission_command_dock_test.dart test/widget/tower_stat_scale_test.dart test/widget/tower_inspector_test.dart test/widget/command_toast_test.dart test/widget/run_module_draft_panel_test.dart test/widget/mission_report_panel_test.dart test/widget/sell_button_test.dart test/widget_test.dart
 ```
 

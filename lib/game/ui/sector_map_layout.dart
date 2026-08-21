@@ -56,11 +56,16 @@ final class SectorMapLayout {
 
   Rect nodeRect(StageDefinition stage) {
     final plotWidth = _size.width - (horizontalPadding * 2) - railWidth;
-    final xStep = maxColumn == 0
-        ? 0.0
-        : (plotWidth - nodeSize.width) / maxColumn;
+    final availableWidth = (plotWidth - nodeSize.width).clamp(
+      0.0,
+      double.infinity,
+    );
+    final xStep = maxColumn == 0 ? 0.0 : availableWidth / maxColumn;
     final availableHeight =
-        _size.height - plotTop - plotBottomInset - nodeSize.height;
+        (_size.height - plotTop - plotBottomInset - nodeSize.height).clamp(
+          0.0,
+          double.infinity,
+        );
     final yStep = maxRow == 0 ? 0.0 : availableHeight / maxRow;
     return Rect.fromLTWH(
       horizontalPadding + (stage.mapColumn * xStep),
@@ -78,13 +83,14 @@ final class SectorMapLayout {
     return [
       for (final to in stages)
         for (final dependency in to.unlockDependencies)
-          SectorRoute(
-            from: byId[dependency]!,
-            to: to,
-            isOptional: !to.isMainPath,
-            isActive: progress.statusFor(to) != StageProgressStatus.locked,
-            medal: progress.resultFor(to.id)?.medal,
-          ),
+          if (byId[dependency] case final from?)
+            SectorRoute(
+              from: from,
+              to: to,
+              isOptional: !to.isMainPath,
+              isActive: progress.statusFor(to) != StageProgressStatus.locked,
+              medal: progress.resultFor(to.id)?.medal,
+            ),
     ];
   }
 }

@@ -85,4 +85,25 @@ void main() {
       {'salvage-rift', 'void-bastion'},
     );
   });
+
+  test('routes skips dependencies not present in the provided stages list', () {
+    // Only provide nebula-relay without its dependency outpost-alpha
+    final subset = [OrionCampaign.stages[1]]; // nebula-relay
+    expect(subset.first.unlockDependencies, contains('outpost-alpha'));
+
+    final routes = SectorMapLayout.routes(subset, CampaignProgress());
+    expect(routes, isEmpty);
+  });
+
+  test('nodeRect clamps steps to zero when available span is constrained', () {
+    const tinySize = Size(50, 100);
+    final layout = SectorMapLayout.fromStages(
+      stages: OrionCampaign.stages,
+      size: tinySize,
+    );
+    final rect = layout.nodeRect(OrionCampaign.stages.last);
+    expect(rect.left, SectorMapLayout.horizontalPadding);
+    expect(rect.top, SectorMapLayout.plotTop);
+    expect(rect.size, const Size(56, 80));
+  });
 }
