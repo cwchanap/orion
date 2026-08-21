@@ -1,4 +1,5 @@
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,36 +47,60 @@ void main() {
     await _pumpUntil(tester, () => tester.any(find.text('Build')));
     expect(find.text('Build'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
-    expect(find.text('Environment: Standard Conditions'), findsOneWidget);
+    await _pumpUntil(tester, () {
+      final game =
+          (tester.state(find.bySubtype<GameWidget>()) as dynamic).currentGame;
+      return game.isAttached as bool &&
+          (game.children as Iterable<dynamic>).any(
+            (child) => child.runtimeType.toString() == 'MultiTapDispatcher',
+          );
+    });
+    await tester.pump();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(RegExp('New wave preview available')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+    expect(find.bySemanticsLabel('Credits 150'), findsOneWidget);
 
     final startingGold = GameBalance.startingGold;
     final laserCost = GameBalance.towerStats(TowerType.laser, level: 1).cost;
 
     // 3. Tap the center of a known buildable cell to open the tower picker.
-    //    Cell (0,0) is never on the enemy path (see BoardLayout.pathCells).
+    //    Cell (0,2) is never on the enemy path (see BoardLayout.pathCells) and
+    //    stays below the portrait top-flow controls.
     //    cellCenter is recomputed inside the action closure on each retry so a
     //    mid-loop resize (e.g. async board layout settling) can't tap a stale
     //    coordinate.
-    const targetCell = GridPosition(0, 0);
+    const targetCell = GridPosition(0, 2);
     await _tapUntil(
       tester,
       () => tester.tapAt(_cellCenter(tester, targetCell)),
-      () => tester.any(find.text('Build Tower')),
+      () => tester.any(find.byKey(const ValueKey('command-dock-build'))),
       timeoutMessage:
-          'Tapping buildable cell (0,0) did not open the tower '
+          'Tapping buildable cell (0,2) did not open the tower '
           'picker within the timeout.',
     );
 
     // 4. Place a Laser tower; gold decreases and the picker closes.
-    await tester.tap(find.text('Laser $laserCost'));
+    await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
     await _pumpUntil(
       tester,
       () =>
-          tester.any(find.text('Gold ${startingGold - laserCost}')) &&
-          !tester.any(find.text('Build Tower')),
+          tester.any(
+            find.bySemanticsLabel('Credits ${startingGold - laserCost}'),
+          ) &&
+          !tester.any(find.byKey(const ValueKey('command-dock-build'))),
     );
-    expect(find.text('Gold ${startingGold - laserCost}'), findsOneWidget);
-    expect(find.text('Build Tower'), findsNothing);
+    expect(
+      find.bySemanticsLabel('Credits ${startingGold - laserCost}'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('command-dock-build')), findsNothing);
 
     // 5. Start a wave; the phase chip flips from Build to Wave Active.
     await tester.tap(find.text('Start Wave'));
