@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
@@ -80,6 +82,22 @@ void main() {
       expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
     },
   );
+
+  testWidgets('optional missions use diamond aperture frames', (tester) async {
+    await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+
+    final optionalStages = OrionCampaign.stages.where(
+      (stage) => !stage.isMainPath,
+    );
+    for (final stage in optionalStages) {
+      final finder = find.byKey(
+        ValueKey('optional-stage-aperture-${stage.id}'),
+      );
+      expect(finder, findsOneWidget);
+      final rotation = tester.widget<Transform>(finder);
+      expect(rotation.transform.entry(0, 0), closeTo(math.sqrt1_2, 0.001));
+    }
+  });
 
   testWidgets('empty campaign preserves the existing empty state', (
     tester,
