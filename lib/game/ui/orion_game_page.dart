@@ -1,7 +1,11 @@
+import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../assets/game_boss_sheet.dart';
+import '../assets/game_sprite_sheet.dart';
+import '../assets/game_tower_variety_sheet.dart';
 import '../campaign/campaign_progress.dart';
 import '../campaign/campaign_progress_store.dart';
 import '../campaign/orion_campaign.dart';
@@ -18,6 +22,7 @@ import 'codex_view.dart';
 import 'campaign_presentation.dart';
 import 'command_frame.dart';
 import 'feedback_settings_sheet.dart';
+import 'mission_command_hud.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
 import 'orion_atlas_sprite.dart';
@@ -89,6 +94,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   StageResult? _missionVictoryResult;
   String? _missionStageId;
   MissionSaveState? _missionSaveState;
+  bool _didPrecacheCommandDeckAssets = false;
 
   @override
   void initState() {
@@ -112,6 +118,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
               _feedbackPreferencesLoaded && _feedbackPreferences.hapticsEnabled,
         );
     _loadProgress();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didPrecacheCommandDeckAssets) return;
+    _didPrecacheCommandDeckAssets = true;
+    for (final fileName in const [
+      GameSpriteSheet.fileName,
+      GameTowerVarietySheet.fileName,
+      GameBossSheet.fileName,
+    ]) {
+      Flame.images.load(fileName).ignore();
+    }
   }
 
   Future<void> _loadProgress() async {
@@ -300,41 +320,40 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   left: 12,
                   top: 12,
                   right: 12,
-                  child: IgnorePointer(
-                    ignoring: true,
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _Hud(snapshot: snapshot),
-                        if (snapshot.acquiredRunModules.isNotEmpty) ...[
-                          const SizedBox(height: 8),
-                          AcquiredRunModuleStrip(
-                            moduleIds: snapshot.acquiredRunModules,
-                          ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IgnorePointer(
+                        child: MissionStatusHud(snapshot: snapshot),
+                      ),
+                      const SizedBox(height: 6),
+                      MissionPacingStrip(
+                        snapshot: snapshot,
+                        onTogglePause: game.togglePause,
+                        onSpeedSelected: game.setSpeedMultiplier,
+                        onToggleAutoStart: game.toggleAutoStart,
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (snapshot.acquiredRunModules.isNotEmpty)
+                            Flexible(
+                              child: IgnorePointer(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 132,
+                                  ),
+                                  child: AcquiredRunModuleStrip(
+                                    moduleIds: snapshot.acquiredRunModules,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          const Spacer(),
                         ],
-                        if (snapshot.nextWavePreview != null) ...[
-                          const SizedBox(height: 8),
-                          _NextWavePanel(
-                            preview: snapshot.nextWavePreview!,
-                            modifierTitles: snapshot.stageModifiers.isEmpty
-                                ? [
-                                    StageModifierMetadata
-                                        .standardConditions
-                                        .title,
-                                  ]
-                                : snapshot.stageModifiers
-                                      .map(
-                                        (modifier) =>
-                                            StageModifierMetadata.forModifier(
-                                              modifier,
-                                            ).title,
-                                      )
-                                      .toList(growable: false),
-                          ),
-                        ],
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
                 Positioned(
@@ -980,68 +999,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 }
 
-class _Hud extends StatelessWidget {
-  const _Hud({required this.snapshot});
-
-  final GameSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.86),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    snapshot.stageName,
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                _StatusChip(label: _phaseLabel(snapshot.phase)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _StatusChip(label: 'Base ${snapshot.baseHealth}'),
-                _StatusChip(label: 'Gold ${snapshot.gold}'),
-                _StatusChip(
-                  label: 'Wave ${snapshot.waveNumber}/${snapshot.waveTotal}',
-                ),
-              ],
-            ),
-            if (snapshot.feedback != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                snapshot.feedback!,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.secondary,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StageBriefingSheet extends StatelessWidget {
   const _StageBriefingSheet({required this.stage, required this.result});
 
@@ -1416,107 +1373,6 @@ String _briefingRewardLabel(CampaignReward reward, {required bool earned}) {
   };
 }
 
-class _NextWavePanel extends StatelessWidget {
-  const _NextWavePanel({required this.preview, required this.modifierTitles});
-
-  final WavePreview preview;
-  final List<String> modifierTitles;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final recommendations = preview.recommendedTowerTypes
-        .map((type) => type.label)
-        .join(', ');
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.surface.withValues(alpha: 0.9),
-        border: Border.all(color: theme.colorScheme.outlineVariant),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Next Wave ${preview.waveNumber}/${preview.waveTotal}',
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-            if (preview.groups.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final group in preview.groups)
-                    _StatusChip(label: '${group.enemyCount} ${group.label}'),
-                ],
-              ),
-            ],
-            if (preview.traits.isNotEmpty || preview.clearBonus > 0) ...[
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final trait in preview.traits)
-                    _StatusChip(label: trait.label),
-                  if (preview.clearBonus > 0)
-                    _StatusChip(label: 'Clear bonus ${preview.clearBonus}'),
-                ],
-              ),
-            ],
-            const SizedBox(height: 8),
-            Text(
-              'Environment: ${modifierTitles.join(', ')}',
-              style: theme.textTheme.bodyMedium,
-            ),
-            if (recommendations.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                'Recommended: $recommendations',
-                style: theme.textTheme.bodyMedium,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer.withValues(alpha: 0.78),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Text(
-          label,
-          style: theme.textTheme.labelLarge?.copyWith(
-            color: theme.colorScheme.onSecondaryContainer,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _BottomControls extends StatelessWidget {
   const _BottomControls({required this.game, required this.snapshot});
 
@@ -1526,6 +1382,23 @@ class _BottomControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final content = _content(context);
+    final resolvedContent = snapshot.feedback == null
+        ? content
+        : Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                snapshot.feedback!,
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.secondary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              content,
+            ],
+          );
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -1537,7 +1410,7 @@ class _BottomControls extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 160),
-          child: _content(context),
+          child: resolvedContent,
         ),
       ),
     );
@@ -1568,8 +1441,6 @@ class _BottomControls extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _PacingControls(game: game, snapshot: snapshot),
-        const SizedBox(height: 10),
         Row(
           children: [
             IconButton.filledTonal(
@@ -1593,56 +1464,6 @@ class _BottomControls extends StatelessWidget {
             ),
           ],
         ),
-      ],
-    );
-  }
-}
-
-class _PacingControls extends StatelessWidget {
-  const _PacingControls({required this.game, required this.snapshot});
-
-  final OrionDefenseGame game;
-  final GameSnapshot snapshot;
-
-  @override
-  Widget build(BuildContext context) {
-    final canUsePacing = !snapshot.isEnded;
-    final canTogglePause =
-        canUsePacing &&
-        (snapshot.phase == GamePhase.wave ||
-            snapshot.autoStartCountdownRemaining != null ||
-            snapshot.isPaused);
-    final countdown = snapshot.autoStartCountdownRemaining;
-
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      crossAxisAlignment: WrapCrossAlignment.center,
-      children: [
-        IconButton.filledTonal(
-          tooltip: snapshot.isPaused ? 'Resume' : 'Pause',
-          onPressed: canTogglePause ? game.togglePause : null,
-          icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
-        ),
-        SegmentedButton<double>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment<double>(value: 1.0, label: Text('1x')),
-            ButtonSegment<double>(value: 2.0, label: Text('2x')),
-            ButtonSegment<double>(value: 3.0, label: Text('3x')),
-          ],
-          selected: {snapshot.speedMultiplier},
-          onSelectionChanged: canUsePacing
-              ? (selection) => game.setSpeedMultiplier(selection.single)
-              : null,
-        ),
-        FilterChip(
-          tooltip: 'Auto-start waves',
-          label: const Text('Auto'),
-          selected: snapshot.autoStartEnabled,
-          onSelected: canUsePacing ? (_) => game.toggleAutoStart() : null,
-        ),
-        if (countdown != null) _StatusChip(label: 'Next ${countdown.ceil()}s'),
       ],
     );
   }
@@ -1970,13 +1791,4 @@ class _UpgradeActions extends StatelessWidget {
       ],
     );
   }
-}
-
-String _phaseLabel(GamePhase phase) {
-  return switch (phase) {
-    GamePhase.build => 'Build',
-    GamePhase.wave => 'Wave Active',
-    GamePhase.won => 'Won',
-    GamePhase.lost => 'Lost',
-  };
 }

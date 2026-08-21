@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
+import '../support/command_deck_fixtures.dart';
 
 GameSnapshot terminalSnapshot({
   required GamePhase phase,
@@ -10,26 +11,16 @@ GameSnapshot terminalSnapshot({
   int waveNumber = 8,
   List<RunModuleId> modules = const [],
 }) {
-  return GameSnapshot(
+  return commandDeckSnapshot(
     phase: phase,
     gold: 120,
     baseHealth: baseHealth,
     startingBaseHealth: 20,
     waveNumber: waveNumber,
-    waveTotal: 8,
     stageId: 'outpost-alpha',
     stageName: 'Outpost Alpha',
     stageLabel: 'Alpha',
     unlockedTowerTypes: const [TowerType.laser, TowerType.cryo],
-    stageModifiers: const [],
-    nextWavePreview: null,
-    selectedCell: null,
-    selectedTower: null,
-    feedback: null,
-    isPaused: false,
-    speedMultiplier: 1,
-    autoStartEnabled: false,
-    autoStartCountdownRemaining: null,
     acquiredRunModules: modules,
   );
 }
