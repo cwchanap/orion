@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flame/events.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,10 +14,14 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/run_module_draft_panel.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'support/command_deck_fixtures.dart';
 
 /// Common page shell for widget tests. Defaults to a no-op feedback service
 /// so ordinary tests never touch the native audio/haptics layer.
@@ -311,7 +314,7 @@ void main() {
     },
   );
 
-  testWidgets('build intel shows snapshot modifier titles and hides in wave', (
+  testWidgets('mission status replaces the legacy build intel panel', (
     tester,
   ) async {
     final store = await storeWithResults({
@@ -331,10 +334,8 @@ void main() {
     await tester.tap(find.text('Replay Mission'));
     await tester.pump();
 
-    expect(
-      find.text('Environment: Temporal Surge, Amplified Wells'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+    expect(find.textContaining('Environment:'), findsNothing);
     game!.startWave();
     await tester.pump();
     expect(find.textContaining('Environment:'), findsNothing);
@@ -347,30 +348,52 @@ void main() {
     await startStageFromBriefing(tester);
     await tester.pumpAndSettle();
 
-    expect(find.text('Outpost Alpha'), findsOneWidget);
-    expect(find.text('Gold 150'), findsOneWidget);
-    expect(find.text('Base 20'), findsOneWidget);
-    expect(find.text('Wave 1/8'), findsOneWidget);
-    expect(find.text('Next Wave 1/8'), findsOneWidget);
-    expect(find.text('8 Drones'), findsOneWidget);
-    expect(find.text('Clear bonus 30'), findsOneWidget);
+    expect(find.byTooltip('Outpost Alpha'), findsOneWidget);
+    expect(find.text('Alpha'), findsOneWidget);
+    expect(find.text('20/20'), findsOneWidget);
+    expect(find.text('150'), findsOneWidget);
+    expect(find.text('1/8'), findsOneWidget);
+    expect(find.textContaining('Next Wave'), findsNothing);
     expect(find.text('Start Wave'), findsOneWidget);
   });
 
   testWidgets('mission screen exposes pause speed and auto-start controls', (
     tester,
   ) async {
-    await tester.pumpWidget(testGamePage());
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
     await tester.pumpAndSettle();
 
     await startStageFromBriefing(tester);
 
+    expect(find.byType(MissionPacingStrip), findsOneWidget);
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.text('2x'), findsOneWidget);
     expect(find.text('3x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
+
+    game!.stateNotifier.value = commandDeckSnapshot(
+      acquiredRunModules: const [RunModuleId.heavyCaliber],
+    );
+    await tester.pump();
+    expect(
+      _activeIgnorePointerAncestorsOf(
+        find.byKey(const ValueKey('mission-status-hud')),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      _activeIgnorePointerAncestorsOf(find.byType(AcquiredRunModuleStrip)),
+      findsOneWidget,
+    );
+    expect(
+      _activeIgnorePointerAncestorsOf(find.byType(MissionPacingStrip)),
+      findsNothing,
+    );
   });
 
   testWidgets('victory panel shows earned medal and base health', (
@@ -435,108 +458,6 @@ void main() {
 
     expect(find.text('Mission Failed'), findsOneWidget);
     expect(find.textContaining('Environment:'), findsNothing);
-  });
-
-  testWidgets(
-    'next wave panel stays visible while planning and hides in wave',
-    (tester) async {
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        testGamePage(onGameCreated: (created) => game = created),
-      );
-      await tester.pumpAndSettle();
-
-      await startStageFromBriefing(tester);
-
-      expect(find.text('Next Wave 1/8'), findsOneWidget);
-      expect(find.text('8 Drones'), findsOneWidget);
-      expect(
-        _activeIgnorePointerAncestorsOf(find.text('Next Wave 1/8')),
-        findsOneWidget,
-      );
-      expect(
-        _activeIgnorePointerAncestorsOf(find.text('8 Drones')),
-        findsOneWidget,
-      );
-      expect(
-        _activeIgnorePointerAncestorsOf(find.text('Start Wave')),
-        findsNothing,
-      );
-
-      final createdGame = game!;
-      createdGame.onTapDown(
-        TapDownEvent(
-          1,
-          createdGame,
-          TapDownDetails(globalPosition: const Offset(225, 275)),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('Build Tower'), findsOneWidget);
-      expect(find.text('Next Wave 1/8'), findsOneWidget);
-      expect(find.text('8 Drones'), findsOneWidget);
-
-      createdGame.startWave();
-      await tester.pump();
-
-      expect(find.text('Next Wave 1/8'), findsNothing);
-      expect(find.text('8 Drones'), findsNothing);
-    },
-  );
-
-  testWidgets('next wave panel omits zero clear bonus text', (tester) async {
-    OrionDefenseGame? game;
-
-    await tester.pumpWidget(
-      testGamePage(onGameCreated: (created) => game = created),
-    );
-    await tester.pumpAndSettle();
-
-    await startStageFromBriefing(tester);
-
-    final snapshot = game!.stateNotifier.value;
-    game!.stateNotifier.value = GameSnapshot(
-      phase: GamePhase.build,
-      gold: snapshot.gold,
-      baseHealth: snapshot.baseHealth,
-      startingBaseHealth: snapshot.startingBaseHealth,
-      waveNumber: 8,
-      waveTotal: snapshot.waveTotal,
-      stageId: snapshot.stageId,
-      stageName: snapshot.stageName,
-      stageLabel: snapshot.stageLabel,
-      unlockedTowerTypes: snapshot.unlockedTowerTypes,
-      stageModifiers: const [],
-      nextWavePreview: WavePreview(
-        waveNumber: 8,
-        waveTotal: snapshot.waveTotal,
-        groups: [
-          WavePreviewGroup(
-            enemyCount: 4,
-            label: 'Regen Heavy Drones',
-            traits: const {EnemyTrait.regen, EnemyTrait.heavy},
-          ),
-        ],
-        traits: const {EnemyTrait.regen, EnemyTrait.heavy},
-        clearBonus: 0,
-        recommendedTowerTypes: const [TowerType.laser, TowerType.rocket],
-      ),
-      selectedCell: snapshot.selectedCell,
-      selectedTower: snapshot.selectedTower,
-      feedback: snapshot.feedback,
-      isPaused: snapshot.isPaused,
-      speedMultiplier: snapshot.speedMultiplier,
-      autoStartEnabled: snapshot.autoStartEnabled,
-      autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
-    );
-    await tester.pump();
-
-    expect(find.text('Next Wave 8/8'), findsOneWidget);
-    expect(find.text('4 Regen Heavy Drones'), findsOneWidget);
-    expect(find.text('Clear bonus 0'), findsNothing);
-    expect(find.text('Recommended: Laser, Rocket'), findsOneWidget);
   });
 
   testWidgets('locked stage tap shows feedback and stays on map', (
@@ -2214,11 +2135,13 @@ void main() {
     await tester.pump();
 
     // The game session has no real selected tower, so retargeting reports the
-    // "select a tower first" feedback — proving the chip callback ran.
+    // "select a tower first" feedback — proving the chip callback ran. The
+    // command-deck status HUD intentionally no longer renders legacy feedback
+    // copy, so assert the snapshot seam instead of a removed text label.
     await tester.tap(find.text('Weakest'));
     await tester.pump();
 
-    expect(find.text('Select a tower first.'), findsOneWidget);
+    expect(game!.snapshot.feedback, 'Select a tower first.');
   });
 
   testWidgets('selected tower panel stacks summary and actions when narrow', (
