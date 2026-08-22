@@ -68,6 +68,103 @@ void main() {
     },
   );
 
+  testWidgets('collapsed tap is forwarded when the intercept hook claims it', (
+    tester,
+  ) async {
+    var interceptedPositions = <Offset>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topRight,
+          child: NextWaveScanner(
+            preview: commandDeckPreview(),
+            modifierTitles: const ['Standard Conditions'],
+            collapseRequested: false,
+            onCollapsedTapIntercept: (position) {
+              interceptedPositions.add(position);
+              return true;
+            },
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    expect(interceptedPositions, hasLength(1));
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsNothing,
+    );
+  });
+
+  testWidgets('collapsed tap expands when the intercept hook declines', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Align(
+          alignment: Alignment.topRight,
+          child: NextWaveScanner(
+            preview: commandDeckPreview(),
+            modifierTitles: const ['Standard Conditions'],
+            collapseRequested: false,
+            onCollapsedTapIntercept: (_) => false,
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets(
+    'collapsed control answers taps across its full bounds, not just the icon',
+    (tester) async {
+      var intercepted = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topRight,
+            child: NextWaveScanner(
+              preview: commandDeckPreview(),
+              modifierTitles: const ['Standard Conditions'],
+              collapseRequested: false,
+              onCollapsedTapIntercept: (_) {
+                intercepted += 1;
+                return true;
+              },
+            ),
+          ),
+        ),
+      );
+
+      // The bottom border band sits inside the 48dp control but outside the
+      // painted radar icon; before the opaque gesture surface it joined no
+      // gesture arena and silently blocked the board cell underneath.
+      final rect = tester.getRect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      );
+      await tester.tapAt(Offset(rect.left + rect.width / 2, rect.bottom - 2));
+      await tester.pumpAndSettle();
+
+      expect(intercepted, 1);
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('selection request collapses an explicitly opened scanner', (
     tester,
   ) async {

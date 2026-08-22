@@ -70,6 +70,7 @@ class OrionGamePage extends StatefulWidget {
 
 class _OrionGamePageState extends State<OrionGamePage> {
   OrionDefenseGame? _game;
+  final GlobalKey _gameWidgetKey = GlobalKey();
   CampaignProgress _progress = CampaignProgress();
   CampaignTechTree _techTree = CampaignTechTree();
   // Last-known committed disk state. Queued saves compose their payload from
@@ -305,6 +306,25 @@ class _OrionGamePageState extends State<OrionGamePage> {
     );
   }
 
+  /// Tap arbiter for the collapsed next-wave scanner: when its 48dp control
+  /// floats over a buildable board cell (inevitable on short viewports where
+  /// the centered board's row 0 sits high), a tap there means "build here",
+  /// not "preview the wave" — forward it to the game so the cell becomes
+  /// selectable. Taps that miss buildable cells still expand the preview.
+  bool _routeScannerTapToBoard(Offset globalPosition) {
+    final game = _game;
+    final box = _gameWidgetKey.currentContext?.findRenderObject() as RenderBox?;
+    if (game == null || box == null || !box.attached) {
+      return false;
+    }
+    final local = box.globalToLocal(globalPosition);
+    if (game.buildableCellAt(local) == null) {
+      return false;
+    }
+    game.handleBoardTap(local);
+    return true;
+  }
+
   Widget _buildStageScaffold() {
     final game = _game;
     if (game == null) {
@@ -326,7 +346,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 // the viewport would silently alter combat balance. The
                 // command-deck chrome overlays the GameWidget as it did
                 // before the in-flow reserve attempt.
-                Positioned.fill(child: GameWidget(game: game)),
+                Positioned.fill(
+                  child: KeyedSubtree(
+                    key: _gameWidgetKey,
+                    child: GameWidget(game: game),
+                  ),
+                ),
                 // Top overlay: Row 1 carries the non-interactive status HUD
                 // and acquired-module strip (IgnorePointer so taps pass
                 // through to the board) alongside the interactive scanner.
@@ -399,6 +424,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                               collapseRequested:
                                   snapshot.selectedCell != null ||
                                   snapshot.selectedTower != null,
+                              onCollapsedTapIntercept: _routeScannerTapToBoard,
                             ),
                           ],
                         ],

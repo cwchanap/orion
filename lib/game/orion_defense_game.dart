@@ -141,6 +141,29 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   @override
   void onTapDown(TapDownEvent event) {
+    handleBoardTap(event.canvasPosition.toOffset());
+  }
+
+  /// Maps [canvasPosition] (GameWidget-local) to the grid cell it lands on,
+  /// or null when it misses the board or hits an enemy-path cell.
+  GridPosition? buildableCellAt(Offset canvasPosition) {
+    final tappedCell = BoardLayout.cellAt(
+      canvasPosition,
+      cellSize: _cellSize,
+      boardOrigin: _boardOrigin,
+    );
+    if (tappedCell == null) {
+      return null;
+    }
+    return BoardLayout.isBuildableCell(tappedCell, pathCells: stage.pathCells)
+        ? tappedCell
+        : null;
+  }
+
+  /// Applies the same selection logic as a raw board tap. Lets widget-layer
+  /// chrome (e.g. the collapsed next-wave scanner) forward a tap that would
+  /// otherwise be swallowed while it hovers over a buildable cell.
+  void handleBoardTap(Offset canvasPosition) {
     if (_session.phase == GamePhase.won || _session.phase == GamePhase.lost) {
       return;
     }
@@ -149,7 +172,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     }
 
     if (_session.phase == GamePhase.wave) {
-      final enemy = _enemyAt(event.canvasPosition);
+      final enemy = _enemyAt(Vector2(canvasPosition.dx, canvasPosition.dy));
       if (enemy != null) {
         _setInspectedEnemy(enemy.enemyId);
         _publishSnapshot();
@@ -159,7 +182,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     }
 
     final tappedCell = BoardLayout.cellAt(
-      event.canvasPosition.toOffset(),
+      canvasPosition,
       cellSize: _cellSize,
       boardOrigin: _boardOrigin,
     );

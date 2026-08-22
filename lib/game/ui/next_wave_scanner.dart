@@ -11,11 +11,18 @@ class NextWaveScanner extends StatefulWidget {
     required this.preview,
     required this.modifierTitles,
     required this.collapseRequested,
+    this.onCollapsedTapIntercept,
   });
 
   final WavePreview preview;
   final List<String> modifierTitles;
   final bool collapseRequested;
+
+  /// Called with the global tap position when the collapsed radar is tapped.
+  /// Return true when the tap was handled elsewhere (e.g. forwarded to the
+  /// board because it landed on a buildable cell) so the scanner neither
+  /// expands nor plays its ink reaction.
+  final bool Function(Offset globalPosition)? onCollapsedTapIntercept;
 
   @override
   State<NextWaveScanner> createState() => _NextWaveScannerState();
@@ -24,6 +31,7 @@ class NextWaveScanner extends StatefulWidget {
 class _NextWaveScannerState extends State<NextWaveScanner> {
   bool _expanded = false;
   bool _hasUnreadPreview = true;
+  bool _tapIntercepted = false;
 
   @override
   void didUpdateWidget(covariant NextWaveScanner oldWidget) {
@@ -42,6 +50,18 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
       _expanded = !_expanded;
       if (_expanded) _hasUnreadPreview = false;
     });
+  }
+
+  void _handleCollapsedTapUp(TapUpDetails details) {
+    _tapIntercepted =
+        widget.onCollapsedTapIntercept?.call(details.globalPosition) ?? false;
+  }
+
+  void _handleCollapsedTap() {
+    final intercepted = _tapIntercepted;
+    _tapIntercepted = false;
+    if (intercepted || widget.collapseRequested) return;
+    _toggleExpanded();
   }
 
   @override
@@ -95,50 +115,51 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
         message: 'Expand next-wave scanner',
         excludeFromSemantics: true,
         child: ExcludeSemantics(
-          child: SizedBox.square(
-            key: const ValueKey('next-wave-scanner-collapsed'),
-            dimension: 48,
-            child: CommandFrame(
-              padding: const EdgeInsets.all(3),
-              color: uiTheme.hullBlack,
-              borderColor: widget.collapseRequested
-                  ? uiTheme.frameSteel
-                  : uiTheme.systemCyan,
-              emphasized: !widget.collapseRequested,
-              chamfer: 12,
+          // The gesture detector owns the full 48dp control (opaque), not just
+          // the painted radar pixels: InkResponse's deferToChild behavior left
+          // dead corners and border bands where a tap joined no gesture arena
+          // at all — silently blocking the board cell underneath instead of
+          // reaching either the scanner or, via the tap arbiter, the game.
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapUp: _handleCollapsedTapUp,
+            onTapCancel: () => _tapIntercepted = false,
+            onTap: _handleCollapsedTap,
+            child: SizedBox.square(
+              key: const ValueKey('next-wave-scanner-collapsed'),
+              dimension: 48,
               child: CommandFrame(
-                padding: EdgeInsets.zero,
-                color: uiTheme.panelBlue,
+                padding: const EdgeInsets.all(3),
+                color: uiTheme.hullBlack,
                 borderColor: widget.collapseRequested
                     ? uiTheme.frameSteel
-                    : uiTheme.systemCyan.withValues(alpha: 0.68),
-                chamfer: 8,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkResponse(
-                    onTap: widget.collapseRequested ? null : _toggleExpanded,
-                    containedInkWell: true,
-                    highlightShape: BoxShape.rectangle,
-                    splashColor: uiTheme.systemCyan.withValues(alpha: 0.18),
-                    highlightColor: uiTheme.systemCyan.withValues(alpha: 0.10),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Icon(
-                          Icons.radar,
-                          color: widget.collapseRequested
-                              ? uiTheme.textMuted
-                              : uiTheme.systemCyan,
-                          size: 27,
+                    : uiTheme.systemCyan,
+                emphasized: !widget.collapseRequested,
+                chamfer: 12,
+                child: CommandFrame(
+                  padding: EdgeInsets.zero,
+                  color: uiTheme.panelBlue,
+                  borderColor: widget.collapseRequested
+                      ? uiTheme.frameSteel
+                      : uiTheme.systemCyan.withValues(alpha: 0.68),
+                  chamfer: 8,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        Icons.radar,
+                        color: widget.collapseRequested
+                            ? uiTheme.textMuted
+                            : uiTheme.systemCyan,
+                        size: 27,
+                      ),
+                      if (_hasUnreadPreview)
+                        Positioned(
+                          top: 5,
+                          right: 5,
+                          child: _UnreadBeacon(color: uiTheme.warningOrange),
                         ),
-                        if (_hasUnreadPreview)
-                          Positioned(
-                            top: 5,
-                            right: 5,
-                            child: _UnreadBeacon(color: uiTheme.warningOrange),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
