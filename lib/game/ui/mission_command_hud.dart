@@ -388,7 +388,9 @@ class MissionPacingStrip extends StatelessWidget {
             padding: const EdgeInsets.all(6),
             child: ConstrainedBox(
               constraints: BoxConstraints(
-                maxWidth: maxWidth.isFinite ? maxWidth - 12 : double.infinity,
+                maxWidth: maxWidth.isFinite
+                    ? (maxWidth - 12).clamp(0.0, 352.0).toDouble()
+                    : 352,
               ),
               child: CommandFrame(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
