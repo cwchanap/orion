@@ -79,7 +79,7 @@ void main() {
     //    Cell (0,0) is never on the enemy path (see BoardLayout.pathCells)
     //    and is a former regression guard: the interactive top-flow controls
     //    once consumed taps over the top board rows, so this tap proves the
-    //    reserved command-deck chrome keeps row 0 tappable.
+    //    command-deck overlay keeps row 0 tappable.
     //    cellCenter is recomputed inside the action closure on each retry so a
     //    mid-loop resize (e.g. async board layout settling) can't tap a stale
     //    coordinate.
@@ -109,7 +109,34 @@ void main() {
     );
     expect(find.byKey(const ValueKey('command-dock-build')), findsNothing);
 
-    // 5. Start a wave; the phase chip flips from Build to Wave Active.
+    // 5. Tap the top-RIGHT buildable cell (7,0) to verify the scanner overlay
+    //    does not swallow taps on the upper-right board area. Cell (7,0) is
+    //    buildable (not on the enemy path) and sits directly beneath where
+    //    the collapsed scanner is positioned. On standard phone widths the
+    //    scanner sits above the board's row-0 center, so this tap should
+    //    reach the cell and switch the dock to the build rail.
+    const topRightCell = GridPosition(7, 0);
+    await _tapUntil(
+      tester,
+      () => tester.tapAt(_cellCenter(tester, topRightCell)),
+      () => tester.any(find.byKey(const ValueKey('command-dock-build'))),
+      timeoutMessage:
+          'Tapping buildable cell (7,0) did not open the tower '
+          'picker within the timeout. The scanner overlay may be '
+          'intercepting taps on the upper-right board area.',
+    );
+
+    // 6. Dismiss the cell selection by tapping outside the board so the idle
+    //    dock (with Start Wave) returns.
+    await _tapUntil(
+      tester,
+      () => tester.tapAt(_pointAboveBoard(tester)),
+      () => !tester.any(find.byKey(const ValueKey('command-dock-build'))),
+      timeoutMessage:
+          'Could not dismiss the build rail to return to the idle dock.',
+    );
+
+    // 7. Start a wave; the phase chip flips from Build to Wave Active.
     await tester.tap(find.text('Start Wave'));
     await _pumpUntil(tester, () => tester.any(find.text('Wave Active')));
     expect(find.text('Wave Active'), findsOneWidget);
@@ -134,6 +161,22 @@ Offset _cellCenter(WidgetTester tester, GridPosition cell) {
   return Offset(
     origin.dx + (cell.column + 0.5) * cellSize,
     origin.dy + (cell.row + 0.5) * cellSize,
+  );
+}
+
+Offset _pointAboveBoard(WidgetTester tester) {
+  // A point inside the GameWidget but above the centered board, so tapping
+  // it clears the selection (cellAt returns null).
+  final boardRect = tester.getRect(find.bySubtype<GameWidget>());
+  final cellSize = (boardRect.width / BoardLayout.columns).clamp(
+    0.0,
+    boardRect.height / BoardLayout.rows,
+  );
+  final boardHeight = BoardLayout.rows * cellSize;
+  final boardTop = boardRect.top + (boardRect.height - boardHeight) / 2;
+  return Offset(
+    boardRect.center.dx,
+    boardRect.top + (boardTop - boardRect.top) / 2,
   );
 }
 
