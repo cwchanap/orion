@@ -1,3 +1,4 @@
+import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -6,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/main.dart';
 
@@ -49,11 +51,11 @@ void main() {
     expect(find.text('Start Wave'), findsOneWidget);
     await _pumpUntil(tester, () {
       final game =
-          (tester.state(find.bySubtype<GameWidget>()) as dynamic).currentGame;
-      return game.isAttached as bool &&
-          (game.children as Iterable<dynamic>).any(
-            (child) => child.runtimeType.toString() == 'MultiTapDispatcher',
-          );
+          (tester.state(find.bySubtype<GameWidget>())
+                  as GameWidgetState<OrionDefenseGame>)
+              .currentGame;
+      return game.isAttached &&
+          game.children.whereType<MultiTapDispatcher>().isNotEmpty;
     });
     await tester.pump();
     expect(
@@ -65,7 +67,10 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
-    expect(find.bySemanticsLabel('Credits 150'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('Credits ${GameBalance.startingGold}'),
+      findsOneWidget,
+    );
 
     final startingGold = GameBalance.startingGold;
     final laserCost = GameBalance.towerStats(TowerType.laser, level: 1).cost;

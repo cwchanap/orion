@@ -401,6 +401,7 @@ void main() {
     expect(find.byType(NextWaveScanner), findsNothing);
 
     game!.stateNotifier.value = commandDeckSnapshot(
+      nextWavePreview: commandDeckPreview(),
       pendingRunModuleOffer: RunModuleOffer(
         offerId: 1,
         draftNumber: 1,

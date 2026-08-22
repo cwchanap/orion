@@ -223,6 +223,8 @@ class _ExpandedPreviewBody extends StatelessWidget {
     final groupedTraits = <EnemyTrait>{
       for (final group in preview.groups) ...group.traits,
     };
+    // Wave-level traits that no group row already reports above.
+    final ungroupedTraits = preview.traits.difference(groupedTraits);
     final recommendationLabel = preview.recommendedTowerTypes.isEmpty
         ? 'Recommended towers: none'
         : 'Recommended towers: ${preview.recommendedTowerTypes.map((type) => type.label).join(', ')}';
@@ -259,9 +261,9 @@ class _ExpandedPreviewBody extends StatelessWidget {
           ),
           if (index < preview.groups.length - 1) const SizedBox(height: 5),
         ],
-        if (preview.traits.isNotEmpty && groupedTraits.isEmpty) ...[
+        if (ungroupedTraits.isNotEmpty) ...[
           const SizedBox(height: 5),
-          _TraitSummary(traits: preview.traits),
+          _TraitSummary(traits: ungroupedTraits),
         ],
         if (preview.clearBonus > 0) ...[
           const SizedBox(height: 6),

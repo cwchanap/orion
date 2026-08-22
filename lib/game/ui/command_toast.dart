@@ -22,7 +22,6 @@ class CommandToast extends StatefulWidget {
 class _CommandToastState extends State<CommandToast> {
   Timer? _timer;
   GlobalKey<_CommandToastMessageState>? _messageKey;
-  String? _lastInput;
   String? _latchedMessage;
   bool _visible = false;
 
@@ -35,19 +34,24 @@ class _CommandToastState extends State<CommandToast> {
   @override
   void didUpdateWidget(covariant CommandToast oldWidget) {
     super.didUpdateWidget(oldWidget);
+    // A duration change re-arms the live toast even when the message is
+    // unchanged; a new message restarts the timer itself in _accept.
+    if (_visible && widget.visibleDuration != oldWidget.visibleDuration) {
+      _startTimer();
+    }
     _accept(widget.feedback, notify: true);
   }
 
+  // Every non-null input is a feedback event, including repeats: the game
+  // only republishes non-null feedback from a fresh player action (timer
+  // driven publishes pass null), so two identical strings back to back mean
+  // the player repeated the rejected action and must see the toast again.
+  // Null keeps the current toast latched until its timer expires.
   void _accept(String? input, {required bool notify}) {
-    if (input == null) {
-      _lastInput = null;
-      return;
-    }
-    if (_lastInput == input) return;
+    if (input == null) return;
 
     final wasVisible = _visible;
     void updateState() {
-      _lastInput = input;
       _latchedMessage = input;
       _visible = true;
       if (!wasVisible || _messageKey == null) {
@@ -60,6 +64,10 @@ class _CommandToastState extends State<CommandToast> {
     } else {
       updateState();
     }
+    _startTimer();
+  }
+
+  void _startTimer() {
     _timer?.cancel();
     _timer = Timer(widget.visibleDuration, () {
       if (!mounted) return;
@@ -169,14 +177,20 @@ class _CommandToastMessageState extends State<_CommandToastMessage> {
       borderColor: widget.toneColor,
       emphasized: true,
       child: _renderText
-          ? Text(
-              widget.message,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              textScaler: widget.textScaler,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: widget.toneColor,
-                fontWeight: FontWeight.w700,
+          ? Semantics(
+              container: true,
+              liveRegion: true,
+              label: widget.message,
+              excludeSemantics: true,
+              child: Text(
+                widget.message,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                textScaler: widget.textScaler,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: widget.toneColor,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             )
           : const SizedBox.shrink(),
