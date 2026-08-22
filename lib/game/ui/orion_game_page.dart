@@ -356,9 +356,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
                                 child: ConstrainedBox(
                                   constraints: const BoxConstraints(
                                     maxWidth: 132,
+                                    // Bound the module strip to the status
+                                    // HUD height so wrapping labels can never
+                                    // grow Row 1 and push MissionPacingStrip
+                                    // down over buildable board cells. The
+                                    // SingleChildScrollView clips any overflow
+                                    // without enabling scrolling (IgnorePointer
+                                    // keeps taps passing through to the board).
+                                    maxHeight: 56,
                                   ),
-                                  child: AcquiredRunModuleStrip(
-                                    moduleIds: snapshot.acquiredRunModules,
+                                  child: SingleChildScrollView(
+                                    clipBehavior: Clip.hardEdge,
+                                    child: AcquiredRunModuleStrip(
+                                      moduleIds: snapshot.acquiredRunModules,
+                                    ),
                                   ),
                                 ),
                               ),

@@ -26,7 +26,10 @@ void main() {
       );
 
       expect(find.bySemanticsLabel('Base 8 of 20'), findsOneWidget);
-      expect(find.bySemanticsLabel('Wave 3 of 8, Build'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Outpost Alpha. Wave 3 of 8, Build'),
+        findsOneWidget,
+      );
       expect(find.bySemanticsLabel('Credits 150'), findsOneWidget);
     } finally {
       handle.dispose();
@@ -49,7 +52,10 @@ void main() {
         ),
       );
 
-      expect(find.bySemanticsLabel('Wave 1 of 8, Paused'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Outpost Alpha. Wave 1 of 8, Paused'),
+        findsOneWidget,
+      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -59,7 +65,10 @@ void main() {
         ),
       );
 
-      expect(find.bySemanticsLabel('Wave 1 of 8, Wave Active'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel('Outpost Alpha. Wave 1 of 8, Wave Active'),
+        findsOneWidget,
+      );
     } finally {
       handle.dispose();
     }
@@ -411,9 +420,16 @@ void main() {
                         Flexible(
                           child: IgnorePointer(
                             child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 132),
-                              child: AcquiredRunModuleStrip(
-                                moduleIds: snapshot.acquiredRunModules,
+                              key: const ValueKey('module-strip-viewport'),
+                              constraints: const BoxConstraints(
+                                maxWidth: 132,
+                                maxHeight: 56,
+                              ),
+                              child: SingleChildScrollView(
+                                clipBehavior: Clip.hardEdge,
+                                child: AcquiredRunModuleStrip(
+                                  moduleIds: snapshot.acquiredRunModules,
+                                ),
                               ),
                             ),
                           ),
@@ -445,7 +461,12 @@ void main() {
         find.byKey(const ValueKey('mission-status-hud')),
       );
       final pacing = tester.getRect(find.byType(MissionPacingStrip));
-      final modules = tester.getRect(find.byType(AcquiredRunModuleStrip));
+      // Use the boundedBox viewport rect, not the unclipped AcquiredRunModuleStrip
+      // content rect — the SingleChildScrollView clips overflow at paint time but
+      // the child's layout rect is its full unwrapped height.
+      final moduleViewport = tester.getRect(
+        find.byKey(const ValueKey('module-strip-viewport')),
+      );
       final scanner = tester.getRect(
         find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       );
@@ -455,12 +476,12 @@ void main() {
 
       // Row 1 (status + modules + scanner) sits above Row 2 (pacing).
       expect(status.bottom, lessThanOrEqualTo(pacing.top));
-      expect(modules.bottom, lessThanOrEqualTo(pacing.top));
+      expect(moduleViewport.bottom, lessThanOrEqualTo(pacing.top));
       expect(scanner.bottom, lessThanOrEqualTo(pacing.top));
       // Within Row 1, modules sit between status and scanner.
-      expect(modules.right, lessThanOrEqualTo(scanner.left));
+      expect(moduleViewport.right, lessThanOrEqualTo(scanner.left));
       expect(status.overlaps(pacing), isFalse);
-      expect(modules.overlaps(pacing), isFalse);
+      expect(moduleViewport.overlaps(pacing), isFalse);
       expect(scanner.overlaps(pacing), isFalse);
       expect(flow.left, greaterThanOrEqualTo(0));
       expect(flow.right, lessThanOrEqualTo(360));
@@ -481,5 +502,136 @@ void main() {
       }
       expect(tester.takeException(), isNull);
     });
+  }
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+      'three acquired modules do not push pacing over the board at scale $scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        final threeModuleSnapshot = commandDeckSnapshot(
+          phase: GamePhase.build,
+          acquiredRunModules: const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+        );
+
+        Widget buildFlow(GameSnapshot snapshot) => MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Stack(
+            children: [
+              Positioned.fill(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                ),
+              ),
+              Positioned(
+                left: 12,
+                right: 12,
+                top: 12,
+                child: Column(
+                  key: const ValueKey('three-module-top-flow'),
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: IgnorePointer(
+                            child: MissionStatusHud(snapshot: snapshot),
+                          ),
+                        ),
+                        if (snapshot.acquiredRunModules.isNotEmpty) ...[
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: IgnorePointer(
+                              child: ConstrainedBox(
+                                key: const ValueKey(
+                                  'three-module-strip-viewport',
+                                ),
+                                constraints: const BoxConstraints(
+                                  maxWidth: 132,
+                                  maxHeight: 56,
+                                ),
+                                child: SingleChildScrollView(
+                                  clipBehavior: Clip.hardEdge,
+                                  child: AcquiredRunModuleStrip(
+                                    moduleIds: snapshot.acquiredRunModules,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    MissionPacingStrip(
+                      snapshot: snapshot,
+                      onTogglePause: () {},
+                      onSpeedSelected: (_) {},
+                      onToggleAutoStart: () {},
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+
+        // Render with zero modules to capture the baseline pacing position.
+        await tester.pumpWidget(buildFlow(commandDeckSnapshot()));
+        final baselinePacing = tester.getRect(find.byType(MissionPacingStrip));
+        final baselineStatus = tester.getRect(
+          find.byKey(const ValueKey('mission-status-hud')),
+        );
+
+        // Re-render with all three acquired modules. Pacing must not move.
+        await tester.pumpWidget(buildFlow(threeModuleSnapshot));
+        final threeModulePacing = tester.getRect(
+          find.byType(MissionPacingStrip),
+        );
+        final threeModuleStatus = tester.getRect(
+          find.byKey(const ValueKey('mission-status-hud')),
+        );
+
+        expect(threeModulePacing.top, equals(baselinePacing.top));
+        expect(threeModuleStatus.bottom, equals(baselineStatus.bottom));
+        // The module strip viewport is height-bounded so it cannot overlap
+        // pacing. Check the ConstrainedBox viewport rect, not the unclipped
+        // AcquiredRunModuleStrip content rect (the SingleChildScrollView clips
+        // at paint time but the child's layout rect is its full height).
+        final moduleViewport = tester.getRect(
+          find.byKey(const ValueKey('three-module-strip-viewport')),
+        );
+        expect(moduleViewport.height, lessThanOrEqualTo(56));
+        expect(moduleViewport.bottom, lessThanOrEqualTo(threeModulePacing.top));
+        expect(moduleViewport.overlaps(threeModulePacing), isFalse);
+        // Pacing controls stay on-screen.
+        for (final finder in [
+          find.byTooltip('Pause'),
+          find.text('1x'),
+          find.text('2x'),
+          find.text('3x'),
+          find.byTooltip('Auto-start waves'),
+        ]) {
+          final rect = tester.getRect(finder.first);
+          expect(rect.right, lessThanOrEqualTo(360));
+          expect(rect.bottom, lessThanOrEqualTo(640));
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   }
 }
