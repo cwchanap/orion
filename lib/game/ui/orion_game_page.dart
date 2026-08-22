@@ -45,14 +45,8 @@ const String _persistenceFailureMessage = 'Could not save campaign progress.';
 /// stale breadcrumb without re-string-literalizing it.
 const String _feedbackSaveFailureMessage = 'Could not save feedback settings.';
 
-/// Vertical space reserved below the game viewport for the bottom command
-/// chrome (toast + idle dock). The dock itself is a bottom-anchored overlay:
-/// idle it fits inside this reserve, while taller selection-driven content
-/// (build rail, tower inspector) overlays the board exactly as it did before
-/// the command deck redesign. Because the header and this reserve are both
-/// constant, the GameWidget never resizes mid-wave (onGameResize deliberately
-/// skips re-layout while enemies are in flight).
-const double _commandDockReserve = 120;
+/// Horizontal padding for the top and bottom command-deck overlays.
+const double _commandDeckPadding = 12;
 
 class OrionGamePage extends StatefulWidget {
   const OrionGamePage({
@@ -325,123 +319,117 @@ class _OrionGamePageState extends State<OrionGamePage> {
           builder: (context, snapshot, _) {
             return Stack(
               children: [
-                // Reserved chrome: the interactive top header sits above the
-                // game viewport in layout flow, and the game viewport itself
-                // stops _commandDockReserve short of the bottom, so the
-                // persistent header and idle dock cannot swallow board taps,
-                // including the top row. The scanner remains its deliberate
-                // compact/explicitly-expandable overlay. Selection-driven dock
-                // content taller than the reserve overlays the board as a
-                // transient overlay (pre-redesign behavior). Both reserved
-                // regions keep a constant height across phases, so the
-                // GameWidget never resizes mid-wave (onGameResize deliberately
-                // skips re-layout while enemies are in flight).
-                Column(
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
+                // The GameWidget fills the entire SafeArea so the Flame
+                // viewport (and therefore _cellSize) is identical to the
+                // pre-command-deck layout. Enemy speed, tower range, and
+                // projectile speed are all absolute game units — shrinking
+                // the viewport would silently alter combat balance. The
+                // command-deck chrome overlays the GameWidget as it did
+                // before the in-flow reserve attempt.
+                Positioned.fill(child: GameWidget(game: game)),
+                // Top overlay: Row 1 carries the non-interactive status HUD
+                // and acquired-module strip (IgnorePointer so taps pass
+                // through to the board) alongside the interactive scanner.
+                // Row 2 carries the compact interactive pacing strip. On
+                // standard phone widths the combined overlay height (~122px)
+                // sits above the centered board's row-0 center, so the top
+                // buildable cells remain tappable.
+                Positioned(
+                  top: _commandDeckPadding,
+                  left: _commandDeckPadding,
+                  right: _commandDeckPadding,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          MissionStatusHud(snapshot: snapshot),
-                          const SizedBox(height: 6),
-                          MissionPacingStrip(
-                            snapshot: snapshot,
-                            onTogglePause: game.togglePause,
-                            onSpeedSelected: game.setSpeedMultiplier,
-                            onToggleAutoStart: game.toggleAutoStart,
+                          Expanded(
+                            child: IgnorePointer(
+                              child: MissionStatusHud(snapshot: snapshot),
+                            ),
                           ),
+                          if (snapshot.acquiredRunModules.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: IgnorePointer(
+                                child: ConstrainedBox(
+                                  constraints: const BoxConstraints(
+                                    maxWidth: 132,
+                                  ),
+                                  child: AcquiredRunModuleStrip(
+                                    moduleIds: snapshot.acquiredRunModules,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                          if (snapshot.phase == GamePhase.build &&
+                              snapshot.nextWavePreview != null &&
+                              snapshot.pendingRunModuleOffer == null &&
+                              !snapshot.isEnded) ...[
+                            const SizedBox(width: 6),
+                            NextWaveScanner(
+                              preview: snapshot.nextWavePreview!,
+                              modifierTitles: snapshot.stageModifiers.isEmpty
+                                  ? [
+                                      StageModifierMetadata
+                                          .standardConditions
+                                          .title,
+                                    ]
+                                  : snapshot.stageModifiers
+                                        .map(
+                                          (modifier) =>
+                                              StageModifierMetadata.forModifier(
+                                                modifier,
+                                              ).title,
+                                        )
+                                        .toList(growable: false),
+                              collapseRequested:
+                                  snapshot.selectedCell != null ||
+                                  snapshot.selectedTower != null,
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                    Expanded(
-                      child: Stack(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.only(
-                              bottom: _commandDockReserve,
-                            ),
-                            child: GameWidget(game: game),
-                          ),
-                          Positioned(
-                            top: 6,
-                            left: 12,
-                            right: 12,
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (snapshot.acquiredRunModules.isNotEmpty)
-                                  Flexible(
-                                    child: IgnorePointer(
-                                      child: ConstrainedBox(
-                                        constraints: const BoxConstraints(
-                                          maxWidth: 132,
-                                        ),
-                                        child: AcquiredRunModuleStrip(
-                                          moduleIds:
-                                              snapshot.acquiredRunModules,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                const Spacer(),
-                                if (snapshot.phase == GamePhase.build &&
-                                    snapshot.nextWavePreview != null &&
-                                    snapshot.pendingRunModuleOffer == null &&
-                                    !snapshot.isEnded)
-                                  NextWaveScanner(
-                                    preview: snapshot.nextWavePreview!,
-                                    modifierTitles:
-                                        snapshot.stageModifiers.isEmpty
-                                        ? [
-                                            StageModifierMetadata
-                                                .standardConditions
-                                                .title,
-                                          ]
-                                        : snapshot.stageModifiers
-                                              .map(
-                                                (modifier) =>
-                                                    StageModifierMetadata.forModifier(
-                                                      modifier,
-                                                    ).title,
-                                              )
-                                              .toList(growable: false),
-                                    collapseRequested:
-                                        snapshot.selectedCell != null ||
-                                        snapshot.selectedTower != null,
-                                  ),
-                              ],
-                            ),
-                          ),
-                          Positioned(
-                            left: 12,
-                            right: 12,
-                            bottom: 12,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                CommandToast(
-                                  key: const ValueKey('mission-command-toast'),
-                                  feedback: snapshot.feedback,
-                                ),
-                                const SizedBox(height: 8),
-                                MissionCommandDock(
-                                  snapshot: snapshot,
-                                  onWorldMap: game.returnToMap,
-                                  onStartWave: game.startWave,
-                                  onPlaceTower: game.placeTower,
-                                  onUpgrade: game.upgradeSelectedTower,
-                                  onSpecialize: game.specializeSelectedTower,
-                                  onTargetingChanged: game.setTargetingMode,
-                                  onSell: game.sellSelectedTower,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 6),
+                      MissionPacingStrip(
+                        snapshot: snapshot,
+                        onTogglePause: game.togglePause,
+                        onSpeedSelected: game.setSpeedMultiplier,
+                        onToggleAutoStart: game.toggleAutoStart,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+                // Bottom overlay: toast + dock, same as the original game.
+                // The dock overlays the bottom rows as it did before the
+                // command deck redesign; selection-driven content (build
+                // rail, inspector) is taller and overlays more.
+                Positioned(
+                  left: _commandDeckPadding,
+                  right: _commandDeckPadding,
+                  bottom: _commandDeckPadding,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CommandToast(
+                        key: const ValueKey('mission-command-toast'),
+                        feedback: snapshot.feedback,
+                      ),
+                      const SizedBox(height: 8),
+                      MissionCommandDock(
+                        snapshot: snapshot,
+                        onWorldMap: game.returnToMap,
+                        onStartWave: game.startWave,
+                        onPlaceTower: game.placeTower,
+                        onUpgrade: game.upgradeSelectedTower,
+                        onSpecialize: game.specializeSelectedTower,
+                        onTargetingChanged: game.setTargetingMode,
+                        onSell: game.sellSelectedTower,
+                      ),
+                    ],
+                  ),
                 ),
                 if (snapshot.pendingRunModuleOffer case final offer?)
                   Positioned.fill(

@@ -209,8 +209,16 @@ void main() {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IgnorePointer(
-                    child: MissionStatusHud(snapshot: commandDeckSnapshot()),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: IgnorePointer(
+                          child: MissionStatusHud(
+                            snapshot: commandDeckSnapshot(),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(key: ValueKey('top-flow-gap'), height: 6),
                   MissionPacingStrip(
@@ -314,8 +322,16 @@ void main() {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IgnorePointer(
-                      child: MissionStatusHud(snapshot: commandDeckSnapshot()),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: IgnorePointer(
+                            child: MissionStatusHud(
+                              snapshot: commandDeckSnapshot(),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 6),
                     MissionPacingStrip(
@@ -382,19 +398,16 @@ void main() {
                   key: const ValueKey('complete-top-flow'),
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    IgnorePointer(child: MissionStatusHud(snapshot: snapshot)),
-                    const SizedBox(height: 6),
-                    MissionPacingStrip(
-                      snapshot: snapshot,
-                      onTogglePause: () {},
-                      onSpeedSelected: (_) {},
-                      onToggleAutoStart: () {},
-                    ),
-                    const SizedBox(height: 6),
                     Row(
                       key: const ValueKey('complete-top-flow-row'),
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
+                        Expanded(
+                          child: IgnorePointer(
+                            child: MissionStatusHud(snapshot: snapshot),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
                         Flexible(
                           child: IgnorePointer(
                             child: ConstrainedBox(
@@ -405,13 +418,20 @@ void main() {
                             ),
                           ),
                         ),
-                        const Spacer(),
+                        const SizedBox(width: 6),
                         NextWaveScanner(
                           preview: commandDeckPreview(),
                           modifierTitles: const ['Standard Conditions'],
                           collapseRequested: false,
                         ),
                       ],
+                    ),
+                    const SizedBox(height: 6),
+                    MissionPacingStrip(
+                      snapshot: snapshot,
+                      onTogglePause: () {},
+                      onSpeedSelected: (_) {},
+                      onToggleAutoStart: () {},
                     ),
                   ],
                 ),
@@ -433,12 +453,15 @@ void main() {
         find.byKey(const ValueKey('complete-top-flow')),
       );
 
+      // Row 1 (status + modules + scanner) sits above Row 2 (pacing).
       expect(status.bottom, lessThanOrEqualTo(pacing.top));
-      expect(pacing.bottom, lessThanOrEqualTo(modules.top));
+      expect(modules.bottom, lessThanOrEqualTo(pacing.top));
+      expect(scanner.bottom, lessThanOrEqualTo(pacing.top));
+      // Within Row 1, modules sit between status and scanner.
       expect(modules.right, lessThanOrEqualTo(scanner.left));
       expect(status.overlaps(pacing), isFalse);
-      expect(pacing.overlaps(modules), isFalse);
-      expect(modules.overlaps(scanner), isFalse);
+      expect(modules.overlaps(pacing), isFalse);
+      expect(scanner.overlaps(pacing), isFalse);
       expect(flow.left, greaterThanOrEqualTo(0));
       expect(flow.right, lessThanOrEqualTo(360));
       expect(flow.bottom, lessThanOrEqualTo(640));

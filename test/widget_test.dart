@@ -495,17 +495,25 @@ void main() {
       acquiredRunModules: const [RunModuleId.heavyCaliber],
     );
     await tester.pump();
-    // The status HUD is presentation-only: it now lives in reserved layout
-    // space above the game viewport instead of masking the board with an
-    // IgnorePointer, so it can never swallow board taps.
+    // The GameWidget fills the full SafeArea so cellSize is preserved.
+    // The status HUD and module strip are non-interactive overlays
+    // (IgnorePointer) so taps pass through to the board. The pacing strip
+    // remains interactive.
     final gameRect = tester.getRect(find.bySubtype<GameWidget>());
-    expect(
-      tester.getRect(find.byKey(const ValueKey('mission-status-hud'))).bottom,
-      lessThanOrEqualTo(gameRect.top),
+    final safeAreaRect = tester.getRect(
+      find
+          .ancestor(
+            of: find.bySubtype<GameWidget>(),
+            matching: find.bySubtype<SafeArea>(),
+          )
+          .first,
     );
+    expect(gameRect, equals(safeAreaRect));
     expect(
-      tester.getRect(find.byType(MissionPacingStrip)).bottom,
-      lessThanOrEqualTo(gameRect.top),
+      _activeIgnorePointerAncestorsOf(
+        find.byKey(const ValueKey('mission-status-hud')),
+      ),
+      findsOneWidget,
     );
     expect(
       _activeIgnorePointerAncestorsOf(find.byType(AcquiredRunModuleStrip)),
