@@ -86,7 +86,10 @@ void main() {
       find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       findsOneWidget,
     );
-    await tester.tap(find.byKey(const ValueKey('next-wave-scanner-collapsed')));
+    await tester.tap(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      warnIfMissed: false,
+    );
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('next-wave-scanner-collapsed')),
@@ -144,6 +147,41 @@ void main() {
       expect(backgroundTaps, 1);
     },
   );
+
+  testWidgets('selection collapse releases the collapsed scanner hit area', (
+    tester,
+  ) async {
+    var backgroundTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Stack(
+          children: [
+            Positioned.fill(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => backgroundTaps += 1,
+              ),
+            ),
+            Align(
+              alignment: Alignment.topRight,
+              child: NextWaveScanner(
+                preview: commandDeckPreview(),
+                modifierTitles: const ['Standard Conditions'],
+                collapseRequested: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final collapsedRect = tester.getRect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+    );
+    await tester.tapAt(collapsedRect.center);
+
+    expect(backgroundTaps, 1);
+  });
 
   testWidgets('Swarm Queen group renders an art-led preview row', (
     tester,
