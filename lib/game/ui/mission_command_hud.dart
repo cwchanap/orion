@@ -13,6 +13,18 @@ Color baseHealthColor(GameSnapshot snapshot, OrionUiTheme uiTheme) {
   return uiTheme.dangerRed;
 }
 
+/// Single source for the visible (and semantic) mission phase label, so the
+/// HUD's semantics carry the same Build/Wave Active/Paused/Won/Lost state the
+/// player sees.
+String _missionPhaseLabel(GameSnapshot snapshot) => snapshot.isPaused
+    ? 'Paused'
+    : switch (snapshot.phase) {
+        GamePhase.build => 'Build',
+        GamePhase.wave => 'Wave Active',
+        GamePhase.won => 'Won',
+        GamePhase.lost => 'Lost',
+      };
+
 class MissionStatusHud extends StatelessWidget {
   const MissionStatusHud({super.key, required this.snapshot});
 
@@ -52,7 +64,9 @@ class MissionStatusHud extends StatelessWidget {
               child: Semantics(
                 container: true,
                 excludeSemantics: true,
-                label: 'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}',
+                label:
+                    'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, '
+                    '${_missionPhaseLabel(snapshot)}',
                 child: _MissionStatusAnchor(
                   snapshot: snapshot,
                   uiTheme: uiTheme,
@@ -165,14 +179,7 @@ class _MissionStatusAnchor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final phaseLabel = snapshot.isPaused
-        ? 'Paused'
-        : switch (snapshot.phase) {
-            GamePhase.build => 'Build',
-            GamePhase.wave => 'Wave Active',
-            GamePhase.won => 'Won',
-            GamePhase.lost => 'Lost',
-          };
+    final phaseLabel = _missionPhaseLabel(snapshot);
 
     return Tooltip(
       message: snapshot.stageName,

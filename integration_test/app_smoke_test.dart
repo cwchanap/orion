@@ -76,18 +76,20 @@ void main() {
     final laserCost = GameBalance.towerStats(TowerType.laser, level: 1).cost;
 
     // 3. Tap the center of a known buildable cell to open the tower picker.
-    //    Cell (0,2) is never on the enemy path (see BoardLayout.pathCells) and
-    //    stays below the portrait top-flow controls.
+    //    Cell (0,0) is never on the enemy path (see BoardLayout.pathCells)
+    //    and is a former regression guard: the interactive top-flow controls
+    //    once consumed taps over the top board rows, so this tap proves the
+    //    reserved command-deck chrome keeps row 0 tappable.
     //    cellCenter is recomputed inside the action closure on each retry so a
     //    mid-loop resize (e.g. async board layout settling) can't tap a stale
     //    coordinate.
-    const targetCell = GridPosition(0, 2);
+    const targetCell = GridPosition(0, 0);
     await _tapUntil(
       tester,
       () => tester.tapAt(_cellCenter(tester, targetCell)),
       () => tester.any(find.byKey(const ValueKey('command-dock-build'))),
       timeoutMessage:
-          'Tapping buildable cell (0,2) did not open the tower '
+          'Tapping buildable cell (0,0) did not open the tower '
           'picker within the timeout.',
     );
 

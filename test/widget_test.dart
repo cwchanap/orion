@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -426,7 +427,7 @@ void main() {
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
     expectSemanticsLabel(tester, 'Base 20 of 20', findsOneWidget);
     expectSemanticsLabel(tester, 'Credits 150', findsOneWidget);
-    expectSemanticsLabel(tester, 'Wave 1 of 8', findsOneWidget);
+    expectSemanticsLabel(tester, 'Wave 1 of 8, Build', findsOneWidget);
     expect(find.textContaining('Next Wave'), findsNothing);
     expect(find.text('Start Wave'), findsOneWidget);
   });
@@ -494,11 +495,17 @@ void main() {
       acquiredRunModules: const [RunModuleId.heavyCaliber],
     );
     await tester.pump();
+    // The status HUD is presentation-only: it now lives in reserved layout
+    // space above the game viewport instead of masking the board with an
+    // IgnorePointer, so it can never swallow board taps.
+    final gameRect = tester.getRect(find.bySubtype<GameWidget>());
     expect(
-      _activeIgnorePointerAncestorsOf(
-        find.byKey(const ValueKey('mission-status-hud')),
-      ),
-      findsOneWidget,
+      tester.getRect(find.byKey(const ValueKey('mission-status-hud'))).bottom,
+      lessThanOrEqualTo(gameRect.top),
+    );
+    expect(
+      tester.getRect(find.byType(MissionPacingStrip)).bottom,
+      lessThanOrEqualTo(gameRect.top),
     );
     expect(
       _activeIgnorePointerAncestorsOf(find.byType(AcquiredRunModuleStrip)),

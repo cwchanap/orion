@@ -95,7 +95,7 @@ void main() {
         findsOneWidget,
       );
       expect(
-        find.bySemanticsLabel('Fire ${cadence(stats.fireInterval)}'),
+        find.bySemanticsLabel('Fire ${cadence(stats.fireInterval)}s'),
         findsOneWidget,
       );
       expect(

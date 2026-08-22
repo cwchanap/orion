@@ -172,7 +172,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('tower-stat-fire')),
-        matching: find.text(cadence(stats.fireInterval)),
+        matching: find.text('${cadence(stats.fireInterval)}s'),
       ),
       findsOneWidget,
     );
