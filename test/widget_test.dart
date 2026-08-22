@@ -427,7 +427,11 @@ void main() {
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
     expectSemanticsLabel(tester, 'Base 20 of 20', findsOneWidget);
     expectSemanticsLabel(tester, 'Credits 150', findsOneWidget);
-    expectSemanticsLabel(tester, 'Wave 1 of 8, Build', findsOneWidget);
+    expectSemanticsLabel(
+      tester,
+      'Outpost Alpha. Wave 1 of 8, Build',
+      findsOneWidget,
+    );
     expect(find.textContaining('Next Wave'), findsNothing);
     expect(find.text('Start Wave'), findsOneWidget);
   });

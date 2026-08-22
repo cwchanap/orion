@@ -65,6 +65,7 @@ class MissionStatusHud extends StatelessWidget {
                 container: true,
                 excludeSemantics: true,
                 label:
+                    '${snapshot.stageName}. '
                     'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, '
                     '${_missionPhaseLabel(snapshot)}',
                 child: _MissionStatusAnchor(
