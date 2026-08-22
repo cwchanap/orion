@@ -57,13 +57,61 @@ void main() {
     },
   );
 
-  testWidgets('uninterrupted duplicate input does not restart the timer', (
+  testWidgets('duplicate input restarts the timer and re-shows the toast', (
     tester,
   ) async {
     await tester.pumpWidget(toastHost('Hold'));
     await tester.pump(const Duration(seconds: 1));
     await tester.pumpWidget(toastHost('Hold', revision: 1));
-    await tester.pump(const Duration(milliseconds: 1399));
+    await tester.pump(const Duration(milliseconds: 2399));
+    expect(find.text('Hold'), findsOneWidget);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump(const Duration(milliseconds: 140));
+    expect(find.text('Hold'), findsNothing);
+  });
+
+  testWidgets('a repeated identical message re-shows after expiry', (
+    tester,
+  ) async {
+    await tester.pumpWidget(toastHost('Not enough gold.'));
+    await tester.pump(const Duration(milliseconds: 2400));
+    await tester.pump(const Duration(milliseconds: 140));
+    expect(find.text('Not enough gold.'), findsNothing);
+
+    await tester.pumpWidget(toastHost('Not enough gold.', revision: 1));
+    expect(find.text('Not enough gold.'), findsOneWidget);
+  });
+
+  testWidgets('a shorter visibleDuration reschedules the live toast', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Semantics(
+          label: 'toast-host',
+          child: CommandToast(
+            key: const ValueKey('test-command-toast'),
+            feedback: 'Hold',
+          ),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(seconds: 1));
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Semantics(
+          label: 'toast-host',
+          child: CommandToast(
+            key: const ValueKey('test-command-toast'),
+            feedback: 'Hold',
+            visibleDuration: const Duration(milliseconds: 1200),
+          ),
+        ),
+      ),
+    );
+    // Same message, new duration: the timer restarts on the 1.2s schedule.
+    await tester.pump(const Duration(milliseconds: 1199));
     expect(find.text('Hold'), findsOneWidget);
     await tester.pump(const Duration(milliseconds: 1));
     await tester.pump(const Duration(milliseconds: 140));
@@ -101,6 +149,23 @@ void main() {
     await tester.pump(const Duration(seconds: 3));
 
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('toast message is exposed as a live-region semantics node', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(toastHost('Not enough gold.'));
+
+      final data = tester
+          .getSemantics(find.text('Not enough gold.'))
+          .getSemanticsData();
+      expect(data.flagsCollection.isLiveRegion, isTrue);
+      expect(data.label, 'Not enough gold.');
+    } finally {
+      handle.dispose();
+    }
   });
 
   testWidgets('feedback maps to danger, warning, and neutral tones', (

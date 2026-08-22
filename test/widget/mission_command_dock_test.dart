@@ -7,16 +7,7 @@ import '../support/command_deck_fixtures.dart';
 
 Widget railHost({
   int gold = 9999,
-  List<TowerType> unlockedTowerTypes = const [
-    TowerType.laser,
-    TowerType.rocket,
-    TowerType.cryo,
-    TowerType.railgun,
-    TowerType.ionChain,
-    TowerType.nanite,
-    TowerType.gravityWell,
-    TowerType.droneBay,
-  ],
+  List<TowerType>? unlockedTowerTypes,
   ValueChanged<TowerType>? onPlaceTower,
 }) {
   return MaterialApp(
@@ -28,7 +19,7 @@ Widget railHost({
         child: TowerBuildRail(
           phase: GamePhase.build,
           gold: gold,
-          unlockedTowerTypes: unlockedTowerTypes,
+          unlockedTowerTypes: unlockedTowerTypes ?? TowerType.values,
           onPlaceTower: onPlaceTower ?? (_) {},
         ),
       ),
@@ -87,11 +78,35 @@ void main() {
       find.byKey(const ValueKey('tower-card-laser')),
     );
     final fifth = tester.getRect(
-      find.byKey(const ValueKey('tower-card-ionChain')),
+      find.byKey(ValueKey('tower-card-${TowerType.values[4].name}')),
     );
     expect(first.width, 64);
     expect(fifth.left, lessThan(375));
     expect(find.byType(Scrollable), findsWidgets);
+  });
+
+  testWidgets('build rail cards grow with text scale up to 1.3x', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(1.4)),
+          child: child!,
+        ),
+        home: railHost(),
+      ),
+    );
+
+    // The scaler is capped at 1.3 and the card dimensions follow it.
+    final first = tester.getRect(
+      find.byKey(const ValueKey('tower-card-laser')),
+    );
+    expect(first.width, closeTo(64 * 1.3, 0.01));
+    expect(find.byType(TowerBuildRail), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('card semantics distinguish affordable and unaffordable towers', (
@@ -224,10 +239,15 @@ void main() {
 
     expect(find.text('Start Wave'), findsNothing);
     expect(find.text('Start Now'), findsOneWidget);
-    expect(
-      find.bySemanticsLabel(RegExp(r'Wave 1 of 8, countdown 3 seconds')),
-      findsOneWidget,
-    );
+    final handle = tester.ensureSemantics();
+    try {
+      expect(
+        find.bySemanticsLabel(RegExp(r'Wave 1 of 8, countdown 3 seconds')),
+        findsOneWidget,
+      );
+    } finally {
+      handle.dispose();
+    }
     await tester.tap(find.byTooltip('Start Now'));
     expect(startWaveTaps, 1);
   });

@@ -231,6 +231,7 @@ void main() {
             runModules: RunModuleId.values,
           );
 
+          expect(resolved.cost, base.cost, reason: '$type $entry');
           expect(
             resolved.upgradeCost,
             base.upgradeCost,

@@ -108,11 +108,13 @@ class IdleCommandBar extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Semantics(
-            container: true,
-            label: stateLabel,
-            excludeSemantics: true,
-            child: ExcludeSemantics(
+          // Yields space to the fixed-size reactor buttons when the viewport
+          // is narrow; the labels ellipsize instead of overflowing.
+          Flexible(
+            child: Semantics(
+              container: true,
+              label: stateLabel,
+              excludeSemantics: true,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 4),
                 child: Column(
@@ -121,6 +123,8 @@ class IdleCommandBar extends StatelessWidget {
                   children: [
                     Text(
                       'MISSION',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: uiTheme.textMuted,
                         fontWeight: FontWeight.w800,
@@ -130,6 +134,8 @@ class IdleCommandBar extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       _phaseLabel(snapshot.phase),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                         color: snapshot.phase == GamePhase.wave
                             ? uiTheme.warningOrange
@@ -224,8 +230,11 @@ class TowerBuildRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final textScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: 1.3);
     return SizedBox(
-      height: 104,
+      height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
         scrollDirection: Axis.horizontal,
@@ -261,6 +270,9 @@ class _TowerBuildCard extends StatelessWidget {
   final bool unlocked;
   final ValueChanged<TowerType> onPlaceTower;
 
+  static const double baseWidth = 64;
+  static const double baseHeight = 92;
+
   @override
   Widget build(BuildContext context) {
     final stats = GameBalance.towerStats(type, level: 1);
@@ -274,6 +286,12 @@ class _TowerBuildCard extends StatelessWidget {
         : affordable
         ? uiTheme.systemCyan
         : uiTheme.textMuted;
+    // Honor the player's text-size preference up to 1.3x and grow the card
+    // with it so the scaled labels keep their room instead of truncating.
+    final textScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: 1.3);
+    final scaleFactor = textScaler.scale(1);
 
     return Semantics(
       button: true,
@@ -283,8 +301,8 @@ class _TowerBuildCard extends StatelessWidget {
       excludeSemantics: true,
       child: SizedBox(
         key: ValueKey('tower-card-${type.name}'),
-        width: 64,
-        height: 92,
+        width: baseWidth * scaleFactor,
+        height: baseHeight * scaleFactor,
         child: CommandFrame(
           padding: const EdgeInsets.all(2),
           color: uiTheme.panelBlue,
@@ -357,9 +375,7 @@ class _TowerBuildCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
-                      textScaler: MediaQuery.textScalerOf(
-                        context,
-                      ).clamp(maxScaleFactor: 1.0),
+                      textScaler: textScaler,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: unlocked
                             ? uiTheme.textPrimary
@@ -382,7 +398,7 @@ class _TowerBuildCard extends StatelessWidget {
                         Text(
                           '${stats.cost}',
                           maxLines: 1,
-                          textScaler: const TextScaler.linear(1),
+                          textScaler: textScaler,
                           style: Theme.of(context).textTheme.labelSmall
                               ?.copyWith(
                                 color: affordable && unlocked
