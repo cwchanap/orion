@@ -179,7 +179,7 @@ class _InspectorBody extends StatelessWidget {
           _StatRow(
             key: const ValueKey('tower-stat-fire'),
             label: 'Fire',
-            value: cadence(stats.fireInterval),
+            value: '${cadence(stats.fireInterval)}s',
             fill: scale.fireFill(stats),
           ),
           _StatRow(

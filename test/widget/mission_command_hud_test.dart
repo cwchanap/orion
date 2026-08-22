@@ -26,8 +26,40 @@ void main() {
       );
 
       expect(find.bySemanticsLabel('Base 8 of 20'), findsOneWidget);
-      expect(find.bySemanticsLabel('Wave 3 of 8'), findsOneWidget);
+      expect(find.bySemanticsLabel('Wave 3 of 8, Build'), findsOneWidget);
       expect(find.bySemanticsLabel('Credits 150'), findsOneWidget);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets('status HUD semantics carry the live phase and paused state', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MissionStatusHud(
+            snapshot: commandDeckSnapshot(
+              phase: GamePhase.wave,
+              isPaused: true,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.bySemanticsLabel('Wave 1 of 8, Paused'), findsOneWidget);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MissionStatusHud(
+            snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+          ),
+        ),
+      );
+
+      expect(find.bySemanticsLabel('Wave 1 of 8, Wave Active'), findsOneWidget);
     } finally {
       handle.dispose();
     }
