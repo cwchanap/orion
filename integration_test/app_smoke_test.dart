@@ -127,6 +127,30 @@ void main() {
           'intercepting taps on the upper-right board area.',
     );
 
+    // 5b. The pacing strip is a read-only badge during the build phase; its
+    //     interactive controls would hover over board row 1 on short
+    //     viewports, so every buildable cell there must be tappable now.
+    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-pacing-strip')), findsNothing);
+    for (final cell in const [
+      GridPosition(4, 1),
+      GridPosition(5, 1),
+      GridPosition(6, 1),
+      GridPosition(7, 1),
+    ]) {
+      // Deselect first so every probe starts from the idle dock.
+      await tester.tapAt(_pointAboveBoard(tester));
+      await tester.pump(const Duration(milliseconds: 150));
+      await _tapUntil(
+        tester,
+        () => tester.tapAt(_cellCenter(tester, cell)),
+        () => tester.any(find.byKey(const ValueKey('command-dock-build'))),
+        timeoutMessage:
+            'Tapping buildable cell $cell did not open the tower picker '
+            'within the timeout.',
+      );
+    }
+
     // 6. Dismiss the cell selection by tapping outside the board so the idle
     //    dock (with Start Wave) returns.
     await _tapUntil(
@@ -143,6 +167,12 @@ void main() {
     expect(find.text('Wave Active'), findsOneWidget);
     expect(find.text('Build'), findsNothing);
     expect(find.textContaining('Environment:'), findsNothing);
+    // The interactive pacing strip returns once the phase locks placement.
+    await _pumpUntil(
+      tester,
+      () => tester.any(find.byKey(const ValueKey('mission-pacing-strip'))),
+    );
+    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsNothing);
   });
 }
 

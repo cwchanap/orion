@@ -304,6 +304,7 @@ class MissionPacingStrip extends StatelessWidget {
     required this.onTogglePause,
     required this.onSpeedSelected,
     required this.onToggleAutoStart,
+    this.interactive = true,
   });
 
   final GameSnapshot snapshot;
@@ -311,8 +312,26 @@ class MissionPacingStrip extends StatelessWidget {
   final ValueChanged<double> onSpeedSelected;
   final VoidCallback onToggleAutoStart;
 
+  /// Whether the pacing controls accept taps. While false the strip renders a
+  /// compact read-only badge instead: pacing state stays readable at a glance
+  /// without interactive controls hovering over buildable board cells (the
+  /// build phase, when cell selection matters).
+  final bool interactive;
+
   @override
   Widget build(BuildContext context) {
+    if (!interactive) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        widthFactor: 1,
+        heightFactor: 1,
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: _PacingBadge(snapshot: snapshot),
+        ),
+      );
+    }
+
     final canUsePacing = !snapshot.isEnded;
     final canTogglePause =
         canUsePacing &&
@@ -393,6 +412,7 @@ class MissionPacingStrip extends StatelessWidget {
                     : 352,
               ),
               child: CommandFrame(
+                key: const ValueKey('mission-pacing-strip'),
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                 color: OrionUiTheme.of(context).hullBlack,
                 borderColor: OrionUiTheme.of(context).frameSteel,
@@ -405,6 +425,72 @@ class MissionPacingStrip extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Read-only pacing state for phases where the interactive controls would
+/// hover over buildable board cells. Kept narrow (speed + auto-start only) so
+/// it hugs the left board columns, which hold the enemy path in row 1.
+class _PacingBadge extends StatelessWidget {
+  const _PacingBadge({required this.snapshot});
+
+  final GameSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final countdown = snapshot.autoStartCountdownRemaining;
+    final speedLabel = '${snapshot.speedMultiplier.toStringAsFixed(0)}x';
+    final autoLabel = !snapshot.autoStartEnabled
+        ? 'Manual'
+        : countdown == null
+        ? 'Auto'
+        : 'Auto ${countdown.ceil()}s';
+
+    return Semantics(
+      container: true,
+      label:
+          'Speed $speedLabel. '
+          '${snapshot.autoStartEnabled ? 'Auto-start enabled' : 'Auto-start disabled'}.',
+      child: IgnorePointer(
+        child: CommandFrame(
+          key: const ValueKey('mission-pacing-badge'),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          color: uiTheme.hullBlack,
+          borderColor: uiTheme.frameSteel,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.speed, size: 16, color: uiTheme.textMuted),
+              const SizedBox(width: 4),
+              Text(
+                speedLabel,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: uiTheme.systemCyan,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(
+                snapshot.autoStartEnabled ? Icons.bolt : Icons.bolt_outlined,
+                size: 16,
+                color: snapshot.autoStartEnabled
+                    ? uiTheme.warningOrange
+                    : uiTheme.textMuted,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                autoLabel,
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: uiTheme.textMuted,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
