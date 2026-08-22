@@ -97,6 +97,54 @@ void main() {
     expect((pauseTaps, speed, autoTaps), (1, 2.0, 1));
   });
 
+  testWidgets('passive strip renders a read-only badge and ignores taps', (
+    tester,
+  ) async {
+    var autoTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MissionPacingStrip(
+          snapshot: commandDeckSnapshot(
+            phase: GamePhase.build,
+            autoStartEnabled: true,
+            autoStartCountdownRemaining: 5,
+          ),
+          interactive: false,
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () => autoTaps += 1,
+        ),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsOneWidget);
+    expect(find.byType(SegmentedButton<double>), findsNothing);
+    expect(find.byType(FilterChip), findsNothing);
+    expect(find.text('1x'), findsOneWidget);
+    expect(find.text('Auto 5s'), findsOneWidget);
+
+    final handle = tester.ensureSemantics();
+    try {
+      // IgnorePointer makes the badge unhittable; the miss IS the assertion.
+      await tester.tap(
+        find.byKey(const ValueKey('mission-pacing-badge')),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(autoTaps, 0);
+
+      // Narrow enough to hug the enemy-path columns of board row 1.
+      expect(
+        tester
+            .getSize(find.byKey(const ValueKey('mission-pacing-badge')))
+            .width,
+        lessThanOrEqualTo(180),
+      );
+    } finally {
+      handle.dispose();
+    }
+  });
+
   testWidgets(
     'pacing controls preserve 48dp hit targets while shrink-wrapped',
     (tester) async {

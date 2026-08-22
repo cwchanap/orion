@@ -431,6 +431,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       ),
                       const SizedBox(height: 6),
                       MissionPacingStrip(
+                        // Interactive only when pacing is actionable; during
+                        // the build phase the strip collapses to a read-only
+                        // badge so its controls never hover over buildable
+                        // board cells (wave phase locks placement, so the
+                        // full strip's overlap is harmless then).
+                        interactive:
+                            snapshot.phase == GamePhase.wave ||
+                            snapshot.isPaused,
                         snapshot: snapshot,
                         onTogglePause: game.togglePause,
                         onSpeedSelected: game.setSpeedMultiplier,

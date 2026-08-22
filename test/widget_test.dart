@@ -537,22 +537,29 @@ void main() {
 
     await startStageFromBriefing(tester);
 
+    // Build phase: pacing state stays readable through a read-only badge so
+    // the interactive controls never hover over buildable board cells.
     expect(find.byType(MissionPacingStrip), findsOneWidget);
-    expect(find.byTooltip('Pause'), findsOneWidget);
-    expect(find.text('1x'), findsOneWidget);
-    expect(find.text('2x'), findsOneWidget);
-    expect(find.text('3x'), findsOneWidget);
-    expect(find.byTooltip('Auto-start waves'), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsOneWidget);
+    expect(find.byTooltip('Pause'), findsNothing);
+    expect(find.byTooltip('Auto-start waves'), findsNothing);
     expect(find.text('Start Wave'), findsOneWidget);
 
     game!.stateNotifier.value = commandDeckSnapshot(
+      phase: GamePhase.wave,
       acquiredRunModules: const [RunModuleId.heavyCaliber],
     );
     await tester.pump();
     // The GameWidget fills the full SafeArea so cellSize is preserved.
     // The status HUD and module strip are non-interactive overlays
-    // (IgnorePointer) so taps pass through to the board. The pacing strip
-    // remains interactive.
+    // (IgnorePointer) so taps pass through to the board. Once the wave locks
+    // placement, the pacing strip returns as an interactive control row.
+    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsNothing);
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.text('1x'), findsOneWidget);
+    expect(find.text('2x'), findsOneWidget);
+    expect(find.text('3x'), findsOneWidget);
+    expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     final gameRect = tester.getRect(find.bySubtype<GameWidget>());
     final safeAreaRect = tester.getRect(
       find
