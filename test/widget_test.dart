@@ -13,6 +13,7 @@ import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
+import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
@@ -475,6 +476,55 @@ void main() {
     await tester.pump();
     expect(find.text(feedback), findsOneWidget);
   });
+
+  testWidgets(
+    'top-right board cell stays outside interactive chrome on Android CI viewport',
+    (tester) async {
+      tester.view.physicalSize = const Size(411, 731);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(testGamePage());
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+
+      final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+      final cellSize = (gameRect.width / BoardLayout.columns).clamp(
+        0.0,
+        gameRect.height / BoardLayout.rows,
+      );
+      final boardHeight = BoardLayout.rows * cellSize;
+      final boardTop = gameRect.top + (gameRect.height - boardHeight) / 2;
+      const topRightCell = GridPosition(7, 0);
+      final topRightCenter = Offset(
+        gameRect.left + (topRightCell.column + 0.5) * cellSize,
+        boardTop + (topRightCell.row + 0.5) * cellSize,
+      );
+      final scannerRect = tester.getRect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      );
+      final pacingFrameRect = tester.getRect(
+        find
+            .descendant(
+              of: find.byType(MissionPacingStrip),
+              matching: find.byType(CommandFrame),
+            )
+            .first,
+      );
+
+      expect(
+        scannerRect.contains(topRightCenter),
+        isFalse,
+        reason: 'Scanner $scannerRect overlaps cell center $topRightCenter.',
+      );
+      expect(
+        pacingFrameRect.contains(topRightCenter),
+        isFalse,
+        reason:
+            'Pacing frame $pacingFrameRect overlaps cell center $topRightCenter.',
+      );
+    },
+  );
 
   testWidgets('mission screen exposes pause speed and auto-start controls', (
     tester,
