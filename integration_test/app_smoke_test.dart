@@ -112,9 +112,10 @@ void main() {
     // 5. Tap the top-RIGHT buildable cell (7,0) to verify the scanner overlay
     //    does not swallow taps on the upper-right board area. Cell (7,0) is
     //    buildable (not on the enemy path) and sits directly beneath where
-    //    the collapsed scanner is positioned. On standard phone widths the
-    //    scanner sits above the board's row-0 center, so this tap should
-    //    reach the cell and switch the dock to the build rail.
+    //    the collapsed scanner is positioned on short viewports: taps that
+    //    land on a buildable cell are forwarded to the game by the scanner's
+    //    tap arbiter, so this tap reaches the cell and switches the dock to
+    //    the build rail.
     const topRightCell = GridPosition(7, 0);
     await _tapUntil(
       tester,
