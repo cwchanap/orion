@@ -138,6 +138,11 @@ void main() {
             .currentGame;
     await tester.tap(find.text('2x'));
     await _pumpUntil(tester, () => pacedGame.speedMultiplier == 2);
+    // The game field flips synchronously but the SegmentedButton only learns
+    // its new selection on the next frame; without this pump the '1x' tap
+    // lands on the segment the button still considers selected and is
+    // silently dropped (onSelectionChanged is not called for it).
+    await tester.pump();
     await tester.tap(find.text('1x'));
     await _pumpUntil(tester, () => pacedGame.speedMultiplier == 1);
     for (final cell in const [
