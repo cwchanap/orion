@@ -319,11 +319,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return false;
     }
     final local = box.globalToLocal(globalPosition);
-    if (game.boardCellAt(local) == null) {
-      return false;
-    }
-    game.handleBoardTap(local);
-    return true;
+    return game.tryHandleBoardTap(local);
   }
 
   Widget _buildStageScaffold() {

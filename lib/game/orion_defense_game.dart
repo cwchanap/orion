@@ -155,6 +155,20 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     );
   }
 
+  /// Routes a widget-layer tap to board handling when it lands on a board
+  /// cell, returning whether the tap was consumed. Lets overlay chrome (e.g.
+  /// the collapsed next-wave scanner) forward a tap that would otherwise be
+  /// swallowed while it hovers over a board cell, without the caller needing
+  /// to query board geometry directly. Taps that miss the board are left to
+  /// the overlay's own handling.
+  bool tryHandleBoardTap(Offset canvasPosition) {
+    if (boardCellAt(canvasPosition) == null) {
+      return false;
+    }
+    handleBoardTap(canvasPosition);
+    return true;
+  }
+
   /// Applies the same selection logic as a raw board tap. Lets widget-layer
   /// chrome (e.g. the collapsed next-wave scanner) forward a tap that would
   /// otherwise be swallowed while it hovers over a board cell.
