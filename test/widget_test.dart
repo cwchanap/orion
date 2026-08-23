@@ -527,6 +527,67 @@ void main() {
     },
   );
 
+  testWidgets(
+    'collapsed scanner stays openable over the board on short viewports',
+    (tester) async {
+      // Short viewport: the whole collapsed radar overlaps the board, so the
+      // tap arbiter would otherwise claim every touch and leave touch users
+      // no way to open the next-wave preview.
+      tester.view.physicalSize = const Size(430, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        testGamePage(onGameCreated: (created) => game = created),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+
+      final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+      GridPosition? cellAtGlobal(Offset point) =>
+          game!.boardCellAt(point - gameRect.topLeft);
+
+      final scannerRect = tester.getRect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      );
+      final centerCell = cellAtGlobal(scannerRect.center);
+      expect(
+        centerCell,
+        isNotNull,
+        reason: 'Precondition: radar center overlaps a board cell.',
+      );
+
+      // The painted radar itself opens the preview…
+      await tester.tapAt(scannerRect.center);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsOneWidget,
+      );
+      expect(game!.snapshot.selectedCell, isNull);
+
+      // …and a second tap on the expanded panel closes it again.
+      await tester.tap(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+        findsOneWidget,
+      );
+
+      // The surrounding band still forwards: tapping it selects the board
+      // cell underneath instead of opening the preview.
+      final fringePoint = Offset(scannerRect.center.dx, scannerRect.bottom - 2);
+      final fringeCell = cellAtGlobal(fringePoint);
+      expect(fringeCell, isNotNull);
+      await tester.tapAt(fringePoint);
+      await tester.pump();
+      expect(game!.snapshot.selectedCell, fringeCell);
+    },
+  );
+
   testWidgets('board taps under the pacing strip still reach the game', (
     tester,
   ) async {
