@@ -668,6 +668,45 @@ void main() {
     expect(game!.snapshot.selectedCell, chosen);
   });
 
+  testWidgets('selection replaces pacing with build or inspector controls', (
+    tester,
+  ) async {
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+
+    expect(find.byType(MissionPacingStrip), findsOneWidget);
+    expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
+
+    game!.stateNotifier.value = commandDeckSnapshot(
+      selectedCell: const GridPosition(1, 1),
+    );
+    await tester.pump();
+
+    expect(find.byType(MissionPacingStrip), findsNothing);
+    expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+
+    final tower = const PlacedTower(
+      id: 1,
+      type: TowerType.laser,
+      position: GridPosition(1, 1),
+    );
+    game!.stateNotifier.value = commandDeckSnapshot(
+      selectedTower: tower,
+      selectedTowerStats: GameBalance.towerStats(
+        tower.type,
+        level: tower.level,
+      ),
+    );
+    await tester.pump();
+
+    expect(find.byType(MissionPacingStrip), findsNothing);
+    expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
+  });
+
   testWidgets('mission screen exposes pause speed and auto-start controls', (
     tester,
   ) async {
@@ -679,10 +718,10 @@ void main() {
 
     await startStageFromBriefing(tester);
 
-    // Pacing stays interactive through every non-ended phase: pause must be
-    // reachable while an auto-start countdown runs, and countdowns run during
-    // the build phase. The strip docks above the command chrome instead of
-    // hovering over the buildable top rows.
+    // With no selection, pacing stays interactive through every non-ended
+    // phase: pause must be reachable while an auto-start countdown runs, and
+    // countdowns run during the build phase. The strip docks above the command
+    // chrome instead of hovering over the buildable top rows.
     expect(find.byType(MissionPacingStrip), findsOneWidget);
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
