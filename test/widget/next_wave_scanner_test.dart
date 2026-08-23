@@ -68,39 +68,36 @@ void main() {
     },
   );
 
-  testWidgets('collapsed tap is forwarded when the intercept hook claims it', (
-    tester,
-  ) async {
-    var interceptedPositions = <Offset>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Align(
-          alignment: Alignment.topRight,
-          child: NextWaveScanner(
-            preview: commandDeckPreview(),
-            modifierTitles: const ['Standard Conditions'],
-            collapseRequested: false,
-            onCollapsedTapIntercept: (position) {
-              interceptedPositions.add(position);
-              return true;
-            },
+  testWidgets(
+    'collapsed radar center expands even when the intercept hook claims',
+    (tester) async {
+      var interceptedPositions = <Offset>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.topRight,
+            child: NextWaveScanner(
+              preview: commandDeckPreview(),
+              modifierTitles: const ['Standard Conditions'],
+              collapseRequested: false,
+              onCollapsedTapIntercept: (position) {
+                interceptedPositions.add(position);
+                return true;
+              },
+            ),
           ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.byTooltip('Expand next-wave scanner'));
-    await tester.pumpAndSettle();
-    expect(interceptedPositions, hasLength(1));
-    expect(
-      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
-      findsOneWidget,
-    );
-    expect(
-      find.byKey(const ValueKey('next-wave-scanner-expanded')),
-      findsNothing,
-    );
-  });
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+      expect(interceptedPositions, isEmpty);
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsOneWidget,
+      );
+    },
+  );
 
   testWidgets('collapsed tap expands when the intercept hook declines', (
     tester,

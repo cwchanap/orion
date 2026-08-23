@@ -18,10 +18,13 @@ class NextWaveScanner extends StatefulWidget {
   final List<String> modifierTitles;
   final bool collapseRequested;
 
-  /// Called with the global tap position when the collapsed radar is tapped.
-  /// Return true when the tap was handled elsewhere (e.g. forwarded to the
-  /// board because it landed on a buildable cell) so the scanner neither
-  /// expands nor plays its ink reaction.
+  /// Called with the global tap position when the band around the collapsed
+  /// radar is tapped. Return true when the tap was handled elsewhere (e.g.
+  /// forwarded to the board because it landed on a buildable cell) so the
+  /// scanner neither expands nor plays its ink reaction. Taps on the painted
+  /// radar itself always expand locally and never reach this hook — otherwise
+  /// a viewport where the whole control overlaps the board (short screens)
+  /// would leave touch users no way to open the preview.
   final bool Function(Offset globalPosition)? onCollapsedTapIntercept;
 
   @override
@@ -29,6 +32,12 @@ class NextWaveScanner extends StatefulWidget {
 }
 
 class _NextWaveScannerState extends State<NextWaveScanner> {
+  /// Gap between the 48dp gesture surface and the painted radar frame; also
+  /// the CommandFrame padding in [_buildCollapsed]. Taps inside the frame are
+  /// deliberate opens and stay local; only the surrounding band may forward
+  /// to the board arbiter.
+  static const double _radarInset = 3;
+
   bool _expanded = false;
   bool _hasUnreadPreview = true;
   bool _tapIntercepted = false;
@@ -53,8 +62,18 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
   }
 
   void _handleCollapsedTapUp(TapUpDetails details) {
-    _tapIntercepted =
-        widget.onCollapsedTapIntercept?.call(details.globalPosition) ?? false;
+    final box = context.findRenderObject()! as RenderBox;
+    final local = box.globalToLocal(details.globalPosition);
+    final size = box.size;
+    final onRadar =
+        local.dx >= _radarInset &&
+        local.dy >= _radarInset &&
+        local.dx <= size.width - _radarInset &&
+        local.dy <= size.height - _radarInset;
+    if (!onRadar) {
+      _tapIntercepted =
+          widget.onCollapsedTapIntercept?.call(details.globalPosition) ?? false;
+    }
   }
 
   void _handleCollapsedTap() {
@@ -129,7 +148,7 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
               key: const ValueKey('next-wave-scanner-collapsed'),
               dimension: 48,
               child: CommandFrame(
-                padding: const EdgeInsets.all(3),
+                padding: const EdgeInsets.all(_radarInset),
                 color: uiTheme.hullBlack,
                 borderColor: widget.collapseRequested
                     ? uiTheme.frameSteel
