@@ -9,6 +9,7 @@ import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
+import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -525,6 +526,147 @@ void main() {
       );
     },
   );
+
+  testWidgets('board taps under the pacing strip still reach the game', (
+    tester,
+  ) async {
+    // Short viewport: the strip then covers row-9 path-cell centers.
+    tester.view.physicalSize = const Size(430, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    await tester.tap(find.text('Start Wave'));
+    await tester.pump();
+
+    final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+    final cellSize = (gameRect.width / BoardLayout.columns).clamp(
+      0.0,
+      gameRect.height / BoardLayout.rows,
+    );
+    final boardTop =
+        gameRect.top + (gameRect.height - BoardLayout.rows * cellSize) / 2;
+    Offset globalFor(GridPosition cell) => Offset(
+      gameRect.left + (cell.column + 0.5) * cellSize,
+      boardTop + (cell.row + 0.5) * cellSize,
+    );
+
+    final pacingFrameFinder = find
+        .descendant(
+          of: find.byType(MissionPacingStrip),
+          matching: find.byType(CommandFrame),
+        )
+        .first;
+
+    // Points sitting on pause/speed/auto controls are skipped: those are
+    // consumed by design. The regression targets the frame's dead space over
+    // the board.
+    bool underControl(Offset point) {
+      return [
+        find.byType(IconButton),
+        find.byType(SegmentedButton<double>),
+        find.byType(FilterChip),
+      ].any((finder) {
+        for (var i = 0; i < tester.widgetList(finder).length; i++) {
+          if (tester.getRect(finder.at(i)).contains(point)) return true;
+        }
+        return false;
+      });
+    }
+
+    GridPosition? freePathCellUnderStrip({Iterable<Offset> avoid = const []}) {
+      final frame = tester.getRect(pacingFrameFinder);
+      for (final cell in BoardLayout.pathCells.reversed) {
+        final point = globalFor(cell);
+        if (!frame.contains(point)) continue;
+        if (avoid.any((p) => (p - point).distance <= cellSize * 0.55)) {
+          continue;
+        }
+        if (!underControl(point)) return cell;
+      }
+      return null;
+    }
+
+    expect(
+      freePathCellUnderStrip(),
+      isNotNull,
+      reason: 'Short viewport must put a path-cell center under the strip.',
+    );
+
+    // A live enemy under the frame: advance the game clock without pumping UI
+    // frames (widget-test frames do not tick Flame's own loop; direct updates
+    // are the established way to drive combat). Anchor and tap are taken from
+    // the same frozen render tree so a pending reflow cannot skew the
+    // hit-test between choosing and dispatching the point. This half runs
+    // before any selection so the dock is still in its compact layout.
+    game!.setSpeedMultiplier(3);
+    EnemyComponent? target;
+    Offset? aim;
+    outer:
+    for (var i = 0; i < 2400 && target == null; i++) {
+      game!.update(1 / 30);
+      final frame = tester.getRect(pacingFrameFinder);
+      for (final cell in BoardLayout.pathCells.reversed) {
+        final point = globalFor(cell);
+        if (!frame.contains(point)) continue;
+        if (underControl(point)) continue;
+        for (final enemy in game!.descendants().whereType<EnemyComponent>()) {
+          if (!enemy.isAlive) continue;
+          if ((gameRect.topLeft + enemy.position.toOffset() - point).distance <=
+              cellSize * 0.4) {
+            target = enemy;
+            aim = point;
+            break outer;
+          }
+        }
+      }
+    }
+    expect(target, isNotNull, reason: 'phase=${game!.snapshot.phase}');
+    await tester.tapAt(aim!);
+    await tester.pump();
+    expect(game!.inspectedEnemyId, target!.enemyId);
+
+    // An empty board point under the frame: the tap must forward and select.
+    // Resolve the inspected enemy so its inspector chrome settles first.
+    target.applyDamage(1000000);
+    await tester.pump();
+    // Prefer a path cell free of enemies; while the wave winds down the
+    // reflowing chrome may cover none, so fall back to any covered cell.
+    GridPosition? chosen;
+    for (var attempt = 0; attempt < 400 && chosen == null; attempt++) {
+      final occupied = [
+        for (final enemy in game!.descendants().whereType<EnemyComponent>())
+          if (enemy.isAlive) gameRect.topLeft + enemy.position.toOffset(),
+      ];
+      chosen = freePathCellUnderStrip(avoid: occupied);
+      if (chosen != null) break;
+      final frame = tester.getRect(pacingFrameFinder);
+      scan:
+      for (var row = BoardLayout.rows - 1; row >= 0; row--) {
+        for (var col = BoardLayout.columns - 1; col >= 0; col--) {
+          final cell = GridPosition(col, row);
+          final point = globalFor(cell);
+          if (!frame.contains(point)) continue;
+          if (underControl(point)) continue;
+          if (occupied.any((p) => (p - point).distance <= cellSize * 0.55)) {
+            continue;
+          }
+          chosen = cell;
+          break scan;
+        }
+      }
+      if (chosen == null) await tester.pump(const Duration(milliseconds: 50));
+    }
+    expect(chosen, isNotNull, reason: 'phase=${game!.snapshot.phase}');
+    await tester.tapAt(globalFor(chosen!));
+    await tester.pump();
+    expect(game!.snapshot.selectedCell, chosen);
+  });
 
   testWidgets('mission screen exposes pause speed and auto-start controls', (
     tester,

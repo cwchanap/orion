@@ -307,18 +307,19 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   /// Tap arbiter shared by floating chrome (collapsed next-wave scanner,
-  /// pacing-strip frame): when the tapped point lands on a buildable board
-  /// cell, forward the tap to the game so the cell becomes selectable instead
-  /// of being swallowed by the overlay. Taps that miss buildable cells are
-  /// left to the overlay's own handling.
-  bool _routeTapToBuildableCell(Offset globalPosition) {
+  /// pacing-strip frame): when the tapped point lands anywhere on the board,
+  /// forward the tap to the game so normal board handling applies instead of
+  /// being swallowed by the overlay. Path cells are included — enemies travel
+  /// on them during waves and must stay inspectable. Taps that miss the board
+  /// are left to the overlay's own handling.
+  bool _routeTapToBoard(Offset globalPosition) {
     final game = _game;
     final box = _gameWidgetKey.currentContext?.findRenderObject() as RenderBox?;
     if (game == null || box == null || !box.attached) {
       return false;
     }
     final local = box.globalToLocal(globalPosition);
-    if (game.buildableCellAt(local) == null) {
+    if (game.boardCellAt(local) == null) {
       return false;
     }
     game.handleBoardTap(local);
@@ -404,7 +405,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           collapseRequested:
                               snapshot.selectedCell != null ||
                               snapshot.selectedTower != null,
-                          onCollapsedTapIntercept: _routeTapToBuildableCell,
+                          onCollapsedTapIntercept: _routeTapToBoard,
                         ),
                       ],
                     ],
@@ -415,7 +416,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 // reachable while an auto-start countdown runs, and countdowns
                 // run during the build phase. It docks above the command
                 // chrome (clear of the buildable top rows) and its frame
-                // forwards taps over buildable cells to the board, mirroring
+                // forwards taps over board cells to the board, mirroring
                 // the scanner arbiter; the dock's bottom-row overlap follows
                 // the same accepted tradeoff as the original game.
                 Positioned(
@@ -427,7 +428,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     children: [
                       GestureDetector(
                         onTapUp: (details) =>
-                            _routeTapToBuildableCell(details.globalPosition),
+                            _routeTapToBoard(details.globalPosition),
                         child: MissionPacingStrip(
                           snapshot: snapshot,
                           onTogglePause: game.togglePause,
