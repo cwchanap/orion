@@ -127,10 +127,17 @@ void main() {
           'intercepting taps on the upper-right board area.',
     );
 
-    // 5b. Pacing controls live in the bottom command chrome during every
-    //     non-ended phase, so nothing interactive hovers over board row 1:
-    //     every buildable cell there must be tappable. Speed selection stays
-    //     live even in the build phase.
+    // 5b. Deselect the cell so the idle dock restores the pacing controls.
+    //     Nothing interactive then hovers over board row 1, so every buildable
+    //     cell there must be tappable. Speed selection stays live in the build
+    //     phase while no cell or tower is selected.
+    await _tapUntil(
+      tester,
+      () => tester.tapAt(_pointAboveBoard(tester)),
+      () => tester.any(find.byKey(const ValueKey('mission-pacing-strip'))),
+      timeoutMessage:
+          'Could not dismiss the build rail to restore pacing controls.',
+    );
     expect(find.byKey(const ValueKey('mission-pacing-strip')), findsOneWidget);
     final pacedGame =
         (tester.state(find.bySubtype<GameWidget>())
