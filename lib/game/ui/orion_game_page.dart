@@ -412,13 +412,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   ),
                 ),
                 // Bottom overlay: pacing strip + toast + dock. Pacing stays
-                // interactive through every non-ended phase — pause must stay
-                // reachable while an auto-start countdown runs, and countdowns
-                // run during the build phase. It docks above the command
-                // chrome (clear of the buildable top rows) and its frame
-                // forwards taps over board cells to the board, mirroring
-                // the scanner arbiter; the dock's bottom-row overlap follows
-                // the same accepted tradeoff as the original game.
+                // interactive while no cell or tower is selected. A selection
+                // replaces it with build or inspector controls so the taller
+                // dock does not extend farther into the board. While visible,
+                // the pacing frame forwards taps over board cells to the board,
+                // mirroring the scanner arbiter.
                 Positioned(
                   left: _commandDeckPadding,
                   right: _commandDeckPadding,
@@ -426,17 +424,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      GestureDetector(
-                        onTapUp: (details) =>
-                            _routeTapToBoard(details.globalPosition),
-                        child: MissionPacingStrip(
-                          snapshot: snapshot,
-                          onTogglePause: game.togglePause,
-                          onSpeedSelected: game.setSpeedMultiplier,
-                          onToggleAutoStart: game.toggleAutoStart,
+                      if (snapshot.selectedCell == null &&
+                          snapshot.selectedTower == null) ...[
+                        GestureDetector(
+                          onTapUp: (details) =>
+                              _routeTapToBoard(details.globalPosition),
+                          child: MissionPacingStrip(
+                            snapshot: snapshot,
+                            onTogglePause: game.togglePause,
+                            onSpeedSelected: game.setSpeedMultiplier,
+                            onToggleAutoStart: game.toggleAutoStart,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
+                        const SizedBox(height: 6),
+                      ],
                       CommandToast(
                         key: const ValueKey('mission-command-toast'),
                         feedback: snapshot.feedback,
