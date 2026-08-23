@@ -537,12 +537,23 @@ void main() {
 
     await startStageFromBriefing(tester);
 
-    // Build phase: pacing state stays readable through a read-only badge so
-    // the interactive controls never hover over buildable board cells.
+    // Pacing stays interactive through every non-ended phase: pause must be
+    // reachable while an auto-start countdown runs, and countdowns run during
+    // the build phase. The strip docks above the command chrome instead of
+    // hovering over the buildable top rows.
     expect(find.byType(MissionPacingStrip), findsOneWidget);
-    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsOneWidget);
-    expect(find.byTooltip('Pause'), findsNothing);
-    expect(find.byTooltip('Auto-start waves'), findsNothing);
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.text('1x'), findsOneWidget);
+    expect(find.text('2x'), findsOneWidget);
+    expect(find.text('3x'), findsOneWidget);
+    expect(find.byTooltip('Auto-start waves'), findsOneWidget);
+
+    // Speed selection works during the build phase.
+    await tester.tap(find.text('2x'));
+    await tester.pump();
+    expect(game!.speedMultiplier, 2.0);
+    game!.setSpeedMultiplier(1);
+    await tester.pump();
     expect(find.text('Start Wave'), findsOneWidget);
 
     game!.stateNotifier.value = commandDeckSnapshot(
@@ -552,9 +563,8 @@ void main() {
     await tester.pump();
     // The GameWidget fills the full SafeArea so cellSize is preserved.
     // The status HUD and module strip are non-interactive overlays
-    // (IgnorePointer) so taps pass through to the board. Once the wave locks
-    // placement, the pacing strip returns as an interactive control row.
-    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsNothing);
+    // (IgnorePointer) so taps pass through to the board; the pacing strip
+    // stays interactive in the bottom command chrome.
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.text('2x'), findsOneWidget);

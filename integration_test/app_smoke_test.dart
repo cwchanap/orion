@@ -127,11 +127,19 @@ void main() {
           'intercepting taps on the upper-right board area.',
     );
 
-    // 5b. The pacing strip is a read-only badge during the build phase; its
-    //     interactive controls would hover over board row 1 on short
-    //     viewports, so every buildable cell there must be tappable now.
-    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsOneWidget);
-    expect(find.byKey(const ValueKey('mission-pacing-strip')), findsNothing);
+    // 5b. Pacing controls live in the bottom command chrome during every
+    //     non-ended phase, so nothing interactive hovers over board row 1:
+    //     every buildable cell there must be tappable. Speed selection stays
+    //     live even in the build phase.
+    expect(find.byKey(const ValueKey('mission-pacing-strip')), findsOneWidget);
+    final pacedGame =
+        (tester.state(find.bySubtype<GameWidget>())
+                as GameWidgetState<OrionDefenseGame>)
+            .currentGame;
+    await tester.tap(find.text('2x'));
+    await _pumpUntil(tester, () => pacedGame.speedMultiplier == 2);
+    await tester.tap(find.text('1x'));
+    await _pumpUntil(tester, () => pacedGame.speedMultiplier == 1);
     for (final cell in const [
       GridPosition(4, 1),
       GridPosition(5, 1),
@@ -167,12 +175,6 @@ void main() {
     expect(find.text('Wave Active'), findsOneWidget);
     expect(find.text('Build'), findsNothing);
     expect(find.textContaining('Environment:'), findsNothing);
-    // The interactive pacing strip returns once the phase locks placement.
-    await _pumpUntil(
-      tester,
-      () => tester.any(find.byKey(const ValueKey('mission-pacing-strip'))),
-    );
-    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsNothing);
   });
 }
 

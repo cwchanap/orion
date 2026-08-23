@@ -97,10 +97,10 @@ void main() {
     expect((pauseTaps, speed, autoTaps), (1, 2.0, 1));
   });
 
-  testWidgets('passive strip renders a read-only badge and ignores taps', (
+  testWidgets('auto-start countdown keeps pause reachable during build', (
     tester,
   ) async {
-    var autoTaps = 0;
+    var pauseTaps = 0;
     await tester.pumpWidget(
       MaterialApp(
         home: MissionPacingStrip(
@@ -109,40 +109,17 @@ void main() {
             autoStartEnabled: true,
             autoStartCountdownRemaining: 5,
           ),
-          interactive: false,
-          onTogglePause: () {},
+          onTogglePause: () => pauseTaps += 1,
           onSpeedSelected: (_) {},
-          onToggleAutoStart: () => autoTaps += 1,
+          onToggleAutoStart: () {},
         ),
       ),
     );
 
-    expect(find.byKey(const ValueKey('mission-pacing-badge')), findsOneWidget);
-    expect(find.byType(SegmentedButton<double>), findsNothing);
-    expect(find.byType(FilterChip), findsNothing);
-    expect(find.text('1x'), findsOneWidget);
+    // Countdowns run during GamePhase.build, so pausing must work there.
+    await tester.tap(find.byTooltip('Pause'));
+    expect(pauseTaps, 1);
     expect(find.text('Auto 5s'), findsOneWidget);
-
-    final handle = tester.ensureSemantics();
-    try {
-      // IgnorePointer makes the badge unhittable; the miss IS the assertion.
-      await tester.tap(
-        find.byKey(const ValueKey('mission-pacing-badge')),
-        warnIfMissed: false,
-      );
-      await tester.pumpAndSettle();
-      expect(autoTaps, 0);
-
-      // Narrow enough to hug the enemy-path columns of board row 1.
-      expect(
-        tester
-            .getSize(find.byKey(const ValueKey('mission-pacing-badge')))
-            .width,
-        lessThanOrEqualTo(180),
-      );
-    } finally {
-      handle.dispose();
-    }
   });
 
   testWidgets(
@@ -357,327 +334,174 @@ void main() {
   });
 
   for (final scale in [1.3, 2.0]) {
-    testWidgets('top flow reflows at text scale $scale', (tester) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
-            child: child!,
-          ),
-          home: Stack(
-            children: [
-              Positioned(
-                left: 12,
-                right: 12,
-                top: 12,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: IgnorePointer(
-                            child: MissionStatusHud(
-                              snapshot: commandDeckSnapshot(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    MissionPacingStrip(
-                      snapshot: commandDeckSnapshot(phase: GamePhase.wave),
-                      onTogglePause: () {},
-                      onSpeedSelected: (_) {},
-                      onToggleAutoStart: () {},
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      final status = tester.getRect(
-        find.byKey(const ValueKey('mission-status-hud')),
-      );
-      final pacing = tester.getRect(find.byType(MissionPacingStrip));
-      expect(status.bottom, lessThanOrEqualTo(pacing.top));
-      expect(tester.takeException(), isNull);
-      for (final finder in [
-        find.byTooltip('Pause'),
-        find.text('1x'),
-        find.text('2x'),
-        find.text('3x'),
-        find.byTooltip('Auto-start waves'),
-      ]) {
-        final rect = tester.getRect(finder.first);
-        expect(rect.left, greaterThanOrEqualTo(0));
-        expect(rect.top, greaterThanOrEqualTo(0));
-        expect(rect.right, lessThanOrEqualTo(360));
-        expect(rect.bottom, lessThanOrEqualTo(640));
-      }
-    });
-
-    testWidgets('complete top flow stays ordered at text scale $scale', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      final snapshot = commandDeckSnapshot(
-        phase: GamePhase.build,
-        acquiredRunModules: const [RunModuleId.heavyCaliber],
-      );
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
-            child: child!,
-          ),
-          home: Stack(
-            children: [
-              Positioned(
-                left: 12,
-                right: 12,
-                top: 12,
-                child: Column(
-                  key: const ValueKey('complete-top-flow'),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      key: const ValueKey('complete-top-flow-row'),
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: IgnorePointer(
-                            child: MissionStatusHud(snapshot: snapshot),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: IgnorePointer(
-                            child: ConstrainedBox(
-                              key: const ValueKey('module-strip-viewport'),
-                              constraints: const BoxConstraints(
-                                maxWidth: 132,
-                                maxHeight: 56,
-                              ),
-                              child: SingleChildScrollView(
-                                clipBehavior: Clip.hardEdge,
-                                child: AcquiredRunModuleStrip(
-                                  moduleIds: snapshot.acquiredRunModules,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        NextWaveScanner(
-                          preview: commandDeckPreview(),
-                          modifierTitles: const ['Standard Conditions'],
-                          collapseRequested: false,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    MissionPacingStrip(
-                      snapshot: snapshot,
-                      onTogglePause: () {},
-                      onSpeedSelected: (_) {},
-                      onToggleAutoStart: () {},
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      final status = tester.getRect(
-        find.byKey(const ValueKey('mission-status-hud')),
-      );
-      final pacing = tester.getRect(find.byType(MissionPacingStrip));
-      // Use the boundedBox viewport rect, not the unclipped AcquiredRunModuleStrip
-      // content rect — the SingleChildScrollView clips overflow at paint time but
-      // the child's layout rect is its full unwrapped height.
-      final moduleViewport = tester.getRect(
-        find.byKey(const ValueKey('module-strip-viewport')),
-      );
-      final scanner = tester.getRect(
-        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
-      );
-      final flow = tester.getRect(
-        find.byKey(const ValueKey('complete-top-flow')),
-      );
-
-      // Row 1 (status + modules + scanner) sits above Row 2 (pacing).
-      expect(status.bottom, lessThanOrEqualTo(pacing.top));
-      expect(moduleViewport.bottom, lessThanOrEqualTo(pacing.top));
-      expect(scanner.bottom, lessThanOrEqualTo(pacing.top));
-      // Within Row 1, modules sit between status and scanner.
-      expect(moduleViewport.right, lessThanOrEqualTo(scanner.left));
-      expect(status.overlaps(pacing), isFalse);
-      expect(moduleViewport.overlaps(pacing), isFalse);
-      expect(scanner.overlaps(pacing), isFalse);
-      expect(flow.left, greaterThanOrEqualTo(0));
-      expect(flow.right, lessThanOrEqualTo(360));
-      expect(flow.bottom, lessThanOrEqualTo(640));
-      for (final finder in [
-        find.byTooltip('Pause'),
-        find.text('1x'),
-        find.text('2x'),
-        find.text('3x'),
-        find.byTooltip('Auto-start waves'),
-        find.byTooltip('Expand next-wave scanner'),
-      ]) {
-        final rect = tester.getRect(finder.first);
-        expect(rect.left, greaterThanOrEqualTo(0));
-        expect(rect.top, greaterThanOrEqualTo(0));
-        expect(rect.right, lessThanOrEqualTo(360));
-        expect(rect.bottom, lessThanOrEqualTo(640));
-      }
-      expect(tester.takeException(), isNull);
-    });
-  }
-
-  for (final scale in [1.0, 2.0]) {
     testWidgets(
-      'three acquired modules do not push pacing over the board at scale $scale',
+      'top row reflows with modules and scanner at text scale $scale',
       (tester) async {
         tester.view.physicalSize = const Size(360, 640);
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.reset);
 
-        final threeModuleSnapshot = commandDeckSnapshot(
+        final snapshot = commandDeckSnapshot(
           phase: GamePhase.build,
-          acquiredRunModules: const [
-            RunModuleId.heavyCaliber,
-            RunModuleId.overclockRelay,
-            RunModuleId.longSight,
-          ],
+          acquiredRunModules: const [RunModuleId.heavyCaliber],
         );
-
-        Widget buildFlow(GameSnapshot snapshot) => MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(scale)),
-            child: child!,
-          ),
-          home: Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () {},
-                ),
-              ),
-              Positioned(
-                left: 12,
-                right: 12,
-                top: 12,
-                child: Column(
-                  key: const ValueKey('three-module-top-flow'),
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: IgnorePointer(
-                            child: MissionStatusHud(snapshot: snapshot),
-                          ),
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Stack(
+              children: [
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  top: 12,
+                  child: Row(
+                    key: const ValueKey('top-status-row'),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: IgnorePointer(
+                          child: MissionStatusHud(snapshot: snapshot),
                         ),
-                        if (snapshot.acquiredRunModules.isNotEmpty) ...[
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: IgnorePointer(
-                              child: ConstrainedBox(
-                                key: const ValueKey(
-                                  'three-module-strip-viewport',
-                                ),
-                                constraints: const BoxConstraints(
-                                  maxWidth: 132,
-                                  maxHeight: 56,
-                                ),
-                                child: SingleChildScrollView(
-                                  clipBehavior: Clip.hardEdge,
-                                  child: AcquiredRunModuleStrip(
-                                    moduleIds: snapshot.acquiredRunModules,
-                                  ),
-                                ),
-                              ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: IgnorePointer(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 132),
+                            child: AcquiredRunModuleStrip(
+                              moduleIds: snapshot.acquiredRunModules,
                             ),
                           ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    MissionPacingStrip(
-                      snapshot: snapshot,
-                      onTogglePause: () {},
-                      onSpeedSelected: (_) {},
-                      onToggleAutoStart: () {},
-                    ),
-                  ],
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      NextWaveScanner(
+                        preview: commandDeckPreview(),
+                        modifierTitles: const ['Standard Conditions'],
+                        collapseRequested: false,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
 
-        // Render with zero modules to capture the baseline pacing position.
-        await tester.pumpWidget(buildFlow(commandDeckSnapshot()));
-        final baselinePacing = tester.getRect(find.byType(MissionPacingStrip));
-        final baselineStatus = tester.getRect(
+        // Within the row, modules sit between status and scanner; nothing
+        // overflows the viewport at elevated text scales.
+        final status = tester.getRect(
           find.byKey(const ValueKey('mission-status-hud')),
         );
-
-        // Re-render with all three acquired modules. Pacing must not move.
-        await tester.pumpWidget(buildFlow(threeModuleSnapshot));
-        final threeModulePacing = tester.getRect(
-          find.byType(MissionPacingStrip),
+        final modules = tester.getRect(find.byType(AcquiredRunModuleStrip));
+        final scanner = tester.getRect(
+          find.byKey(const ValueKey('next-wave-scanner-collapsed')),
         );
-        final threeModuleStatus = tester.getRect(
-          find.byKey(const ValueKey('mission-status-hud')),
-        );
-
-        expect(threeModulePacing.top, equals(baselinePacing.top));
-        expect(threeModuleStatus.bottom, equals(baselineStatus.bottom));
-        // The module strip viewport is height-bounded so it cannot overlap
-        // pacing. Check the ConstrainedBox viewport rect, not the unclipped
-        // AcquiredRunModuleStrip content rect (the SingleChildScrollView clips
-        // at paint time but the child's layout rect is its full height).
-        final moduleViewport = tester.getRect(
-          find.byKey(const ValueKey('three-module-strip-viewport')),
-        );
-        expect(moduleViewport.height, lessThanOrEqualTo(56));
-        expect(moduleViewport.bottom, lessThanOrEqualTo(threeModulePacing.top));
-        expect(moduleViewport.overlaps(threeModulePacing), isFalse);
-        // Pacing controls stay on-screen.
+        expect(status.right, lessThanOrEqualTo(modules.left));
+        expect(modules.right, lessThanOrEqualTo(scanner.left));
         for (final finder in [
-          find.byTooltip('Pause'),
-          find.text('1x'),
-          find.text('2x'),
-          find.text('3x'),
-          find.byTooltip('Auto-start waves'),
+          find.byTooltip('Expand next-wave scanner'),
+          find.textContaining(
+            runModuleDefinition(RunModuleId.heavyCaliber).title,
+          ),
         ]) {
           final rect = tester.getRect(finder.first);
+          expect(rect.left, greaterThanOrEqualTo(0));
+          expect(rect.top, greaterThanOrEqualTo(0));
           expect(rect.right, lessThanOrEqualTo(360));
           expect(rect.bottom, lessThanOrEqualTo(640));
         }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  for (final scale in [1.0, 2.0]) {
+    testWidgets(
+      'three acquired modules render fully without clipping at scale $scale',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        const moduleIds = [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ];
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: child!,
+            ),
+            home: Stack(
+              children: [
+                Positioned(
+                  left: 12,
+                  right: 12,
+                  top: 12,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: IgnorePointer(
+                          child: MissionStatusHud(
+                            snapshot: commandDeckSnapshot(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: IgnorePointer(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 132),
+                            child: AcquiredRunModuleStrip(moduleIds: moduleIds),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+        // Every label is laid out on screen — no viewport clips them away, so
+        // all three acquired modules stay inspectable.
+        for (final id in moduleIds) {
+          final rect = tester.getRect(
+            find.textContaining(runModuleDefinition(id).title),
+          );
+          expect(rect.height, greaterThan(0));
+          expect(rect.right, lessThanOrEqualTo(360));
+          expect(rect.bottom, lessThanOrEqualTo(640));
+        }
+
+        // The strip grows past the fixed status-HUD height when the labels
+        // need more room; taps still pass through to the board underneath.
+        final strip = tester.getRect(find.byType(AcquiredRunModuleStrip));
+        final status = tester.getRect(
+          find.byKey(const ValueKey('mission-status-hud')),
+        );
+        expect(strip.bottom, greaterThanOrEqualTo(status.bottom));
+        expect(
+          find.ancestor(
+            of: find.byType(AcquiredRunModuleStrip),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is IgnorePointer && widget.ignoring,
+            ),
+          ),
+          findsOneWidget,
+        );
         expect(tester.takeException(), isNull);
       },
     );
