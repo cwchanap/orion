@@ -306,12 +306,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
     );
   }
 
-  /// Tap arbiter for the collapsed next-wave scanner: when its 48dp control
-  /// floats over a buildable board cell (inevitable on short viewports where
-  /// the centered board's row 0 sits high), a tap there means "build here",
-  /// not "preview the wave" — forward it to the game so the cell becomes
-  /// selectable. Taps that miss buildable cells still expand the preview.
-  bool _routeScannerTapToBoard(Offset globalPosition) {
+  /// Tap arbiter shared by floating chrome (collapsed next-wave scanner,
+  /// pacing-strip frame): when the tapped point lands on a buildable board
+  /// cell, forward the tap to the game so the cell becomes selectable instead
+  /// of being swallowed by the overlay. Taps that miss buildable cells are
+  /// left to the overlay's own handling.
+  bool _routeTapToBuildableCell(Offset globalPosition) {
     final game = _game;
     final box = _gameWidgetKey.currentContext?.findRenderObject() as RenderBox?;
     if (game == null || box == null || !box.attached) {
@@ -352,105 +352,72 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     child: GameWidget(game: game),
                   ),
                 ),
-                // Top overlay: Row 1 carries the non-interactive status HUD
-                // and acquired-module strip (IgnorePointer so taps pass
-                // through to the board) alongside the interactive scanner.
-                // Row 2 carries the compact interactive pacing strip. On
-                // standard phone widths the combined overlay height (~122px)
-                // sits above the centered board's row-0 center, so the top
-                // buildable cells remain tappable.
+                // Top overlay: a single row of status chrome — the
+                // non-interactive status HUD and acquired-module strip
+                // (IgnorePointer so taps pass through to the board) alongside
+                // the interactive scanner. The module strip renders at its
+                // natural wrapped height: any growth extends downward over
+                // pointer-transparent territory only, so all acquired modules
+                // stay visible and nothing interactive below them moves.
                 Positioned(
                   top: _commandDeckPadding,
                   left: _commandDeckPadding,
                   right: _commandDeckPadding,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: IgnorePointer(
-                              child: MissionStatusHud(snapshot: snapshot),
-                            ),
-                          ),
-                          if (snapshot.acquiredRunModules.isNotEmpty) ...[
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: IgnorePointer(
-                                child: ConstrainedBox(
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 132,
-                                    // Bound the module strip to the status
-                                    // HUD height so wrapping labels can never
-                                    // grow Row 1 and push MissionPacingStrip
-                                    // down over buildable board cells. The
-                                    // SingleChildScrollView clips any overflow
-                                    // without enabling scrolling (IgnorePointer
-                                    // keeps taps passing through to the board).
-                                    maxHeight: 56,
-                                  ),
-                                  child: SingleChildScrollView(
-                                    clipBehavior: Clip.hardEdge,
-                                    child: AcquiredRunModuleStrip(
-                                      moduleIds: snapshot.acquiredRunModules,
-                                    ),
-                                  ),
-                                ),
+                      Expanded(
+                        child: IgnorePointer(
+                          child: MissionStatusHud(snapshot: snapshot),
+                        ),
+                      ),
+                      if (snapshot.acquiredRunModules.isNotEmpty) ...[
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: IgnorePointer(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 132),
+                              child: AcquiredRunModuleStrip(
+                                moduleIds: snapshot.acquiredRunModules,
                               ),
                             ),
-                          ],
-                          if (snapshot.phase == GamePhase.build &&
-                              snapshot.nextWavePreview != null &&
-                              snapshot.pendingRunModuleOffer == null &&
-                              !snapshot.isEnded) ...[
-                            const SizedBox(width: 6),
-                            NextWaveScanner(
-                              preview: snapshot.nextWavePreview!,
-                              modifierTitles: snapshot.stageModifiers.isEmpty
-                                  ? [
-                                      StageModifierMetadata
-                                          .standardConditions
-                                          .title,
-                                    ]
-                                  : snapshot.stageModifiers
-                                        .map(
-                                          (modifier) =>
-                                              StageModifierMetadata.forModifier(
-                                                modifier,
-                                              ).title,
-                                        )
-                                        .toList(growable: false),
-                              collapseRequested:
-                                  snapshot.selectedCell != null ||
-                                  snapshot.selectedTower != null,
-                              onCollapsedTapIntercept: _routeScannerTapToBoard,
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      MissionPacingStrip(
-                        // Interactive only when pacing is actionable; during
-                        // the build phase the strip collapses to a read-only
-                        // badge so its controls never hover over buildable
-                        // board cells (wave phase locks placement, so the
-                        // full strip's overlap is harmless then).
-                        interactive:
-                            snapshot.phase == GamePhase.wave ||
-                            snapshot.isPaused,
-                        snapshot: snapshot,
-                        onTogglePause: game.togglePause,
-                        onSpeedSelected: game.setSpeedMultiplier,
-                        onToggleAutoStart: game.toggleAutoStart,
-                      ),
+                          ),
+                        ),
+                      ],
+                      if (snapshot.phase == GamePhase.build &&
+                          snapshot.nextWavePreview != null &&
+                          snapshot.pendingRunModuleOffer == null &&
+                          !snapshot.isEnded) ...[
+                        const SizedBox(width: 6),
+                        NextWaveScanner(
+                          preview: snapshot.nextWavePreview!,
+                          modifierTitles: snapshot.stageModifiers.isEmpty
+                              ? [StageModifierMetadata.standardConditions.title]
+                              : snapshot.stageModifiers
+                                    .map(
+                                      (modifier) =>
+                                          StageModifierMetadata.forModifier(
+                                            modifier,
+                                          ).title,
+                                    )
+                                    .toList(growable: false),
+                          collapseRequested:
+                              snapshot.selectedCell != null ||
+                              snapshot.selectedTower != null,
+                          onCollapsedTapIntercept: _routeTapToBuildableCell,
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                // Bottom overlay: toast + dock, same as the original game.
-                // The dock overlays the bottom rows as it did before the
-                // command deck redesign; selection-driven content (build
-                // rail, inspector) is taller and overlays more.
+                // Bottom overlay: pacing strip + toast + dock. Pacing stays
+                // interactive through every non-ended phase — pause must stay
+                // reachable while an auto-start countdown runs, and countdowns
+                // run during the build phase. It docks above the command
+                // chrome (clear of the buildable top rows) and its frame
+                // forwards taps over buildable cells to the board, mirroring
+                // the scanner arbiter; the dock's bottom-row overlap follows
+                // the same accepted tradeoff as the original game.
                 Positioned(
                   left: _commandDeckPadding,
                   right: _commandDeckPadding,
@@ -458,6 +425,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      GestureDetector(
+                        onTapUp: (details) =>
+                            _routeTapToBuildableCell(details.globalPosition),
+                        child: MissionPacingStrip(
+                          snapshot: snapshot,
+                          onTogglePause: game.togglePause,
+                          onSpeedSelected: game.setSpeedMultiplier,
+                          onToggleAutoStart: game.toggleAutoStart,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
                       CommandToast(
                         key: const ValueKey('mission-command-toast'),
                         feedback: snapshot.feedback,
