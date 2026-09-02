@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'command_frame.dart';
+import 'mission_surface.dart';
 import 'orion_ui_theme.dart';
 
 Color baseHealthColor(GameSnapshot snapshot, OrionUiTheme uiTheme) {
@@ -37,60 +38,55 @@ class MissionStatusHud extends StatelessWidget {
       context,
     ).clamp(maxScaleFactor: 1.15);
 
-    return CommandFrame(
-      padding: EdgeInsets.zero,
-      color: uiTheme.hullBlack,
-      borderColor: uiTheme.frameSteel,
-      child: SizedBox(
-        height: 56,
-        child: Row(
-          key: const ValueKey('mission-status-hud'),
-          children: [
-            Expanded(
-              child: Semantics(
-                container: true,
-                excludeSemantics: true,
-                label:
-                    'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
-                child: _BaseHealthAnchor(
-                  snapshot: snapshot,
-                  uiTheme: uiTheme,
-                  textScaler: textScaler,
-                ),
-              ),
+    return Wrap(
+      key: const ValueKey('mission-status-hud'),
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        Semantics(
+          container: true,
+          excludeSemantics: true,
+          label:
+              'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
+          child: MissionSurface(
+            key: const ValueKey('mission-status-base'),
+            child: _BaseHealthAnchor(
+              snapshot: snapshot,
+              uiTheme: uiTheme,
+              textScaler: textScaler,
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Semantics(
-                container: true,
-                excludeSemantics: true,
-                label:
-                    '${snapshot.stageName}. '
-                    'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, '
-                    '${_missionPhaseLabel(snapshot)}',
-                child: _MissionStatusAnchor(
-                  snapshot: snapshot,
-                  uiTheme: uiTheme,
-                  textScaler: textScaler,
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Semantics(
-                container: true,
-                excludeSemantics: true,
-                label: 'Credits ${snapshot.gold}',
-                child: _CreditsAnchor(
-                  snapshot: snapshot,
-                  uiTheme: uiTheme,
-                  textScaler: textScaler,
-                ),
-              ),
-            ),
-          ],
+          ),
         ),
-      ),
+        Semantics(
+          container: true,
+          excludeSemantics: true,
+          label:
+              '${snapshot.stageName}. '
+              'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, '
+              '${_missionPhaseLabel(snapshot)}',
+          child: MissionSurface(
+            key: const ValueKey('mission-status-stage'),
+            child: _MissionStatusAnchor(
+              snapshot: snapshot,
+              uiTheme: uiTheme,
+              textScaler: textScaler,
+            ),
+          ),
+        ),
+        Semantics(
+          container: true,
+          excludeSemantics: true,
+          label: 'Credits ${snapshot.gold}',
+          child: MissionSurface(
+            key: const ValueKey('mission-status-credits'),
+            child: _CreditsAnchor(
+              snapshot: snapshot,
+              uiTheme: uiTheme,
+              textScaler: textScaler,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -114,55 +110,56 @@ class _BaseHealthAnchor extends StatelessWidget {
               .clamp(0.0, 1.0)
               .toDouble();
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.shield_outlined, color: uiTheme.systemCyan, size: 18),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  '${snapshot.baseHealth}/${snapshot.startingBaseHealth}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textScaler: textScaler,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: uiTheme.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
+    // ponytail: fixed-width fill track so the anchor shrink-wraps without
+    // intrinsic-width queries (IntrinsicWidth + width:infinity asserts under
+    // unbounded-height ancestors, e.g. Stack positioned overlays).
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.shield_outlined, color: uiTheme.systemCyan, size: 18),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                '${snapshot.baseHealth}/${snapshot.startingBaseHealth}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textScaler: textScaler,
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: uiTheme.textPrimary,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 3),
-          SizedBox(
-            key: const ValueKey('base-health-fill-track'),
-            height: 4,
-            width: double.infinity,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(2),
-              child: ColoredBox(
-                color: uiTheme.panelRaised,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: fraction,
-                    heightFactor: 1,
-                    child: ColoredBox(
-                      key: const ValueKey('base-health-fill'),
-                      color: baseHealthColor(snapshot, uiTheme),
-                    ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        SizedBox(
+          key: const ValueKey('base-health-fill-track'),
+          height: 4,
+          width: 72,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(2),
+            child: ColoredBox(
+              color: uiTheme.panelRaised,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: FractionallySizedBox(
+                  widthFactor: fraction,
+                  heightFactor: 1,
+                  child: ColoredBox(
+                    key: const ValueKey('base-health-fill'),
+                    color: baseHealthColor(snapshot, uiTheme),
                   ),
                 ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -185,70 +182,66 @@ class _MissionStatusAnchor extends StatelessWidget {
     return Tooltip(
       message: snapshot.stageName,
       excludeFromSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 5),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Text(
-              snapshot.stageLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textScaler: textScaler,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: uiTheme.textPrimary,
-                fontWeight: FontWeight.w700,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            snapshot.stageLabel,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textScaler: textScaler,
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+              color: uiTheme.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  '${snapshot.waveNumber}/${snapshot.waveTotal}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textScaler: textScaler,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                    color: uiTheme.systemCyan,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
-            ),
-            Row(
-              mainAxisSize: MainAxisSize.max,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Flexible(
-                  child: Text(
-                    '${snapshot.waveNumber}/${snapshot.waveTotal}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textScaler: textScaler,
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: uiTheme.systemCyan,
-                      fontWeight: FontWeight.w800,
-                    ),
+              const SizedBox(width: 6),
+              SizedBox.square(
+                dimension: 6,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: snapshot.isPaused
+                        ? uiTheme.warningOrange
+                        : uiTheme.systemCyan,
+                    shape: BoxShape.circle,
                   ),
                 ),
-                const SizedBox(width: 6),
-                SizedBox.square(
-                  dimension: 6,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: snapshot.isPaused
-                          ? uiTheme.warningOrange
-                          : uiTheme.systemCyan,
-                      shape: BoxShape.circle,
-                    ),
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  phaseLabel,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textScaler: textScaler,
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: snapshot.isPaused
+                        ? uiTheme.warningOrange
+                        : uiTheme.textMuted,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(width: 4),
-                Flexible(
-                  child: Text(
-                    phaseLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textScaler: textScaler,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: snapshot.isPaused
-                          ? uiTheme.warningOrange
-                          : uiTheme.textMuted,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -267,32 +260,29 @@ class _CreditsAnchor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          Icon(
-            Icons.account_balance_wallet_outlined,
-            color: uiTheme.creditGold,
-            size: 18,
-          ),
-          const SizedBox(width: 4),
-          Flexible(
-            child: Text(
-              '${snapshot.gold}',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textScaler: textScaler,
-              textAlign: TextAlign.end,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                color: uiTheme.creditGold,
-                fontWeight: FontWeight.w800,
-              ),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          Icons.account_balance_wallet_outlined,
+          color: uiTheme.creditGold,
+          size: 18,
+        ),
+        const SizedBox(width: 4),
+        Flexible(
+          child: Text(
+            '${snapshot.gold}',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            textScaler: textScaler,
+            textAlign: TextAlign.end,
+            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: uiTheme.creditGold,
+              fontWeight: FontWeight.w800,
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
