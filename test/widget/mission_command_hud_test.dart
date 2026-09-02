@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
@@ -306,6 +307,86 @@ void main() {
     }
   });
 
+  testWidgets(
+    'status HUD renders three compact mission surfaces without command frames',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
+      );
+
+      expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+      expect(find.byKey(const ValueKey('mission-status-base')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('mission-status-stage')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('mission-status-credits')),
+        findsOneWidget,
+      );
+      expect(find.byType(MissionSurface), findsNWidgets(3));
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('mission-status-hud')),
+          matching: find.byType(CommandFrame),
+        ),
+        findsNothing,
+      );
+    },
+  );
+
+  testWidgets(
+    'status anchors stay on screen for long stage names at 390x844 scale 1.3',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(1.3)),
+            child: child!,
+          ),
+          home: Stack(
+            children: [
+              Positioned(
+                left: 12,
+                right: 12,
+                top: 12,
+                child: IgnorePointer(
+                  child: MissionStatusHud(
+                    snapshot: commandDeckSnapshot(
+                      stageName: 'Helios Terminus Orbital Relay Station',
+                      stageLabel: 'Terminus Relay',
+                      waveNumber: 8,
+                      waveTotal: 8,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+
+      for (final key in [
+        'mission-status-base',
+        'mission-status-stage',
+        'mission-status-credits',
+      ]) {
+        final rect = tester.getRect(find.byKey(ValueKey(key)));
+        expect(rect.left, greaterThanOrEqualTo(0), reason: key);
+        expect(rect.top, greaterThanOrEqualTo(0), reason: key);
+        expect(rect.right, lessThanOrEqualTo(390), reason: key);
+        expect(rect.bottom, lessThanOrEqualTo(844), reason: key);
+      }
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('countdown is exposed in auto-start semantics', (tester) async {
     final handle = tester.ensureSemantics();
     try {
@@ -486,13 +567,15 @@ void main() {
           expect(rect.bottom, lessThanOrEqualTo(640));
         }
 
-        // The strip grows past the fixed status-HUD height when the labels
-        // need more room; taps still pass through to the board underneath.
+        // The status HUD is a Wrap now: it reflows vertically when squeezed
+        // narrow, so both chrome pieces must simply stay on screen; taps still
+        // pass through to the board underneath.
         final strip = tester.getRect(find.byType(AcquiredRunModuleStrip));
         final status = tester.getRect(
           find.byKey(const ValueKey('mission-status-hud')),
         );
-        expect(strip.bottom, greaterThanOrEqualTo(status.bottom));
+        expect(status.bottom, lessThanOrEqualTo(640));
+        expect(strip.bottom, lessThanOrEqualTo(640));
         expect(
           find.ancestor(
             of: find.byType(AcquiredRunModuleStrip),
