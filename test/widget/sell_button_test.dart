@@ -267,7 +267,7 @@ void main() {
     );
   });
 
-  testWidgets('acquired run modules strip renders in the HUD', (tester) async {
+  testWidgets('acquired run modules render in the HUD', (tester) async {
     await _pumpStageWithSelectedTower(
       tester,
       const PlacedTower(
@@ -278,8 +278,12 @@ void main() {
       acquiredRunModules: const [RunModuleId.heavyCaliber],
     );
 
-    final definition = runModuleDefinition(RunModuleId.heavyCaliber);
-    expect(find.textContaining(definition.title), findsWidgets);
+    // The selection keeps the details collapsed to the count trigger.
+    expect(
+      find.byKey(const ValueKey('acquired-modules-collapsed')),
+      findsOneWidget,
+    );
+    expect(find.text('Modules 1'), findsOneWidget);
   });
 
   testWidgets('pending module offer shows the draft panel overlay', (

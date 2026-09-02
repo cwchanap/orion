@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
-import 'package:orion/game/ui/run_module_draft_panel.dart';
 
 import '../support/command_deck_fixtures.dart';
 
@@ -93,7 +93,7 @@ void main() {
 
     expect(find.byType(MissionStatusHud), findsOneWidget);
     expect(find.byTooltip('World Map'), findsOneWidget);
-    expect(find.byType(AcquiredRunModuleStrip), findsOneWidget);
+    expect(find.byType(AcquiredRunModuleControl), findsOneWidget);
     expect(find.byType(NextWaveScanner), findsOneWidget);
 
     // The toast band sits above the command dock, never beside or below it.
@@ -115,7 +115,7 @@ void main() {
     expect(find.textContaining('ORION'), findsNothing);
   });
 
-  testWidgets('acquired module strip exists only when modules exist', (
+  testWidgets('acquired module control exists only when modules exist', (
     tester,
   ) async {
     tester.view.physicalSize = _productViewport;
@@ -124,7 +124,7 @@ void main() {
 
     await tester.pumpWidget(chromeHost(commandDeckSnapshot()));
     await tester.pump();
-    expect(find.byType(AcquiredRunModuleStrip), findsNothing);
+    expect(find.byType(AcquiredRunModuleControl), findsNothing);
 
     await tester.pumpWidget(
       chromeHost(
@@ -134,7 +134,7 @@ void main() {
       ),
     );
     await tester.pump();
-    expect(find.byType(AcquiredRunModuleStrip), findsOneWidget);
+    expect(find.byType(AcquiredRunModuleControl), findsOneWidget);
   });
 
   testWidgets('next wave scanner exists under its visibility condition', (
@@ -187,6 +187,149 @@ void main() {
     expect(backgroundTaps, 1);
   });
 
+  testWidgets('compact portrait: expanded overlays stay inside the viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(),
+          acquiredRunModules: const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.cryoReservoir,
+          ],
+          feedback: 'Not enough gold.',
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Warning toast remains within the viewport.
+    expect(find.text('Not enough gold.'), findsOneWidget);
+    _expectWithinViewport(
+      tester,
+      find.byKey(const ValueKey('command-toast')),
+      _productViewport,
+    );
+
+    // Expanded scanner stays inside the viewport.
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    _expectWithinViewport(
+      tester,
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      _productViewport,
+    );
+    await tester.tap(find.byTooltip('Collapse next-wave scanner'));
+    await tester.pumpAndSettle();
+
+    // Expanded acquired-module details stay inside the viewport.
+    await tester.tap(find.text('Modules 2'));
+    await tester.pumpAndSettle();
+    _expectWithinViewport(
+      tester,
+      find.byKey(const ValueKey('acquired-modules-expanded')),
+      _productViewport,
+    );
+  });
+
+  testWidgets(
+    'compact portrait: a selection collapses the scanner and module details',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      GameSnapshot snapshotWith({GridPosition? selectedCell}) {
+        return commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(),
+          acquiredRunModules: const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.cryoReservoir,
+          ],
+          selectedCell: selectedCell,
+        );
+      }
+
+      await tester.pumpWidget(chromeHost(snapshotWith()));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Modules 2'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsOneWidget,
+      );
+
+      // Selecting a board cell collapses both expansions.
+      await tester.pumpWidget(
+        chromeHost(snapshotWith(selectedCell: const GridPosition(1, 1))),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('acquired-modules-collapsed')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsNothing,
+      );
+
+      // …and a tower selection keeps both collapsed.
+      const tower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(1, 1),
+      );
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            nextWavePreview: commandDeckPreview(),
+            acquiredRunModules: const [
+              RunModuleId.heavyCaliber,
+              RunModuleId.cryoReservoir,
+            ],
+            selectedTower: tower,
+            selectedTowerStats: GameBalance.towerStats(
+              tower.type,
+              level: tower.level,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('acquired-modules-collapsed')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('landscape viewports render the same tree without overflow', (
     tester,
   ) async {
@@ -197,6 +340,13 @@ void main() {
       id: 1,
       type: TowerType.laser,
       position: GridPosition(1, 1),
+    );
+    final idleSnapshot = commandDeckSnapshot(
+      nextWavePreview: commandDeckPreview(),
+      acquiredRunModules: const [
+        RunModuleId.heavyCaliber,
+        RunModuleId.cryoReservoir,
+      ],
     );
     final cellSnapshot = commandDeckSnapshot(
       selectedCell: const GridPosition(1, 1),
@@ -213,6 +363,18 @@ void main() {
 
     for (final size in const [Size(844, 390), Size(932, 430)]) {
       tester.view.physicalSize = size;
+
+      // Build idle: the module trigger and scanner must fit, not overflow.
+      await tester.pumpWidget(chromeHost(idleSnapshot));
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
+      _expectWithinViewport(
+        tester,
+        find.byKey(const ValueKey('acquired-modules-collapsed')),
+        size,
+      );
+      _expectWithinViewport(tester, find.byType(MissionStatusHud), size);
 
       // Selected cell: the build rail must fit or scroll, not overflow.
       await tester.pumpWidget(chromeHost(cellSnapshot));

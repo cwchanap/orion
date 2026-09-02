@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
-import 'command_frame.dart';
 import 'mission_collapsible.dart';
+import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 
@@ -34,9 +34,9 @@ class NextWaveScanner extends StatefulWidget {
 
 class _NextWaveScannerState extends State<NextWaveScanner> {
   /// Gap between the 48dp gesture surface and the painted radar frame; also
-  /// the CommandFrame padding in [_buildCollapsed]. Taps inside the frame are
-  /// deliberate opens and stay local; only the surrounding band may forward
-  /// to the board arbiter.
+  /// the MissionSurface padding in [_buildCollapsed]. Taps inside the frame
+  /// are deliberate opens and stay local; only the surrounding band may
+  /// forward to the board arbiter.
   static const double _radarInset = 3;
 
   bool _hasUnreadPreview = true;
@@ -124,21 +124,20 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
             child: SizedBox.square(
               key: const ValueKey('next-wave-scanner-collapsed'),
               dimension: 48,
-              child: CommandFrame(
+              child: MissionSurface(
                 padding: const EdgeInsets.all(_radarInset),
-                color: uiTheme.hullBlack,
+                radius: 12,
                 borderColor: widget.collapseRequested
                     ? uiTheme.frameSteel
                     : uiTheme.systemCyan,
                 emphasized: !widget.collapseRequested,
-                chamfer: 12,
-                child: CommandFrame(
+                child: MissionSurface(
                   padding: EdgeInsets.zero,
-                  color: uiTheme.panelBlue,
+                  radius: 8,
+                  backgroundColor: uiTheme.panelBlue,
                   borderColor: widget.collapseRequested
                       ? uiTheme.frameSteel
                       : uiTheme.systemCyan.withValues(alpha: 0.68),
-                  chamfer: 8,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
@@ -167,7 +166,6 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
   }
 
   Widget _buildExpanded(BuildContext context, VoidCallback toggle) {
-    final uiTheme = OrionUiTheme.of(context);
     return Tooltip(
       message: 'Collapse next-wave scanner',
       excludeFromSemantics: true,
@@ -181,13 +179,11 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
           child: SizedBox(
             width: 212,
             height: 168,
-            child: CommandFrame(
+            child: MissionSurface(
               key: const ValueKey('next-wave-scanner-expanded'),
               padding: const EdgeInsets.all(8),
-              color: uiTheme.hullBlack,
-              borderColor: uiTheme.systemCyan,
+              radius: 10,
               emphasized: true,
-              chamfer: 10,
               child: SizedBox.expand(
                 child: SingleChildScrollView(
                   padding: EdgeInsets.zero,

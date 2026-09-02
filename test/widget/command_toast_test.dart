@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/command_toast.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
 Widget toastHost(
@@ -191,10 +191,10 @@ void main() {
 
     for (final testCase in cases) {
       await tester.pumpWidget(toastHost(testCase.feedback));
-      final frame = tester.widget<CommandFrame>(
+      final surface = tester.widget<MissionSurface>(
         find.byKey(const ValueKey('command-toast')),
       );
-      expect(frame.borderColor, testCase.color, reason: testCase.feedback);
+      expect(surface.borderColor, testCase.color, reason: testCase.feedback);
     }
   });
 

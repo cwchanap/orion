@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../campaign/stage_modifier_metadata.dart';
 import '../models/game_models.dart';
+import 'acquired_run_module_control.dart';
 import 'command_frame.dart';
 import 'command_toast.dart';
 import 'mission_command_dock.dart';
 import 'mission_command_hud.dart';
 import 'next_wave_scanner.dart';
-import 'run_module_draft_panel.dart';
 
 /// Horizontal padding for the top and bottom mission overlay bands.
 const double _commandDeckPadding = 12;
@@ -61,12 +61,9 @@ class MissionChrome extends StatelessWidget {
       builder: (context, constraints) => Stack(
         children: [
           // Top overlay band: a single row of status chrome — the
-          // non-interactive status HUD and acquired-module strip
-          // (IgnorePointer so taps pass through to the board) alongside the
-          // interactive scanner. The module strip renders at its natural
-          // wrapped height: any growth extends downward over
-          // pointer-transparent territory only, so all acquired modules stay
-          // visible and nothing interactive below them moves.
+          // non-interactive status HUD alongside the interactive acquired-
+          // module details control (it collapses while a board/tower
+          // selection is active) and the interactive scanner.
           Positioned(
             top: _commandDeckPadding,
             left: _commandDeckPadding,
@@ -82,13 +79,11 @@ class MissionChrome extends StatelessWidget {
                 if (snapshot.acquiredRunModules.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   Flexible(
-                    child: IgnorePointer(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 132),
-                        child: AcquiredRunModuleStrip(
-                          moduleIds: snapshot.acquiredRunModules,
-                        ),
-                      ),
+                    child: AcquiredRunModuleControl(
+                      moduleIds: snapshot.acquiredRunModules,
+                      collapseRequested:
+                          snapshot.selectedCell != null ||
+                          snapshot.selectedTower != null,
                     ),
                   ),
                 ],
