@@ -14,13 +14,13 @@ const double _commandDeckPadding = 12;
 
 /// The mission's full-screen chrome: the status band, next-wave scanner,
 /// toast, and command dock composed over the board. Presentation only — it
-/// owns no state and holds no game reference; every interaction is forwarded
-/// through the constructor callbacks.
+/// owns no game reference; every interaction is forwarded through the
+/// constructor callbacks.
 ///
 /// The root is a layout-only [LayoutBuilder]/[Stack]: it paints nothing and
 /// never hit-tests outside the positioned control bands, so taps on empty
 /// chrome space fall through to the board beneath.
-class MissionChrome extends StatelessWidget {
+class MissionChrome extends StatefulWidget {
   const MissionChrome({
     super.key,
     required this.snapshot,
@@ -54,7 +54,48 @@ class MissionChrome extends StatelessWidget {
   final VoidCallback onSell;
 
   @override
+  State<MissionChrome> createState() => _MissionChromeState();
+}
+
+class _MissionChromeState extends State<MissionChrome> {
+  /// Whether an expanded top-band panel (scanner preview or module details)
+  /// is borrowing the band's width. The idle World Map action yields while
+  /// it does, so the status HUD never drops below its minimum width.
+  bool _topPanelExpanded = false;
+
+  void _handleTopPanelExpanded(bool expanded) {
+    if (_topPanelExpanded != expanded) {
+      setState(() => _topPanelExpanded = expanded);
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant MissionChrome oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Panels snap shut without a toggle when a selection requests collapse
+    // or their reset token rolls (new wave preview, module list change);
+    // mirror those resets so the World Map action cannot stay hidden behind
+    // a panel that is no longer expanded.
+    final snapshot = widget.snapshot;
+    final oldSnapshot = oldWidget.snapshot;
+    final selectionActive =
+        snapshot.selectedCell != null || snapshot.selectedTower != null;
+    final oldSelectionActive =
+        oldSnapshot.selectedCell != null || oldSnapshot.selectedTower != null;
+    final resetTokenChanged =
+        snapshot.nextWavePreview?.waveNumber !=
+            oldSnapshot.nextWavePreview?.waveNumber ||
+        Object.hashAll(snapshot.acquiredRunModules) !=
+            Object.hashAll(oldSnapshot.acquiredRunModules);
+    if (_topPanelExpanded &&
+        ((selectionActive && !oldSelectionActive) || resetTokenChanged)) {
+      _topPanelExpanded = false;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final snapshot = widget.snapshot;
     final isIdle =
         snapshot.selectedCell == null && snapshot.selectedTower == null;
     return LayoutBuilder(
@@ -63,7 +104,8 @@ class MissionChrome extends StatelessWidget {
           // Top overlay band: a single row of status chrome — the
           // non-interactive status HUD alongside the interactive acquired-
           // module details control (it collapses while a board/tower
-          // selection is active) and the interactive scanner.
+          // selection is active), the idle-only World Map mission action,
+          // and the interactive scanner.
           Positioned(
             top: _commandDeckPadding,
             left: _commandDeckPadding,
@@ -84,7 +126,18 @@ class MissionChrome extends StatelessWidget {
                       collapseRequested:
                           snapshot.selectedCell != null ||
                           snapshot.selectedTower != null,
+                      onExpandedChanged: _handleTopPanelExpanded,
                     ),
+                  ),
+                ],
+                // World Map rides in the top band only while idle and while
+                // no expanded panel needs the width, keeping the bottom band
+                // a single-row dock at the product width.
+                if (isIdle && !_topPanelExpanded) ...[
+                  const SizedBox(width: 6),
+                  WorldMapAction(
+                    enabled: snapshot.phase == GamePhase.build,
+                    onWorldMap: widget.onWorldMap,
                   ),
                 ],
                 if (snapshot.phase == GamePhase.build &&
@@ -106,7 +159,8 @@ class MissionChrome extends StatelessWidget {
                     collapseRequested:
                         snapshot.selectedCell != null ||
                         snapshot.selectedTower != null,
-                    onCollapsedTapIntercept: onBoardTapIntercept,
+                    onCollapsedTapIntercept: widget.onBoardTapIntercept,
+                    onExpandedChanged: _handleTopPanelExpanded,
                   ),
                 ],
               ],
@@ -115,10 +169,9 @@ class MissionChrome extends StatelessWidget {
           // Bottom overlay band: toast + command dock. The idle dock hosts
           // the pacing controls beside the primary action; a selection
           // replaces them with build or inspector controls so the taller dock
-          // does not extend farther into the board. World Map rides beside
-          // the dock only while it idles, keeping selection surfaces at full
-          // dock width. While idle, the dock forwards taps over board cells
-          // to the board, mirroring the scanner arbiter.
+          // does not extend farther into the board. While idle, the dock
+          // forwards taps over board cells to the board, mirroring the
+          // scanner arbiter.
           Positioned(
             left: _commandDeckPadding,
             right: _commandDeckPadding,
@@ -137,30 +190,24 @@ class MissionChrome extends StatelessWidget {
                     Expanded(
                       child: GestureDetector(
                         onTapUp: isIdle
-                            ? (details) =>
-                                  onBoardTapIntercept(details.globalPosition)
+                            ? (details) => widget.onBoardTapIntercept(
+                                details.globalPosition,
+                              )
                             : null,
                         child: MissionCommandDock(
                           snapshot: snapshot,
-                          onTogglePause: onTogglePause,
-                          onSpeedSelected: onSpeedSelected,
-                          onToggleAutoStart: onToggleAutoStart,
-                          onStartWave: onStartWave,
-                          onPlaceTower: onPlaceTower,
-                          onUpgrade: onUpgrade,
-                          onSpecialize: onSpecialize,
-                          onTargetingChanged: onTargetingChanged,
-                          onSell: onSell,
+                          onTogglePause: widget.onTogglePause,
+                          onSpeedSelected: widget.onSpeedSelected,
+                          onToggleAutoStart: widget.onToggleAutoStart,
+                          onStartWave: widget.onStartWave,
+                          onPlaceTower: widget.onPlaceTower,
+                          onUpgrade: widget.onUpgrade,
+                          onSpecialize: widget.onSpecialize,
+                          onTargetingChanged: widget.onTargetingChanged,
+                          onSell: widget.onSell,
                         ),
                       ),
                     ),
-                    if (isIdle) ...[
-                      const SizedBox(width: 6),
-                      WorldMapAction(
-                        enabled: snapshot.phase == GamePhase.build,
-                        onWorldMap: onWorldMap,
-                      ),
-                    ],
                   ],
                 ),
               ],
