@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'command_frame.dart';
+import 'mission_collapsible.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 
@@ -38,7 +39,6 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
   /// to the board arbiter.
   static const double _radarInset = 3;
 
-  bool _expanded = false;
   bool _hasUnreadPreview = true;
   bool _tapIntercepted = false;
 
@@ -46,19 +46,8 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
   void didUpdateWidget(covariant NextWaveScanner oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.preview.waveNumber != widget.preview.waveNumber) {
-      _expanded = false;
       _hasUnreadPreview = true;
-    } else if (!oldWidget.collapseRequested && widget.collapseRequested) {
-      _expanded = false;
     }
-  }
-
-  void _toggleExpanded() {
-    if (widget.collapseRequested) return;
-    setState(() {
-      _expanded = !_expanded;
-      if (_expanded) _hasUnreadPreview = false;
-    });
   }
 
   void _handleCollapsedTapUp(TapUpDetails details) {
@@ -76,41 +65,29 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
     }
   }
 
-  void _handleCollapsedTap() {
+  void _handleCollapsedTap(VoidCallback toggle) {
     final intercepted = _tapIntercepted;
     _tapIntercepted = false;
     if (intercepted || widget.collapseRequested) return;
-    _toggleExpanded();
+    toggle();
   }
 
   @override
   Widget build(BuildContext context) {
-    final duration = orionMotionDuration(
-      context,
-      const Duration(milliseconds: 180),
-    );
-    final child = _expanded && !widget.collapseRequested
-        ? _buildExpanded(context)
-        : _buildCollapsed(context);
-
-    return IgnorePointer(
-      ignoring: widget.collapseRequested,
-      child: AnimatedSwitcher(
-        duration: duration,
-        switchInCurve: Curves.easeOut,
-        switchOutCurve: Curves.easeIn,
-        // Keep only the current child in the layout while switching. The
-        // default Stack layout keeps the outgoing expanded detector hit-testable
-        // for the fade duration, even after a board/tower selection requests an
-        // immediate collapse.
-        layoutBuilder: (currentChild, _) =>
-            currentChild ?? const SizedBox.shrink(),
-        child: child,
-      ),
+    return MissionCollapsible(
+      collapseRequested: widget.collapseRequested,
+      resetToken: widget.preview.waveNumber,
+      onExpandedChanged: (expanded) {
+        if (expanded && _hasUnreadPreview) {
+          setState(() => _hasUnreadPreview = false);
+        }
+      },
+      collapsedBuilder: _buildCollapsed,
+      expandedBuilder: _buildExpanded,
     );
   }
 
-  Widget _buildCollapsed(BuildContext context) {
+  Widget _buildCollapsed(BuildContext context, VoidCallback toggle) {
     final uiTheme = OrionUiTheme.of(context);
     final totalEnemyCount = widget.preview.groups.fold<int>(
       0,
@@ -129,7 +106,7 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
       button: true,
       enabled: !widget.collapseRequested,
       label: unreadLabel,
-      onTap: widget.collapseRequested ? null : _toggleExpanded,
+      onTap: widget.collapseRequested ? null : toggle,
       child: Tooltip(
         message: 'Expand next-wave scanner',
         excludeFromSemantics: true,
@@ -143,7 +120,7 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
             behavior: HitTestBehavior.opaque,
             onTapUp: _handleCollapsedTapUp,
             onTapCancel: () => _tapIntercepted = false,
-            onTap: _handleCollapsedTap,
+            onTap: () => _handleCollapsedTap(toggle),
             child: SizedBox.square(
               key: const ValueKey('next-wave-scanner-collapsed'),
               dimension: 48,
@@ -189,18 +166,18 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
     );
   }
 
-  Widget _buildExpanded(BuildContext context) {
+  Widget _buildExpanded(BuildContext context, VoidCallback toggle) {
     final uiTheme = OrionUiTheme.of(context);
     return Tooltip(
       message: 'Collapse next-wave scanner',
       excludeFromSemantics: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: _toggleExpanded,
+        onTap: toggle,
         child: Semantics(
           button: true,
           label: 'Collapse next-wave scanner',
-          onTap: _toggleExpanded,
+          onTap: toggle,
           child: SizedBox(
             width: 212,
             height: 168,
