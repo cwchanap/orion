@@ -17,7 +17,9 @@ import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
+import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
@@ -850,6 +852,69 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'module draft and mission report stay later blocking stack entries',
+    (tester) async {
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        testGamePage(onGameCreated: (created) => game = created),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+
+      int stackIndexOfType(Type type) {
+        final stack = tester.widget<Stack>(
+          find
+              .ancestor(
+                of: find.bySubtype<GameWidget>(),
+                matching: find.byType(Stack),
+              )
+              .first,
+        );
+        return stack.children.indexWhere((child) {
+          final inner = child is Positioned ? child.child : child;
+          return inner.runtimeType == type;
+        });
+      }
+
+      // The draft overlay is ordered after the chrome…
+      game!.stateNotifier.value = commandDeckSnapshot(
+        nextWavePreview: commandDeckPreview(),
+        pendingRunModuleOffer: RunModuleOffer(
+          offerId: 1,
+          draftNumber: 1,
+          draftTotal: 3,
+          moduleIds: const [RunModuleId.heavyCaliber],
+        ),
+      );
+      await tester.pump();
+      expect(
+        stackIndexOfType(MissionChrome),
+        lessThan(stackIndexOfType(RunModuleDraftPanel)),
+      );
+
+      // …and blocks the board: a tap through the middle reaches no cell.
+      await tester.tapAt(tester.getCenter(find.bySubtype<GameWidget>()));
+      await tester.pump();
+      expect(game!.snapshot.selectedCell, isNull);
+      expect(find.byType(RunModuleDraftPanel), findsOneWidget);
+
+      // The loss report is likewise a later blocking entry.
+      game!.selectRunModule(1, RunModuleId.heavyCaliber);
+      await tester.pump();
+      await publishLoss(tester, game!);
+      expect(
+        stackIndexOfType(MissionChrome),
+        lessThan(stackIndexOfType(MissionReportPanel)),
+      );
+
+      await tester.tapAt(tester.getCenter(find.bySubtype<GameWidget>()));
+      await tester.pump();
+      expect(find.text('Mission Failed'), findsOneWidget);
+      expect(find.text('ORION SECTOR'), findsNothing);
+    },
+  );
 
   testWidgets('victory panel shows earned medal and base health', (
     tester,

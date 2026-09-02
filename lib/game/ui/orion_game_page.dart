@@ -20,13 +20,10 @@ import '../rules/run_module_unlocks.dart';
 import 'codex_view.dart';
 import 'campaign_presentation.dart';
 import 'command_frame.dart';
-import 'command_toast.dart';
 import 'feedback_settings_sheet.dart';
-import 'mission_command_hud.dart';
-import 'mission_command_dock.dart';
+import 'mission_chrome.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
-import 'next_wave_scanner.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
@@ -44,9 +41,6 @@ const String _persistenceFailureMessage = 'Could not save campaign progress.';
 /// top-level constant so a later successful save can match and clear the
 /// stale breadcrumb without re-string-literalizing it.
 const String _feedbackSaveFailureMessage = 'Could not save feedback settings.';
-
-/// Horizontal padding for the top and bottom command-deck overlays.
-const double _commandDeckPadding = 12;
 
 class OrionGamePage extends StatefulWidget {
   const OrionGamePage({
@@ -334,8 +328,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
         child: ValueListenableBuilder<GameSnapshot>(
           valueListenable: game.stateNotifier,
           builder: (context, snapshot, _) {
-            final isIdle =
-                snapshot.selectedCell == null && snapshot.selectedTower == null;
             return Stack(
               children: [
                 // The GameWidget fills the entire SafeArea so the Flame
@@ -343,125 +335,28 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 // pre-command-deck layout. Enemy speed, tower range, and
                 // projectile speed are all absolute game units — shrinking
                 // the viewport would silently alter combat balance. The
-                // command-deck chrome overlays the GameWidget as it did
-                // before the in-flow reserve attempt.
+                // mission chrome overlays the GameWidget as it did before the
+                // in-flow reserve attempt.
                 Positioned.fill(
                   child: KeyedSubtree(
                     key: _gameWidgetKey,
                     child: GameWidget(game: game),
                   ),
                 ),
-                // Top overlay: a single row of status chrome — the
-                // non-interactive status HUD and acquired-module strip
-                // (IgnorePointer so taps pass through to the board) alongside
-                // the interactive scanner. The module strip renders at its
-                // natural wrapped height: any growth extends downward over
-                // pointer-transparent territory only, so all acquired modules
-                // stay visible and nothing interactive below them moves.
-                Positioned(
-                  top: _commandDeckPadding,
-                  left: _commandDeckPadding,
-                  right: _commandDeckPadding,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: IgnorePointer(
-                          child: MissionStatusHud(snapshot: snapshot),
-                        ),
-                      ),
-                      if (snapshot.acquiredRunModules.isNotEmpty) ...[
-                        const SizedBox(width: 6),
-                        Flexible(
-                          child: IgnorePointer(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 132),
-                              child: AcquiredRunModuleStrip(
-                                moduleIds: snapshot.acquiredRunModules,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (snapshot.phase == GamePhase.build &&
-                          snapshot.nextWavePreview != null &&
-                          snapshot.pendingRunModuleOffer == null &&
-                          !snapshot.isEnded) ...[
-                        const SizedBox(width: 6),
-                        NextWaveScanner(
-                          preview: snapshot.nextWavePreview!,
-                          modifierTitles: snapshot.stageModifiers.isEmpty
-                              ? [StageModifierMetadata.standardConditions.title]
-                              : snapshot.stageModifiers
-                                    .map(
-                                      (modifier) =>
-                                          StageModifierMetadata.forModifier(
-                                            modifier,
-                                          ).title,
-                                    )
-                                    .toList(growable: false),
-                          collapseRequested:
-                              snapshot.selectedCell != null ||
-                              snapshot.selectedTower != null,
-                          onCollapsedTapIntercept: _routeTapToBoard,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                // Bottom overlay: toast + command dock. The idle dock hosts
-                // the pacing controls beside the primary action; a selection
-                // replaces them with build or inspector controls so the
-                // taller dock does not extend farther into the board. World
-                // Map rides beside the dock only while it idles, keeping
-                // selection surfaces at full dock width. While idle, the dock
-                // forwards taps over board cells to the board, mirroring the
-                // scanner arbiter.
-                Positioned(
-                  left: _commandDeckPadding,
-                  right: _commandDeckPadding,
-                  bottom: _commandDeckPadding,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      CommandToast(
-                        key: const ValueKey('mission-command-toast'),
-                        feedback: snapshot.feedback,
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Expanded(
-                            child: GestureDetector(
-                              onTapUp: isIdle
-                                  ? (details) =>
-                                        _routeTapToBoard(details.globalPosition)
-                                  : null,
-                              child: MissionCommandDock(
-                                snapshot: snapshot,
-                                onTogglePause: game.togglePause,
-                                onSpeedSelected: game.setSpeedMultiplier,
-                                onToggleAutoStart: game.toggleAutoStart,
-                                onStartWave: game.startWave,
-                                onPlaceTower: game.placeTower,
-                                onUpgrade: game.upgradeSelectedTower,
-                                onSpecialize: game.specializeSelectedTower,
-                                onTargetingChanged: game.setTargetingMode,
-                                onSell: game.sellSelectedTower,
-                              ),
-                            ),
-                          ),
-                          if (isIdle) ...[
-                            const SizedBox(width: 6),
-                            WorldMapAction(
-                              enabled: snapshot.phase == GamePhase.build,
-                              onWorldMap: game.returnToMap,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+                Positioned.fill(
+                  child: MissionChrome(
+                    snapshot: snapshot,
+                    onBoardTapIntercept: _routeTapToBoard,
+                    onWorldMap: game.returnToMap,
+                    onStartWave: game.startWave,
+                    onTogglePause: game.togglePause,
+                    onSpeedSelected: game.setSpeedMultiplier,
+                    onToggleAutoStart: game.toggleAutoStart,
+                    onPlaceTower: game.placeTower,
+                    onUpgrade: game.upgradeSelectedTower,
+                    onSpecialize: game.specializeSelectedTower,
+                    onTargetingChanged: game.setTargetingMode,
+                    onSell: game.sellSelectedTower,
                   ),
                 ),
                 if (snapshot.pendingRunModuleOffer case final offer?)

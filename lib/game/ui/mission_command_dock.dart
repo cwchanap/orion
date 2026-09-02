@@ -89,30 +89,6 @@ class MissionCommandDock extends StatelessWidget {
   }
 }
 
-/// Page-chrome action for returning to the world map. Owned by the page
-/// composition (not the dock contract); enabled only while the mission is in
-/// its build phase.
-class WorldMapAction extends StatelessWidget {
-  const WorldMapAction({
-    super.key,
-    required this.enabled,
-    required this.onWorldMap,
-  });
-
-  final bool enabled;
-  final VoidCallback onWorldMap;
-
-  @override
-  Widget build(BuildContext context) {
-    return ReactorButton(
-      tooltip: 'World Map',
-      label: 'World Map',
-      icon: Icons.map_outlined,
-      onPressed: enabled ? onWorldMap : null,
-    );
-  }
-}
-
 class IdleCommandBar extends StatelessWidget {
   const IdleCommandBar({
     super.key,
