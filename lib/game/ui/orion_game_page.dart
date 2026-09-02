@@ -334,6 +334,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
         child: ValueListenableBuilder<GameSnapshot>(
           valueListenable: game.stateNotifier,
           builder: (context, snapshot, _) {
+            final isIdle =
+                snapshot.selectedCell == null && snapshot.selectedTower == null;
             return Stack(
               children: [
                 // The GameWidget fills the entire SafeArea so the Flame
@@ -407,12 +409,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     ],
                   ),
                 ),
-                // Bottom overlay: pacing strip + toast + dock. Pacing stays
-                // interactive while no cell or tower is selected. A selection
-                // replaces it with build or inspector controls so the taller
-                // dock does not extend farther into the board. While visible,
-                // the pacing frame forwards taps over board cells to the board,
-                // mirroring the scanner arbiter.
+                // Bottom overlay: toast + command dock. The idle dock hosts
+                // the pacing controls beside the primary action; a selection
+                // replaces them with build or inspector controls so the
+                // taller dock does not extend farther into the board. World
+                // Map rides beside the dock only while it idles, keeping
+                // selection surfaces at full dock width. While idle, the dock
+                // forwards taps over board cells to the board, mirroring the
+                // scanner arbiter.
                 Positioned(
                   left: _commandDeckPadding,
                   right: _commandDeckPadding,
@@ -420,34 +424,42 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (snapshot.selectedCell == null &&
-                          snapshot.selectedTower == null) ...[
-                        GestureDetector(
-                          onTapUp: (details) =>
-                              _routeTapToBoard(details.globalPosition),
-                          child: MissionPacingStrip(
-                            snapshot: snapshot,
-                            onTogglePause: game.togglePause,
-                            onSpeedSelected: game.setSpeedMultiplier,
-                            onToggleAutoStart: game.toggleAutoStart,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                      ],
                       CommandToast(
                         key: const ValueKey('mission-command-toast'),
                         feedback: snapshot.feedback,
                       ),
                       const SizedBox(height: 8),
-                      MissionCommandDock(
-                        snapshot: snapshot,
-                        onWorldMap: game.returnToMap,
-                        onStartWave: game.startWave,
-                        onPlaceTower: game.placeTower,
-                        onUpgrade: game.upgradeSelectedTower,
-                        onSpecialize: game.specializeSelectedTower,
-                        onTargetingChanged: game.setTargetingMode,
-                        onSell: game.sellSelectedTower,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTapUp: isIdle
+                                  ? (details) =>
+                                        _routeTapToBoard(details.globalPosition)
+                                  : null,
+                              child: MissionCommandDock(
+                                snapshot: snapshot,
+                                onTogglePause: game.togglePause,
+                                onSpeedSelected: game.setSpeedMultiplier,
+                                onToggleAutoStart: game.toggleAutoStart,
+                                onStartWave: game.startWave,
+                                onPlaceTower: game.placeTower,
+                                onUpgrade: game.upgradeSelectedTower,
+                                onSpecialize: game.specializeSelectedTower,
+                                onTargetingChanged: game.setTargetingMode,
+                                onSell: game.sellSelectedTower,
+                              ),
+                            ),
+                          ),
+                          if (isIdle) ...[
+                            const SizedBox(width: 6),
+                            WorldMapAction(
+                              enabled: snapshot.phase == GamePhase.build,
+                              onWorldMap: game.returnToMap,
+                            ),
+                          ],
+                        ],
                       ),
                     ],
                   ),

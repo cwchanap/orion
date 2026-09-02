@@ -1,3 +1,5 @@
+import 'dart:ui' show SemanticsAction;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -185,42 +187,88 @@ void main() {
     expect(placed, isEmpty);
   });
 
-  testWidgets('idle World Map and Start Wave actions obey snapshot gating', (
+  testWidgets('idle dock hosts pacing controls and the primary action', (
     tester,
   ) async {
-    var worldMapTaps = 0;
+    var pauseTaps = 0;
+    var autoTaps = 0;
     var startWaveTaps = 0;
+    double? speed;
     await tester.pumpWidget(
       MaterialApp(
-        home: IdleCommandBar(
+        home: MissionCommandDock(
           snapshot: commandDeckSnapshot(),
-          onWorldMap: () => worldMapTaps += 1,
+          onTogglePause: () => pauseTaps += 1,
+          onSpeedSelected: (value) => speed = value,
+          onToggleAutoStart: () => autoTaps += 1,
           onStartWave: () => startWaveTaps += 1,
+          onPlaceTower: (_) {},
+          onUpgrade: () {},
+          onSpecialize: (_) {},
+          onTargetingChanged: (_) {},
+          onSell: () {},
         ),
       ),
     );
 
-    expect(find.text('World Map'), findsOneWidget);
+    expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.text('1x'), findsOneWidget);
+    expect(find.text('2x'), findsOneWidget);
+    expect(find.text('3x'), findsOneWidget);
+    expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
-    await tester.tap(find.byTooltip('World Map'));
-    await tester.tap(find.byTooltip('Start Wave'));
-    expect((worldMapTaps, startWaveTaps), (1, 1));
+    // World Map left the dock contract; the chrome layer owns it now.
+    expect(find.text('World Map'), findsNothing);
 
-    await tester.pumpWidget(
-      MaterialApp(
-        home: IdleCommandBar(
-          snapshot: commandDeckSnapshot(phase: GamePhase.wave),
-          onWorldMap: () => worldMapTaps += 1,
-          onStartWave: () => startWaveTaps += 1,
-        ),
-      ),
-    );
-    await tester.tap(find.byTooltip('World Map'));
-    await tester.tap(find.byTooltip('Wave 1 of 8'));
-    expect((worldMapTaps, startWaveTaps), (1, 1));
+    await tester.tap(find.text('2x'));
+    await tester.tap(find.byTooltip('Auto-start waves'));
+    await tester.tap(find.byTooltip('Start Wave'));
+    // Pause is gated off during a plain build phase (no countdown, not
+    // paused); the paused variant below proves the callback wiring.
+    await tester.tap(find.byTooltip('Pause'));
+    expect((pauseTaps, speed, autoTaps, startWaveTaps), (0, 2.0, 1, 1));
   });
 
-  testWidgets('idle bar keeps Start Now visible during the countdown', (
+  testWidgets('idle dock shows Resume while paused', (tester) async {
+    var pauseTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: IdleCommandBar(
+          snapshot: commandDeckSnapshot(isPaused: true),
+          onTogglePause: () => pauseTaps += 1,
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+          onStartWave: () {},
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Pause'), findsNothing);
+    expect(find.byTooltip('Resume'), findsOneWidget);
+    await tester.tap(find.byTooltip('Resume'));
+    expect(pauseTaps, 1);
+  });
+
+  testWidgets('World Map action obeys its build-phase gate', (tester) async {
+    var mapTaps = 0;
+    Widget host({required bool enabled}) => MaterialApp(
+      home: Center(
+        child: WorldMapAction(enabled: enabled, onWorldMap: () => mapTaps += 1),
+      ),
+    );
+
+    await tester.pumpWidget(host(enabled: true));
+    expect(find.text('World Map'), findsOneWidget);
+    await tester.tap(find.byTooltip('World Map'));
+    expect(mapTaps, 1);
+
+    await tester.pumpWidget(host(enabled: false));
+    await tester.tap(find.byTooltip('World Map'));
+    expect(mapTaps, 1);
+  });
+
+  testWidgets('idle dock keeps Start Now visible during the countdown', (
     tester,
   ) async {
     var startWaveTaps = 0;
@@ -231,7 +279,9 @@ void main() {
             autoStartEnabled: true,
             autoStartCountdownRemaining: 2.2,
           ),
-          onWorldMap: () {},
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
           onStartWave: () => startWaveTaps += 1,
         ),
       ),
@@ -242,7 +292,7 @@ void main() {
     final handle = tester.ensureSemantics();
     try {
       expect(
-        find.bySemanticsLabel(RegExp(r'Wave 1 of 8, countdown 3 seconds')),
+        find.bySemanticsLabel('Auto-start waves, 3 seconds'),
         findsOneWidget,
       );
     } finally {
@@ -255,33 +305,26 @@ void main() {
   testWidgets('active wave reactor exposes progress and cannot start a wave', (
     tester,
   ) async {
-    final handle = tester.ensureSemantics();
-    try {
-      var startWaveTaps = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: IdleCommandBar(
-            snapshot: commandDeckSnapshot(
-              phase: GamePhase.wave,
-              waveNumber: 3,
-              waveTotal: 8,
-            ),
-            onWorldMap: () {},
-            onStartWave: () => startWaveTaps += 1,
+    var startWaveTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: IdleCommandBar(
+          snapshot: commandDeckSnapshot(
+            phase: GamePhase.wave,
+            waveNumber: 3,
+            waveTotal: 8,
           ),
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+          onStartWave: () => startWaveTaps += 1,
         ),
-      );
+      ),
+    );
 
-      expect(find.text('3/8'), findsOneWidget);
-      expect(
-        find.bySemanticsLabel(RegExp(r'Wave 3 of 8, active')),
-        findsOneWidget,
-      );
-      await tester.tap(find.byTooltip('Wave 3 of 8'));
-      expect(startWaveTaps, 0);
-    } finally {
-      handle.dispose();
-    }
+    expect(find.text('3/8'), findsOneWidget);
+    await tester.tap(find.byTooltip('Wave 3 of 8'));
+    expect(startWaveTaps, 0);
   });
 
   testWidgets('reduced motion sets the idle reactor transition to zero', (
@@ -293,7 +336,9 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: IdleCommandBar(
             snapshot: commandDeckSnapshot(),
-            onWorldMap: () {},
+            onTogglePause: () {},
+            onSpeedSelected: (_) {},
+            onToggleAutoStart: () {},
             onStartWave: () {},
           ),
         ),
@@ -306,6 +351,175 @@ void main() {
     expect(switcher.duration, Duration.zero);
   });
 
+  testWidgets(
+    'primary and World Map actions keep 48dp targets and invoke once',
+    (tester) async {
+      var startWaveTaps = 0;
+      var mapTaps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IdleCommandBar(
+                snapshot: commandDeckSnapshot(),
+                onTogglePause: () {},
+                onSpeedSelected: (_) {},
+                onToggleAutoStart: () {},
+                onStartWave: () => startWaveTaps += 1,
+              ),
+              WorldMapAction(enabled: true, onWorldMap: () => mapTaps += 1),
+            ],
+          ),
+        ),
+      );
+
+      final startRect = tester.getRect(find.byTooltip('Start Wave'));
+      expect(startRect.width, greaterThanOrEqualTo(48));
+      expect(startRect.height, greaterThanOrEqualTo(48));
+      await tester.tap(find.byTooltip('Start Wave'));
+      expect(startWaveTaps, 1);
+
+      final mapRect = tester.getRect(find.byTooltip('World Map'));
+      expect(mapRect.width, greaterThanOrEqualTo(48));
+      expect(mapRect.height, greaterThanOrEqualTo(48));
+      await tester.tap(find.byTooltip('World Map'));
+      expect(mapTaps, 1);
+    },
+  );
+
+  testWidgets('primary and World Map semantics tap fires each callback once', (
+    tester,
+  ) async {
+    var startWaveTaps = 0;
+    var mapTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IdleCommandBar(
+              snapshot: commandDeckSnapshot(),
+              onTogglePause: () {},
+              onSpeedSelected: (_) {},
+              onToggleAutoStart: () {},
+              onStartWave: () => startWaveTaps += 1,
+            ),
+            WorldMapAction(enabled: true, onWorldMap: () => mapTaps += 1),
+          ],
+        ),
+      ),
+    );
+
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      final startData = tester.getSemantics(
+        find.bySemanticsLabel('Start Wave'),
+      );
+      // ignore: deprecated_member_use
+      tester.binding.pipelineOwner.semanticsOwner!.performAction(
+        startData.id,
+        SemanticsAction.tap,
+      );
+      expect(startWaveTaps, 1);
+
+      final mapData = tester.getSemantics(find.bySemanticsLabel('World Map'));
+      // ignore: deprecated_member_use
+      tester.binding.pipelineOwner.semanticsOwner!.performAction(
+        mapData.id,
+        SemanticsAction.tap,
+      );
+      expect(mapTaps, 1);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets(
+    'disabled primary and World Map actions carry no semantics tap action',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IdleCommandBar(
+                snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+                onTogglePause: () {},
+                onSpeedSelected: (_) {},
+                onToggleAutoStart: () {},
+                onStartWave: () {},
+              ),
+              WorldMapAction(enabled: false, onWorldMap: () {}),
+            ],
+          ),
+        ),
+      );
+
+      final handle = tester.ensureSemantics();
+      try {
+        await tester.pump();
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('Wave 1 of 8')),
+          matchesSemantics(
+            label: 'Wave 1 of 8',
+            tooltip: '',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: false,
+            hasTapAction: false,
+          ),
+        );
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('World Map')),
+          matchesSemantics(
+            label: 'World Map',
+            tooltip: '',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: false,
+            hasTapAction: false,
+          ),
+        );
+      } finally {
+        handle.dispose();
+      }
+    },
+  );
+
+  testWidgets('primary and World Map labels survive text scale 3.0', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3.0)),
+          child: child!,
+        ),
+        home: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IdleCommandBar(
+              snapshot: commandDeckSnapshot(),
+              onTogglePause: () {},
+              onSpeedSelected: (_) {},
+              onToggleAutoStart: () {},
+              onStartWave: () {},
+            ),
+            WorldMapAction(enabled: true, onWorldMap: () {}),
+          ],
+        ),
+      ),
+    );
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.text('World Map'), findsOneWidget);
+  });
+
   testWidgets('dock prioritizes selected tower over selected cell and idle', (
     tester,
   ) async {
@@ -315,7 +529,6 @@ void main() {
       position: GridPosition(2, 3),
     );
     final callbacks = <String, VoidCallback>{
-      'worldMap': () {},
       'startWave': () {},
       'placeTower': () {},
       'upgrade': () {},
@@ -328,7 +541,9 @@ void main() {
       return MaterialApp(
         home: MissionCommandDock(
           snapshot: snapshot,
-          onWorldMap: callbacks['worldMap']!,
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
           onStartWave: callbacks['startWave']!,
           onPlaceTower: (_) => callbacks['placeTower']!(),
           onUpgrade: callbacks['upgrade']!,
@@ -369,7 +584,9 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: MissionCommandDock(
             snapshot: commandDeckSnapshot(),
-            onWorldMap: () {},
+            onTogglePause: () {},
+            onSpeedSelected: (_) {},
+            onToggleAutoStart: () {},
             onStartWave: () {},
             onPlaceTower: (_) {},
             onUpgrade: () {},

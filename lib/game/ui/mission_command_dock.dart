@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'command_frame.dart';
+import 'mission_command_hud.dart';
+import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 import 'tower_inspector.dart';
@@ -10,7 +12,9 @@ class MissionCommandDock extends StatelessWidget {
   const MissionCommandDock({
     super.key,
     required this.snapshot,
-    required this.onWorldMap,
+    required this.onTogglePause,
+    required this.onSpeedSelected,
+    required this.onToggleAutoStart,
     required this.onStartWave,
     required this.onPlaceTower,
     required this.onUpgrade,
@@ -20,7 +24,9 @@ class MissionCommandDock extends StatelessWidget {
   });
 
   final GameSnapshot snapshot;
-  final VoidCallback onWorldMap;
+  final VoidCallback onTogglePause;
+  final ValueChanged<double> onSpeedSelected;
+  final VoidCallback onToggleAutoStart;
   final VoidCallback onStartWave;
   final ValueChanged<TowerType> onPlaceTower;
   final VoidCallback onUpgrade;
@@ -54,7 +60,9 @@ class MissionCommandDock extends StatelessWidget {
       contentKey = const ValueKey('command-dock-idle');
       content = IdleCommandBar(
         snapshot: snapshot,
-        onWorldMap: onWorldMap,
+        onTogglePause: onTogglePause,
+        onSpeedSelected: onSpeedSelected,
+        onToggleAutoStart: onToggleAutoStart,
         onStartWave: onStartWave,
       );
     }
@@ -81,16 +89,44 @@ class MissionCommandDock extends StatelessWidget {
   }
 }
 
+/// Page-chrome action for returning to the world map. Owned by the page
+/// composition (not the dock contract); enabled only while the mission is in
+/// its build phase.
+class WorldMapAction extends StatelessWidget {
+  const WorldMapAction({
+    super.key,
+    required this.enabled,
+    required this.onWorldMap,
+  });
+
+  final bool enabled;
+  final VoidCallback onWorldMap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ReactorButton(
+      tooltip: 'World Map',
+      label: 'World Map',
+      icon: Icons.map_outlined,
+      onPressed: enabled ? onWorldMap : null,
+    );
+  }
+}
+
 class IdleCommandBar extends StatelessWidget {
   const IdleCommandBar({
     super.key,
     required this.snapshot,
-    required this.onWorldMap,
+    required this.onTogglePause,
+    required this.onSpeedSelected,
+    required this.onToggleAutoStart,
     required this.onStartWave,
   });
 
   final GameSnapshot snapshot;
-  final VoidCallback onWorldMap;
+  final VoidCallback onTogglePause;
+  final ValueChanged<double> onSpeedSelected;
+  final VoidCallback onToggleAutoStart;
   final VoidCallback onStartWave;
 
   @override
@@ -100,61 +136,19 @@ class IdleCommandBar extends StatelessWidget {
     final reactorTooltip = snapshot.phase == GamePhase.wave
         ? 'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}'
         : reactorLabel;
-    final stateLabel = _stateLabel(snapshot, countdown);
-    final uiTheme = OrionUiTheme.of(context);
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+    return MissionSurface(
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          // Yields space to the fixed-size reactor buttons when the viewport
-          // is narrow; the labels ellipsize instead of overflowing.
-          Flexible(
-            child: Semantics(
-              container: true,
-              label: stateLabel,
-              excludeSemantics: true,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'MISSION',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: uiTheme.textMuted,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      _phaseLabel(snapshot.phase),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: snapshot.phase == GamePhase.wave
-                            ? uiTheme.warningOrange
-                            : uiTheme.systemCyan,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+          // Pacing flexes and wraps on narrow viewports; the fixed-size
+          // reactor keeps the primary action pinned to the dock's edge.
+          Expanded(
+            child: MissionPacingControls(
+              snapshot: snapshot,
+              onTogglePause: onTogglePause,
+              onSpeedSelected: onSpeedSelected,
+              onToggleAutoStart: onToggleAutoStart,
             ),
-          ),
-          const SizedBox(width: 8),
-          ReactorButton(
-            tooltip: 'World Map',
-            label: 'World Map',
-            icon: Icons.map_outlined,
-            onPressed: snapshot.phase == GamePhase.build ? onWorldMap : null,
-            size: 68,
           ),
           const SizedBox(width: 8),
           AnimatedSwitcher(
@@ -173,37 +167,12 @@ class IdleCommandBar extends StatelessWidget {
                   ? Icons.radar
                   : Icons.play_arrow_rounded,
               onPressed: snapshot.canStartWave ? onStartWave : null,
-              size: 68,
             ),
           ),
         ],
       ),
     );
   }
-
-  static String _stateLabel(GameSnapshot snapshot, double? countdown) {
-    if (countdown != null) {
-      return 'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, '
-          'countdown ${countdown.ceil()} seconds';
-    }
-    return switch (snapshot.phase) {
-      GamePhase.build =>
-        'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, build phase',
-      GamePhase.wave =>
-        'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, active',
-      GamePhase.won =>
-        'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, won',
-      GamePhase.lost =>
-        'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, lost',
-    };
-  }
-
-  static String _phaseLabel(GamePhase phase) => switch (phase) {
-    GamePhase.build => 'BUILD PHASE',
-    GamePhase.wave => 'WAVE ACTIVE',
-    GamePhase.won => 'MISSION WON',
-    GamePhase.lost => 'MISSION LOST',
-  };
 
   static String _reactorLabel(GameSnapshot snapshot, double? countdown) {
     if (countdown != null) return 'Start Now';

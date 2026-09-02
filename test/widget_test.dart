@@ -17,7 +17,7 @@ import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/command_frame.dart';
-import 'package:orion/game/ui/mission_command_hud.dart';
+import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
@@ -504,10 +504,10 @@ void main() {
       final scannerRect = tester.getRect(
         find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       );
-      final pacingFrameRect = tester.getRect(
+      final dockFrameRect = tester.getRect(
         find
             .descendant(
-              of: find.byType(MissionPacingStrip),
+              of: find.byType(MissionCommandDock),
               matching: find.byType(CommandFrame),
             )
             .first,
@@ -519,10 +519,11 @@ void main() {
         reason: 'Scanner $scannerRect overlaps cell center $topRightCenter.',
       );
       expect(
-        pacingFrameRect.contains(topRightCenter),
+        dockFrameRect.contains(topRightCenter),
         isFalse,
         reason:
-            'Pacing frame $pacingFrameRect overlaps cell center $topRightCenter.',
+            'Command dock frame $dockFrameRect overlaps cell center '
+            '$topRightCenter.',
       );
     },
   );
@@ -588,10 +589,10 @@ void main() {
     },
   );
 
-  testWidgets('board taps under the pacing strip still reach the game', (
+  testWidgets('board taps under the idle dock still reach the game', (
     tester,
   ) async {
-    // Short viewport: the strip then covers row-9 path-cell centers.
+    // Short viewport: the idle dock then covers row-9 path-cell centers.
     tester.view.physicalSize = const Size(430, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -617,21 +618,22 @@ void main() {
       boardTop + (cell.row + 0.5) * cellSize,
     );
 
-    final pacingFrameFinder = find
+    final dockFrameFinder = find
         .descendant(
-          of: find.byType(MissionPacingStrip),
+          of: find.byType(MissionCommandDock),
           matching: find.byType(CommandFrame),
         )
         .first;
 
-    // Points sitting on pause/speed/auto controls are skipped: those are
-    // consumed by design. The regression targets the frame's dead space over
-    // the board.
+    // Points sitting on pacing/primary/World Map controls are skipped: those
+    // are consumed by design. The regression targets the dock's dead space
+    // over the board.
     bool underControl(Offset point) {
       return [
         find.byType(IconButton),
         find.byType(SegmentedButton<double>),
         find.byType(FilterChip),
+        find.byType(ReactorButton),
       ].any((finder) {
         for (var i = 0; i < tester.widgetList(finder).length; i++) {
           if (tester.getRect(finder.at(i)).contains(point)) return true;
@@ -641,7 +643,7 @@ void main() {
     }
 
     GridPosition? freePathCellUnderStrip({Iterable<Offset> avoid = const []}) {
-      final frame = tester.getRect(pacingFrameFinder);
+      final frame = tester.getRect(dockFrameFinder);
       for (final cell in BoardLayout.pathCells.reversed) {
         final point = globalFor(cell);
         if (!frame.contains(point)) continue;
@@ -656,7 +658,7 @@ void main() {
     expect(
       freePathCellUnderStrip(),
       isNotNull,
-      reason: 'Short viewport must put a path-cell center under the strip.',
+      reason: 'Short viewport must put a path-cell center under the dock.',
     );
 
     // A live enemy under the frame: advance the game clock without pumping UI
@@ -671,7 +673,7 @@ void main() {
     outer:
     for (var i = 0; i < 2400 && target == null; i++) {
       game!.update(1 / 30);
-      final frame = tester.getRect(pacingFrameFinder);
+      final frame = tester.getRect(dockFrameFinder);
       for (final cell in BoardLayout.pathCells.reversed) {
         final point = globalFor(cell);
         if (!frame.contains(point)) continue;
@@ -706,7 +708,7 @@ void main() {
       ];
       chosen = freePathCellUnderStrip(avoid: occupied);
       if (chosen != null) break;
-      final frame = tester.getRect(pacingFrameFinder);
+      final frame = tester.getRect(dockFrameFinder);
       scan:
       for (var row = BoardLayout.rows - 1; row >= 0; row--) {
         for (var col = BoardLayout.columns - 1; col >= 0; col--) {
@@ -739,15 +741,18 @@ void main() {
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester);
 
-    expect(find.byType(MissionPacingStrip), findsOneWidget);
+    // Pacing lives inside the idle dock while nothing is selected.
     expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.text('1x'), findsOneWidget);
 
     game!.stateNotifier.value = commandDeckSnapshot(
       selectedCell: const GridPosition(1, 1),
     );
     await tester.pump();
 
-    expect(find.byType(MissionPacingStrip), findsNothing);
+    expect(find.byTooltip('Pause'), findsNothing);
+    expect(find.text('1x'), findsNothing);
     expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
 
     final tower = const PlacedTower(
@@ -764,7 +769,8 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byType(MissionPacingStrip), findsNothing);
+    expect(find.byTooltip('Pause'), findsNothing);
+    expect(find.text('1x'), findsNothing);
     expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
   });
 
@@ -779,21 +785,26 @@ void main() {
 
     await startStageFromBriefing(tester);
 
-    // With no selection, pacing stays interactive through every non-ended
-    // phase: pause must be reachable while an auto-start countdown runs, and
-    // countdowns run during the build phase. The strip docks above the command
-    // chrome instead of hovering over the buildable top rows.
-    expect(find.byType(MissionPacingStrip), findsOneWidget);
+    // Pacing lives inside the idle dock: pause must be reachable while an
+    // auto-start countdown runs, and countdowns run during the build phase.
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.text('2x'), findsOneWidget);
     expect(find.text('3x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
+    expect(find.text('Start Wave'), findsOneWidget);
 
-    // Speed selection works during the build phase.
+    // Speed selection works during the build phase, jumping straight to the
+    // tapped multiplier.
     await tester.tap(find.text('2x'));
     await tester.pump();
     expect(game!.speedMultiplier, 2.0);
+    game!.setSpeedMultiplier(1);
+    await tester.pump();
+
+    await tester.tap(find.text('3x'));
+    await tester.pump();
+    expect(game!.speedMultiplier, 3.0);
     game!.setSpeedMultiplier(1);
     await tester.pump();
     expect(find.text('Start Wave'), findsOneWidget);
@@ -803,10 +814,10 @@ void main() {
       acquiredRunModules: const [RunModuleId.heavyCaliber],
     );
     await tester.pump();
-    // The GameWidget fills the full SafeArea so cellSize is preserved.
-    // The status HUD and module strip are non-interactive overlays
-    // (IgnorePointer) so taps pass through to the board; the pacing strip
-    // stays interactive in the bottom command chrome.
+    // The GameWidget fills the full SafeArea so cellSize is preserved. The
+    // status HUD and module strip are non-interactive overlays
+    // (IgnorePointer) so taps pass through to the board; pacing stays
+    // interactive inside the idle dock in the bottom command chrome.
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.text('2x'), findsOneWidget);
@@ -833,7 +844,9 @@ void main() {
       findsOneWidget,
     );
     expect(
-      _activeIgnorePointerAncestorsOf(find.byType(MissionPacingStrip)),
+      _activeIgnorePointerAncestorsOf(
+        find.byKey(const ValueKey('command-dock-idle')),
+      ),
       findsNothing,
     );
   });
