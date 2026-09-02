@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import '../util/format.dart';
+import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 import 'tower_stat_scale.dart';
@@ -34,23 +35,25 @@ class TowerInspector extends StatelessWidget {
     final maxHeight = math.min(210.0, MediaQuery.sizeOf(context).height * 0.31);
     return Align(
       alignment: Alignment.topCenter,
-      child: SizedBox(
-        key: const ValueKey('tower-inspector'),
-        width: double.infinity,
-        height: maxHeight,
-        child: Material(
-          color: Colors.transparent,
-          child: SingleChildScrollView(
-            key: const ValueKey('tower-inspector-scroll'),
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            child: _InspectorBody(
-              snapshot: snapshot,
-              tower: tower,
-              onUpgrade: onUpgrade,
-              onSpecialize: onSpecialize,
-              onTargetingChanged: onTargetingChanged,
-              onSell: onSell,
-              sellRefund: sellRefund,
+      child: MissionSurface(
+        child: SizedBox(
+          key: const ValueKey('tower-inspector'),
+          width: double.infinity,
+          height: maxHeight,
+          child: Material(
+            color: Colors.transparent,
+            child: SingleChildScrollView(
+              key: const ValueKey('tower-inspector-scroll'),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: _InspectorBody(
+                snapshot: snapshot,
+                tower: tower,
+                onUpgrade: onUpgrade,
+                onSpecialize: onSpecialize,
+                onTargetingChanged: onTargetingChanged,
+                onSell: onSell,
+                sellRefund: sellRefund,
+              ),
             ),
           ),
         ),

@@ -3,8 +3,10 @@ import 'dart:ui' show SemanticsAction;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 
 import '../support/command_deck_fixtures.dart';
 
@@ -69,6 +71,30 @@ void main() {
       }
     },
   );
+
+  testWidgets('rail and tower cards use MissionSurface, not CommandFrame', (
+    tester,
+  ) async {
+    await tester.pumpWidget(railHost());
+
+    expect(find.byType(CommandFrame), findsNothing);
+    // The rail shell surfaces the whole strip...
+    expect(
+      find.ancestor(
+        of: find.byKey(const ValueKey('tower-card-laser')),
+        matching: find.byType(MissionSurface),
+      ),
+      findsOneWidget,
+    );
+    // ...and each card is itself surfaced.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('tower-card-laser')),
+        matching: find.byType(MissionSurface),
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('five art cards fit or peek at 375dp and the rail scrolls', (
     tester,

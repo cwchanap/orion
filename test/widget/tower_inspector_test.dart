@@ -3,6 +3,8 @@ import 'dart:ui' show Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/tower_inspector.dart';
 import 'package:orion/game/util/format.dart';
 
@@ -258,6 +260,38 @@ void main() {
         findsNothing,
       );
     }
+  });
+
+  testWidgets('inspector is surfaced with MissionSurface, not CommandFrame', (
+    tester,
+  ) async {
+    const tower = PlacedTower(
+      id: 7,
+      type: TowerType.laser,
+      position: GridPosition(2, 3),
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TowerInspector(
+          snapshot: commandDeckSnapshot(
+            selectedTower: tower,
+            selectedTowerStats: GameBalance.towerStats(
+              tower.type,
+              level: tower.level,
+            ),
+          ),
+          onUpgrade: () {},
+          onSpecialize: (_) {},
+          onTargetingChanged: (_) {},
+          onSell: () {},
+          sellRefund: 41,
+        ),
+      ),
+    );
+
+    expect(find.byType(MissionSurface), findsOneWidget);
+    expect(find.byType(CommandFrame), findsNothing);
+    expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });
 
   testWidgets('inspector caps height and scrolls internally on a phone', (

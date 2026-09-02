@@ -67,24 +67,31 @@ class MissionCommandDock extends StatelessWidget {
       );
     }
 
-    return CommandFrame(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AnimatedSwitcher(
-            key: const ValueKey('mission-command-dock-transition'),
-            duration: orionMotionDuration(
-              context,
-              const Duration(milliseconds: 180),
-            ),
-            layoutBuilder: (currentChild, previousChildren) =>
-                currentChild ?? const SizedBox.shrink(),
-            child: KeyedSubtree(key: contentKey, child: content),
+    // Selected states own their rounded MissionSurface shell; only the
+    // idle dock keeps its CommandFrame chrome.
+    final shell =
+        snapshot.selectedTower == null && snapshot.selectedCell == null
+        ? CommandFrame(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            child: content,
+          )
+        : content;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AnimatedSwitcher(
+          key: const ValueKey('mission-command-dock-transition'),
+          duration: orionMotionDuration(
+            context,
+            const Duration(milliseconds: 180),
           ),
-        ],
-      ),
+          layoutBuilder: (currentChild, previousChildren) =>
+              currentChild ?? const SizedBox.shrink(),
+          child: KeyedSubtree(key: contentKey, child: shell),
+        ),
+      ],
     );
   }
 }
@@ -178,23 +185,26 @@ class TowerBuildRail extends StatelessWidget {
     final textScaler = MediaQuery.textScalerOf(
       context,
     ).clamp(maxScaleFactor: 1.3);
-    return SizedBox(
-      height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
-      child: ListView.separated(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        scrollDirection: Axis.horizontal,
-        itemCount: TowerType.values.length,
-        separatorBuilder: (_, index) => const SizedBox(width: 6),
-        itemBuilder: (context, index) {
-          final type = TowerType.values[index];
-          return _TowerBuildCard(
-            type: type,
-            phase: phase,
-            gold: gold,
-            unlocked: unlockedTowerTypes.contains(type),
-            onPlaceTower: onPlaceTower,
-          );
-        },
+    return MissionSurface(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: SizedBox(
+        height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
+        child: ListView.separated(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          scrollDirection: Axis.horizontal,
+          itemCount: TowerType.values.length,
+          separatorBuilder: (_, index) => const SizedBox(width: 6),
+          itemBuilder: (context, index) {
+            final type = TowerType.values[index];
+            return _TowerBuildCard(
+              type: type,
+              phase: phase,
+              gold: gold,
+              unlocked: unlockedTowerTypes.contains(type),
+              onPlaceTower: onPlaceTower,
+            );
+          },
+        ),
       ),
     );
   }
@@ -248,12 +258,12 @@ class _TowerBuildCard extends StatelessWidget {
         key: ValueKey('tower-card-${type.name}'),
         width: baseWidth * scaleFactor,
         height: baseHeight * scaleFactor,
-        child: CommandFrame(
+        child: MissionSurface(
           padding: const EdgeInsets.all(2),
-          color: uiTheme.panelBlue,
+          radius: 10,
+          backgroundColor: uiTheme.panelBlue,
           borderColor: accent,
           emphasized: canAttempt && affordable,
-          chamfer: 8,
           child: Material(
             color: Colors.transparent,
             child: InkResponse(
