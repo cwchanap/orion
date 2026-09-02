@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
@@ -72,7 +76,57 @@ void _expectIdlePacingAbsent(WidgetTester tester) {
   expect(find.text('Start Wave'), findsNothing);
 }
 
+/// Loads the Flutter SDK's real Roboto so text measurements in this suite
+/// use proportional metrics. The host test harness otherwise falls back to
+/// 1em-per-glyph placeholder glyphs, which cannot expose real truncation.
+Future<void> _loadRealRoboto() async {
+  final root = Platform.environment['FLUTTER_ROOT'];
+  if (root == null) {
+    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
+  }
+  final loader = FontLoader('Roboto');
+  for (final file in [
+    'Roboto-Regular.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-Bold.ttf',
+  ]) {
+    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
+    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
+    final bytes = fontFile.readAsBytesSync();
+    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+  }
+  await loader.load();
+}
+
 void main() {
+  testWidgets('mission actions render their labels fully at product width', (
+    tester,
+  ) async {
+    await _loadRealRoboto();
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+    );
+    await tester.pump();
+
+    // Roboto is marginally narrower than the device's SF Pro; the regenerated
+    // fixture evidence covers the device metrics. Both mission actions must
+    // fit their labels at 390px width and 1.0x text scale without ellipsis.
+    for (final label in const ['Start Wave', 'World Map']) {
+      final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
+      expect(
+        paragraph.didExceedMaxLines,
+        isFalse,
+        reason:
+            '"$label" ellipsizes at 390px width; the mission actions '
+            'must render their labels without truncation.',
+      );
+    }
+  });
+
   testWidgets('composes the mission overlay bands at the product viewport', (
     tester,
   ) async {
