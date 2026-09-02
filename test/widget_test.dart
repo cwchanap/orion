@@ -21,6 +21,7 @@ import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
@@ -511,7 +512,7 @@ void main() {
         find
             .descendant(
               of: find.byType(MissionCommandDock),
-              matching: find.byType(CommandFrame),
+              matching: find.byType(MissionSurface),
             )
             .first,
       );
@@ -624,7 +625,7 @@ void main() {
     final dockFrameFinder = find
         .descendant(
           of: find.byType(MissionCommandDock),
-          matching: find.byType(CommandFrame),
+          matching: find.byType(MissionSurface),
         )
         .first;
 

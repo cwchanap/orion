@@ -96,6 +96,39 @@ void main() {
     );
   });
 
+  testWidgets('idle dock is a single MissionSurface with no frame chrome', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MissionCommandDock(
+          snapshot: commandDeckSnapshot(),
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+          onStartWave: () {},
+          onPlaceTower: (_) {},
+          onUpgrade: () {},
+          onSpecialize: (_) {},
+          onTargetingChanged: (_) {},
+          onSell: () {},
+        ),
+      ),
+    );
+
+    final surface = find.descendant(
+      of: find.byKey(const ValueKey('command-dock-idle')),
+      matching: find.byType(MissionSurface),
+    );
+    expect(surface, findsOneWidget);
+    // The reactor button carries its own internal octagon frames; no legacy
+    // CommandFrame chrome may wrap the idle surface itself.
+    expect(
+      find.ancestor(of: surface, matching: find.byType(CommandFrame)),
+      findsNothing,
+    );
+  });
+
   testWidgets('five art cards fit or peek at 375dp and the rail scrolls', (
     tester,
   ) async {

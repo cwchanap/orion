@@ -59,7 +59,9 @@ class ReactorButton extends StatelessWidget {
     required this.label,
     required this.icon,
     required this.onPressed,
-    this.size = 68,
+    // Wide enough for both mission action labels ("Start Wave", "World
+    // Map") to render without ellipsis at 390px width / 1.0x text scale.
+    this.size = 84,
   });
 
   final String tooltip;

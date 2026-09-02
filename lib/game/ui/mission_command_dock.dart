@@ -67,16 +67,8 @@ class MissionCommandDock extends StatelessWidget {
       );
     }
 
-    // Selected states own their rounded MissionSurface shell; only the
-    // idle dock keeps its CommandFrame chrome.
-    final shell =
-        snapshot.selectedTower == null && snapshot.selectedCell == null
-        ? CommandFrame(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-            child: content,
-          )
-        : content;
-
+    // Every dock state surfaces itself: idle, build rail, and inspector
+    // each own a rounded MissionSurface — no outer frame chrome.
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -89,7 +81,7 @@ class MissionCommandDock extends StatelessWidget {
           ),
           layoutBuilder: (currentChild, previousChildren) =>
               currentChild ?? const SizedBox.shrink(),
-          child: KeyedSubtree(key: contentKey, child: shell),
+          child: KeyedSubtree(key: contentKey, child: content),
         ),
       ],
     );
