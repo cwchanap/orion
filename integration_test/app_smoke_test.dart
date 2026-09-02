@@ -58,6 +58,10 @@ void main() {
           game.children.whereType<MultiTapDispatcher>().isNotEmpty;
     });
     await tester.pump();
+    final game =
+        (tester.state(find.bySubtype<GameWidget>())
+                as GameWidgetState<OrionDefenseGame>)
+            .currentGame;
     expect(
       find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       findsOneWidget,
@@ -134,24 +138,24 @@ void main() {
     await _tapUntil(
       tester,
       () => tester.tapAt(_pointAboveBoard(tester)),
-      () => tester.any(find.byKey(const ValueKey('mission-pacing-strip'))),
+      () => tester.any(find.byKey(const ValueKey('command-dock-idle'))),
       timeoutMessage:
-          'Could not dismiss the build rail to restore pacing controls.',
+          'Could not dismiss the build rail to restore the idle dock.',
     );
-    expect(find.byKey(const ValueKey('mission-pacing-strip')), findsOneWidget);
-    final pacedGame =
-        (tester.state(find.bySubtype<GameWidget>())
-                as GameWidgetState<OrionDefenseGame>)
-            .currentGame;
+    expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
     await tester.tap(find.text('2x'));
-    await _pumpUntil(tester, () => pacedGame.speedMultiplier == 2);
+    await _pumpUntil(tester, () => game.speedMultiplier == 2);
     // The game field flips synchronously but the SegmentedButton only learns
-    // its new selection on the next frame; without this pump the '1x' tap
+    // its new selection on the next frame; without this pump the next tap
     // lands on the segment the button still considers selected and is
     // silently dropped (onSelectionChanged is not called for it).
     await tester.pump();
+    await tester.tap(find.text('3x'));
+    await _pumpUntil(tester, () => game.speedMultiplier == 3);
+    await tester.pump();
     await tester.tap(find.text('1x'));
-    await _pumpUntil(tester, () => pacedGame.speedMultiplier == 1);
+    await _pumpUntil(tester, () => game.speedMultiplier == 1);
+    await tester.pump();
     for (final cell in const [
       GridPosition(4, 1),
       GridPosition(5, 1),
@@ -171,6 +175,21 @@ void main() {
       );
     }
 
+    // 5c. Bottom-left buildable cell (0,11): the lower board must stay
+    //     reachable past the bottom chrome. Deselect first so the idle dock
+    //     (whose dead space forwards board taps) is active, not the build
+    //     rail whose tower cards would consume the tap.
+    await tester.tapAt(_pointAboveBoard(tester));
+    await tester.pump(const Duration(milliseconds: 150));
+    await _tapUntil(
+      tester,
+      () => tester.tapAt(_cellCenter(tester, const GridPosition(0, 11))),
+      () => tester.any(find.byKey(const ValueKey('command-dock-build'))),
+      timeoutMessage:
+          'Tapping buildable cell (0,11) did not open the tower picker '
+          'within the timeout.',
+    );
+
     // 6. Dismiss the cell selection by tapping outside the board so the idle
     //    dock (with Start Wave) returns.
     await _tapUntil(
@@ -181,12 +200,83 @@ void main() {
           'Could not dismiss the build rail to return to the idle dock.',
     );
 
-    // 7. Start a wave; the phase chip flips from Build to Wave Active.
+    // 7. Select the placed Laser: tapping its cell now opens the tower
+    //    inspector, and a targeting change hits the real game session.
+    await _tapUntil(
+      tester,
+      () => tester.tapAt(_cellCenter(tester, targetCell)),
+      () => tester.any(find.byKey(const ValueKey('command-dock-tower'))),
+      timeoutMessage:
+          'Tapping the placed tower at (0,0) did not open the tower '
+          'inspector within the timeout.',
+    );
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('tower-target-strongest')),
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('tower-target-strongest')));
+    await _pumpUntil(
+      tester,
+      () =>
+          game.stateNotifier.value.selectedTower?.targetingMode ==
+          TowerTargetingMode.strongest,
+    );
+
+    // 8. Return to idle and toggle auto-start on and off.
+    await _tapUntil(
+      tester,
+      () => tester.tapAt(_pointAboveBoard(tester)),
+      () => tester.any(find.byKey(const ValueKey('command-dock-idle'))),
+      timeoutMessage: 'Could not dismiss the tower inspector.',
+    );
+    await tester.tap(find.byTooltip('Auto-start waves'));
+    await _pumpUntil(tester, () => game.autoStartEnabled);
+    await tester.pump();
+    await tester.tap(find.byTooltip('Auto-start waves'));
+    await _pumpUntil(tester, () => !game.autoStartEnabled);
+    await tester.pump();
+
+    // 9. Open and close the next-wave scanner.
+    await tester.tap(find.byKey(const ValueKey('next-wave-scanner-collapsed')));
+    await _pumpUntil(
+      tester,
+      () =>
+          tester.any(find.byKey(const ValueKey('next-wave-scanner-expanded'))),
+    );
+    await tester.tap(find.byKey(const ValueKey('next-wave-scanner-expanded')));
+    await _pumpUntil(
+      tester,
+      () =>
+          !tester.any(find.byKey(const ValueKey('next-wave-scanner-expanded'))),
+    );
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      findsOneWidget,
+    );
+
+    // 10. Start a wave; the phase chip flips from Build to Wave Active.
     await tester.tap(find.text('Start Wave'));
     await _pumpUntil(tester, () => tester.any(find.text('Wave Active')));
     expect(find.text('Wave Active'), findsOneWidget);
     expect(find.text('Build'), findsNothing);
     expect(find.textContaining('Environment:'), findsNothing);
+
+    // 11. Pause the active wave, then resume it.
+    await _tapUntil(
+      tester,
+      () => tester.tap(find.byTooltip('Pause')),
+      () => game.isPaused,
+      timeoutMessage: 'Tapping Pause did not pause the active wave.',
+    );
+    expect(find.byTooltip('Resume'), findsOneWidget);
+    expect(find.text('Paused'), findsOneWidget);
+    await tester.tap(find.byTooltip('Resume'));
+    await _pumpUntil(tester, () => !game.isPaused);
+    // The tap flips the game field synchronously, but the HUD label only
+    // updates on the next rendered frame.
+    await tester.pump();
+    expect(find.text('Paused'), findsNothing);
+    expect(find.text('Wave Active'), findsOneWidget);
   });
 }
 
