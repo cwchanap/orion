@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
-import 'command_frame.dart';
 import 'mission_surface.dart';
 import 'orion_ui_theme.dart';
 
@@ -287,8 +286,11 @@ class _CreditsAnchor extends StatelessWidget {
   }
 }
 
-class MissionPacingStrip extends StatelessWidget {
-  const MissionPacingStrip({
+/// Pause + visible 1x/2x/3x speeds + auto-start. Frameless by design: the
+/// idle command dock owns the painted surface, so the controls shrink-wrap
+/// inside its [MissionSurface] and the dock keeps the tap-arbiter contract.
+class MissionPacingControls extends StatelessWidget {
+  const MissionPacingControls({
     super.key,
     required this.snapshot,
     required this.onTogglePause,
@@ -314,88 +316,60 @@ class MissionPacingStrip extends StatelessWidget {
         ? 'Auto-start waves'
         : 'Auto-start waves, ${countdown.ceil()} seconds';
 
-    final controls = Wrap(
-      spacing: 4,
-      runSpacing: 4,
-      children: [
-        IconButton.filledTonal(
-          tooltip: snapshot.isPaused ? 'Resume' : 'Pause',
-          onPressed: canTogglePause ? onTogglePause : null,
-          icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
-        ),
-        SegmentedButton<double>(
-          showSelectedIcon: false,
-          segments: const [
-            ButtonSegment<double>(value: 1.0, label: Text('1x')),
-            ButtonSegment<double>(value: 2.0, label: Text('2x')),
-            ButtonSegment<double>(value: 3.0, label: Text('3x')),
-          ],
-          selected: {snapshot.speedMultiplier},
-          onSelectionChanged: canUsePacing
-              ? (selection) => onSpeedSelected(selection.single)
-              : null,
-        ),
-        AnimatedSwitcher(
-          duration: orionMotionDuration(
-            context,
-            const Duration(milliseconds: 160),
+    return Material(
+      type: MaterialType.transparency,
+      child: Wrap(
+        spacing: 4,
+        runSpacing: 4,
+        children: [
+          IconButton.filledTonal(
+            tooltip: snapshot.isPaused ? 'Resume' : 'Pause',
+            onPressed: canTogglePause ? onTogglePause : null,
+            icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
           ),
-          child: Semantics(
-            key: ValueKey(autoSemanticsLabel),
-            container: true,
-            button: true,
-            enabled: canUsePacing,
-            label: autoSemanticsLabel,
-            onTap: canUsePacing ? onToggleAutoStart : null,
-            child: Tooltip(
-              message: 'Auto-start waves',
-              excludeFromSemantics: true,
-              child: ExcludeSemantics(
-                child: FilterChip(
-                  label: Text(
-                    countdown == null ? 'Auto' : 'Auto ${countdown.ceil()}s',
+          SegmentedButton<double>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment<double>(value: 1.0, label: Text('1x')),
+              ButtonSegment<double>(value: 2.0, label: Text('2x')),
+              ButtonSegment<double>(value: 3.0, label: Text('3x')),
+            ],
+            selected: {snapshot.speedMultiplier},
+            onSelectionChanged: canUsePacing
+                ? (selection) => onSpeedSelected(selection.single)
+                : null,
+          ),
+          AnimatedSwitcher(
+            duration: orionMotionDuration(
+              context,
+              const Duration(milliseconds: 160),
+            ),
+            child: Semantics(
+              key: ValueKey(autoSemanticsLabel),
+              container: true,
+              button: true,
+              enabled: canUsePacing,
+              label: autoSemanticsLabel,
+              onTap: canUsePacing ? onToggleAutoStart : null,
+              child: Tooltip(
+                message: 'Auto-start waves',
+                excludeFromSemantics: true,
+                child: ExcludeSemantics(
+                  child: FilterChip(
+                    label: Text(
+                      countdown == null ? 'Auto' : 'Auto ${countdown.ceil()}s',
+                    ),
+                    selected: snapshot.autoStartEnabled,
+                    onSelected: canUsePacing
+                        ? (_) => onToggleAutoStart()
+                        : null,
                   ),
-                  selected: snapshot.autoStartEnabled,
-                  onSelected: canUsePacing ? (_) => onToggleAutoStart() : null,
                 ),
               ),
             ),
           ),
-        ),
-      ],
-    );
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final maxWidth = constraints.hasBoundedWidth
-            ? constraints.maxWidth
-            : double.infinity;
-        return Align(
-          alignment: Alignment.centerLeft,
-          widthFactor: 1,
-          heightFactor: 1,
-          child: Padding(
-            padding: const EdgeInsets.all(6),
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: maxWidth.isFinite
-                    ? (maxWidth - 12).clamp(0.0, 352.0).toDouble()
-                    : 352,
-              ),
-              child: CommandFrame(
-                key: const ValueKey('mission-pacing-strip'),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                color: OrionUiTheme.of(context).hullBlack,
-                borderColor: OrionUiTheme.of(context).frameSteel,
-                child: Material(
-                  type: MaterialType.transparency,
-                  child: controls,
-                ),
-              ),
-            ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 }

@@ -75,7 +75,7 @@ void main() {
     }
   });
 
-  testWidgets('pacing strip invokes existing control callbacks', (
+  testWidgets('pacing controls invoke existing control callbacks', (
     tester,
   ) async {
     var pauseTaps = 0;
@@ -83,7 +83,7 @@ void main() {
     double? speed;
     await tester.pumpWidget(
       MaterialApp(
-        home: MissionPacingStrip(
+        home: MissionPacingControls(
           snapshot: commandDeckSnapshot(phase: GamePhase.wave),
           onTogglePause: () => pauseTaps += 1,
           onSpeedSelected: (value) => speed = value,
@@ -104,7 +104,7 @@ void main() {
     var pauseTaps = 0;
     await tester.pumpWidget(
       MaterialApp(
-        home: MissionPacingStrip(
+        home: MissionPacingControls(
           snapshot: commandDeckSnapshot(
             phase: GamePhase.build,
             autoStartEnabled: true,
@@ -123,105 +123,37 @@ void main() {
     expect(find.text('Auto 5s'), findsOneWidget);
   });
 
-  testWidgets(
-    'pacing controls preserve 48dp hit targets while shrink-wrapped',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: MissionPacingStrip(
-            snapshot: commandDeckSnapshot(phase: GamePhase.wave),
-            onTogglePause: () {},
-            onSpeedSelected: (_) {},
-            onToggleAutoStart: () {},
-          ),
+  testWidgets('pacing controls preserve 48dp hit targets', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MissionPacingControls(
+          snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
         ),
+      ),
+    );
+
+    const minimumHitTarget = 48.0;
+    final pauseRect = tester.getRect(find.byType(IconButton));
+    expect(pauseRect.width, greaterThanOrEqualTo(minimumHitTarget));
+    expect(pauseRect.height, greaterThanOrEqualTo(minimumHitTarget));
+
+    for (final label in ['1x', '2x', '3x']) {
+      final segment = find.ancestor(
+        of: find.text(label),
+        matching: find.byType(TextButton),
       );
+      final segmentRect = tester.getRect(segment);
+      expect(segmentRect.width, greaterThanOrEqualTo(minimumHitTarget));
+      expect(segmentRect.height, greaterThanOrEqualTo(minimumHitTarget));
+    }
 
-      const minimumHitTarget = 48.0;
-      final pauseRect = tester.getRect(find.byType(IconButton));
-      expect(pauseRect.width, greaterThanOrEqualTo(minimumHitTarget));
-      expect(pauseRect.height, greaterThanOrEqualTo(minimumHitTarget));
-
-      for (final label in ['1x', '2x', '3x']) {
-        final segment = find.ancestor(
-          of: find.text(label),
-          matching: find.byType(TextButton),
-        );
-        final segmentRect = tester.getRect(segment);
-        expect(segmentRect.width, greaterThanOrEqualTo(minimumHitTarget));
-        expect(segmentRect.height, greaterThanOrEqualTo(minimumHitTarget));
-      }
-
-      final autoRect = tester.getRect(find.byType(FilterChip));
-      expect(autoRect.width, greaterThanOrEqualTo(minimumHitTarget));
-      expect(autoRect.height, greaterThanOrEqualTo(minimumHitTarget));
-
-      final paintedFrameRect = tester.getRect(find.byType(CommandFrame));
-      expect(paintedFrameRect.width, lessThan(800));
-    },
-  );
-
-  testWidgets(
-    'pacing frame ends at its controls so the adjacent board stays tappable',
-    (tester) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      var backgroundTaps = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: TextScaler.linear(2)),
-            child: child!,
-          ),
-          home: Stack(
-            children: [
-              Positioned.fill(
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: () => backgroundTaps += 1,
-                ),
-              ),
-              Positioned(
-                left: 12,
-                right: 12,
-                top: 12,
-                child: MissionPacingStrip(
-                  snapshot: commandDeckSnapshot(phase: GamePhase.wave),
-                  onTogglePause: () {},
-                  onSpeedSelected: (_) {},
-                  onToggleAutoStart: () {},
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      final frame = tester.getRect(find.byType(CommandFrame));
-      final controlRects = [
-        tester.getRect(find.byType(IconButton)),
-        tester.getRect(find.byType(SegmentedButton<double>)),
-        tester.getRect(find.byType(FilterChip)),
-      ];
-      final controlsRight = controlRects
-          .map((rect) => rect.right)
-          .reduce((left, right) => left > right ? left : right);
-      expect(frame.right - controlsRight, lessThanOrEqualTo(7));
-
-      final strip = tester.getRect(find.byType(MissionPacingStrip));
-      final pointImmediatelyOutsideFrame = Offset(
-        frame.right + 1,
-        frame.center.dy,
-      );
-      expect(pointImmediatelyOutsideFrame.dx, lessThan(strip.right));
-      await tester.tapAt(pointImmediatelyOutsideFrame);
-      expect(backgroundTaps, 1);
-    },
-  );
+    final autoRect = tester.getRect(find.byType(FilterChip));
+    expect(autoRect.width, greaterThanOrEqualTo(minimumHitTarget));
+    expect(autoRect.height, greaterThanOrEqualTo(minimumHitTarget));
+  });
 
   testWidgets('status passes taps through while pacing consumes them', (
     tester,
@@ -256,7 +188,7 @@ void main() {
                     ],
                   ),
                   const SizedBox(key: ValueKey('top-flow-gap'), height: 6),
-                  MissionPacingStrip(
+                  MissionPacingControls(
                     snapshot: commandDeckSnapshot(phase: GamePhase.wave),
                     onTogglePause: () {},
                     onSpeedSelected: (_) {},
@@ -276,7 +208,9 @@ void main() {
     expect(backgroundTaps, 2);
     await tester.tap(find.byTooltip('Pause'));
     expect(backgroundTaps, 2);
-    await tester.tapAt(tester.getTopLeft(find.byType(MissionPacingStrip)));
+    // The controls shrink-wrap: space just beside them belongs to the board.
+    final pacing = tester.getRect(find.byType(MissionPacingControls));
+    await tester.tapAt(Offset(pacing.left - 1, pacing.center.dy));
     expect(backgroundTaps, 3);
   });
 
@@ -392,7 +326,7 @@ void main() {
     try {
       await tester.pumpWidget(
         MaterialApp(
-          home: MissionPacingStrip(
+          home: MissionPacingControls(
             snapshot: commandDeckSnapshot(
               phase: GamePhase.build,
               autoStartEnabled: true,
