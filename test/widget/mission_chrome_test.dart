@@ -11,8 +11,16 @@ import '../support/command_deck_fixtures.dart';
 
 const _productViewport = Size(390, 844);
 
-Widget chromeHost(GameSnapshot snapshot, {VoidCallback? onBackgroundTap}) {
+Widget chromeHost(
+  GameSnapshot snapshot, {
+  VoidCallback? onBackgroundTap,
+  TextScaler textScaler = TextScaler.noScaling,
+}) {
   return MaterialApp(
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+      child: child!,
+    ),
     home: Scaffold(
       body: Stack(
         children: [
@@ -51,6 +59,17 @@ void _expectWithinViewport(WidgetTester tester, Finder finder, Size viewport) {
   expect(rect.top, greaterThanOrEqualTo(0));
   expect(rect.right, lessThanOrEqualTo(viewport.width));
   expect(rect.bottom, lessThanOrEqualTo(viewport.height));
+}
+
+void _expectIdlePacingAbsent(WidgetTester tester) {
+  // A selection replaces the idle dock entirely: no pacing, no reactor.
+  expect(find.byTooltip('Pause'), findsNothing);
+  expect(find.byTooltip('Resume'), findsNothing);
+  expect(find.text('1x'), findsNothing);
+  expect(find.text('2x'), findsNothing);
+  expect(find.text('3x'), findsNothing);
+  expect(find.byTooltip('Auto-start waves'), findsNothing);
+  expect(find.text('Start Wave'), findsNothing);
 }
 
 void main() {
@@ -220,4 +239,95 @@ void main() {
       _expectWithinViewport(tester, find.byType(MissionStatusHud), size);
     }
   });
+
+  testWidgets(
+    'compact portrait: selected cell keeps the rail reachable and scrollable',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(selectedCell: const GridPosition(1, 1)),
+          textScaler: const TextScaler.linear(1.3),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+      _expectIdlePacingAbsent(tester);
+
+      // The first card is on screen and the rail scrolls horizontally to
+      // reveal the last one.
+      _expectWithinViewport(
+        tester,
+        find.byKey(const ValueKey('tower-card-laser')),
+        _productViewport,
+      );
+      await tester.drag(
+        find.byKey(const ValueKey('tower-card-laser')),
+        const Offset(-400, 0),
+      );
+      await tester.pumpAndSettle();
+      _expectWithinViewport(
+        tester,
+        find.byKey(ValueKey('tower-card-${TowerType.values.last.name}')),
+        _productViewport,
+      );
+    },
+  );
+
+  testWidgets(
+    'compact portrait: selected Level 2 tower scrolls to every control',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      const tower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(1, 1),
+        level: 2,
+      );
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            selectedTower: tower,
+            selectedTowerStats: GameBalance.towerStats(
+              tower.type,
+              level: tower.level,
+            ),
+          ),
+          textScaler: const TextScaler.linear(1.3),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
+      _expectIdlePacingAbsent(tester);
+
+      // Both specialization actions, targeting, sell, and the final stat row
+      // are all reachable through the inspector's internal scroll.
+      final reachableKeys = <String>[
+        for (final specialization in GameBalance.specializationsFor(tower.type))
+          'tower-specialization-${specialization.name}',
+        'tower-target-first',
+        'tower-sell',
+        'tower-stat-range',
+      ];
+      for (final key in reachableKeys) {
+        await tester.ensureVisible(find.byKey(ValueKey(key)));
+        await tester.pumpAndSettle();
+        _expectWithinViewport(
+          tester,
+          find.byKey(ValueKey(key)),
+          _productViewport,
+        );
+      }
+    },
+  );
 }
