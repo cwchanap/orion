@@ -13,6 +13,7 @@ class NextWaveScanner extends StatefulWidget {
     required this.modifierTitles,
     required this.collapseRequested,
     this.onCollapsedTapIntercept,
+    this.onExpandedChanged,
   });
 
   final WavePreview preview;
@@ -27,6 +28,10 @@ class NextWaveScanner extends StatefulWidget {
   /// a viewport where the whole control overlaps the board (short screens)
   /// would leave touch users no way to open the preview.
   final bool Function(Offset globalPosition)? onCollapsedTapIntercept;
+
+  /// Reports in-place expansion changes so the composing band can yield
+  /// width to the expanded preview.
+  final ValueChanged<bool>? onExpandedChanged;
 
   @override
   State<NextWaveScanner> createState() => _NextWaveScannerState();
@@ -81,6 +86,7 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
         if (expanded && _hasUnreadPreview) {
           setState(() => _hasUnreadPreview = false);
         }
+        widget.onExpandedChanged?.call(expanded);
       },
       collapsedBuilder: _buildCollapsed,
       expandedBuilder: _buildExpanded,

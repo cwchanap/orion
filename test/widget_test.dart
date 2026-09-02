@@ -596,8 +596,10 @@ void main() {
   testWidgets('board taps under the idle dock still reach the game', (
     tester,
   ) async {
-    // Short viewport: the idle dock then covers row-9 path-cell centers.
-    tester.view.physicalSize = const Size(430, 640);
+    // Short viewport: the single-row idle dock then covers row-9 path-cell
+    // centers with dead space (the row-10 path cell sits under the reactor,
+    // which is skipped as an absorbing control).
+    tester.view.physicalSize = const Size(430, 520);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -615,10 +617,15 @@ void main() {
       0.0,
       gameRect.height / BoardLayout.rows,
     );
+    // The game centers the board inside the GameWidget on both axes; probe
+    // points must use the same origin (a wide-short viewport makes the
+    // horizontal centering offset a full column wide).
+    final boardLeft =
+        gameRect.left + (gameRect.width - BoardLayout.columns * cellSize) / 2;
     final boardTop =
         gameRect.top + (gameRect.height - BoardLayout.rows * cellSize) / 2;
     Offset globalFor(GridPosition cell) => Offset(
-      gameRect.left + (cell.column + 0.5) * cellSize,
+      boardLeft + (cell.column + 0.5) * cellSize,
       boardTop + (cell.row + 0.5) * cellSize,
     );
 
@@ -704,34 +711,45 @@ void main() {
     await tester.pump();
     // Prefer a path cell free of enemies; while the wave winds down the
     // reflowing chrome may cover none, so fall back to any covered cell.
+    // Toasts and phase flips shift the dock between scan and tap (a point
+    // under the disabled wave reactor can land under the enabled Start Wave
+    // button), so tap-and-verify, rescanning until a forwarded tap actually
+    // selects the intended cell.
     GridPosition? chosen;
-    for (var attempt = 0; attempt < 400 && chosen == null; attempt++) {
+    for (var attempt = 0; attempt < 40 && chosen == null; attempt++) {
       final occupied = [
         for (final enemy in game!.descendants().whereType<EnemyComponent>())
           if (enemy.isAlive) gameRect.topLeft + enemy.position.toOffset(),
       ];
-      chosen = freePathCellUnderStrip(avoid: occupied);
-      if (chosen != null) break;
-      final frame = tester.getRect(dockFrameFinder);
-      scan:
-      for (var row = BoardLayout.rows - 1; row >= 0; row--) {
-        for (var col = BoardLayout.columns - 1; col >= 0; col--) {
-          final cell = GridPosition(col, row);
-          final point = globalFor(cell);
-          if (!frame.contains(point)) continue;
-          if (underControl(point)) continue;
-          if (occupied.any((p) => (p - point).distance <= cellSize * 0.55)) {
-            continue;
+      GridPosition? candidate = freePathCellUnderStrip(avoid: occupied);
+      if (candidate == null) {
+        final frame = tester.getRect(dockFrameFinder);
+        scan:
+        for (var row = BoardLayout.rows - 1; row >= 0; row--) {
+          for (var col = BoardLayout.columns - 1; col >= 0; col--) {
+            final cell = GridPosition(col, row);
+            final point = globalFor(cell);
+            if (!frame.contains(point)) continue;
+            if (underControl(point)) continue;
+            if (occupied.any((p) => (p - point).distance <= cellSize * 0.55)) {
+              continue;
+            }
+            candidate = cell;
+            break scan;
           }
-          chosen = cell;
-          break scan;
         }
       }
-      if (chosen == null) await tester.pump(const Duration(milliseconds: 50));
+      if (candidate == null) {
+        await tester.pump(const Duration(milliseconds: 50));
+        continue;
+      }
+      await tester.tapAt(globalFor(candidate));
+      await tester.pump();
+      if (game!.snapshot.selectedCell == candidate) {
+        chosen = candidate;
+      }
     }
     expect(chosen, isNotNull, reason: 'phase=${game!.snapshot.phase}');
-    await tester.tapAt(globalFor(chosen!));
-    await tester.pump();
     expect(game!.snapshot.selectedCell, chosen);
   });
 

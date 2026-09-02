@@ -15,10 +15,15 @@ class AcquiredRunModuleControl extends StatelessWidget {
     super.key,
     required this.moduleIds,
     required this.collapseRequested,
+    this.onExpandedChanged,
   });
 
   final List<RunModuleId> moduleIds;
   final bool collapseRequested;
+
+  /// Reports in-place expansion changes so the composing band can yield
+  /// width to the expanded details.
+  final ValueChanged<bool>? onExpandedChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +31,7 @@ class AcquiredRunModuleControl extends StatelessWidget {
     return MissionCollapsible(
       collapseRequested: collapseRequested,
       resetToken: Object.hashAll(moduleIds),
+      onExpandedChanged: onExpandedChanged,
       collapsedBuilder: _buildCollapsed,
       expandedBuilder: _buildExpanded,
     );

@@ -9,6 +9,7 @@ import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 
 import '../support/command_deck_fixtures.dart';
@@ -127,6 +128,63 @@ void main() {
     }
   });
 
+  testWidgets(
+    'idle dock keeps pacing and the primary action on one row at product '
+    'width with real fonts',
+    (tester) async {
+      // Placeholder test glyphs are wider than any real font and cannot
+      // expose a real-font wrap; Roboto approximates the device metrics.
+      await _loadRealRoboto();
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+      );
+      await tester.pump();
+
+      // A wrapped pacing row grows the dock taller, lifting its surface
+      // over bottom-row board cells and swallowing their taps. Bound the
+      // idle surface to its single-row height: one 48dp control run and
+      // the 84px reactor, plus the surface's own 8px padding.
+      final surfaceRect = tester.getRect(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('command-dock-idle')),
+              matching: find.byType(MissionSurface),
+            )
+            .first,
+      );
+      expect(
+        surfaceRect.height,
+        lessThanOrEqualTo(100.5),
+        reason:
+            'Idle dock surface grew to ${surfaceRect.height}px; the pacing '
+            'controls wrapped into a second row at 390px with real fonts.',
+      );
+
+      // Every idle control shares the row: equal vertical centers.
+      final centers = [
+        find.byTooltip('Pause'),
+        find.text('1x'),
+        find.text('2x'),
+        find.text('3x'),
+        find.byType(FilterChip),
+        find.byTooltip('Start Wave'),
+      ].map(tester.getCenter).toList();
+      for (final center in centers) {
+        expect(
+          (center.dy - centers.first.dy).abs(),
+          lessThan(0.5),
+          reason:
+              'Idle control at $center is not on the same row as the first '
+              'control (${centers.first}); the dock wrapped.',
+        );
+      }
+    },
+  );
+
   testWidgets('composes the mission overlay bands at the product viewport', (
     tester,
   ) async {
@@ -156,6 +214,11 @@ void main() {
         .dy;
     final dockTop = tester.getTopLeft(find.byType(MissionCommandDock)).dy;
     expect(toastBottom, lessThanOrEqualTo(dockTop));
+
+    // World Map is a compact top-band mission action now, not a bottom-band
+    // dock companion.
+    final worldMapTop = tester.getTopLeft(find.byTooltip('World Map')).dy;
+    expect(worldMapTop, lessThan(dockTop));
 
     // The idle dock hosts pacing plus the primary action.
     expect(find.byTooltip('Pause'), findsOneWidget);

@@ -329,6 +329,15 @@ class MissionPacingControls extends StatelessWidget {
           ),
           SegmentedButton<double>(
             showSelectedIcon: false,
+            // M3 floors every segment at the inner button's 64px minimum
+            // width, which alone pushes pause + 3 speeds + auto-start past
+            // the idle dock's row at the product width and makes the dock
+            // wrap (covering bottom-row board cells). Horizontal density -4
+            // lowers that floor to the 48dp touch minimum; vertical density
+            // stays 0 so the padded 48dp hit height is preserved.
+            style: const ButtonStyle(
+              visualDensity: VisualDensity(horizontal: -4),
+            ),
             segments: const [
               ButtonSegment<double>(value: 1.0, label: Text('1x')),
               ButtonSegment<double>(value: 2.0, label: Text('2x')),
@@ -356,6 +365,11 @@ class MissionPacingControls extends StatelessWidget {
                 excludeFromSemantics: true,
                 child: ExcludeSemantics(
                   child: FilterChip(
+                    // Tighter chip insets keep pause + speeds + auto on one
+                    // row inside the idle dock at the product width; the
+                    // chip keeps its default 48dp hit height.
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
                     label: Text(
                       countdown == null ? 'Auto' : 'Auto ${countdown.ceil()}s',
                     ),
