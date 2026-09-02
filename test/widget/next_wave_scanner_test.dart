@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 
@@ -411,6 +413,29 @@ void main() {
     } finally {
       handle.dispose();
     }
+  });
+
+  testWidgets('collapsed and expanded shells use MissionSurface', (
+    tester,
+  ) async {
+    await tester.pumpWidget(scannerHost(commandDeckPreview()));
+
+    Finder scannerSurfaces() => find.descendant(
+      of: find.byType(NextWaveScanner),
+      matching: find.byType(MissionSurface),
+    );
+    Finder scannerFrames() => find.descendant(
+      of: find.byType(NextWaveScanner),
+      matching: find.byType(CommandFrame),
+    );
+
+    expect(scannerSurfaces(), findsWidgets);
+    expect(scannerFrames(), findsNothing);
+
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    expect(scannerSurfaces(), findsWidgets);
+    expect(scannerFrames(), findsNothing);
   });
 
   testWidgets('reduced motion expands and collapses after one pump', (

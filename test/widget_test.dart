@@ -16,6 +16,7 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/game_session.dart';
+import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
@@ -817,9 +818,10 @@ void main() {
     );
     await tester.pump();
     // The GameWidget fills the full SafeArea so cellSize is preserved. The
-    // status HUD and module strip are non-interactive overlays
-    // (IgnorePointer) so taps pass through to the board; pacing stays
-    // interactive inside the idle dock in the bottom command chrome.
+    // status HUD is the non-interactive overlay (IgnorePointer) so taps pass
+    // through to the board; the acquired-module details control stays
+    // interactive (it collapses on selection) and pacing stays interactive
+    // inside the idle dock in the bottom command chrome.
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.text('2x'), findsOneWidget);
@@ -842,8 +844,8 @@ void main() {
       findsOneWidget,
     );
     expect(
-      _activeIgnorePointerAncestorsOf(find.byType(AcquiredRunModuleStrip)),
-      findsOneWidget,
+      _activeIgnorePointerAncestorsOf(find.byType(AcquiredRunModuleControl)),
+      findsNothing,
     );
     expect(
       _activeIgnorePointerAncestorsOf(
@@ -878,6 +880,12 @@ void main() {
         });
       }
 
+      // Mission-control coordinates recorded while the dock is reachable.
+      final startWaveCenter = tester.getCenter(find.text('Start Wave'));
+      final scannerCenter = tester.getCenter(
+        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      );
+
       // The draft overlay is ordered after the chrome…
       game!.stateNotifier.value = commandDeckSnapshot(
         nextWavePreview: commandDeckPreview(),
@@ -900,6 +908,17 @@ void main() {
       expect(game!.snapshot.selectedCell, isNull);
       expect(find.byType(RunModuleDraftPanel), findsOneWidget);
 
+      // Taps at the underlying mission-control coordinates reach neither the
+      // dock (no wave start, no speed change) nor the scanner.
+      await tester.tapAt(startWaveCenter);
+      await tester.pump();
+      await tester.tapAt(scannerCenter);
+      await tester.pump();
+      expect(game!.snapshot.phase, GamePhase.build);
+      expect(game!.snapshot.speedMultiplier, 1);
+      expect(game!.snapshot.selectedCell, isNull);
+      expect(find.byType(RunModuleDraftPanel), findsOneWidget);
+
       // The loss report is likewise a later blocking entry.
       game!.selectRunModule(1, RunModuleId.heavyCaliber);
       await tester.pump();
@@ -909,6 +928,14 @@ void main() {
         lessThan(stackIndexOfType(MissionReportPanel)),
       );
 
+      // A tap at the underlying scanner coordinate is absorbed by the report
+      // (its own action row owns the bottom edge, so the bottom-band dock
+      // probes stay exclusive to the draft leg) and reaches neither the dock
+      // nor the world map.
+      await tester.tapAt(scannerCenter);
+      await tester.pump();
+      expect(game!.snapshot.phase, GamePhase.lost);
+      expect(find.text('Mission Failed'), findsOneWidget);
       await tester.tapAt(tester.getCenter(find.bySubtype<GameWidget>()));
       await tester.pump();
       expect(find.text('Mission Failed'), findsOneWidget);
