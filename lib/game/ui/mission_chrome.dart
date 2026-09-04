@@ -87,21 +87,27 @@ class _MissionChromeState extends State<MissionChrome> {
     // Panels snap shut without a toggle when a selection requests collapse
     // or their reset token rolls (new wave preview, module list change);
     // mirror those resets so the World Map action cannot stay hidden behind
-    // a panel that is no longer expanded.
+    // a panel that is no longer expanded. Each panel's MissionCollapsible
+    // only closes on its own token change, so reset clears only the matching
+    // flag — clearing both would desync from a still-expanded panel whose
+    // token is unchanged and reinsert World Map to steal its width. A
+    // selection activation raises collapseRequested on both panels, so it
+    // clears both.
     final snapshot = widget.snapshot;
     final oldSnapshot = oldWidget.snapshot;
-    final selectionActive =
-        snapshot.selectedCell != null || snapshot.selectedTower != null;
-    final oldSelectionActive =
-        oldSnapshot.selectedCell != null || oldSnapshot.selectedTower != null;
-    final resetTokenChanged =
+    final selectionActivated =
+        (snapshot.selectedCell != null || snapshot.selectedTower != null) &&
+        (oldSnapshot.selectedCell == null && oldSnapshot.selectedTower == null);
+    final scannerResetTokenChanged =
         snapshot.nextWavePreview?.waveNumber !=
-            oldSnapshot.nextWavePreview?.waveNumber ||
+        oldSnapshot.nextWavePreview?.waveNumber;
+    final modulesResetTokenChanged =
         Object.hashAll(snapshot.acquiredRunModules) !=
-            Object.hashAll(oldSnapshot.acquiredRunModules);
-    if (_anyTopPanelExpanded &&
-        ((selectionActive && !oldSelectionActive) || resetTokenChanged)) {
+        Object.hashAll(oldSnapshot.acquiredRunModules);
+    if (_scannerExpanded && (selectionActivated || scannerResetTokenChanged)) {
       _scannerExpanded = false;
+    }
+    if (_modulesExpanded && (selectionActivated || modulesResetTokenChanged)) {
       _modulesExpanded = false;
     }
   }

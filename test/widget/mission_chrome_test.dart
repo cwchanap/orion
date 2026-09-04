@@ -511,6 +511,110 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a scanner-preview reset keeps the still-expanded modules panel yielded',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      // Build phase with modules and a wave-1 preview.
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            nextWavePreview: commandDeckPreview(waveNumber: 1),
+            acquiredRunModules: const [
+              RunModuleId.heavyCaliber,
+              RunModuleId.cryoReservoir,
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Expand only the modules panel; World Map yields to it.
+      await tester.tap(find.text('Modules 2'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('World Map'), findsNothing);
+
+      // The scanner preview rolls to the next wave while the module list is
+      // unchanged. Only the scanner's reset token changed, so only the
+      // scanner may collapse — the still-expanded modules panel must keep
+      // World Map yielded, not reinsert it to steal the panel's width.
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            nextWavePreview: commandDeckPreview(waveNumber: 2),
+            acquiredRunModules: const [
+              RunModuleId.heavyCaliber,
+              RunModuleId.cryoReservoir,
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('World Map'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'a module-list reset keeps the still-expanded scanner panel yielded',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      // Build phase with modules and a wave-1 preview.
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            nextWavePreview: commandDeckPreview(waveNumber: 1),
+            acquiredRunModules: const [RunModuleId.heavyCaliber],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Expand only the scanner; World Map yields to it.
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('World Map'), findsNothing);
+
+      // The module list changes while the scanner preview is unchanged. Only
+      // the modules' reset token changed, so only the modules panel may
+      // collapse — the still-expanded scanner must keep World Map yielded.
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            nextWavePreview: commandDeckPreview(waveNumber: 1),
+            acquiredRunModules: const [
+              RunModuleId.heavyCaliber,
+              RunModuleId.cryoReservoir,
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('World Map'), findsNothing);
+    },
+  );
+
   testWidgets('landscape viewports render the same tree without overflow', (
     tester,
   ) async {
