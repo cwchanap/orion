@@ -58,14 +58,26 @@ class MissionChrome extends StatefulWidget {
 }
 
 class _MissionChromeState extends State<MissionChrome> {
-  /// Whether an expanded top-band panel (scanner preview or module details)
-  /// is borrowing the band's width. The idle World Map action yields while
-  /// it does, so the status HUD never drops below its minimum width.
-  bool _topPanelExpanded = false;
+  /// Whether each top-band panel is currently borrowing the band's width.
+  /// Tracked independently so collapsing one panel never reinserts the idle
+  /// World Map action while the other is still expanded — which would steal
+  /// width from the still-open panel at the product viewport. The idle World
+  /// Map action yields while either is expanded, so the status HUD never
+  /// drops below its minimum width.
+  bool _scannerExpanded = false;
+  bool _modulesExpanded = false;
 
-  void _handleTopPanelExpanded(bool expanded) {
-    if (_topPanelExpanded != expanded) {
-      setState(() => _topPanelExpanded = expanded);
+  bool get _anyTopPanelExpanded => _scannerExpanded || _modulesExpanded;
+
+  void _handleScannerExpanded(bool expanded) {
+    if (_scannerExpanded != expanded) {
+      setState(() => _scannerExpanded = expanded);
+    }
+  }
+
+  void _handleModulesExpanded(bool expanded) {
+    if (_modulesExpanded != expanded) {
+      setState(() => _modulesExpanded = expanded);
     }
   }
 
@@ -87,9 +99,10 @@ class _MissionChromeState extends State<MissionChrome> {
             oldSnapshot.nextWavePreview?.waveNumber ||
         Object.hashAll(snapshot.acquiredRunModules) !=
             Object.hashAll(oldSnapshot.acquiredRunModules);
-    if (_topPanelExpanded &&
+    if (_anyTopPanelExpanded &&
         ((selectionActive && !oldSelectionActive) || resetTokenChanged)) {
-      _topPanelExpanded = false;
+      _scannerExpanded = false;
+      _modulesExpanded = false;
     }
   }
 
@@ -126,14 +139,14 @@ class _MissionChromeState extends State<MissionChrome> {
                       collapseRequested:
                           snapshot.selectedCell != null ||
                           snapshot.selectedTower != null,
-                      onExpandedChanged: _handleTopPanelExpanded,
+                      onExpandedChanged: _handleModulesExpanded,
                     ),
                   ),
                 ],
                 // World Map rides in the top band only while idle and while
                 // no expanded panel needs the width, keeping the bottom band
                 // a single-row dock at the product width.
-                if (isIdle && !_topPanelExpanded) ...[
+                if (isIdle && !_anyTopPanelExpanded) ...[
                   const SizedBox(width: 6),
                   WorldMapAction(
                     enabled: snapshot.phase == GamePhase.build,
@@ -160,7 +173,7 @@ class _MissionChromeState extends State<MissionChrome> {
                         snapshot.selectedCell != null ||
                         snapshot.selectedTower != null,
                     onCollapsedTapIntercept: widget.onBoardTapIntercept,
-                    onExpandedChanged: _handleTopPanelExpanded,
+                    onExpandedChanged: _handleScannerExpanded,
                   ),
                 ],
               ],
