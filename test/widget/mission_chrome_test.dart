@@ -447,6 +447,70 @@ void main() {
     },
   );
 
+  testWidgets(
+    'collapsing one of two expanded top panels keeps World Map yielded',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            nextWavePreview: commandDeckPreview(),
+            acquiredRunModules: const [
+              RunModuleId.heavyCaliber,
+              RunModuleId.cryoReservoir,
+            ],
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Idle with no panel expanded: World Map is present.
+      expect(find.byTooltip('World Map'), findsOneWidget);
+
+      // Expand both top-band panels.
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Modules 2'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsOneWidget,
+      );
+      // World Map yields to the expanded panels.
+      expect(find.byTooltip('World Map'), findsNothing);
+
+      // Collapse only the scanner; modules is still expanded, so World Map
+      // must stay hidden — not reinserted to steal the modules panel's width.
+      await tester.tap(find.byTooltip('Collapse next-wave scanner'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('next-wave-scanner-expanded')),
+        findsNothing,
+      );
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('World Map'), findsNothing);
+
+      // Collapse the modules panel too; now World Map returns.
+      await tester.tap(find.byTooltip('Collapse acquired modules'));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('acquired-modules-expanded')),
+        findsNothing,
+      );
+      expect(find.byTooltip('World Map'), findsOneWidget);
+    },
+  );
+
   testWidgets('landscape viewports render the same tree without overflow', (
     tester,
   ) async {

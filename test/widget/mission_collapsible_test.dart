@@ -140,6 +140,32 @@ void main() {
     },
   );
 
+  testWidgets(
+    'outgoing expanded rectangle is not hit-testable after a local collapse',
+    (tester) async {
+      var backgroundTaps = 0;
+      void countTap() => backgroundTaps += 1;
+      await tester.pumpWidget(_host(_collapsible(), onBackgroundTap: countTap));
+      // 1. open the expanded child.
+      await tester.tap(find.byKey(_collapsedKey));
+      await tester.pumpAndSettle();
+      // 2. record its rectangle.
+      final formerExpandedRect = tester.getRect(find.byKey(_expandedKey));
+
+      // 3. collapse by tapping the expanded trigger (collapseRequested stays
+      //    false), so the stale-area case cannot rely on IgnorePointer masking
+      //    the outgoing child — AnimatedSwitcher must release it on its own.
+      await tester.tap(find.byKey(_expandedKey));
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(find.byKey(_expandedKey), findsNothing);
+
+      // 4. tap the former expanded rectangle.
+      await tester.tapAt(formerExpandedRect.center);
+      // 5. the background receives exactly one tap.
+      expect(backgroundTaps, 1);
+    },
+  );
+
   testWidgets('Reduced Motion makes the switch duration zero', (tester) async {
     await tester.pumpWidget(_host(_collapsible(), disableAnimations: true));
     await tester.tap(find.byKey(_collapsedKey));
