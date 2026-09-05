@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
-import 'command_frame.dart';
 import 'mission_command_hud.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
@@ -106,6 +105,7 @@ class IdleCommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
     final countdown = snapshot.autoStartCountdownRemaining;
     final reactorLabel = _reactorLabel(snapshot, countdown);
     final reactorTooltip = snapshot.phase == GamePhase.wave
@@ -113,10 +113,16 @@ class IdleCommandBar extends StatelessWidget {
         : reactorLabel;
 
     return MissionSurface(
+      // The shell is a low grouping surface for the idle row, not a strong
+      // cyan frame: reduced vertical padding and a quiet border let the dark
+      // translucent fill group the controls.
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+      backgroundColor: uiTheme.hullBlack.withValues(alpha: 0.92),
+      borderColor: uiTheme.systemCyan.withValues(alpha: 0.10),
       child: Row(
         children: [
           // Pacing flexes and wraps on narrow viewports; the fixed-size
-          // reactor keeps the primary action pinned to the dock's edge.
+          // primary action stays pinned to the dock's edge.
           Expanded(
             child: MissionPacingControls(
               snapshot: snapshot,
@@ -134,7 +140,7 @@ class IdleCommandBar extends StatelessWidget {
             ),
             layoutBuilder: (currentChild, previousChildren) =>
                 currentChild ?? const SizedBox.shrink(),
-            child: ReactorButton(
+            child: _PrimaryActionPill(
               key: ValueKey(reactorLabel),
               tooltip: reactorTooltip,
               label: reactorLabel,
@@ -155,6 +161,108 @@ class IdleCommandBar extends StatelessWidget {
       return '${snapshot.waveNumber}/${snapshot.waveTotal}';
     }
     return 'Start Wave';
+  }
+}
+
+/// Wide filled pill for the dock's single primary action: 48-56dp tall,
+/// filled cyan with dark content while enabled, and the dock's only glow.
+/// The wave-progress and countdown variants share the same footprint so the
+/// idle dock never reflows when the phase label changes.
+class _PrimaryActionPill extends StatelessWidget {
+  const _PrimaryActionPill({
+    super.key,
+    required this.tooltip,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  static const double _width = 98;
+  static const double _height = 52;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final enabled = onPressed != null;
+    final foreground = enabled ? uiTheme.voidBlack : uiTheme.textMuted;
+    final accent = enabled ? uiTheme.systemCyanStrong : uiTheme.frameSteel;
+    final radius = BorderRadius.circular(_height / 2);
+
+    return Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: tooltip,
+        onTap: onPressed,
+        excludeSemantics: true,
+        child: SizedBox(
+          width: _width,
+          height: _height,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              // The strongest glow in the idle dock is reserved for this
+              // one action; pacing and the shell carry none.
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                        color: uiTheme.systemCyanStrong.withValues(alpha: 0.30),
+                        blurRadius: 12,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Material(
+              color: enabled
+                  ? uiTheme.systemCyan
+                  : uiTheme.hullBlack.withValues(alpha: 0.55),
+              shape: RoundedRectangleBorder(
+                borderRadius: radius,
+                side: BorderSide(color: accent, width: 1),
+              ),
+              child: InkWell(
+                onTap: onPressed,
+                borderRadius: radius,
+                splashColor: uiTheme.voidBlack.withValues(alpha: 0.12),
+                highlightColor: uiTheme.voidBlack.withValues(alpha: 0.06),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 18, color: foreground),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textScaler: MediaQuery.textScalerOf(
+                            context,
+                          ).clamp(maxScaleFactor: 1.15),
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: foreground,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -39,8 +39,8 @@ class MissionStatusHud extends StatelessWidget {
 
     return Wrap(
       key: const ValueKey('mission-status-hud'),
-      spacing: 6,
-      runSpacing: 6,
+      spacing: 4,
+      runSpacing: 4,
       children: [
         Semantics(
           container: true,
@@ -49,6 +49,9 @@ class MissionStatusHud extends StatelessWidget {
               'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
           child: MissionSurface(
             key: const ValueKey('mission-status-base'),
+            // Status chips group quietly behind the readouts; the default
+            // interactive-cyan edge reads as a button cluster.
+            borderColor: uiTheme.systemCyan.withValues(alpha: 0.12),
             child: _BaseHealthAnchor(
               snapshot: snapshot,
               uiTheme: uiTheme,
@@ -65,6 +68,7 @@ class MissionStatusHud extends StatelessWidget {
               '${_missionPhaseLabel(snapshot)}',
           child: MissionSurface(
             key: const ValueKey('mission-status-stage'),
+            borderColor: uiTheme.systemCyan.withValues(alpha: 0.12),
             child: _MissionStatusAnchor(
               snapshot: snapshot,
               uiTheme: uiTheme,
@@ -78,6 +82,7 @@ class MissionStatusHud extends StatelessWidget {
           label: 'Credits ${snapshot.gold}',
           child: MissionSurface(
             key: const ValueKey('mission-status-credits'),
+            borderColor: uiTheme.systemCyan.withValues(alpha: 0.12),
             child: _CreditsAnchor(
               snapshot: snapshot,
               uiTheme: uiTheme,
@@ -127,7 +132,7 @@ class _BaseHealthAnchor extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: textScaler,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   color: uiTheme.textPrimary,
                   fontWeight: FontWeight.w700,
                 ),
@@ -275,7 +280,7 @@ class _CreditsAnchor extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textScaler: textScaler,
             textAlign: TextAlign.end,
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               color: uiTheme.creditGold,
               fontWeight: FontWeight.w800,
             ),

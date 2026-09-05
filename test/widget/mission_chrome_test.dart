@@ -11,8 +11,10 @@ import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
+import '../support/reactor_rim_visual_capture.dart';
 
 const _productViewport = Size(390, 844);
 
@@ -20,6 +22,7 @@ Widget chromeHost(
   GameSnapshot snapshot, {
   VoidCallback? onBackgroundTap,
   TextScaler textScaler = TextScaler.noScaling,
+  Color? backgroundColor,
 }) {
   return MaterialApp(
     builder: (context, child) => MediaQuery(
@@ -27,6 +30,7 @@ Widget chromeHost(
       child: child!,
     ),
     home: Scaffold(
+      backgroundColor: backgroundColor,
       body: Stack(
         children: [
           // Tappable stand-in for the board beneath the chrome.
@@ -100,6 +104,37 @@ Future<void> _loadRealRoboto() async {
 }
 
 void main() {
+  testWidgets('capture scene 1a fixture', (tester) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Representative scene 1a state: build-idle, no cell/tower selected,
+    // scanner/modules collapsed (no acquired modules). Real Roboto so the
+    // evidence shows true text metrics, not Ahem blocks.
+    await _loadRealRoboto();
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: chromeHost(
+          commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+          // The scene's ground is the board's hull black; the chrome bands
+          // are the parity subject, the dark ground keeps the fixture
+          // readable against the mock.
+          backgroundColor: OrionUiTheme.dark.hullBlack,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+    // real async engine work and deadlocks the FakeAsync zone otherwise.
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1a.png'),
+    );
+  });
+
   testWidgets('mission actions render their labels fully at product width', (
     tester,
   ) async {
@@ -114,18 +149,19 @@ void main() {
     await tester.pump();
 
     // Roboto is marginally narrower than the device's SF Pro; the regenerated
-    // fixture evidence covers the device metrics. Both mission actions must
-    // fit their labels at 390px width and 1.0x text scale without ellipsis.
-    for (final label in const ['Start Wave', 'World Map']) {
-      final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
-      expect(
-        paragraph.didExceedMaxLines,
-        isFalse,
-        reason:
-            '"$label" ellipsizes at 390px width; the mission actions '
-            'must render their labels without truncation.',
-      );
-    }
+    // fixture evidence covers the device metrics. The primary action label
+    // must fit at 390px width and 1.0x text scale without ellipsis. (World
+    // Map is an icon-scale chip now; its label lives in tooltip/semantics.)
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.text('Start Wave'),
+    );
+    expect(
+      paragraph.didExceedMaxLines,
+      isFalse,
+      reason:
+          '"Start Wave" ellipsizes at 390px width; the primary mission '
+          'action must render its label without truncation.',
+    );
   });
 
   testWidgets(
@@ -777,4 +813,34 @@ void main() {
       }
     },
   );
+
+  testWidgets('World Map shell matches the scanner utility scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+    );
+    await tester.pump();
+
+    // World Map is a compact top-band utility now, not the largest control:
+    // it matches the scanner's ~48dp shell (keeping the touch minimum) and
+    // shares its top alignment in the utility row.
+    final mapRect = tester.getRect(find.byTooltip('World Map'));
+    final scannerRect = tester.getRect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+    );
+    expect(mapRect.width, inInclusiveRange(48, 60));
+    expect(mapRect.height, inInclusiveRange(48, 60));
+    expect(
+      (mapRect.top - scannerRect.top).abs(),
+      lessThan(0.5),
+      reason: 'World Map must align with the scanner in the top utility row.',
+    );
+    // The shell is icon-scale: no label text beside the map glyph.
+    expect(find.text('World Map'), findsNothing);
+  });
 }

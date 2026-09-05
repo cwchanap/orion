@@ -1,12 +1,15 @@
+import 'dart:io';
 import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_surface.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
 
@@ -30,6 +33,25 @@ Widget railHost({
       ),
     ),
   );
+}
+
+Future<void> _loadRealRoboto() async {
+  final root = Platform.environment['FLUTTER_ROOT'];
+  if (root == null) {
+    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
+  }
+  final loader = FontLoader('Roboto');
+  for (final file in [
+    'Roboto-Regular.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-Bold.ttf',
+  ]) {
+    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
+    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
+    final bytes = fontFile.readAsBytesSync();
+    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+  }
+  await loader.load();
 }
 
 void main() {
@@ -319,7 +341,7 @@ void main() {
     );
 
     await tester.pumpWidget(host(enabled: true));
-    expect(find.text('World Map'), findsOneWidget);
+    expect(find.byTooltip('World Map'), findsOneWidget);
     await tester.tap(find.byTooltip('World Map'));
     expect(mapTaps, 1);
 
@@ -577,7 +599,7 @@ void main() {
 
     expect(tester.takeException(), isNull);
     expect(find.text('Start Wave'), findsOneWidget);
-    expect(find.text('World Map'), findsOneWidget);
+    expect(find.byTooltip('World Map'), findsOneWidget);
   });
 
   testWidgets('dock prioritizes selected tower over selected cell and idle', (
@@ -663,4 +685,112 @@ void main() {
     );
     expect(switcher.duration, Duration.zero);
   });
+
+  testWidgets(
+    'idle dock is compact and quiet while the primary action is a wide '
+    'filled pill',
+    (tester) async {
+      await _loadRealRoboto();
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              width: 390,
+              child: IdleCommandBar(
+                snapshot: commandDeckSnapshot(),
+                onTogglePause: () {},
+                onSpeedSelected: (_) {},
+                onToggleAutoStart: () {},
+                onStartWave: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final surface = find
+          .descendant(
+            of: find.byType(IdleCommandBar),
+            matching: find.byType(MissionSurface),
+          )
+          .first;
+      final dockRect = tester.getRect(surface);
+
+      // The idle dock no longer towers over the board: content row plus a
+      // reduced vertical inset.
+      expect(
+        dockRect.height,
+        lessThanOrEqualTo(80),
+        reason:
+            'Idle dock shell is ${dockRect.height}px tall; it must be a '
+            'compact strip.',
+      );
+      final surfaceWidget = tester.widget<MissionSurface>(surface);
+      final padding = surfaceWidget.padding.resolve(TextDirection.ltr);
+      expect(
+        padding.top,
+        lessThanOrEqualTo(7),
+        reason:
+            'Idle dock vertical padding ${padding.vertical} keeps the '
+            'shell too tall.',
+      );
+
+      // The perimeter is a soft grouping edge, not a strong cyan frame.
+      final shellBox = tester.widget<DecoratedBox>(
+        find.descendant(of: surface, matching: find.byType(DecoratedBox)).first,
+      );
+      final side =
+          ((shellBox.decoration as BoxDecoration).border as Border).top;
+      expect(
+        side.color.a / 255,
+        lessThan(0.2),
+        reason:
+            'Idle dock border opacity ${side.color.a / 255} is as strong '
+            'as the primary action; soften the grouping surface.',
+      );
+
+      // Start Wave is the dominant, wide, filled action: 48-56dp tall,
+      // clearly wider than a quarter of the dock, filled cyan with dark
+      // content.
+      final startRect = tester.getRect(find.byTooltip('Start Wave'));
+      expect(
+        startRect.height,
+        inInclusiveRange(48, 56),
+        reason:
+            'Start Wave is ${startRect.height}px tall; the primary action '
+            'must be a 48-56dp control.',
+      );
+      expect(
+        startRect.width,
+        // The dock's own horizontal chrome (deck margins, surface padding,
+        // border) is not part of the action row; the pill must dominate the
+        // row's content width.
+        greaterThanOrEqualTo((dockRect.width - 40) / 4),
+        reason:
+            'Start Wave width ${startRect.width} must dominate the dock '
+            'action row.',
+      );
+      final fill = tester.widget<Material>(
+        find
+            .descendant(
+              of: find.byTooltip('Start Wave'),
+              matching: find.byType(Material),
+            )
+            .first,
+      );
+      expect(
+        fill.color,
+        OrionUiTheme.dark.systemCyan,
+        reason:
+            'Start Wave must be a filled cyan action, not an outlined '
+            'frame.',
+      );
+    },
+  );
 }
