@@ -523,4 +523,53 @@ void main() {
       },
     );
   }
+
+  testWidgets('status readouts grow a text step and cluster reads as status', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
+    );
+
+    // Health and credits numbers are the primary readouts: one theme step
+    // above the stage chip's label text so they no longer read as small
+    // button labels.
+    for (final value in ['20/20', '150']) {
+      final text = tester.widget<Text>(find.text(value));
+      expect(
+        text.style?.fontSize,
+        greaterThanOrEqualTo(15),
+        reason:
+            '"$value" stays at button-label size; status readouts need a '
+            'larger text step.',
+      );
+    }
+
+    // Status surfaces are grouped, not interactive: tight spacing and a
+    // whisper-quiet border rather than the button cyan.
+    final base = find.byKey(const ValueKey('mission-status-base'));
+    final stage = find.byKey(const ValueKey('mission-status-stage'));
+    final baseRect = tester.getRect(base);
+    final stageRect = tester.getRect(stage);
+    expect(
+      stageRect.left - baseRect.right,
+      lessThanOrEqualTo(5),
+      reason:
+          'Status surfaces are ${stageRect.left - baseRect.right}px '
+          'apart; the loose spacing reads as separate buttons.',
+    );
+    for (final chip in [base, stage]) {
+      final box = tester.widget<DecoratedBox>(
+        find.descendant(of: chip, matching: find.byType(DecoratedBox)).first,
+      );
+      final side = ((box.decoration as BoxDecoration).border as Border).top;
+      expect(
+        side.color.a / 255,
+        lessThan(0.25),
+        reason:
+            'Status chip border opacity ${side.color.a / 255} is as strong '
+            'as an interactive control.',
+      );
+    }
+  });
 }
