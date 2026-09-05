@@ -8,11 +8,17 @@ import 'package:flutter/material.dart';
 import '../assets/game_boss_sheet.dart';
 import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
+import '../campaign/campaign_progress.dart';
+import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 
 typedef OrionSourceRectResolver =
     ui.Rect Function({required double imageWidth, required double imageHeight});
+
+enum OrionStageArtCrop { briefingWide, mapSquare }
+
+enum OrionSceneArt { worldMap, techTree, missionReport }
 
 @immutable
 final class OrionArtDescriptor {
@@ -106,11 +112,70 @@ abstract final class OrionArt {
     fallbackIcon: Icons.autorenew,
   );
 
+  static final Map<String, OrionArtDescriptor> _stageBriefingArt =
+      Map.unmodifiable({
+        for (final stage in OrionCampaign.stages)
+          stage.id: _stageKeyArtDescriptor(
+            stage,
+            OrionStageArtCrop.briefingWide,
+          ),
+      });
+
+  static final Map<String, OrionArtDescriptor> _stageMapArt = Map.unmodifiable({
+    for (final stage in OrionCampaign.stages)
+      stage.id: _stageKeyArtDescriptor(stage, OrionStageArtCrop.mapSquare),
+  });
+
+  static final Map<OrionSceneArt, OrionArtDescriptor> _scenes =
+      Map.unmodifiable({
+        OrionSceneArt.worldMap: OrionArtDescriptor(
+          fileName: 'reactor_rim_ui/backdrops/world-map.png',
+          sourceRectFor: _fullRectFor,
+          semanticLabel: 'Star chart backdrop',
+          fallbackIcon: Icons.public,
+        ),
+        OrionSceneArt.techTree: OrionArtDescriptor(
+          fileName: 'reactor_rim_ui/backdrops/tech-tree-rnd-bay.png',
+          sourceRectFor: _fullRectFor,
+          semanticLabel: 'R&D bay backdrop',
+          fallbackIcon: Icons.science,
+        ),
+        OrionSceneArt.missionReport: OrionArtDescriptor(
+          fileName: 'reactor_rim_ui/backdrops/mission-report-debrief.png',
+          sourceRectFor: _fullRectFor,
+          semanticLabel: 'Mission debrief backdrop',
+          fallbackIcon: Icons.description,
+        ),
+      });
+
+  static final OrionArtDescriptor _victoryArt = OrionArtDescriptor(
+    fileName: 'reactor_rim_ui/results/victory.png',
+    sourceRectFor: _fullRectFor,
+    semanticLabel: 'Victory banner art',
+    fallbackIcon: Icons.emoji_events,
+  );
+
+  static final OrionArtDescriptor _defeatArt = OrionArtDescriptor(
+    fileName: 'reactor_rim_ui/results/defeat.png',
+    sourceRectFor: _fullRectFor,
+    semanticLabel: 'Defeat banner art',
+    fallbackIcon: Icons.flag,
+  );
+
   static OrionArtDescriptor tower(TowerType type) => _towers[type]!;
 
   static OrionArtDescriptor boss(BossSprite sprite) => _bosses[sprite]!;
 
-  static OrionArtDescriptor stage(StageDefinition stage) {
+  static OrionArtDescriptor stage(
+    StageDefinition stage, {
+    OrionStageArtCrop? crop,
+  }) {
+    if (crop != null) {
+      return switch (crop) {
+        OrionStageArtCrop.briefingWide => _stageBriefingArt[stage.id]!,
+        OrionStageArtCrop.mapSquare => _stageMapArt[stage.id]!,
+      };
+    }
     if (stage.waves.isEmpty || stage.waves.last.groups.isEmpty) {
       throw StateError('Stage ${stage.id} has no final enemy group');
     }
@@ -119,6 +184,66 @@ abstract final class OrionArt {
       throw StateError('Stage ${stage.id} does not end with a boss');
     }
     return boss(finalEnemy.sprite);
+  }
+
+  static OrionArtDescriptor result(StageResult? result) {
+    return result == null ? _defeatArt : _victoryArt;
+  }
+
+  static OrionArtDescriptor scene(OrionSceneArt scene) => _scenes[scene]!;
+
+  static ui.Rect _briefingWideRectFor({
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    const aspect = 1.6;
+    var width = imageWidth;
+    var height = width / aspect;
+    if (height > imageHeight) {
+      height = imageHeight;
+      width = height * aspect;
+    }
+    return ui.Rect.fromLTWH(
+      (imageWidth - width) / 2,
+      (imageHeight - height) / 2,
+      width,
+      height,
+    );
+  }
+
+  static ui.Rect _mapSquareRectFor({
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    final side = imageWidth < imageHeight ? imageWidth : imageHeight;
+    return ui.Rect.fromLTWH(
+      (imageWidth - side) / 2,
+      (imageHeight - side) / 2,
+      side,
+      side,
+    );
+  }
+
+  static ui.Rect _fullRectFor({
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    return ui.Rect.fromLTWH(0, 0, imageWidth, imageHeight);
+  }
+
+  static OrionArtDescriptor _stageKeyArtDescriptor(
+    StageDefinition stage,
+    OrionStageArtCrop crop,
+  ) {
+    return OrionArtDescriptor(
+      fileName: 'reactor_rim_ui/stages/${stage.id}.png',
+      sourceRectFor: switch (crop) {
+        OrionStageArtCrop.briefingWide => _briefingWideRectFor,
+        OrionStageArtCrop.mapSquare => _mapSquareRectFor,
+      },
+      semanticLabel: '${stage.name} sector key art',
+      fallbackIcon: Icons.landscape,
+    );
   }
 
   static OrionArtDescriptor previewGroup(WavePreviewGroup group) {
