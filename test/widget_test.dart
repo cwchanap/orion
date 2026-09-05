@@ -54,7 +54,7 @@ Widget testGamePage({
 Future<void> startStageFromBriefing(
   WidgetTester tester, {
   String mapLabel = 'Alpha',
-  String actionLabel = 'Launch Mission',
+  String actionLabel = 'Start Mission',
 }) async {
   await tester.tap(find.text(mapLabel));
   await tester.pumpAndSettle();
@@ -153,7 +153,7 @@ void main() {
     expect(find.text('No environmental modifiers'), findsOneWidget);
     expect(createdGame, isNull);
 
-    await tester.tap(find.text('Launch Mission'));
+    await tester.tap(find.text('Start Mission'));
     await tester.pump();
     expect(createdGame?.stage.id, 'outpost-alpha');
   });
@@ -306,7 +306,7 @@ void main() {
         await tester.pump();
         expect(find.text('Outpost Alpha'), findsOneWidget);
 
-        final action = find.text('Launch Mission');
+        final action = find.text('Start Mission');
         await tester.ensureVisible(action);
         await tester.pump();
         final actionRect = tester.getRect(action);
@@ -1041,7 +1041,7 @@ void main() {
 
     expect(find.text('Singularity Core is locked.'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Launch Mission'), findsNothing);
+    expect(find.text('Start Mission'), findsNothing);
     expect(find.text('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
   });
@@ -1339,7 +1339,7 @@ void main() {
       await startStageFromBriefing(
         tester,
         mapLabel: 'Rift',
-        actionLabel: 'Launch Mission',
+        actionLabel: 'Start Mission',
       );
 
       expect(game!.snapshot.gold, GameBalance.startingGold);
@@ -1902,7 +1902,7 @@ void main() {
 
     expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Launch Mission'), findsNothing);
+    expect(find.text('Start Mission'), findsNothing);
     expect(find.text('Replay Mission'), findsNothing);
 
     store.saveCompletions.single.complete();
@@ -2174,7 +2174,7 @@ void main() {
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
-    expect(find.text('Launch Mission'), findsNothing);
+    expect(find.text('Start Mission'), findsNothing);
     expect(find.text('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
 
@@ -3522,12 +3522,12 @@ void main() {
       await tester.tap(find.text('Alpha'));
       await tester.pump();
       expect(find.text('Outpost Alpha'), findsOneWidget);
-      expect(find.text('Launch Mission'), findsOneWidget);
+      expect(find.text('Start Mission'), findsOneWidget);
 
       // Dismiss without starting the mission.
       await tester.tap(find.text('Dismiss'));
       await tester.pumpAndSettle();
-      expect(find.text('Launch Mission'), findsNothing);
+      expect(find.text('Start Mission'), findsNothing);
 
       // The Settings sheet is also visible immediately.
       await tester.tap(find.byTooltip('Settings'));
