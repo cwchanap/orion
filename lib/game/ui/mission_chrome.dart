@@ -36,6 +36,7 @@ class MissionChrome extends StatefulWidget {
     required this.onSpecialize,
     required this.onTargetingChanged,
     required this.onSell,
+    this.onPlacementPreviewEvent,
   });
 
   final GameSnapshot snapshot;
@@ -53,6 +54,10 @@ class MissionChrome extends StatefulWidget {
   final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
   final VoidCallback onSell;
+
+  /// Closed scene-1e drag-preview event family, forwarded from the dock to
+  /// the page. Presentation only — the page maps events onto the game.
+  final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
 
   @override
   State<MissionChrome> createState() => _MissionChromeState();
@@ -225,6 +230,8 @@ class _MissionChromeState extends State<MissionChrome> {
                           onSpecialize: widget.onSpecialize,
                           onTargetingChanged: widget.onTargetingChanged,
                           onSell: widget.onSell,
+                          onPlacementPreviewEvent:
+                              widget.onPlacementPreviewEvent,
                         ),
                       ),
                     ),
