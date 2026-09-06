@@ -21,6 +21,7 @@ import 'codex_view.dart';
 import 'command_frame.dart';
 import 'feedback_settings_sheet.dart';
 import 'mission_chrome.dart';
+import 'mission_command_dock.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
 import 'orion_ui_theme.dart';
@@ -315,6 +316,38 @@ class _OrionGamePageState extends State<OrionGamePage> {
     return game.tryHandleBoardTap(local);
   }
 
+  RenderBox? get _gameRenderBox =>
+      _gameWidgetKey.currentContext?.findRenderObject() as RenderBox?;
+
+  /// Maps scene-1e drag-preview events onto the game. Update/Commit convert
+  /// the global pointer into GameWidget-local coordinates with the same
+  /// [_gameWidgetKey] conversion the board-tap arbiter uses. A commit whose
+  /// conversion is impossible cancels — never a blind placement.
+  void _handlePlacementPreviewEvent(TowerPlacementPreviewEvent event) {
+    final game = _game;
+    if (game == null) {
+      return;
+    }
+    switch (event) {
+      case TowerPlacementPreviewBegin(:final type):
+        game.beginTowerPlacementPreview(type);
+      case TowerPlacementPreviewUpdate(:final globalPosition):
+        final box = _gameRenderBox;
+        if (box != null && box.attached) {
+          game.updateTowerPlacementPreview(box.globalToLocal(globalPosition));
+        }
+      case TowerPlacementPreviewCommit(:final globalPosition):
+        final box = _gameRenderBox;
+        if (box == null || !box.attached) {
+          game.cancelTowerPlacementPreview();
+        } else {
+          game.commitTowerPlacementPreview(box.globalToLocal(globalPosition));
+        }
+      case TowerPlacementPreviewCancel():
+        game.cancelTowerPlacementPreview();
+    }
+  }
+
   Widget _buildStageScaffold() {
     final game = _game;
     if (game == null) {
@@ -356,6 +389,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     onSpecialize: game.specializeSelectedTower,
                     onTargetingChanged: game.setTargetingMode,
                     onSell: game.sellSelectedTower,
+                    onPlacementPreviewEvent: _handlePlacementPreviewEvent,
                   ),
                 ),
                 if (snapshot.pendingRunModuleOffer case final offer?)

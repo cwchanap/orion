@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui' show SemanticsAction;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -17,6 +18,7 @@ Widget railHost({
   int gold = 9999,
   List<TowerType>? unlockedTowerTypes,
   ValueChanged<TowerType>? onPlaceTower,
+  ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
 }) {
   return MaterialApp(
     home: Align(
@@ -29,6 +31,7 @@ Widget railHost({
           gold: gold,
           unlockedTowerTypes: unlockedTowerTypes ?? TowerType.values,
           onPlaceTower: onPlaceTower ?? (_) {},
+          onPlacementPreviewEvent: onPlacementPreviewEvent,
         ),
       ),
     ),
@@ -55,6 +58,268 @@ Future<void> _loadRealRoboto() async {
 }
 
 void main() {
+  group('scene 1e long-press drag placement preview', () {
+    testWidgets('normal physical tap places exactly once, never previews', (
+      tester,
+    ) async {
+      final placed = <TowerType>[];
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(
+        railHost(onPlaceTower: placed.add, onPlacementPreviewEvent: events.add),
+      );
+
+      await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+
+      expect(placed, [TowerType.laser]);
+      expect(events, isEmpty);
+    });
+
+    testWidgets('semantics tap places exactly once, never previews', (
+      tester,
+    ) async {
+      final placed = <TowerType>[];
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(
+        railHost(onPlaceTower: placed.add, onPlacementPreviewEvent: events.add),
+      );
+      final handle = tester.ensureSemantics();
+      try {
+        await tester.pump();
+        final data = tester.getSemantics(
+          find.bySemanticsLabel(
+            RegExp(r'Laser, unlocked, cost \d+, affordable'),
+          ),
+        );
+        // ignore: deprecated_member_use
+        tester.binding.pipelineOwner.semanticsOwner!.performAction(
+          data.id,
+          SemanticsAction.tap,
+        );
+        await tester.pump();
+
+        expect(placed, [TowerType.laser]);
+        expect(events, isEmpty);
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('short press below the long-press threshold never previews', (
+      tester,
+    ) async {
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+      );
+      await tester.pump(kLongPressTimeout - const Duration(milliseconds: 100));
+      await gesture.up();
+      await tester.pump();
+
+      expect(events, isEmpty);
+    });
+
+    testWidgets('horizontal swipe scrolls the rail and never previews', (
+      tester,
+    ) async {
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+      await tester.drag(
+        find.byKey(const ValueKey('tower-card-laser')),
+        const Offset(-300, 0),
+      );
+      await tester.pumpAndSettle();
+
+      final scrollable = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
+      expect(scrollable.position.pixels, greaterThan(0));
+      expect(events, isEmpty);
+    });
+
+    testWidgets('long press begins the preview exactly once', (tester) async {
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+
+      expect(events, hasLength(1));
+      expect(events.single, isA<TowerPlacementPreviewBegin>());
+      expect(
+        (events.single as TowerPlacementPreviewBegin).type,
+        TowerType.laser,
+      );
+
+      // Releasing with no pointer position ever recorded cancels — never a
+      // commit at a guessed position.
+      await gesture.up();
+      await tester.pump();
+      expect(events, hasLength(2));
+      expect(events.last, isA<TowerPlacementPreviewCancel>());
+    });
+
+    testWidgets(
+      'long-press drag streams updates, then commits once with the latest '
+      'global pointer',
+      (tester) async {
+        final events = <TowerPlacementPreviewEvent>[];
+        await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+        final start = tester.getCenter(
+          find.byKey(const ValueKey('tower-card-laser')),
+        );
+        final gesture = await tester.startGesture(start);
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+        await gesture.moveBy(const Offset(40, -30));
+        await tester.pump();
+        await gesture.moveBy(const Offset(40, -30));
+        await tester.pump();
+        await gesture.up();
+        await tester.pump();
+
+        expect(events.first, isA<TowerPlacementPreviewBegin>());
+        final updates = events
+            .whereType<TowerPlacementPreviewUpdate>()
+            .toList();
+        expect(updates, hasLength(2));
+        expect(updates.first.globalPosition, start + const Offset(40, -30));
+        expect(updates.last.globalPosition, start + const Offset(80, -60));
+        expect(events.last, isA<TowerPlacementPreviewCommit>());
+        expect(
+          (events.last as TowerPlacementPreviewCommit).globalPosition,
+          start + const Offset(80, -60),
+        );
+        expect(events.whereType<TowerPlacementPreviewCommit>(), hasLength(1));
+      },
+    );
+
+    testWidgets('locked card cannot begin a preview', (tester) async {
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(
+        railHost(
+          unlockedTowerTypes: const [TowerType.laser],
+          onPlacementPreviewEvent: events.add,
+        ),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-card-railgun'))),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await gesture.up();
+      await tester.pump();
+
+      expect(events, isEmpty);
+    });
+
+    testWidgets('active-wave card cannot begin a preview', (tester) async {
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              width: 375,
+              height: 104,
+              child: TowerBuildRail(
+                phase: GamePhase.wave,
+                gold: 9999,
+                unlockedTowerTypes: TowerType.values,
+                onPlaceTower: (_) {},
+                onPlacementPreviewEvent: events.add,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await gesture.up();
+      await tester.pump();
+
+      expect(events, isEmpty);
+    });
+
+    testWidgets(
+      'unaffordable unlocked card may preview; the game authority reports '
+      'insufficientGold on validate',
+      (tester) async {
+        // Affordability is authority-driven: the drag begins and the game's
+        // validatePlacement (pinned in orion_defense_game_test.dart) denies
+        // with insufficientGold. The UI never reimplements the rule.
+        final events = <TowerPlacementPreviewEvent>[];
+        await tester.pumpWidget(
+          railHost(gold: 0, onPlacementPreviewEvent: events.add),
+        );
+
+        final gesture = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+        );
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+
+        expect(events, hasLength(1));
+        expect(events.single, isA<TowerPlacementPreviewBegin>());
+
+        // The unaffordable feedback states the real need, not fake success.
+        expect(find.text('need 50 more'), findsOneWidget);
+
+        await gesture.up();
+        await tester.pump();
+      },
+    );
+
+    testWidgets('LIFTED source and DROP TO BUILD appear only while dragging', (
+      tester,
+    ) async {
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+      expect(find.text('LIFTED'), findsNothing);
+      expect(find.text('DROP TO BUILD'), findsNothing);
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await tester.pump();
+
+      expect(find.text('LIFTED'), findsOneWidget);
+      expect(find.text('DROP TO BUILD'), findsOneWidget);
+
+      await gesture.up();
+      await tester.pump();
+
+      expect(find.text('LIFTED'), findsNothing);
+      expect(find.text('DROP TO BUILD'), findsNothing);
+    });
+
+    testWidgets('affordable drag feedback shows cost delta to remaining gold', (
+      tester,
+    ) async {
+      await tester.pumpWidget(railHost(gold: 150));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await tester.pump();
+
+      // Laser costs 50: −50 → 100 remaining.
+      expect(find.text('−50 → 100'), findsOneWidget);
+
+      await gesture.up();
+      await tester.pump();
+    });
+  });
+
   testWidgets(
     'build rail shows every tower and preserves lock/affordability callbacks',
     (tester) async {

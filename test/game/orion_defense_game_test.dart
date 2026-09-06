@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/components/drone_component.dart';
 import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/gravity_field_component.dart';
@@ -2612,6 +2613,323 @@ void main() {
         );
       },
     );
+
+    group('tower placement preview', () {
+      // 800x1200 lays the 8x12 board out at exactly 100px cells, origin (0,0).
+      Offset cellPoint(GridPosition position) => BoardLayout.cellCenter(
+        position,
+        cellSize: 100,
+        boardOrigin: Offset.zero,
+      );
+
+      BoardComponent boardOf(OrionDefenseGame game) =>
+          game.children.whereType<BoardComponent>().single;
+
+      test('begin preview stores tower type but mutates nothing', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+
+        game.beginTowerPlacementPreview(TowerType.laser);
+
+        expect(game.placementPreview.type, TowerType.laser);
+        expect(game.snapshot.gold, GameBalance.startingGold);
+        expect(game.children.whereType<TowerComponent>(), isEmpty);
+        expect(game.snapshot.selectedCell, isNull);
+        expect(game.snapshot.selectedTower, isNull);
+      });
+
+      test('update maps GameWidget-local pointer through boardCellAt', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        game.beginTowerPlacementPreview(TowerType.laser);
+
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        expect(game.placementPreview.cell, const GridPosition(2, 0));
+      });
+
+      test('valid empty cell previews allowed with a resolved range', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        game.beginTowerPlacementPreview(TowerType.laser);
+
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        expect(game.placementPreview.allowed, isTrue);
+        expect(
+          game.placementPreview.range,
+          GameBalance.towerStats(TowerType.laser, level: 1).range,
+        );
+      });
+
+      test('path cell previews denied', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        game.beginTowerPlacementPreview(TowerType.laser);
+
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(0, 1)));
+
+        expect(game.placementPreview.cell, const GridPosition(0, 1));
+        expect(game.placementPreview.allowed, isFalse);
+        expect(game.placementPreview.range, 0);
+      });
+
+      test('occupied cell previews denied', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(2, 0));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+        game.beginTowerPlacementPreview(TowerType.rocket);
+
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        expect(game.placementPreview.allowed, isFalse);
+      });
+
+      test(
+        'locked tower previews denied when game API is invoked directly',
+        () {
+          final game = OrionDefenseGame();
+          game.onGameResize(Vector2(800, 1200));
+          expect(
+            GameBalance.towerUnlockWave(TowerType.railgun),
+            greaterThan(1),
+          );
+          game.beginTowerPlacementPreview(TowerType.railgun);
+
+          game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+          expect(game.placementPreview.type, TowerType.railgun);
+          expect(game.placementPreview.cell, const GridPosition(2, 0));
+          expect(game.placementPreview.allowed, isFalse);
+        },
+      );
+
+      test('insufficient gold previews denied', () {
+        final laserCost = GameBalance.towerStats(
+          TowerType.laser,
+          level: 1,
+        ).cost;
+        final game = OrionDefenseGame(
+          campaignModifiers: const CampaignModifiers(bonusGold: -149),
+        );
+        game.onGameResize(Vector2(800, 1200));
+        expect(game.snapshot.gold, lessThan(laserCost));
+        game.beginTowerPlacementPreview(TowerType.laser);
+
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        expect(game.placementPreview.allowed, isFalse);
+        expect(game.placementPreview.range, 0);
+      });
+
+      test('preview spends no gold and creates no tower', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        game.beginTowerPlacementPreview(TowerType.laser);
+
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(4, 0)));
+
+        expect(game.snapshot.gold, GameBalance.startingGold);
+        expect(game.children.whereType<TowerComponent>(), isEmpty);
+        expect(game.snapshot.phase, GamePhase.build);
+      });
+
+      test('preview fields replace normal selected-cell render state', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        final board = boardOf(game);
+        _tapCell(game, const GridPosition(2, 0));
+        expect(board.selectedCell, const GridPosition(2, 0));
+        expect(board.showsSelectionHighlight, isTrue);
+
+        game.beginTowerPlacementPreview(TowerType.laser);
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        expect(board.previewActive, isTrue);
+        expect(board.previewCandidate, const GridPosition(2, 0));
+        expect(board.previewAllowed, isTrue);
+        expect(board.showsSelectionHighlight, isFalse);
+
+        game.cancelTowerPlacementPreview();
+        expect(board.previewActive, isFalse);
+        expect(board.showsSelectionHighlight, isTrue);
+      });
+
+      test(
+        'null/off-board update clears candidate and range but keeps preview',
+        () {
+          final game = OrionDefenseGame();
+          game.onGameResize(Vector2(800, 1200));
+          game.beginTowerPlacementPreview(TowerType.laser);
+          game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+          expect(game.placementPreview.cell, isNotNull);
+
+          game.updateTowerPlacementPreview(const Offset(-40, -40));
+
+          expect(game.placementPreview.type, TowerType.laser);
+          expect(game.placementPreview.cell, isNull);
+          expect(game.placementPreview.allowed, isFalse);
+          expect(game.placementPreview.range, 0);
+        },
+      );
+
+      test('off-board final commit cancels and never uses _selectedCell', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(2, 0)); // selection must not be used
+        game.beginTowerPlacementPreview(TowerType.laser);
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(4, 0)));
+
+        game.commitTowerPlacementPreview(const Offset(5000, 5000));
+
+        expect(game.children.whereType<TowerComponent>(), isEmpty);
+        expect(game.snapshot.gold, GameBalance.startingGold);
+        expect(game.placementPreview.type, isNull);
+      });
+
+      test(
+        'valid final commit places exactly one tower and spends one cost',
+        () {
+          final game = OrionDefenseGame();
+          game.onGameResize(Vector2(800, 1200));
+          final laserCost = GameBalance.towerStats(
+            TowerType.laser,
+            level: 1,
+          ).cost;
+          game.beginTowerPlacementPreview(TowerType.laser);
+          game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+          game.commitTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+          expect(game.children.whereType<TowerComponent>(), hasLength(1));
+          expect(game.snapshot.gold, GameBalance.startingGold - laserCost);
+          expect(game.placementPreview.type, isNull);
+          expect(game.snapshot.selectedCell, isNull);
+        },
+      );
+
+      test('invalid commit places nothing and clears preview', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        game.beginTowerPlacementPreview(TowerType.laser);
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(0, 1)));
+
+        game.commitTowerPlacementPreview(cellPoint(const GridPosition(0, 1)));
+
+        expect(game.children.whereType<TowerComponent>(), isEmpty);
+        expect(game.snapshot.gold, GameBalance.startingGold);
+        expect(game.placementPreview.type, isNull);
+        expect(game.snapshot.feedback, 'Cannot build on the enemy path.');
+      });
+
+      test('cancel clears preview', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        game.beginTowerPlacementPreview(TowerType.laser);
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        game.cancelTowerPlacementPreview();
+
+        expect(game.placementPreview.type, isNull);
+        expect(game.placementPreview.cell, isNull);
+        expect(game.placementPreview.allowed, isFalse);
+        expect(game.placementPreview.range, 0);
+      });
+
+      test('miss-tap selection cleanup clears preview', () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(800, 1200));
+        game.beginTowerPlacementPreview(TowerType.laser);
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        // A tap that misses the board routes through _clearSelection.
+        _tapPoint(game, Vector2(850, 1100));
+
+        expect(game.placementPreview.type, isNull);
+        expect(game.snapshot.selectedCell, isNull);
+      });
+
+      test(
+        'startWave, restart, sell, and place cleanup cannot leave preview',
+        () {
+          final game = OrionDefenseGame();
+          game.onGameResize(Vector2(800, 1200));
+
+          game.beginTowerPlacementPreview(TowerType.laser);
+          game.startWave();
+          expect(game.placementPreview.type, isNull);
+
+          game.beginTowerPlacementPreview(TowerType.laser);
+          game.restart();
+          expect(game.placementPreview.type, isNull);
+
+          game.beginTowerPlacementPreview(TowerType.laser);
+          _tapCell(game, const GridPosition(2, 0));
+          game.placeTower(TowerType.laser);
+          game.processLifecycleEvents();
+          expect(game.placementPreview.type, isNull); // place cleans up
+
+          _tapCell(game, const GridPosition(2, 0)); // select the placed tower
+          game.beginTowerPlacementPreview(TowerType.cryo);
+          game.sellSelectedTower();
+          game.processLifecycleEvents();
+          expect(game.placementPreview.type, isNull);
+        },
+      );
+
+      test('allowed returnToMap clears preview before callback', () {
+        TowerType? previewTypeAtCallback;
+        OrionDefenseGame? gameRef;
+        final game = OrionDefenseGame(
+          onReturnToMap: () {
+            previewTypeAtCallback = gameRef?.placementPreview.type;
+          },
+        );
+        gameRef = game;
+        game.beginTowerPlacementPreview(TowerType.laser);
+
+        game.returnToMap();
+
+        expect(previewTypeAtCallback, isNull);
+        expect(game.placementPreview.type, isNull);
+      });
+
+      test('Long Sight preview range uses the session resolver pipeline', () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(8),
+          moduleOfferPicker: picker,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0); // clear wave 1
+        game.startWave();
+        game.update(0); // clear wave 2, opening draft 1
+        final offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.longSight);
+
+        game.beginTowerPlacementPreview(TowerType.laser);
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
+
+        // Expected value from GameBalance only — never the resolver under
+        // test — with Long Sight as the only range modifier.
+        final baseRange = GameBalance.towerStats(
+          TowerType.laser,
+          level: 1,
+        ).range;
+        expect(game.placementPreview.range, closeTo(baseRange * 1.15, 0.001));
+        expect(game.placementPreview.range, greaterThan(baseRange));
+      });
+    });
   });
 }
 

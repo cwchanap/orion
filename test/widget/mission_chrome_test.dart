@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -23,6 +24,7 @@ Widget chromeHost(
   VoidCallback? onBackgroundTap,
   TextScaler textScaler = TextScaler.noScaling,
   Color? backgroundColor,
+  ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
 }) {
   return MaterialApp(
     builder: (context, child) => MediaQuery(
@@ -54,6 +56,7 @@ Widget chromeHost(
               onSpecialize: (_) {},
               onTargetingChanged: (_) {},
               onSell: () {},
+              onPlacementPreviewEvent: onPlacementPreviewEvent,
             ),
           ),
         ],
@@ -104,6 +107,54 @@ Future<void> _loadRealRoboto() async {
 }
 
 void main() {
+  testWidgets(
+    'dock preview events pass through chrome; board taps recover after drag',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final events = <TowerPlacementPreviewEvent>[];
+      var backgroundTaps = 0;
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(selectedCell: const GridPosition(1, 1)),
+          onBackgroundTap: () => backgroundTaps++,
+          onPlacementPreviewEvent: events.add,
+        ),
+      );
+      await tester.pump();
+
+      // One long-press drag passes its begin/update/commit family through
+      // MissionChrome untouched.
+      final start = tester.getCenter(
+        find.byKey(const ValueKey('tower-card-laser')),
+      );
+      final gesture = await tester.startGesture(start);
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      expect(events, hasLength(1));
+      expect(events.single, isA<TowerPlacementPreviewBegin>());
+
+      await gesture.moveBy(const Offset(40, -120));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+
+      expect(events.last, isA<TowerPlacementPreviewCommit>());
+      expect(
+        (events.last as TowerPlacementPreviewCommit).globalPosition,
+        start + const Offset(40, -120),
+      );
+
+      // The ended drag leaves no arena winner behind: normal board taps pass.
+      await tester.tapAt(
+        Offset(_productViewport.width / 2, _productViewport.height / 2),
+      );
+      await tester.pump();
+      expect(backgroundTaps, 1);
+    },
+  );
+
   testWidgets('capture scene 1a fixture', (tester) async {
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;

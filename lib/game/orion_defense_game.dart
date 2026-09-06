@@ -74,6 +74,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   BoardComponent? _board;
   GridPosition? _selectedCell;
   PlacedTower? _selectedTower;
+  // Transient placement-preview presentation state (scene 1e). Never part of
+  // GameSnapshot and never published by pointer moves; GameSession stays the
+  // only validity/mutation authority.
+  TowerType? _previewType;
+  GridPosition? _previewCell;
+  bool _previewAllowed = false;
+  double _previewRange = 0;
   double _cellSize = 0;
   Offset _boardOrigin = Offset.zero;
   double _spawnTimer = 0;
@@ -105,6 +112,17 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   final Map<int, int> _activeDronesByTower = {};
 
   GameSnapshot get snapshot => stateNotifier.value;
+
+  /// Current transient placement-preview presentation state.
+  @visibleForTesting
+  ({TowerType? type, GridPosition? cell, bool allowed, double range})
+  get placementPreview => (
+    type: _previewType,
+    cell: _previewCell,
+    allowed: _previewAllowed,
+    range: _previewRange,
+  );
+
   bool get isPaused => _isPaused;
   double get speedMultiplier => _speedMultiplier;
   bool get autoStartEnabled => _autoStartEnabled;
@@ -224,7 +242,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       );
       return;
     }
+    _placeTowerAt(position, type);
+  }
 
+  /// Shared placement mutation for the tap path and the drag-commit path.
+  /// GameSession.placeTower stays the only mutation authority.
+  void _placeTowerAt(GridPosition position, TowerType type) {
     final result = _session.placeTower(position, type);
     if (!result.isAllowed) {
       _publishSnapshot(feedback: _placementMessage(result.failure));
@@ -238,6 +261,80 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _clearSelection();
     gameFeedback.towerConfirmed();
     _publishSnapshot();
+  }
+
+  /// Begins a drag placement preview. Stores the type only; validity is
+  /// resolved per-pointer-update through GameSession.validatePlacement.
+  void beginTowerPlacementPreview(TowerType type) {
+    _previewType = type;
+    _previewCell = null;
+    _previewAllowed = false;
+    _previewRange = 0;
+    _syncBoardPreview();
+  }
+
+  /// Maps a GameWidget-local pointer position through boardCellAt and
+  /// validates the candidate cell through the session. Publishes no snapshot.
+  void updateTowerPlacementPreview(Offset canvasPosition) {
+    final type = _previewType;
+    if (type == null) {
+      return;
+    }
+    final cell = boardCellAt(canvasPosition);
+    if (cell == null) {
+      _previewCell = null;
+      _previewAllowed = false;
+      _previewRange = 0;
+      _syncBoardPreview();
+      return;
+    }
+    final result = _session.validatePlacement(cell, type);
+    final double range = result.isAllowed
+        ? _session
+              .resolveTowerStats(
+                PlacedTower(id: -1, type: type, position: cell),
+              )
+              .range
+        : 0;
+    _previewCell = cell;
+    _previewAllowed = result.isAllowed;
+    _previewRange = range;
+    _syncBoardPreview();
+  }
+
+  /// Commits the drag at the provided final position. An off-board final
+  /// position always cancels — it never falls back to the last candidate or
+  /// the selected cell.
+  void commitTowerPlacementPreview(Offset canvasPosition) {
+    final type = _previewType;
+    if (type == null) {
+      return;
+    }
+    final cell = boardCellAt(canvasPosition);
+    cancelTowerPlacementPreview();
+    if (cell == null) {
+      return;
+    }
+    _placeTowerAt(cell, type);
+  }
+
+  void cancelTowerPlacementPreview() {
+    _previewType = null;
+    _previewCell = null;
+    _previewAllowed = false;
+    _previewRange = 0;
+    _syncBoardPreview();
+  }
+
+  void _syncBoardPreview() {
+    final board = _board;
+    if (board == null) {
+      return;
+    }
+    board.previewActive = _previewType != null;
+    board.previewCandidate = _previewCell;
+    board.previewAllowed = _previewAllowed;
+    board.previewRange = _previewRange;
   }
 
   void upgradeSelectedTower() {
@@ -427,6 +524,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       _publishSnapshot(feedback: 'Finish the active wave before returning.');
       return;
     }
+    _clearSelection();
     onReturnToMap?.call();
   }
 
@@ -555,6 +653,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       priority: 0,
     );
     add(_board!);
+    _syncBoardPreview();
 
     for (final tower in _towerComponents.values) {
       tower.position = _cellCenter(tower.placedTower.position);
@@ -1006,10 +1105,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     return stage.pathCells.map(_cellCenter).toList(growable: false);
   }
 
+  /// Single transient board-interaction cleanup path: clears the selection
+  /// and any active placement preview together.
   void _clearSelection() {
     _selectedCell = null;
     _selectedTower = null;
     _board?.selectedCell = null;
+    cancelTowerPlacementPreview();
   }
 
   void _layoutBoardIfReady() {

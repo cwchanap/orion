@@ -1,6 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +13,7 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/components/enemy_component.dart';
+import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -30,6 +34,28 @@ import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/command_deck_fixtures.dart';
+import 'support/reactor_rim_visual_capture.dart';
+
+/// Loads the Flutter SDK's real Roboto so captured fixture evidence shows
+/// proportional text metrics instead of Ahem placeholder glyphs.
+Future<void> _loadRealRoboto() async {
+  final root = Platform.environment['FLUTTER_ROOT'];
+  if (root == null) {
+    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
+  }
+  final loader = FontLoader('Roboto');
+  for (final file in [
+    'Roboto-Regular.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-Bold.ttf',
+  ]) {
+    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
+    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
+    final bytes = fontFile.readAsBytesSync();
+    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+  }
+  await loader.load();
+}
 
 /// Common page shell for widget tests. Defaults to a no-op feedback service
 /// so ordinary tests never touch the native audio/haptics layer.
@@ -120,6 +146,106 @@ void main() {
   // themselves after this, overriding the empty default.
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('capture scene 1e fixture', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Representative scene 1e state, captured mid-drag: a buildable cell is
+    // selected (rail visible), the Laser card is long-press-lifted (source
+    // LIFTED, rail header DROP TO BUILD, finger ghost + cost pill airborne)
+    // and the pointer hovers a valid cell (allowed candidate, resolved range
+    // ring, path danger wash on the board). Real Roboto for true metrics.
+    await _loadRealRoboto();
+
+    // Warm Flame's global image cache BEFORE the game exists so its onLoad
+    // resolves from cache instead of racing real engine decodes, which
+    // never complete under the fake-async test binding.
+    await tester.runAsync(() async {
+      for (final name in [
+        'orion_terrain_background.png',
+        'orion_path_tiles.png',
+        'orion_sprite_sheet.png',
+        'orion_tower_variety_sheet.png',
+        'orion_boss_sheet.png',
+      ]) {
+        await Flame.images.load(name);
+      }
+    });
+
+    final boundaryKey = GlobalKey();
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: testGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    // Fixed pumps from here: once the warm-cache load completes the game
+    // mounts and its live loop never lets pumpAndSettle settle.
+    await tester.pump();
+    await tester.pump();
+    expect(game!.isMounted, isTrue);
+    // Restore the cold image cache: later tests were written against the
+    // never-mounts-under-test-binding behavior and their pumpAndSettles
+    // would hang against a live mounted game loop.
+    addTearDown(Flame.images.clearCache);
+
+    final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+    final cellSize = (gameRect.width / BoardLayout.columns).clamp(
+      0.0,
+      gameRect.height / BoardLayout.rows,
+    );
+    final boardLeft =
+        gameRect.left + (gameRect.width - BoardLayout.columns * cellSize) / 2;
+    final boardTop =
+        gameRect.top + (gameRect.height - BoardLayout.rows * cellSize) / 2;
+    Offset globalFor(GridPosition cell) => Offset(
+      boardLeft + (cell.column + 0.5) * cellSize,
+      boardTop + (cell.row + 0.5) * cellSize,
+    );
+
+    // The mounted game loop never settles under fake async, so every frame
+    // wait from here on is a fixed pump.
+    game!.handleBoardTap(
+      globalFor(const GridPosition(2, 3)) - gameRect.topLeft,
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+
+    final start = tester.getCenter(
+      find.byKey(const ValueKey('tower-card-laser')),
+    );
+    final holdTarget = globalFor(const GridPosition(4, 0));
+    final gesture = await tester.startGesture(start);
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    await gesture.moveBy(holdTarget - start);
+    await tester.pump();
+    await tester.pump();
+
+    // All five 1e treatments must be live while the gesture is held.
+    expect(find.text('LIFTED'), findsOneWidget);
+    expect(find.text('DROP TO BUILD'), findsOneWidget);
+    expect(game!.placementPreview.cell, const GridPosition(4, 0));
+    expect(game!.placementPreview.allowed, isTrue);
+    expect(game!.placementPreview.range, greaterThan(0));
+
+    // PNG encoding is real async engine work; capture while held.
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1e.png'),
+    );
+
+    await gesture.up();
+    await tester.pump();
+    // Tear the mounted game down so its live loop ticker does not leak into
+    // the tests that follow this fixture.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100));
   });
 
   testWidgets('boots into the Orion world map first', (tester) async {
@@ -440,6 +566,71 @@ void main() {
     );
     expect(find.textContaining('Next Wave'), findsNothing);
     expect(find.text('Start Wave'), findsOneWidget);
+  });
+
+  testWidgets('long-press drag commits placement through the page', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(430, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    await tester.pumpAndSettle();
+
+    final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+    final cellSize = (gameRect.width / BoardLayout.columns).clamp(
+      0.0,
+      gameRect.height / BoardLayout.rows,
+    );
+    final boardLeft =
+        gameRect.left + (gameRect.width - BoardLayout.columns * cellSize) / 2;
+    final boardTop =
+        gameRect.top + (gameRect.height - BoardLayout.rows * cellSize) / 2;
+    Offset globalFor(GridPosition cell) => Offset(
+      boardLeft + (cell.column + 0.5) * cellSize,
+      boardTop + (cell.row + 0.5) * cellSize,
+    );
+
+    // Under the fake-async test binding the Flame surface never completes
+    // onLoad (real image decode), so it never mounts and raw board taps are
+    // inert. Route the selection exactly the way the chrome arbiters do.
+    game!.handleBoardTap(
+      globalFor(const GridPosition(2, 3)) - gameRect.topLeft,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+
+    // Long-press the Laser card, drag it over a buildable cell, release. The
+    // commit must land through the page's event plumbing at the final global
+    // pointer position — not at the selected cell.
+    final laserCost = GameBalance.towerStats(TowerType.laser, level: 1).cost;
+    final start = tester.getCenter(
+      find.byKey(const ValueKey('tower-card-laser')),
+    );
+    final dropTarget = globalFor(const GridPosition(4, 0));
+    final gesture = await tester.startGesture(start);
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    await gesture.moveBy(dropTarget - start);
+    await tester.pump();
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    expect(game!.children.whereType<TowerComponent>(), hasLength(1));
+    expect(game!.snapshot.gold, GameBalance.startingGold - laserCost);
+    expect(game!.placementPreview.type, isNull);
+
+    // Board interaction recovers after the drag ended: the next selection
+    // goes through and leaves no preview state behind.
+    game!.handleBoardTap(
+      globalFor(const GridPosition(6, 0)) - gameRect.topLeft,
+    );
+    await tester.pump();
+    expect(game!.snapshot.selectedCell, const GridPosition(6, 0));
   });
 
   testWidgets('mission toast latches through null republishes', (tester) async {
