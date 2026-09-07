@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
@@ -13,6 +11,7 @@ import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
+import '../support/real_fonts.dart';
 
 Widget railHost({
   int gold = 9999,
@@ -36,25 +35,6 @@ Widget railHost({
       ),
     ),
   );
-}
-
-Future<void> _loadRealRoboto() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
 }
 
 void main() {
@@ -986,7 +966,7 @@ void main() {
     'idle dock is compact and quiet while the primary action is a wide '
     'filled pill',
     (tester) async {
-      await _loadRealRoboto();
+      await loadRealFonts(withMaterialIcons: false);
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);

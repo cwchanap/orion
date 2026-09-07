@@ -282,7 +282,7 @@ class _BriefingHero extends StatelessWidget {
     // The briefingWide crop is 1.6:1, so an AspectRatio box makes the Flame
     // sprite's contain-fit fill the band exactly — full-bleed, no insets.
     return AspectRatio(
-      aspectRatio: 1.6,
+      aspectRatio: OrionArt.briefingHeroAspect,
       child: Stack(
         fit: StackFit.expand,
         children: [
@@ -294,12 +294,8 @@ class _BriefingHero extends StatelessWidget {
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
-                colors: [
-                  Colors.transparent,
-                  scrimColor.withValues(alpha: 0),
-                  scrimColor,
-                ],
-                stops: const [0.55, 0.82, 1],
+                colors: [scrimColor.withValues(alpha: 0), scrimColor],
+                stops: const [0.82, 1],
               ),
             ),
           ),

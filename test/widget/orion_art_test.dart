@@ -116,11 +116,18 @@ void main() {
   test(
     'no public parallel resultHeroAssetPath/string-table API is introduced',
     () {
-      final source = File(
-        'lib/game/ui/orion_atlas_sprite.dart',
-      ).readAsStringSync();
-      expect(source.contains('resultHeroAssetPath'), isFalse);
-      expect(RegExp(r'Map<String,\s*String>').hasMatch(source), isFalse);
+      // Tripwire over all of lib/: stage art stays behind the typed
+      // OrionArtDescriptor registry, never a parallel path-string table.
+      final offenders = <String>[
+        for (final entity in Directory('lib').listSync(recursive: true))
+          if (entity is File && entity.path.endsWith('.dart'))
+            if (entity.readAsStringSync().contains('resultHeroAssetPath') ||
+                RegExp(
+                  r'Map<String,\s*String>',
+                ).hasMatch(entity.readAsStringSync()))
+              entity.path,
+      ];
+      expect(offenders, isEmpty);
     },
   );
 }

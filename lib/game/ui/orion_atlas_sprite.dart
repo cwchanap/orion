@@ -112,19 +112,16 @@ abstract final class OrionArt {
     fallbackIcon: Icons.autorenew,
   );
 
-  static final Map<String, OrionArtDescriptor> _stageBriefingArt =
+  /// Aspect of the briefingWide hero crop; drives both the sprite crop and
+  /// the briefing sheet's full-bleed AspectRatio band.
+  static const double briefingHeroAspect = 1.6;
+
+  static final Map<(String, OrionStageArtCrop), OrionArtDescriptor> _stageArt =
       Map.unmodifiable({
         for (final stage in OrionCampaign.stages)
-          stage.id: _stageKeyArtDescriptor(
-            stage,
-            OrionStageArtCrop.briefingWide,
-          ),
+          for (final crop in OrionStageArtCrop.values)
+            (stage.id, crop): _stageKeyArtDescriptor(stage, crop),
       });
-
-  static final Map<String, OrionArtDescriptor> _stageMapArt = Map.unmodifiable({
-    for (final stage in OrionCampaign.stages)
-      stage.id: _stageKeyArtDescriptor(stage, OrionStageArtCrop.mapSquare),
-  });
 
   static final Map<OrionSceneArt, OrionArtDescriptor> _scenes =
       Map.unmodifiable({
@@ -171,10 +168,7 @@ abstract final class OrionArt {
     OrionStageArtCrop? crop,
   }) {
     if (crop != null) {
-      return switch (crop) {
-        OrionStageArtCrop.briefingWide => _stageBriefingArt[stage.id]!,
-        OrionStageArtCrop.mapSquare => _stageMapArt[stage.id]!,
-      };
+      return _stageArt[(stage.id, crop)]!;
     }
     if (stage.waves.isEmpty || stage.waves.last.groups.isEmpty) {
       throw StateError('Stage ${stage.id} has no final enemy group');
@@ -192,11 +186,28 @@ abstract final class OrionArt {
 
   static OrionArtDescriptor scene(OrionSceneArt scene) => _scenes[scene]!;
 
+  static ui.Rect _stageRectFor(
+    OrionStageArtCrop crop, {
+    required double imageWidth,
+    required double imageHeight,
+  }) {
+    return switch (crop) {
+      OrionStageArtCrop.briefingWide => _briefingWideRectFor(
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+      ),
+      OrionStageArtCrop.mapSquare => _mapSquareRectFor(
+        imageWidth: imageWidth,
+        imageHeight: imageHeight,
+      ),
+    };
+  }
+
   static ui.Rect _briefingWideRectFor({
     required double imageWidth,
     required double imageHeight,
   }) {
-    const aspect = 1.6;
+    const aspect = briefingHeroAspect;
     var width = imageWidth;
     var height = width / aspect;
     if (height > imageHeight) {
@@ -237,10 +248,8 @@ abstract final class OrionArt {
   ) {
     return OrionArtDescriptor(
       fileName: 'reactor_rim_ui/stages/${stage.id}.png',
-      sourceRectFor: switch (crop) {
-        OrionStageArtCrop.briefingWide => _briefingWideRectFor,
-        OrionStageArtCrop.mapSquare => _mapSquareRectFor,
-      },
+      sourceRectFor: ({required imageWidth, required imageHeight}) =>
+          _stageRectFor(crop, imageWidth: imageWidth, imageHeight: imageHeight),
       semanticLabel: '${stage.name} sector key art',
       fallbackIcon: Icons.landscape,
     );

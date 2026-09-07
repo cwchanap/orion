@@ -1,9 +1,6 @@
-import 'dart:io';
-
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
@@ -16,6 +13,7 @@ import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 const _productViewport = Size(390, 844);
 
@@ -84,28 +82,6 @@ void _expectIdlePacingAbsent(WidgetTester tester) {
   expect(find.text('Start Wave'), findsNothing);
 }
 
-/// Loads the Flutter SDK's real Roboto so text measurements in this suite
-/// use proportional metrics. The host test harness otherwise falls back to
-/// 1em-per-glyph placeholder glyphs, which cannot expose real truncation.
-Future<void> _loadRealRoboto() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
-}
-
 void main() {
   testWidgets(
     'dock preview events pass through chrome; board taps recover after drag',
@@ -163,7 +139,7 @@ void main() {
     // Representative scene 1a state: build-idle, no cell/tower selected,
     // scanner/modules collapsed (no acquired modules). Real Roboto so the
     // evidence shows true text metrics, not Ahem blocks.
-    await _loadRealRoboto();
+    await loadRealFonts(withMaterialIcons: false);
     final boundaryKey = GlobalKey();
     await tester.pumpWidget(
       RepaintBoundary(
@@ -189,7 +165,7 @@ void main() {
   testWidgets('mission actions render their labels fully at product width', (
     tester,
   ) async {
-    await _loadRealRoboto();
+    await loadRealFonts(withMaterialIcons: false);
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -221,7 +197,7 @@ void main() {
     (tester) async {
       // Placeholder test glyphs are wider than any real font and cannot
       // expose a real-font wrap; Roboto approximates the device metrics.
-      await _loadRealRoboto();
+      await loadRealFonts(withMaterialIcons: false);
       tester.view.physicalSize = _productViewport;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
