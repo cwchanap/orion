@@ -1,11 +1,18 @@
+import 'dart:io';
+
+import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import '../support/command_deck_fixtures.dart';
+import '../support/reactor_rim_visual_capture.dart';
 
 void main() {
   testWidgets('saving victory shows save copy and disables both exits', (
@@ -255,7 +262,227 @@ void main() {
 
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('saved victory fixture: debrief backdrop, victory banner, '
+      'medal glyphs, real facts', (tester) async {
+    // Scene 1h restyle pin: the report reads as a debrief over the approved
+    // backdrop, with exactly ONE result banner selected through
+    // OrionArt.result(content.result), medal treatment derived from the real
+    // StageResult.medal (vector glyphs, no per-medal bitmaps), and the real
+    // stage facts. No score/time/kills/damage/R&D analytics exist here.
+    await _pumpPanel(
+      tester,
+      _victoryContent(
+        MissionSaveState.saved,
+        moduleIds: const [RunModuleId.heavyCaliber],
+        reward: const MissionRewardFact(
+          title: 'Blueprint fragment',
+          detail: 'Unlocks a new blueprint after saving.',
+        ),
+      ),
+      onReplay: () {},
+      onReturnToMap: () {},
+    );
+
+    // Debrief-hall backdrop + readability scrim, art cover-fit under the scrim.
+    expect(
+      find.byKey(const ValueKey('mission-report-backdrop')),
+      findsOneWidget,
+    );
+    final backdropArt = find.descendant(
+      of: find.byKey(const ValueKey('mission-report-backdrop')),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is OrionAtlasSprite &&
+            widget.art.fileName ==
+                'reactor_rim_ui/backdrops/mission-report-debrief.png',
+      ),
+    );
+    expect(backdropArt, findsOneWidget);
+    final backdropStack = tester.widget<Stack>(
+      find.ancestor(of: backdropArt, matching: find.byType(Stack)).first,
+    );
+    final layerKeys = [
+      for (final child in backdropStack.children)
+        (child is Positioned ? child.child : child).key,
+    ];
+    final artIndex = layerKeys.indexOf(
+      const ValueKey('mission-report-backdrop-art'),
+    );
+    final scrimIndex = layerKeys.indexOf(
+      const ValueKey('mission-report-scrim'),
+    );
+    expect(artIndex, greaterThanOrEqualTo(0));
+    expect(scrimIndex, greaterThan(artIndex));
+
+    // Exactly ONE victory banner via OrionArt.result(non-null result); the
+    // defeat art must never appear next to it.
+    expect(
+      find.byKey(const ValueKey('mission-report-result-art')),
+      findsOneWidget,
+    );
+    expect(_resultArt('reactor_rim_ui/results/victory.png'), findsOneWidget);
+    expect(_resultArt('reactor_rim_ui/results/defeat.png'), findsNothing);
+
+    // Medal glyph/color derives from the real StageResult.medal: gold rank 3.
+    expect(find.byIcon(Icons.workspace_premium), findsNWidgets(3));
+    final glyph = tester.widget<Icon>(
+      find.byIcon(Icons.workspace_premium).first,
+    );
+    expect(glyph.color, OrionUiTheme.dark.creditGold);
+
+    // Stage identity, real base-health result, comparison copy, save state.
+    expect(find.text('Victory'), findsOneWidget);
+    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(find.text('Gold medal • Base 20/20'), findsOneWidget);
+    expect(find.text('New first-clear result'), findsOneWidget);
+    expect(find.text('Saved.'), findsOneWidget);
+
+    // Module content/count and reward as subordinate sections.
+    expect(find.text('Salvage Modules · 1'), findsOneWidget);
+    expect(
+      find.textContaining(runModuleDefinition(RunModuleId.heavyCaliber).title),
+      findsOneWidget,
+    );
+    expect(find.text('Blueprint fragment'), findsOneWidget);
+
+    // Current state-appropriate actions.
+    expect(find.text('Replay Mission'), findsOneWidget);
+    expect(find.text('World Map'), findsOneWidget);
+  });
+
+  testWidgets('loss shows the defeat banner and keeps Retry + World Map', (
+    tester,
+  ) async {
+    // OrionArt.result(null) must resolve the defeat banner; a loss has no
+    // StageResult, so no medal treatment may appear.
+    var retried = false;
+    var returned = false;
+    await _pumpPanel(
+      tester,
+      _lossContent(),
+      onReplay: () => retried = true,
+      onReturnToMap: () => returned = true,
+    );
+
+    expect(
+      find.byKey(const ValueKey('mission-report-result-art')),
+      findsOneWidget,
+    );
+    expect(_resultArt('reactor_rim_ui/results/defeat.png'), findsOneWidget);
+    expect(_resultArt('reactor_rim_ui/results/victory.png'), findsNothing);
+    expect(find.byIcon(Icons.workspace_premium), findsNothing);
+    expect(find.text('Mission Failed'), findsOneWidget);
+    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(find.text('Reached Wave 5/8'), findsOneWidget);
+    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('World Map'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Retry'));
+    await tester.tap(find.byTooltip('World Map'));
+    expect(retried, isTrue);
+    expect(returned, isTrue);
+  });
+
+  testWidgets('Reduced Motion leaves saved-victory actions immediately '
+      'available', (tester) async {
+    // No entrance animation may delay action availability: with animations
+    // disabled the Replay action fires on the very first frame, with no
+    // settling pumps in between.
+    var replayed = false;
+    await _pumpPanel(
+      tester,
+      _victoryContent(MissionSaveState.saved),
+      onReplay: () => replayed = true,
+      disableAnimations: true,
+    );
+
+    await tester.tap(find.byTooltip('Replay Mission'));
+    expect(replayed, isTrue);
+  });
+
+  testWidgets('capture scene 1h fixture', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Representative scene 1h state: saved victory — debrief backdrop + scrim,
+    // victory result banner, gold medal glyphs, real stage facts, module strip
+    // + reward, Replay/World Map actions. Real Roboto + Material icons so the
+    // evidence shows true text metrics.
+    await _loadRealFonts();
+    // Image decode is real async engine work that cannot complete under the
+    // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
+    // same keys the OrionArt descriptors use) so the art renders.
+    await tester.runAsync(() async {
+      await Flame.images.load(
+        'reactor_rim_ui/backdrops/mission-report-debrief.png',
+      );
+      await Flame.images.load('reactor_rim_ui/results/victory.png');
+    });
+
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: MaterialApp(
+          home: Scaffold(
+            body: MissionReportPanel(
+              content: _victoryContent(
+                MissionSaveState.saved,
+                moduleIds: const [
+                  RunModuleId.heavyCaliber,
+                  RunModuleId.overclockRelay,
+                ],
+                reward: const MissionRewardFact(
+                  title: 'Blueprint fragment',
+                  detail: 'Unlocks a new blueprint after saving.',
+                ),
+              ),
+              onReplay: () {},
+              onReturnToMap: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey('mission-report-backdrop')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('mission-report-backdrop-art')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('mission-report-scrim')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('mission-report-result-art')),
+      findsOneWidget,
+    );
+    expect(_resultArt('reactor_rim_ui/results/victory.png'), findsOneWidget);
+    expect(find.text('Victory'), findsOneWidget);
+    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(find.text('Gold medal • Base 20/20'), findsOneWidget);
+    expect(find.text('New first-clear result'), findsOneWidget);
+    expect(find.text('Saved.'), findsOneWidget);
+    expect(find.text('Salvage Modules · 2'), findsOneWidget);
+    expect(find.text('Blueprint fragment'), findsOneWidget);
+    expect(find.text('Replay Mission'), findsOneWidget);
+    expect(find.text('World Map'), findsOneWidget);
+
+    // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+    // real async engine work and deadlocks the FakeAsync zone otherwise.
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1h.png'),
+    );
+  });
 }
+
+Finder _resultArt(String fileName) => find.byWidgetPredicate(
+  (widget) => widget is OrionAtlasSprite && widget.art.fileName == fileName,
+);
 
 Future<void> _pumpPanel(
   WidgetTester tester,
@@ -263,26 +490,56 @@ Future<void> _pumpPanel(
   VoidCallback? onReplay,
   VoidCallback? onReturnToMap,
   VoidCallback? onRetrySave,
+  bool disableAnimations = false,
 }) async {
   tester.view.physicalSize = const Size(360, 640);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 
   await tester.pumpWidget(
-    MaterialApp(
-      home: Scaffold(
-        body: MissionReportPanel(
-          content: content,
-          onReplay: onReplay,
-          onReturnToMap: onReturnToMap,
-          onRetrySave: onRetrySave,
+    MediaQuery(
+      data: MediaQueryData(disableAnimations: disableAnimations),
+      child: MaterialApp(
+        home: Scaffold(
+          body: MissionReportPanel(
+            content: content,
+            onReplay: onReplay,
+            onReturnToMap: onReturnToMap,
+            onRetrySave: onRetrySave,
+          ),
         ),
       ),
     ),
   );
 
-  expect(find.byKey(const ValueKey('mission-report-frame')), findsOneWidget);
   expect(find.byType(CommandFrame), findsWidgets);
+}
+
+Future<void> _loadRealFonts() async {
+  final root = Platform.environment['FLUTTER_ROOT'];
+  if (root == null) {
+    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
+  }
+  final loader = FontLoader('Roboto');
+  for (final file in [
+    'Roboto-Regular.ttf',
+    'Roboto-Medium.ttf',
+    'Roboto-Bold.ttf',
+  ]) {
+    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
+    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
+    final bytes = fontFile.readAsBytesSync();
+    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
+  }
+  await loader.load();
+
+  final iconFile = File(
+    '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
+  );
+  if (!iconFile.existsSync()) fail('Missing SDK font: ${iconFile.path}');
+  final iconLoader = FontLoader('MaterialIcons')
+    ..addFont(Future.value(ByteData.view(iconFile.readAsBytesSync().buffer)));
+  await iconLoader.load();
 }
 
 GameSnapshot _syntheticSnapshot({
