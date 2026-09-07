@@ -814,7 +814,6 @@ void main() {
         find.byType(IconButton),
         find.byType(SegmentedButton<double>),
         find.byType(FilterChip),
-        find.byType(ReactorButton),
       ].any((finder) {
         for (var i = 0; i < tester.widgetList(finder).length; i++) {
           if (tester.getRect(finder.at(i)).contains(point)) return true;
