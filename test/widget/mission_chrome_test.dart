@@ -870,4 +870,123 @@ void main() {
     // The shell is icon-scale: no label text beside the map glyph.
     expect(find.text('World Map'), findsNothing);
   });
+
+  // Semantic contracts migrated from the deleted ReactorButton: the World
+  // Map action chip is the production control implementing the same
+  // Tooltip + explicit-Semantics pattern (per the HPA-14 migration rule).
+  group(
+    'World Map action chip semantics (migrated ReactorButton contracts)',
+    () {
+      testWidgets(
+        'chip is at least 48dp and its tooltip merges into one label',
+        (tester) async {
+          var opens = 0;
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: Center(
+                  child: WorldMapAction(
+                    enabled: true,
+                    onWorldMap: () => opens++,
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          final rect = tester.getRect(find.byTooltip('World Map'));
+          expect(rect.width, greaterThanOrEqualTo(48));
+          expect(rect.height, greaterThanOrEqualTo(48));
+          await tester.tap(find.byTooltip('World Map'));
+          expect(opens, 1);
+
+          // The Tooltip must not duplicate the explicit Semantics label, or
+          // VoiceOver/TalkBack will announce "World Map" twice (once as the
+          // label, once as the tooltip). With excludeFromSemantics on the
+          // Tooltip, exactly one semantics node carries the label and its
+          // tooltip is empty.
+          final handle = tester.ensureSemantics();
+          try {
+            await tester.pump();
+            expect(find.bySemanticsLabel('World Map'), findsOneWidget);
+            expect(
+              tester.getSemantics(find.bySemanticsLabel('World Map')),
+              matchesSemantics(
+                label: 'World Map',
+                tooltip: '',
+                isButton: true,
+                hasEnabledState: true,
+                isEnabled: true,
+                hasTapAction: true,
+              ),
+            );
+          } finally {
+            handle.dispose();
+          }
+        },
+      );
+
+      testWidgets('semantics tap action fires the World Map callback', (
+        tester,
+      ) async {
+        // excludeSemantics: true on the chip replaces the gesture surface's
+        // tap action, so the outer Semantics must carry its own onTap or
+        // screen readers cannot activate it via the accessibility double-tap.
+        var opens = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: WorldMapAction(enabled: true, onWorldMap: () => opens++),
+              ),
+            ),
+          ),
+        );
+
+        final handle = tester.ensureSemantics();
+        try {
+          await tester.pump();
+          final data = tester.getSemantics(find.bySemanticsLabel('World Map'));
+          // ignore: deprecated_member_use
+          tester.binding.pipelineOwner.semanticsOwner!.performAction(
+            data.id,
+            SemanticsAction.tap,
+          );
+          expect(opens, 1);
+        } finally {
+          handle.dispose();
+        }
+      });
+
+      testWidgets('disabled chip carries no tap action', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: WorldMapAction(enabled: false, onWorldMap: () {}),
+              ),
+            ),
+          ),
+        );
+
+        final handle = tester.ensureSemantics();
+        try {
+          await tester.pump();
+          expect(
+            tester.getSemantics(find.bySemanticsLabel('World Map')),
+            matchesSemantics(
+              label: 'World Map',
+              tooltip: '',
+              isButton: true,
+              hasEnabledState: true,
+              isEnabled: false,
+              hasTapAction: false,
+            ),
+          );
+        } finally {
+          handle.dispose();
+        }
+      });
+    },
+  );
 }
