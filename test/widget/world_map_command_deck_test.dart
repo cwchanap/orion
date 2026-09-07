@@ -1,9 +1,7 @@
-import 'dart:io';
 import 'dart:ui' show SemanticsAction;
 
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
@@ -14,6 +12,7 @@ import 'package:orion/game/ui/sector_map_layout.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 CampaignProgress clearedCampaignProgress() => CampaignProgress(
   bestResultsByStageId: {
@@ -56,37 +55,6 @@ Widget buildMap({
       ),
     ),
   );
-}
-
-/// Loads the Flutter SDK's real Roboto and Material icon fonts so captured
-/// fixture evidence shows production text metrics (see stage_briefing_sheet_test).
-Future<void> _loadRealFonts() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
-
-  final iconFile = File(
-    '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-  );
-  if (!iconFile.existsSync()) fail('Missing SDK font: MaterialIcons');
-  final iconLoader = FontLoader('MaterialIcons');
-  iconLoader.addFont(
-    Future.value(ByteData.view(iconFile.readAsBytesSync().buffer)),
-  );
-  await iconLoader.load();
 }
 
 void main() {
@@ -799,7 +767,7 @@ void main() {
     // (medal ring + badge), Nebula Relay available (open marker + cyan ring),
     // the rest locked (lock icons), over the approved world-map backdrop.
     // Real Roboto + Material icons so the evidence shows true text metrics.
-    await _loadRealFonts();
+    await loadRealFonts();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same keys the OrionArt descriptors use) so the art renders.

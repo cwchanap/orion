@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
@@ -14,6 +11,7 @@ import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/stage_briefing_sheet.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 const _productViewport = Size(390, 844);
 
@@ -95,40 +93,6 @@ void _expectActionWithinViewport(WidgetTester tester, Size viewport) {
 Future<void> _dismissBriefing(WidgetTester tester) async {
   await tester.tap(find.text('Dismiss'));
   await tester.pumpAndSettle();
-}
-
-/// Loads the Flutter SDK's real Roboto and Material icon fonts so text and
-/// icons use production metrics. The host test harness otherwise falls back
-/// to 1em-per-glyph placeholder glyphs, which cannot expose real truncation.
-Future<void> _loadRealFonts() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
-
-  final iconFile = File(
-    '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-  );
-  if (!iconFile.existsSync()) {
-    fail('Missing SDK font: ${iconFile.path}');
-  }
-  final iconLoader = FontLoader('MaterialIcons');
-  iconLoader.addFont(
-    Future.value(ByteData.view(iconFile.readAsBytesSync().buffer)),
-  );
-  await iconLoader.load();
 }
 
 void main() {
@@ -394,7 +358,7 @@ void main() {
     // Representative scene 1b state: Outpost Alpha briefing, fresh run (no
     // committed result), real fonts so the evidence shows true text metrics
     // rather than Ahem blocks.
-    await _loadRealFonts();
+    await loadRealFonts();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same key the OrionArt descriptors use) so the hero art renders.

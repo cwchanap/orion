@@ -42,7 +42,7 @@ Future<void> captureReactorRimFixture(
   if (!directory.existsSync()) {
     directory.createSync(recursive: true);
   }
-  File(
-    '${directory.path}/$fileName',
-  ).writeAsBytesSync(byteData.buffer.asUint8List());
+  File('${directory.path}/$fileName').writeAsBytesSync(
+    byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
+  );
 }

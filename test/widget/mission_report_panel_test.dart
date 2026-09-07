@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -13,6 +10,7 @@ import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 void main() {
   testWidgets('saving victory shows save copy and disables both exits', (
@@ -410,7 +408,7 @@ void main() {
     // victory result banner, gold medal glyphs, real stage facts, module strip
     // + reward, Replay/World Map actions. Real Roboto + Material icons so the
     // evidence shows true text metrics.
-    await _loadRealFonts();
+    await loadRealFonts();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same keys the OrionArt descriptors use) so the art renders.
@@ -513,33 +511,6 @@ Future<void> _pumpPanel(
   );
 
   expect(find.byType(CommandFrame), findsWidgets);
-}
-
-Future<void> _loadRealFonts() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
-
-  final iconFile = File(
-    '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-  );
-  if (!iconFile.existsSync()) fail('Missing SDK font: ${iconFile.path}');
-  final iconLoader = FontLoader('MaterialIcons')
-    ..addFont(Future.value(ByteData.view(iconFile.readAsBytesSync().buffer)));
-  await iconLoader.load();
 }
 
 GameSnapshot _syntheticSnapshot({

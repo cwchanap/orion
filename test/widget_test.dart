@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
@@ -35,27 +34,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/command_deck_fixtures.dart';
 import 'support/reactor_rim_visual_capture.dart';
-
-/// Loads the Flutter SDK's real Roboto so captured fixture evidence shows
-/// proportional text metrics instead of Ahem placeholder glyphs.
-Future<void> _loadRealRoboto() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
-}
+import 'support/real_fonts.dart';
 
 /// Common page shell for widget tests. Defaults to a no-op feedback service
 /// so ordinary tests never touch the native audio/haptics layer.
@@ -158,7 +137,7 @@ void main() {
     // LIFTED, rail header DROP TO BUILD, finger ghost + cost pill airborne)
     // and the pointer hovers a valid cell (allowed candidate, resolved range
     // ring, path danger wash on the board). Real Roboto for true metrics.
-    await _loadRealRoboto();
+    await loadRealFonts(withMaterialIcons: false);
 
     // Warm Flame's global image cache BEFORE the game exists so its onLoad
     // resolves from cache instead of racing real engine decodes, which

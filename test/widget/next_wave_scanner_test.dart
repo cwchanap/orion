@@ -1,8 +1,5 @@
-import 'dart:io';
-
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
@@ -14,37 +11,7 @@ import 'package:orion/game/ui/orion_atlas_sprite.dart';
 
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
-
-/// Loads the Flutter SDK's real Roboto and Material icon fonts so the
-/// fixture shows production text metrics (see stage_briefing_sheet_test).
-Future<void> _loadRealFonts() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
-
-  final iconFile = File(
-    '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',
-  );
-  if (!iconFile.existsSync()) fail('Missing SDK font: MaterialIcons');
-  final iconLoader = FontLoader('MaterialIcons');
-  iconLoader.addFont(
-    Future.value(ByteData.view(iconFile.readAsBytesSync().buffer)),
-  );
-  await iconLoader.load();
-}
+import '../support/real_fonts.dart';
 
 Widget scannerHost(
   WavePreview preview, {
@@ -563,7 +530,7 @@ void main() {
     // Representative scene 1c state: expanded scanner over a multi-group
     // convoy with traits, clear bonus, recommendations, and a modifier.
     // Real Roboto so the evidence shows true text metrics.
-    await _loadRealFonts();
+    await loadRealFonts();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same keys the OrionArt descriptors use) so enemy/tower art renders.
