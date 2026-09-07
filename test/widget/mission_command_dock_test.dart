@@ -1013,7 +1013,7 @@ void main() {
         padding.top,
         lessThanOrEqualTo(7),
         reason:
-            'Idle dock vertical padding ${padding.vertical} keeps the '
+            'Idle dock vertical padding ${padding.top} keeps the '
             'shell too tall.',
       );
 

@@ -1,3 +1,5 @@
+import 'dart:ui' show Rect;
+
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
@@ -496,11 +498,20 @@ Future<void> _takeFirstDraftOffer(
     return;
   }
   final firstTitle = runModuleDefinition(offer.moduleIds.first).title;
-  await _pumpUntil(tester, () => tester.any(find.text(firstTitle)));
+  await _pumpUntil(
+    tester,
+    () => tester.any(find.text(firstTitle)),
+    timeoutMessage:
+        'A draft offer ("$firstTitle") was pending but its sheet never '
+        'appeared, leaving the mission dock blocked.',
+  );
   await tester.tap(find.text(firstTitle));
   await _pumpUntil(
     tester,
     () => game.stateNotifier.value.pendingRunModuleOffer == null,
+    timeoutMessage:
+        'Tapping "$firstTitle" did not clear the pending draft offer; the '
+        'tap was swallowed and the dock stays blocked.',
   );
   await tester.pump();
 }
@@ -564,14 +575,35 @@ Offset _pointAboveBoard(WidgetTester tester) {
   );
 }
 
-/// Waits out the modal sheet's entrance animation in real time. The
-/// full-height briefing sheet (scene 1b) slides up over ~300ms of real
+/// Waits for the modal briefing sheet's entrance to settle by polling for
+/// the action row being fully on-screen and stationary — no blind sleep.
+/// The full-height briefing sheet (scene 1b) slides up over ~300ms of real
 /// frames; until it settles, its bottom action row sits below the screen
 /// edge and taps there are lost to the barrier.
 Future<void> _settleSheetEntrance(WidgetTester tester) async {
   await tester.runAsync(() async {
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    Rect? previous;
+    while (DateTime.now().isBefore(deadline)) {
+      final action = find.text('Start Mission');
+      if (tester.any(action)) {
+        final rect = tester.getRect(action);
+        final onScreen =
+            rect.top >= 0 &&
+            rect.bottom <=
+                tester.view.physicalSize.height / tester.view.devicePixelRatio;
+        if (onScreen && previous == rect) {
+          return;
+        }
+        previous = rect;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      await tester.pump();
+    }
   });
+  if (!tester.any(find.text('Start Mission'))) {
+    fail('Briefing sheet action row never settled on-screen.');
+  }
   await tester.pump();
 }
 
@@ -579,6 +611,7 @@ Future<void> _pumpUntil(
   WidgetTester tester,
   bool Function() predicate, {
   Duration timeout = const Duration(seconds: 15),
+  String? timeoutMessage,
 }) async {
   final deadline = DateTime.now().add(timeout);
   while (DateTime.now().isBefore(deadline)) {
@@ -587,7 +620,7 @@ Future<void> _pumpUntil(
     }
     await tester.pump(const Duration(milliseconds: 100));
   }
-  fail('Condition was not met within $timeout.');
+  fail(timeoutMessage ?? 'Condition was not met within $timeout.');
 }
 
 Future<void> _tapUntil(

@@ -68,6 +68,11 @@ class BoardComponent extends PositionComponent {
     ..color = const Color(0xB3FFFFFF)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2;
+  final Paint _deniedGlyphPaint = Paint()
+    ..color = const Color(0xFFFFFFFF)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2
+    ..strokeCap = StrokeCap.round;
 
   Rect cellRect(GridPosition position) {
     return Rect.fromLTWH(
@@ -137,6 +142,9 @@ class BoardComponent extends PositionComponent {
       if (previewAllowed && previewRange > 0) {
         canvas.drawCircle(cellCenter(candidate), previewRange, _rangeRingPaint);
       }
+      if (!previewAllowed) {
+        _renderDeniedGlyph(canvas, candidate);
+      }
     } else if (showsSelectionHighlight) {
       final activeSelection = selectedCell!;
       final paint =
@@ -179,6 +187,16 @@ class BoardComponent extends PositionComponent {
       final y = row * cellSize;
       canvas.drawLine(Offset(0, y), Offset(boardWidth, y), _gridPaint);
     }
+  }
+
+  /// Non-color-only denied affordance: a small ✗ glyph over the blocked
+  /// candidate fill, mirroring the mock's crosshair, so denial does not rely
+  /// on the red fill alone.
+  void _renderDeniedGlyph(Canvas canvas, GridPosition position) {
+    final rect = cellRect(position).deflate(cellSize * 0.3);
+    canvas
+      ..drawLine(rect.topLeft, rect.bottomRight, _deniedGlyphPaint)
+      ..drawLine(rect.topRight, rect.bottomLeft, _deniedGlyphPaint);
   }
 
   void _renderMarker(

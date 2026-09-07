@@ -149,7 +149,7 @@ class IdleCommandBar extends StatelessWidget {
       // The shell is a low grouping surface for the idle row, not a strong
       // cyan frame: reduced vertical padding and a quiet border let the dark
       // translucent fill group the controls.
-      padding: const EdgeInsets.fromLTRB(6, 6, 6, 6),
+      padding: const EdgeInsets.all(6),
       backgroundColor: uiTheme.hullBlack.withValues(alpha: 0.92),
       borderColor: uiTheme.systemCyan.withValues(alpha: 0.10),
       child: Row(

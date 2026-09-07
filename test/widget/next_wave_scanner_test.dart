@@ -407,6 +407,9 @@ void main() {
       );
       expect(frame.width, lessThanOrEqualTo(212));
       expect(frame.height, lessThanOrEqualTo(320));
+      // Bounded AND scrollable: the 320 cap is real, so overflow content
+      // must be reachable through the scroll view, never clipped.
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
       expect(find.bySemanticsLabel('8 Armored Drones'), findsOneWidget);
       expect(find.bySemanticsLabel('2 Drones'), findsOneWidget);
       expect(find.bySemanticsLabel('Armored trait'), findsOneWidget);

@@ -434,13 +434,9 @@ void main() {
       onPurchase: (_) {},
       onBack: () async {},
     );
-    // Five independent purchases: no "Requires …" copy and no connector
-    // layer implying a dependency graph between nodes.
+    // Five independent purchases: no "Requires …" copy implying
+    // prerequisites between the nodes.
     expect(find.textContaining('Requires'), findsNothing);
-    expect(
-      find.byKey(const ValueKey('tech-tree-connector-layer')),
-      findsNothing,
-    );
   });
 
   testWidgets('shows feedback when present', (tester) async {

@@ -8,6 +8,7 @@ import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/stage_briefing_sheet.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
@@ -56,6 +57,7 @@ Future<_PopRecorder> _pumpBriefing(
                   isScrollControlled: true,
                   useSafeArea: true,
                   backgroundColor: Colors.transparent,
+                  sheetAnimationStyle: orionSheetAnimationStyle(context),
                   builder: (_) => StageBriefingSheet(
                     stage: stage,
                     result: result,

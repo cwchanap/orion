@@ -487,8 +487,11 @@ class _TechDetail extends StatelessWidget {
     final uiTheme = OrionUiTheme.of(context);
     final theme = Theme.of(context);
     final isPurchased = techTree.isPurchased(upgrade);
+    // Single source of truth for affordability: the domain rule covers the
+    // purchased and unspent-points checks; the view only adds its own
+    // save-in-flight gating.
     final unspent = techTree.unspentPoints(progress);
-    final canAfford = !isPurchased && unspent >= upgrade.cost;
+    final canAfford = techTree.canPurchase(upgrade, progress);
     // Purchases are disabled while a save is in flight so the button never
     // presents an enabled affordance that silently no-ops (round-3 review P3).
     final canPurchase = canAfford && !isSavingProgress;

@@ -101,11 +101,12 @@ class _WorldMapViewState extends State<WorldMapView> {
           final needsScroll = contentWidth > constraints.biggest.width;
 
           Widget plotLayers = Stack(
+            key: const ValueKey('world-map-plot'),
             children: [
               Positioned.fill(
                 child: CustomPaint(
                   key: const ValueKey('sector-route-layer'),
-                  painter: _SectorRoutePainter(
+                  painter: SectorRoutePainter(
                     routes: SectorMapLayout.routes(
                       widget.stages,
                       widget.progress,
@@ -807,8 +808,8 @@ class _NodeGlyph extends StatelessWidget {
   }
 }
 
-class _SectorRoutePainter extends CustomPainter {
-  const _SectorRoutePainter({
+class SectorRoutePainter extends CustomPainter {
+  const SectorRoutePainter({
     required this.routes,
     required this.nodeRects,
     required this.uiTheme,
@@ -851,7 +852,7 @@ class _SectorRoutePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SectorRoutePainter oldDelegate) {
+  bool shouldRepaint(covariant SectorRoutePainter oldDelegate) {
     if (oldDelegate.uiTheme != uiTheme ||
         !mapEquals(oldDelegate.nodeRects, nodeRects) ||
         oldDelegate.routes.length != routes.length) {
