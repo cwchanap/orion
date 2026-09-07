@@ -198,6 +198,37 @@ void main() {
       },
     );
 
+    testWidgets('recognizer cancel clears the preview and never commits', (
+      tester,
+    ) async {
+      final events = <TowerPlacementPreviewEvent>[];
+      await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+      );
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      // Stream an update so a later drag end would commit at the last
+      // pointer — the exact failure a recognizer cancel must never cause.
+      await gesture.moveBy(const Offset(40, -30));
+      await tester.pump();
+
+      expect(events.first, isA<TowerPlacementPreviewBegin>());
+      expect(events.whereType<TowerPlacementPreviewUpdate>(), isNotEmpty);
+      expect(find.text('DROP TO BUILD'), findsOneWidget);
+      expect(find.text('LIFTED'), findsOneWidget);
+
+      // OS pointer interruption (incoming call, notification shade, app
+      // switcher) surfaces as a recognizer cancel, not a drag end.
+      await gesture.cancel();
+      await tester.pump();
+
+      expect(events.whereType<TowerPlacementPreviewCancel>(), hasLength(1));
+      expect(events.whereType<TowerPlacementPreviewCommit>(), isEmpty);
+      expect(find.text('DROP TO BUILD'), findsNothing);
+      expect(find.text('LIFTED'), findsNothing);
+    });
+
     testWidgets('locked card cannot begin a preview', (tester) async {
       final events = <TowerPlacementPreviewEvent>[];
       await tester.pumpWidget(
