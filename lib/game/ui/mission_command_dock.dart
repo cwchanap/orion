@@ -326,11 +326,16 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   TowerType? _activeDraggedType;
   Offset? _latestGlobalPointer;
 
+  /// Set when the OS cancels the drag pointer (see [_handleDragCanceled]);
+  /// LongPressDraggable then still reports a drag end, which must not commit.
+  bool _dragCancelledBySystem = false;
+
   void _emit(TowerPlacementPreviewEvent event) {
     widget.onPlacementPreviewEvent?.call(event);
   }
 
   void _handleDragStarted(TowerType type) {
+    _dragCancelledBySystem = false;
     setState(() {
       _activeDraggedType = type;
       _latestGlobalPointer = null;
@@ -344,6 +349,10 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   }
 
   void _handleDragEnded() {
+    if (_dragCancelledBySystem) {
+      _dragCancelledBySystem = false;
+      return;
+    }
     setState(() => _activeDraggedType = null);
     final pointer = _latestGlobalPointer;
     _latestGlobalPointer = null;
@@ -352,6 +361,21 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
     } else {
       _emit(TowerPlacementPreviewCancel());
     }
+  }
+
+  /// Recognizer-level cancel (OS pointer interruption: incoming call,
+  /// notification shade, app switcher, or rail unmount). This SDK has no
+  /// onDragCancel callback and surfaces cancels as onDragEnd — the raw
+  /// pointer cancel preempts it here; the trailing drag end is ignored.
+  /// Never commits at the last pointer — always cancels the preview.
+  void _handleDragCanceled() {
+    if (_activeDraggedType == null) return;
+    _dragCancelledBySystem = true;
+    setState(() {
+      _activeDraggedType = null;
+      _latestGlobalPointer = null;
+    });
+    _emit(TowerPlacementPreviewCancel());
   }
 
   @override
@@ -381,6 +405,7 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
                   onDragStarted: () => _handleDragStarted(type),
                   onDragUpdate: _handleDragUpdate,
                   onDragEnded: _handleDragEnded,
+                  onDragCanceled: _handleDragCanceled,
                 );
               },
             ),
@@ -437,6 +462,7 @@ class _TowerBuildCard extends StatelessWidget {
     this.onDragStarted,
     this.onDragUpdate,
     this.onDragEnded,
+    this.onDragCanceled,
   });
 
   final TowerType type;
@@ -450,6 +476,7 @@ class _TowerBuildCard extends StatelessWidget {
   final VoidCallback? onDragStarted;
   final ValueChanged<Offset>? onDragUpdate;
   final VoidCallback? onDragEnded;
+  final VoidCallback? onDragCanceled;
 
   static const double baseWidth = 64;
   static const double baseHeight = 92;
@@ -610,17 +637,23 @@ class _TowerBuildCard extends StatelessWidget {
     // handler; a horizontal swipe scrolls the rail and never begins preview.
     // The Flame board is NOT a DragTarget — game validation decides, never
     // wasAccepted/onDragCompleted.
-    return LongPressDraggable<TowerType>(
-      data: type,
-      // The game holds exactly one transient preview; a second concurrent
-      // drag would overwrite its type and commit the wrong tower.
-      maxSimultaneousDrags: 1,
-      onDragStarted: onDragStarted,
-      onDragUpdate: (details) => onDragUpdate?.call(details.globalPosition),
-      onDragEnd: (_) => onDragEnded?.call(),
-      feedback: _buildDragFeedback(context),
-      childWhenDragging: _buildLiftedSource(context, scaleFactor),
-      child: card,
+    // Listener observes the raw pointer cancel, which the GestureBinding
+    // dispatches before the avatar's drag-end cleanup, letting the rail
+    // treat a recognizer cancel as a cancel instead of a commit.
+    return Listener(
+      onPointerCancel: (_) => onDragCanceled?.call(),
+      child: LongPressDraggable<TowerType>(
+        data: type,
+        // The game holds exactly one transient preview; a second concurrent
+        // drag would overwrite its type and commit the wrong tower.
+        maxSimultaneousDrags: 1,
+        onDragStarted: onDragStarted,
+        onDragUpdate: (details) => onDragUpdate?.call(details.globalPosition),
+        onDragEnd: (_) => onDragEnded?.call(),
+        feedback: _buildDragFeedback(context),
+        childWhenDragging: _buildLiftedSource(context, scaleFactor),
+        child: card,
+      ),
     );
   }
 
