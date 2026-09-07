@@ -275,26 +275,24 @@ class WorldMapAction extends StatelessWidget {
         label: 'World Map',
         onTap: enabled ? onWorldMap : null,
         excludeSemantics: true,
-        child: ExcludeSemantics(
+        child: GestureDetector(
           // The opaque gesture surface owns the full 48dp chip so taps in
           // every corner reach the action (mirrors the scanner chip).
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: enabled ? onWorldMap : null,
-            child: SizedBox.square(
-              key: const ValueKey('world-map-action'),
-              dimension: 48,
-              child: MissionSurface(
-                padding: const EdgeInsets.all(10),
-                radius: 12,
-                borderColor: enabled
-                    ? uiTheme.systemCyan.withValues(alpha: 0.5)
-                    : uiTheme.frameSteel,
-                child: Icon(
-                  Icons.map_outlined,
-                  size: 24,
-                  color: enabled ? uiTheme.textPrimary : uiTheme.textMuted,
-                ),
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled ? onWorldMap : null,
+          child: SizedBox.square(
+            key: const ValueKey('world-map-action'),
+            dimension: 48,
+            child: MissionSurface(
+              padding: const EdgeInsets.all(10),
+              radius: 12,
+              borderColor: enabled
+                  ? uiTheme.systemCyan.withValues(alpha: 0.5)
+                  : uiTheme.frameSteel,
+              child: Icon(
+                Icons.map_outlined,
+                size: 24,
+                color: enabled ? uiTheme.textPrimary : uiTheme.textMuted,
               ),
             ),
           ),

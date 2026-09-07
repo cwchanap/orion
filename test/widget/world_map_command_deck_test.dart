@@ -8,7 +8,6 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
-import 'package:orion/game/ui/sector_map_layout.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
@@ -142,6 +141,27 @@ void main() {
     final scrimIndex = keys.indexOf(const ValueKey('world-map-scrim'));
     expect(artIndex, greaterThanOrEqualTo(0));
     expect(scrimIndex, greaterThan(artIndex));
+
+    // The backdrop layer sits BEHIND the map plot layers in the outer
+    // composition stack, mirroring the inner art/scrim ordering above.
+    final outerStack = tester.widget<Stack>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('world-map-backdrop')),
+            matching: find.byType(Stack),
+          )
+          .first,
+    );
+    final outerKeys = [
+      for (final child in outerStack.children)
+        (child is Positioned ? child.child : child).key,
+    ];
+    final backdropLayerIndex = outerKeys.indexOf(
+      const ValueKey('world-map-backdrop'),
+    );
+    final plotLayerIndex = outerKeys.indexOf(const ValueKey('world-map-plot'));
+    expect(backdropLayerIndex, greaterThanOrEqualTo(0));
+    expect(plotLayerIndex, greaterThan(backdropLayerIndex));
   });
 
   testWidgets('stage nodes use square-cropped map art, never stretched wide '
@@ -281,8 +301,8 @@ void main() {
     final painter = tester
         .widget<CustomPaint>(find.byKey(const ValueKey('sector-route-layer')))
         .painter;
-    expect(painter.runtimeType.toString(), '_SectorRoutePainter');
-    final routes = (painter as dynamic).routes as List<SectorRoute>;
+    expect(painter, isA<SectorRoutePainter>());
+    final routes = (painter as SectorRoutePainter).routes;
     expect(routes, hasLength(6));
     expect(
       routes.where((route) => route.isOptional).map((route) => route.to.id),
@@ -807,6 +827,16 @@ void main() {
     );
     expect(
       find.byKey(const ValueKey('stage-status-ring-singularity-core')),
+      findsOneWidget,
+    );
+    // Side-stage nodes render in the capture state so the fixture shows the
+    // full route graph, optional legs included.
+    expect(
+      find.byKey(const ValueKey('sector-stage-salvage-rift')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('sector-stage-void-bastion')),
       findsOneWidget,
     );
 

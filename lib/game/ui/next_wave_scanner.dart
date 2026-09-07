@@ -187,6 +187,10 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
             // the representative multi-group preview fits without scrolling,
             // while pathological content stays bounded and scrollable.
             constraints: const BoxConstraints(maxWidth: 212, maxHeight: 320),
+            // ponytail: 320 is a flat cap, not a scale-derived value — it
+            // keeps the expanded panel inside the 390pt-landscape viewport
+            // floor (MediaQuery height) beside the HUD/dock bands; past the
+            // cap the scroll view takes over instead of the panel growing.
             child: MissionSurface(
               key: const ValueKey('next-wave-scanner-expanded'),
               padding: const EdgeInsets.all(8),
@@ -373,6 +377,9 @@ class _SectionLabel extends StatelessWidget {
             text,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
+            // Deliberate: fixed-width section chips must keep their line
+            // count at any accessibility text scale; ellipsis absorbs the
+            // overflow instead.
             textScaler: TextScaler.noScaling,
             style: Theme.of(context).textTheme.labelSmall?.copyWith(
               color: uiTheme.textMuted,

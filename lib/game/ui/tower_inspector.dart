@@ -366,7 +366,7 @@ class _ProgressionActions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
-          'SPECIALIZE - LV 3',
+          'SPECIALIZE - LV ${tower.level + 1}',
           style: Theme.of(context).textTheme.labelMedium?.copyWith(
             color: uiTheme.textMuted,
             fontWeight: FontWeight.w800,

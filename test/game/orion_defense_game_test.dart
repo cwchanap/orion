@@ -2753,6 +2753,14 @@ void main() {
         expect(board.previewAllowed, isTrue);
         expect(board.showsSelectionHighlight, isFalse);
 
+        // Denied candidate state is what drives the board's non-color-only
+        // ✗ glyph paint over the blocked fill (column 0, row 1 is a path
+        // cell, so it always resolves denied).
+        game.updateTowerPlacementPreview(cellPoint(const GridPosition(0, 1)));
+        expect(board.previewActive, isTrue);
+        expect(board.previewCandidate, const GridPosition(0, 1));
+        expect(board.previewAllowed, isFalse);
+
         game.cancelTowerPlacementPreview();
         expect(board.previewActive, isFalse);
         expect(board.showsSelectionHighlight, isTrue);

@@ -410,33 +410,25 @@ void main() {
           debugShowCheckedModeBanner: false,
           home: Scaffold(
             backgroundColor: OrionUiTheme.dark.voidBlack,
-            // Bottom-anchored like the real scene: the command dock hosts
-            // the inspector at the bottom. Column(min) shrinkwraps so
-            // TowerInspector's internal top Align cannot fill the body.
             body: Align(
               alignment: Alignment.bottomCenter,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: TowerInspector(
-                      snapshot: commandDeckSnapshot(
-                        gold: 9999,
-                        selectedTower: tower,
-                        selectedTowerStats: GameBalance.towerStats(
-                          tower.type,
-                          level: tower.level,
-                        ),
-                      ),
-                      onUpgrade: () {},
-                      onSpecialize: (_) {},
-                      onTargetingChanged: (_) {},
-                      onSell: () {},
-                      sellRefund: 84,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TowerInspector(
+                  snapshot: commandDeckSnapshot(
+                    gold: 9999,
+                    selectedTower: tower,
+                    selectedTowerStats: GameBalance.towerStats(
+                      tower.type,
+                      level: tower.level,
                     ),
                   ),
-                ],
+                  onUpgrade: () {},
+                  onSpecialize: (_) {},
+                  onTargetingChanged: (_) {},
+                  onSell: () {},
+                  sellRefund: 84,
+                ),
               ),
             ),
           ),
