@@ -1,5 +1,8 @@
+import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/assets/game_sprite_sheet.dart';
+import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_surface.dart';
@@ -7,11 +10,14 @@ import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 
 import '../support/command_deck_fixtures.dart';
+import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 Widget scannerHost(
   WavePreview preview, {
   bool disableAnimations = false,
   bool collapseRequested = false,
+  List<String> modifierTitles = const ['Standard Conditions'],
 }) {
   return MaterialApp(
     home: MediaQuery(
@@ -20,11 +26,36 @@ Widget scannerHost(
         alignment: Alignment.topRight,
         child: NextWaveScanner(
           preview: preview,
-          modifierTitles: const ['Standard Conditions'],
+          modifierTitles: modifierTitles,
           collapseRequested: collapseRequested,
         ),
       ),
     ),
+  );
+}
+
+/// Representative scene 1c preview: a multi-group convoy with traits, a
+/// clear bonus, tower recommendations, and a stage modifier.
+WavePreview representativePreview() {
+  return WavePreview(
+    waveNumber: 4,
+    waveTotal: 8,
+    groups: [
+      WavePreviewGroup(
+        enemyCount: 12,
+        label: 'Armored Drones',
+        traits: {EnemyTrait.armored, EnemyTrait.shielded},
+      ),
+      WavePreviewGroup(
+        enemyCount: 4,
+        label: 'Heavy Drones',
+        traits: {EnemyTrait.heavy},
+      ),
+      WavePreviewGroup(enemyCount: 6, label: 'Drones', traits: const {}),
+    ],
+    traits: {EnemyTrait.armored, EnemyTrait.shielded, EnemyTrait.heavy},
+    clearBonus: 45,
+    recommendedTowerTypes: const [TowerType.railgun, TowerType.cryo],
   );
 }
 
@@ -375,7 +406,10 @@ void main() {
         find.byKey(const ValueKey('next-wave-scanner-expanded')),
       );
       expect(frame.width, lessThanOrEqualTo(212));
-      expect(frame.height, lessThanOrEqualTo(168));
+      expect(frame.height, lessThanOrEqualTo(320));
+      // Bounded AND scrollable: the 320 cap is real, so overflow content
+      // must be reachable through the scroll view, never clipped.
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
       expect(find.bySemanticsLabel('8 Armored Drones'), findsOneWidget);
       expect(find.bySemanticsLabel('2 Drones'), findsOneWidget);
       expect(find.bySemanticsLabel('Armored trait'), findsOneWidget);
@@ -394,6 +428,138 @@ void main() {
     } finally {
       handle.dispose();
     }
+  });
+
+  testWidgets(
+    'convoy preview keeps identifiable group rows, adjacent counts, prominent art',
+    (tester) async {
+      await tester.pumpWidget(
+        scannerHost(
+          representativePreview(),
+          modifierTitles: const ['Ion Storm'],
+        ),
+      );
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+
+      // Group rows stay individually identifiable.
+      for (var index = 0; index < 3; index++) {
+        expect(find.byKey(ValueKey('preview-group-$index')), findsOneWidget);
+      }
+
+      // The count stays adjacent to its own group row.
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('preview-group-0')),
+          matching: find.text('12x'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('preview-group-1')),
+          matching: find.text('4x'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('preview-group-2')),
+          matching: find.text('6x'),
+        ),
+        findsOneWidget,
+      );
+
+      // Enemy art leads each row prominently.
+      final groupArt = tester.getSize(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('preview-group-0')),
+              matching: find.byType(OrionAtlasSprite),
+            )
+            .first,
+      );
+      expect(groupArt.shortestSide, greaterThanOrEqualTo(40));
+
+      // Recommendation/modifier sections stay discoverable by label.
+      expect(find.text('RECOMMENDED COUNTERS'), findsOneWidget);
+      expect(find.text('MODIFIERS'), findsOneWidget);
+
+      // Recommended counters stay art-led with an affirmative mark each.
+      final counters = find.bySemanticsLabel(
+        'Recommended towers: Railgun, Cryo',
+      );
+      expect(counters, findsOneWidget);
+      final counterArt = tester.getSize(
+        find
+            .descendant(of: counters, matching: find.byType(OrionAtlasSprite))
+            .first,
+      );
+      expect(counterArt.shortestSide, greaterThanOrEqualTo(24));
+      expect(
+        find.descendant(
+          of: counters,
+          matching: find.byIcon(Icons.check_circle),
+        ),
+        findsNWidgets(2),
+      );
+    },
+  );
+
+  testWidgets('group trait badges render as readable chips', (tester) async {
+    final armoredPreview = commandDeckPreview(
+      groups: [
+        WavePreviewGroup(
+          enemyCount: 4,
+          label: 'Armored Drones',
+          traits: {EnemyTrait.armored},
+        ),
+      ],
+    );
+    await tester.pumpWidget(scannerHost(armoredPreview));
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+
+    final badge = find.bySemanticsLabel('Armored trait');
+    expect(badge, findsOneWidget);
+    expect(tester.getSize(badge).height, greaterThanOrEqualTo(20));
+  });
+
+  testWidgets('capture scene 1c fixture', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Representative scene 1c state: expanded scanner over a multi-group
+    // convoy with traits, clear bonus, recommendations, and a modifier.
+    // Real Roboto so the evidence shows true text metrics.
+    await loadRealFonts();
+    // Image decode is real async engine work that cannot complete under the
+    // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
+    // same keys the OrionArt descriptors use) so enemy/tower art renders.
+    await tester.runAsync(() async {
+      await Flame.images.load(GameSpriteSheet.fileName);
+      await Flame.images.load(GameTowerVarietySheet.fileName);
+    });
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: scannerHost(
+          representativePreview(),
+          modifierTitles: const ['Ion Storm'],
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+
+    // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+    // real async engine work and deadlocks the FakeAsync zone otherwise.
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1c.png'),
+    );
   });
 
   testWidgets('collapsed semantics include next wave and total enemy count', (

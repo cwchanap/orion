@@ -1,11 +1,6 @@
-import 'dart:math' as math;
-
-import 'package:flame/flame.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import '../assets/game_boss_sheet.dart';
-import '../assets/game_terrain.dart';
 import '../campaign/campaign_progress.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
@@ -53,8 +48,6 @@ class WorldMapView extends StatefulWidget {
 }
 
 class _WorldMapViewState extends State<WorldMapView> {
-  bool _didPrecacheMapArt = false;
-
   bool get _isBusy => widget.isSavingProgress || widget.isResetting;
 
   String? get _effectiveFeedback {
@@ -64,15 +57,6 @@ class _WorldMapViewState extends State<WorldMapView> {
           : 'Saving campaign progress…';
     }
     return widget.feedback;
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_didPrecacheMapArt) return;
-    _didPrecacheMapArt = true;
-    precacheImage(const AssetImage(GameTerrain.assetPath), context).ignore();
-    Flame.images.load(GameBossSheet.fileName).ignore();
   }
 
   @override
@@ -117,11 +101,12 @@ class _WorldMapViewState extends State<WorldMapView> {
           final needsScroll = contentWidth > constraints.biggest.width;
 
           Widget plotLayers = Stack(
+            key: const ValueKey('world-map-plot'),
             children: [
               Positioned.fill(
                 child: CustomPaint(
                   key: const ValueKey('sector-route-layer'),
-                  painter: _SectorRoutePainter(
+                  painter: SectorRoutePainter(
                     routes: SectorMapLayout.routes(
                       widget.stages,
                       widget.progress,
@@ -162,7 +147,9 @@ class _WorldMapViewState extends State<WorldMapView> {
 
           return Stack(
             children: [
-              const Positioned.fill(child: _SectorBackdrop()),
+              const Positioned.fill(
+                child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
+              ),
               Positioned.fill(child: plotLayers),
               Positioned(
                 left: SectorMapLayout.horizontalPadding,
@@ -194,11 +181,6 @@ class _WorldMapViewState extends State<WorldMapView> {
                   onOpenSettings: widget.onOpenSettings,
                 ),
               ),
-              const Positioned(
-                left: SectorMapLayout.horizontalPadding,
-                bottom: 8,
-                child: _MedalLegend(),
-              ),
             ],
           );
         },
@@ -207,8 +189,11 @@ class _WorldMapViewState extends State<WorldMapView> {
   }
 }
 
-class _SectorBackdrop extends StatelessWidget {
-  const _SectorBackdrop();
+/// Approved star-chart scene art behind the plot, dimmed by a readability
+/// scrim so routes and node labels stay legible. The art is square, so it is
+/// cover-fitted (never stretched) into the portrait aperture.
+class _WorldMapBackdrop extends StatelessWidget {
+  const _WorldMapBackdrop({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -216,15 +201,37 @@ class _SectorBackdrop extends StatelessWidget {
     return Stack(
       fit: StackFit.expand,
       children: [
-        Image.asset(
-          GameTerrain.assetPath,
+        ColoredBox(color: uiTheme.voidBlack),
+        // ponytail: square art, so any square child size cover-fits correctly;
+        // recompute from the decoded image if the asset ever stops being 1:1.
+        FittedBox(
+          key: const ValueKey('world-map-backdrop-art'),
           fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => ColoredBox(
-            color: uiTheme.voidBlack,
-            child: Icon(Icons.public_off, color: uiTheme.frameSteel, size: 48),
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox.square(
+            dimension: 640,
+            child: OrionAtlasSprite(
+              art: OrionArt.scene(OrionSceneArt.worldMap),
+              size: const Size.square(640),
+            ),
           ),
         ),
-        ColoredBox(color: uiTheme.voidBlack.withValues(alpha: 0.64)),
+        const DecoratedBox(
+          key: ValueKey('world-map-scrim'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xAA05080D),
+                Color(0x3305080D),
+                Color(0x4405080D),
+                Color(0x8805080D),
+              ],
+              stops: [0, 0.28, 0.72, 1],
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -257,7 +264,9 @@ class _EmptySectorMap extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const Positioned.fill(child: _SectorBackdrop()),
+        const Positioned.fill(
+          child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
+        ),
         Center(
           child: CommandFrame(
             borderColor: uiTheme.frameSteel,
@@ -317,86 +326,94 @@ class _SectorHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return CommandFrame(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      color: uiTheme.hullBlack.withValues(alpha: 0.94),
-      borderColor: isCampaignComplete ? uiTheme.creditGold : uiTheme.systemCyan,
-      emphasized: true,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
+    // Lower-noise chrome: an unboxed floating title row over the backdrop
+    // instead of a framed command plate (artboard 1f).
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.public,
+              size: 16,
+              color: uiTheme.systemCyan,
+              shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'ORION SECTOR',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: uiTheme.textPrimary,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.1,
+                  shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+                ),
+              ),
+            ),
+            Semantics(
+              label: isCampaignComplete
+                  ? 'Campaign Complete • $cleared/$total stages cleared'
+                  : '$cleared of $total stages cleared',
+              child: ExcludeSemantics(
+                child: _HeaderBadge(
+                  icon: isCampaignComplete
+                      ? Icons.workspace_premium
+                      : Icons.radar,
+                  label: '$cleared/$total',
+                  color: isCampaignComplete
+                      ? uiTheme.creditGold
+                      : uiTheme.systemCyan,
+                ),
+              ),
+            ),
+            if (hasChallengeBadge) ...[
+              const SizedBox(width: 5),
+              Semantics(
+                label: 'Challenge Badge Earned - All side stages cleared',
+                child: ExcludeSemantics(
+                  child: Tooltip(
+                    message: 'Challenge Badge Earned - All side stages cleared',
+                    child: Icon(
+                      Icons.stars_rounded,
+                      size: 18,
+                      color: uiTheme.systemViolet,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        if (feedback != null) ...[
+          const SizedBox(height: 4),
           Row(
             children: [
-              Icon(Icons.public, size: 16, color: uiTheme.systemCyan),
-              const SizedBox(width: 6),
+              Icon(
+                Icons.sensors,
+                size: 13,
+                color: uiTheme.warningOrange,
+                shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+              ),
+              const SizedBox(width: 5),
               Expanded(
                 child: Text(
-                  'ORION SECTOR',
+                  feedback!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: uiTheme.textPrimary,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.1,
+                    shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
                   ),
                 ),
               ),
-              Semantics(
-                label: isCampaignComplete
-                    ? 'Campaign Complete • $cleared/$total stages cleared'
-                    : '$cleared of $total stages cleared',
-                child: ExcludeSemantics(
-                  child: _HeaderBadge(
-                    icon: isCampaignComplete
-                        ? Icons.workspace_premium
-                        : Icons.radar,
-                    label: '$cleared/$total',
-                    color: isCampaignComplete
-                        ? uiTheme.creditGold
-                        : uiTheme.systemCyan,
-                  ),
-                ),
-              ),
-              if (hasChallengeBadge) ...[
-                const SizedBox(width: 5),
-                Semantics(
-                  label: 'Challenge Badge Earned - All side stages cleared',
-                  child: ExcludeSemantics(
-                    child: Tooltip(
-                      message:
-                          'Challenge Badge Earned - All side stages cleared',
-                      child: Icon(
-                        Icons.stars_rounded,
-                        size: 18,
-                        color: uiTheme.systemViolet,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
-          if (feedback != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Icon(Icons.sensors, size: 13, color: uiTheme.warningOrange),
-                const SizedBox(width: 5),
-                Expanded(
-                  child: Text(
-                    feedback!,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: uiTheme.textPrimary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ],
         ],
-      ),
+      ],
     );
   }
 }
@@ -460,40 +477,36 @@ class _UtilityRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uiTheme = OrionUiTheme.of(context);
-    return CommandFrame(
-      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
-      color: uiTheme.hullBlack.withValues(alpha: 0.94),
-      borderColor: uiTheme.frameSteel,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (onOpenCodex != null)
-            _RailButton(
-              tooltip: 'Codex',
-              icon: Icons.menu_book_rounded,
-              onPressed: isBusy ? null : onOpenCodex,
-            ),
-          if (onOpenTechTree != null)
-            _RailButton(
-              tooltip: 'Tech Tree',
-              icon: Icons.account_tree_rounded,
-              onPressed: isBusy ? null : onOpenTechTree,
-            ),
+    // Lower-noise chrome: the rail is a bare column of 48dp buttons over the
+    // backdrop instead of a framed plate (artboard 1f has no utility rail).
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (onOpenCodex != null)
           _RailButton(
-            tooltip: 'Reset Campaign',
-            icon: Icons.restart_alt_rounded,
-            isDestructive: true,
-            onPressed: isBusy ? null : onResetCampaign,
+            tooltip: 'Codex',
+            icon: Icons.menu_book_rounded,
+            onPressed: isBusy ? null : onOpenCodex,
           ),
-          if (onOpenSettings != null)
-            _RailButton(
-              tooltip: 'Settings',
-              icon: Icons.settings_rounded,
-              onPressed: isBusy || isSavingFeedback ? null : onOpenSettings,
-            ),
-        ],
-      ),
+        if (onOpenTechTree != null)
+          _RailButton(
+            tooltip: 'Tech Tree',
+            icon: Icons.account_tree_rounded,
+            onPressed: isBusy ? null : onOpenTechTree,
+          ),
+        _RailButton(
+          tooltip: 'Reset Campaign',
+          icon: Icons.restart_alt_rounded,
+          isDestructive: true,
+          onPressed: isBusy ? null : onResetCampaign,
+        ),
+        if (onOpenSettings != null)
+          _RailButton(
+            tooltip: 'Settings',
+            icon: Icons.settings_rounded,
+            onPressed: isBusy || isSavingFeedback ? null : onOpenSettings,
+          ),
+      ],
     );
   }
 }
@@ -524,7 +537,11 @@ class _RailButton extends StatelessWidget {
       color: enabled ? activeColor : uiTheme.textMuted,
       disabledColor: uiTheme.frameSteel,
       onPressed: onPressed,
-      icon: Icon(icon, size: 21),
+      icon: Icon(
+        icon,
+        size: 21,
+        shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+      ),
     );
   }
 }
@@ -553,6 +570,7 @@ class _IllustratedStageNode extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final isLocked = status == StageProgressStatus.locked;
+    final isAvailable = status == StageProgressStatus.unlocked;
     final statusColor = _statusColor(uiTheme, status, result);
     final rewardLabel = stageRewardLabel(
       stage,
@@ -587,29 +605,33 @@ class _IllustratedStageNode extends StatelessWidget {
           color: Colors.transparent,
           child: InkWell(
             onTap: onTap,
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(28),
             splashColor: statusColor.withValues(alpha: 0.20),
             highlightColor: statusColor.withValues(alpha: 0.10),
             child: Column(
               mainAxisSize: MainAxisSize.max,
               children: [
                 SizedBox(
+                  key: ValueKey('stage-crest-${stage.id}'),
                   width: 56,
                   height: 58,
                   child: Stack(
                     fit: StackFit.expand,
                     children: [
                       Center(
-                        child: _StageArtAperture(
+                        child: _StageCrestAperture(
+                          key: ValueKey('stage-status-ring-${stage.id}'),
                           stage: stage,
                           isLocked: isLocked,
-                          statusColor: statusColor,
+                          isAvailable: isAvailable,
+                          ringColor: statusColor,
                         ),
                       ),
                       if (result != null)
                         Align(
                           alignment: Alignment.topRight,
                           child: _NodeGlyph(
+                            key: ValueKey('stage-medal-${stage.id}'),
                             icon: medalIcon(result!.medal),
                             color: medalColor(uiTheme, result!.medal),
                           ),
@@ -634,12 +656,24 @@ class _IllustratedStageNode extends StatelessWidget {
                                 : uiTheme.textMuted,
                           ),
                         ),
+                      if (isAvailable)
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _NodeGlyph(
+                            key: ValueKey('stage-open-${stage.id}'),
+                            icon: Icons.play_arrow_rounded,
+                            color: uiTheme.systemCyan,
+                          ),
+                        ),
                       if (isLocked)
                         Center(
                           child: Icon(
                             Icons.lock_rounded,
                             size: 17,
                             color: uiTheme.textPrimary,
+                            shadows: const [
+                              Shadow(color: Colors.black, blurRadius: 4),
+                            ],
                           ),
                         ),
                     ],
@@ -686,23 +720,30 @@ class _IllustratedStageNode extends StatelessWidget {
   }
 }
 
-class _StageArtAperture extends StatelessWidget {
-  const _StageArtAperture({
+/// Star-chart crest node: a circular aperture holding the square-cropped
+/// stage key art, ringed by the integrated status/medal color (artboard 1f).
+class _StageCrestAperture extends StatelessWidget {
+  const _StageCrestAperture({
+    super.key,
     required this.stage,
     required this.isLocked,
-    required this.statusColor,
+    required this.isAvailable,
+    required this.ringColor,
   });
 
   final StageDefinition stage;
   final bool isLocked;
-  final Color statusColor;
+  final bool isAvailable;
+  final Color ringColor;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final diameter = stage.isMainPath ? 52.0 : 42.0;
+    final artSize = stage.isMainPath ? 48.0 : 38.0;
     Widget art = OrionAtlasSprite(
-      art: OrionArt.stage(stage),
-      size: Size.square(stage.isMainPath ? 48 : 34),
+      art: OrionArt.stage(stage, crop: OrionStageArtCrop.mapSquare),
+      size: Size.square(artSize),
     );
     if (isLocked) {
       art = Opacity(
@@ -717,45 +758,35 @@ class _StageArtAperture extends StatelessWidget {
       );
     }
 
-    if (!stage.isMainPath) {
-      return SizedBox.square(
-        dimension: 54,
-        child: Center(
-          child: Transform.rotate(
-            key: ValueKey('optional-stage-aperture-${stage.id}'),
-            angle: math.pi / 4,
-            child: SizedBox.square(
-              dimension: 38,
-              child: CommandFrame(
-                padding: const EdgeInsets.all(2),
-                color: uiTheme.hullBlack,
-                borderColor: statusColor,
-                emphasized: true,
-                chamfer: 4,
-                child: Transform.rotate(angle: -math.pi / 4, child: art),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return SizedBox.square(
-      dimension: 54,
-      child: CommandFrame(
-        padding: const EdgeInsets.all(2),
+    return Container(
+      width: diameter,
+      height: diameter,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
         color: uiTheme.hullBlack,
-        borderColor: statusColor,
-        emphasized: true,
-        chamfer: 9,
-        child: art,
+        border: Border.all(
+          color: isLocked
+              ? uiTheme.frameSteel.withValues(alpha: 0.85)
+              : ringColor,
+          width: isAvailable ? 2.4 : 1.6,
+        ),
+        boxShadow: isAvailable
+            ? [
+                BoxShadow(
+                  color: ringColor.withValues(alpha: 0.35),
+                  blurRadius: 12,
+                  spreadRadius: 1,
+                ),
+              ]
+            : const [],
       ),
+      child: ClipOval(child: Center(child: art)),
     );
   }
 }
 
 class _NodeGlyph extends StatelessWidget {
-  const _NodeGlyph({required this.icon, required this.color});
+  const _NodeGlyph({super.key, required this.icon, required this.color});
 
   final IconData icon;
   final Color color;
@@ -777,65 +808,8 @@ class _NodeGlyph extends StatelessWidget {
   }
 }
 
-class _MedalLegend extends StatelessWidget {
-  const _MedalLegend();
-
-  @override
-  Widget build(BuildContext context) {
-    final uiTheme = OrionUiTheme.of(context);
-    return CommandFrame(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-      color: uiTheme.hullBlack.withValues(alpha: 0.90),
-      borderColor: uiTheme.frameSteel,
-      chamfer: 6,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _LegendGlyph(
-            tooltip: 'Clear medal',
-            icon: Icons.check_circle,
-            color: uiTheme.naniteGreen,
-          ),
-          const SizedBox(width: 7),
-          _LegendGlyph(
-            tooltip: 'Silver medal',
-            icon: Icons.military_tech,
-            color: uiTheme.textMuted,
-          ),
-          const SizedBox(width: 7),
-          _LegendGlyph(
-            tooltip: 'Gold medal',
-            icon: Icons.emoji_events,
-            color: uiTheme.creditGold,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LegendGlyph extends StatelessWidget {
-  const _LegendGlyph({
-    required this.tooltip,
-    required this.icon,
-    required this.color,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Icon(icon, size: 15, color: color),
-    );
-  }
-}
-
-class _SectorRoutePainter extends CustomPainter {
-  const _SectorRoutePainter({
+class SectorRoutePainter extends CustomPainter {
+  const SectorRoutePainter({
     required this.routes,
     required this.nodeRects,
     required this.uiTheme,
@@ -878,7 +852,7 @@ class _SectorRoutePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SectorRoutePainter oldDelegate) {
+  bool shouldRepaint(covariant SectorRoutePainter oldDelegate) {
     if (oldDelegate.uiTheme != uiTheme ||
         !mapEquals(oldDelegate.nodeRects, nodeRects) ||
         oldDelegate.routes.length != routes.length) {

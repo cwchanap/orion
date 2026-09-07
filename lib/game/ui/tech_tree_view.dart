@@ -2,10 +2,14 @@ import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
 import '../campaign/tech_tree.dart';
+import 'orion_atlas_sprite.dart';
+import 'orion_ui_theme.dart';
 
-/// Full-screen panel reached from the world map. Shows the player's medal-
-/// point bank and all five purchasable tech-tree upgrades.
-class TechTreeView extends StatelessWidget {
+/// Full-screen panel reached from the world map: five independent tech-tree
+/// upgrades over the R&D-bay backdrop (artboard 1g). Tapping a node only
+/// changes which upgrade's detail is shown — the purchase/persistence rules
+/// keep living in the parent shell.
+class TechTreeView extends StatefulWidget {
   const TechTreeView({
     super.key,
     required this.progress,
@@ -30,64 +34,220 @@ class TechTreeView extends StatelessWidget {
   final VoidCallback onBack;
 
   @override
+  State<TechTreeView> createState() => _TechTreeViewState();
+}
+
+class _TechTreeViewState extends State<TechTreeView> {
+  /// Presentation-only selection: which node's detail is on screen. Never
+  /// persisted and never read by the parent; real node/detail state (purchased,
+  /// affordable, saving) is always derived from [TechTreeView] props on
+  /// rebuild so purchases and rollbacks flow through unchanged.
+  CampaignTechUpgrade _selected = CampaignTechUpgrade.values.first;
+
+  @override
   Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
     final theme = Theme.of(context);
+    final progress = widget.progress;
+    final techTree = widget.techTree;
     final earned = CampaignTechTree.totalMedalRank(progress);
     final spent = techTree.totalSpent;
     final unspent = techTree.unspentPoints(progress);
 
+    // Fixed five-node field, positioned to echo artboard 1g: the top node,
+    // a flanking pair, then two more — without any connector edges (the five
+    // upgrades are independent purchases).
+    const rows = [
+      [CampaignTechUpgrade.solarCapacitors],
+      [CampaignTechUpgrade.hardenedCore, CampaignTechUpgrade.salvageCrew],
+      [CampaignTechUpgrade.laserTuning],
+      [CampaignTechUpgrade.cryoCoolant],
+    ];
+
     return Scaffold(
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+      backgroundColor: uiTheme.voidBlack,
+      body: Stack(
+        children: [
+          const Positioned.fill(
+            child: _TechTreeBackdrop(key: ValueKey('tech-tree-backdrop')),
+          ),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                IconButton(
-                  tooltip: 'Back',
-                  onPressed: onBack,
-                  icon: const Icon(Icons.arrow_back),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Back',
+                        onPressed: widget.onBack,
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                      Expanded(
+                        child: Text(
+                          'Campaign Tech Tree',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: theme.textTheme.titleSmall?.copyWith(
+                            color: uiTheme.textPrimary,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                            shadows: const [
+                              Shadow(color: Colors.black, blurRadius: 6),
+                            ],
+                          ),
+                        ),
+                      ),
+                      Semantics(
+                        label: 'Unspent: $unspent',
+                        excludeSemantics: true,
+                        child: _BankChip(unspent: unspent),
+                      ),
+                    ],
+                  ),
                 ),
-                Expanded(
-                  child: Text(
-                    'Campaign Tech Tree',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                if (widget.feedback != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                    child: Text(
+                      widget.feedback!,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.error,
+                      ),
                     ),
+                  ),
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < rows.length; i++) ...[
+                          if (i > 0) const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              for (var j = 0; j < rows[i].length; j++) ...[
+                                if (j > 0) const SizedBox(width: 12),
+                                _TechNode(
+                                  upgrade: rows[i][j],
+                                  isSelected: rows[i][j] == _selected,
+                                  isPurchased: techTree.isPurchased(rows[i][j]),
+                                  canAfford: techTree.canPurchase(
+                                    rows[i][j],
+                                    progress,
+                                  ),
+                                  onSelect: () =>
+                                      setState(() => _selected = rows[i][j]),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                _TechDetail(
+                  key: ValueKey('tech-detail-${_selected.id}'),
+                  upgrade: _selected,
+                  progress: progress,
+                  techTree: techTree,
+                  isSavingProgress: widget.isSavingProgress,
+                  onPurchase: widget.onPurchase,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: _BankBar(
+                    unspent: unspent,
+                    earned: earned,
+                    spent: spent,
                   ),
                 ),
               ],
             ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Text(
-                'Unspent: $unspent · Earned: $earned · Spent: $spent',
-                style: theme.textTheme.titleMedium,
-              ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Approved R&D-bay scene art behind the nodes, dimmed by a readability scrim
+/// so node labels stay legible. The art is square, so it is cover-fitted
+/// (never stretched) into the portrait aperture.
+class _TechTreeBackdrop extends StatelessWidget {
+  const _TechTreeBackdrop({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(color: uiTheme.voidBlack),
+        // ponytail: square art, so any square child size cover-fits correctly;
+        // recompute from the decoded image if the asset ever stops being 1:1.
+        FittedBox(
+          key: const ValueKey('tech-tree-backdrop-art'),
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox.square(
+            dimension: 640,
+            child: OrionAtlasSprite(
+              art: OrionArt.scene(OrionSceneArt.techTree),
+              size: const Size.square(640),
             ),
-            if (feedback != null)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  feedback!,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.error,
-                  ),
-                ),
-              ),
-            Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(16),
-                children: [
-                  for (final upgrade in CampaignTechUpgrade.values)
-                    _UpgradeRow(
-                      upgrade: upgrade,
-                      progress: progress,
-                      techTree: techTree,
-                      isSavingProgress: isSavingProgress,
-                      onPurchase: onPurchase,
-                    ),
-                ],
+          ),
+        ),
+        const DecoratedBox(
+          key: ValueKey('tech-tree-scrim'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xAA05080D),
+                Color(0x3305080D),
+                Color(0x4405080D),
+                Color(0x8805080D),
+              ],
+              stops: [0, 0.28, 0.72, 1],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BankChip extends StatelessWidget {
+  const _BankChip({required this.unspent});
+
+  final int unspent;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: uiTheme.hullBlack.withValues(alpha: 0.85),
+        border: Border.all(color: uiTheme.frameSteel),
+        borderRadius: BorderRadius.circular(3),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.workspace_premium, size: 14, color: uiTheme.creditGold),
+            const SizedBox(width: 3),
+            Text(
+              '$unspent',
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: uiTheme.textPrimary,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ],
@@ -97,8 +257,218 @@ class TechTreeView extends StatelessWidget {
   }
 }
 
-class _UpgradeRow extends StatelessWidget {
-  const _UpgradeRow({
+class _BankBar extends StatelessWidget {
+  const _BankBar({
+    required this.unspent,
+    required this.earned,
+    required this.spent,
+  });
+
+  final int unspent;
+  final int earned;
+  final int spent;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return DecoratedBox(
+      key: const ValueKey('tech-bank-bar'),
+      decoration: BoxDecoration(
+        color: uiTheme.hullBlack.withValues(alpha: 0.92),
+        border: Border.all(color: uiTheme.frameSteel),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        child: Row(
+          children: [
+            Icon(Icons.workspace_premium, size: 16, color: uiTheme.creditGold),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Unspent: $unspent · Earned: $earned · Spent: $spent',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textScaler: MediaQuery.textScalerOf(
+                  context,
+                ).clamp(maxScaleFactor: 1.15),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  color: uiTheme.textPrimary,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TechNode extends StatelessWidget {
+  const _TechNode({
+    required this.upgrade,
+    required this.isSelected,
+    required this.isPurchased,
+    required this.canAfford,
+    required this.onSelect,
+  });
+
+  final CampaignTechUpgrade upgrade;
+  final bool isSelected;
+  final bool isPurchased;
+  final bool canAfford;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final theme = Theme.of(context);
+    // Purchased nodes glow green; affordable ones cyan; the rest stay muted.
+    final accent = isPurchased
+        ? uiTheme.naniteGreen
+        : canAfford
+        ? uiTheme.systemCyan
+        : uiTheme.textMuted;
+
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: [
+        upgrade.label,
+        if (isPurchased) 'Purchased',
+        upgrade.effectLabel,
+        'Cost ${upgrade.cost} points',
+      ].join(' • '),
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onSelect,
+        borderRadius: BorderRadius.circular(10),
+        child: SizedBox(
+          key: ValueKey('tech-node-${upgrade.id}'),
+          width: 160,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Container(
+                  key: isSelected
+                      ? ValueKey('tech-selected-ring-${upgrade.id}')
+                      : null,
+                  decoration: BoxDecoration(
+                    color: uiTheme.hullBlack.withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: isSelected
+                          ? uiTheme.systemViolet
+                          : uiTheme.frameSteel,
+                      width: isSelected ? 2 : 1,
+                    ),
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: uiTheme.systemViolet.withValues(
+                                alpha: 0.4,
+                              ),
+                              blurRadius: 14,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : const [],
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: uiTheme.panelBlue,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: accent),
+                      ),
+                      child: Icon(_nodeIcon(upgrade), size: 18, color: accent),
+                    ),
+                    const SizedBox(height: 5),
+                    Text(
+                      upgrade.label,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      textScaler: MediaQuery.textScalerOf(
+                        context,
+                      ).clamp(maxScaleFactor: 1.15),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        fontSize: 10,
+                        color: isPurchased || canAfford
+                            ? uiTheme.textPrimary
+                            : uiTheme.textMuted,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      upgrade.effectLabel,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textScaler: MediaQuery.textScalerOf(
+                        context,
+                      ).clamp(maxScaleFactor: 1.15),
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isPurchased || canAfford
+                            ? uiTheme.naniteGreen
+                            : uiTheme.textMuted,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.workspace_premium,
+                          size: 12,
+                          color: uiTheme.creditGold,
+                        ),
+                        const SizedBox(width: 3),
+                        Text(
+                          '${upgrade.cost}',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: uiTheme.creditGold,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              if (isPurchased)
+                Positioned(
+                  top: 5,
+                  right: 5,
+                  child: Icon(
+                    Icons.check_circle,
+                    key: ValueKey('tech-node-purchased-${upgrade.id}'),
+                    size: 17,
+                    color: uiTheme.naniteGreen,
+                    shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _TechDetail extends StatelessWidget {
+  const _TechDetail({
+    super.key,
     required this.upgrade,
     required this.progress,
     required this.techTree,
@@ -114,48 +484,71 @@ class _UpgradeRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
     final theme = Theme.of(context);
     final isPurchased = techTree.isPurchased(upgrade);
+    // Single source of truth for affordability: the domain rule covers the
+    // purchased and unspent-points checks; the view only adds its own
+    // save-in-flight gating.
     final unspent = techTree.unspentPoints(progress);
-    final canAfford = !isPurchased && unspent >= upgrade.cost;
+    final canAfford = techTree.canPurchase(upgrade, progress);
     // Purchases are disabled while a save is in flight so the button never
     // presents an enabled affordance that silently no-ops (round-3 review P3).
     final canPurchase = canAfford && !isSavingProgress;
 
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: uiTheme.panelBlue.withValues(alpha: 0.94),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: uiTheme.systemViolet.withValues(alpha: 0.55),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    upgrade.label,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(upgrade.description, style: theme.textTheme.bodySmall),
-                  const SizedBox(height: 4),
-                  Text(
-                    upgrade.effectLabel,
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Cost: ${upgrade.cost} pts',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                ],
+            Text(
+              upgrade.label,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: uiTheme.textPrimary,
+                fontWeight: FontWeight.w800,
               ),
             ),
-            _buildAction(theme, isPurchased, canPurchase, canAfford, unspent),
+            const SizedBox(height: 2),
+            Text(
+              upgrade.description,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: uiTheme.textMuted,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              upgrade.effectLabel,
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: uiTheme.naniteGreen,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'Cost: ${upgrade.cost} pts',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: uiTheme.textMuted,
+              ),
+            ),
+            const SizedBox(height: 10),
+            _buildAction(
+              theme,
+              uiTheme,
+              isPurchased,
+              canPurchase,
+              canAfford,
+              unspent,
+            ),
           ],
         ),
       ),
@@ -164,18 +557,35 @@ class _UpgradeRow extends StatelessWidget {
 
   Widget _buildAction(
     ThemeData theme,
+    OrionUiTheme uiTheme,
     bool isPurchased,
     bool canPurchase,
     bool canAfford,
     int unspent,
   ) {
     if (isPurchased) {
-      return Chip(
-        label: Text(
-          'Purchased',
-          style: TextStyle(color: theme.colorScheme.onPrimaryContainer),
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: uiTheme.naniteGreen),
         ),
-        backgroundColor: theme.colorScheme.primaryContainer,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.check_circle, size: 14, color: uiTheme.naniteGreen),
+              const SizedBox(width: 5),
+              Text(
+                'Purchased',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: uiTheme.naniteGreen,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+        ),
       );
     }
     if (canPurchase) {
@@ -198,5 +608,20 @@ class _UpgradeRow extends StatelessWidget {
       onPressed: null, // disabled
       child: Text('Need $needed more points'),
     );
+  }
+}
+
+IconData _nodeIcon(CampaignTechUpgrade upgrade) {
+  switch (upgrade) {
+    case CampaignTechUpgrade.solarCapacitors:
+      return Icons.solar_power;
+    case CampaignTechUpgrade.hardenedCore:
+      return Icons.shield_rounded;
+    case CampaignTechUpgrade.salvageCrew:
+      return Icons.paid_rounded;
+    case CampaignTechUpgrade.laserTuning:
+      return Icons.bolt_rounded;
+    case CampaignTechUpgrade.cryoCoolant:
+      return Icons.ac_unit_rounded;
   }
 }

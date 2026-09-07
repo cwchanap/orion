@@ -1,10 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../campaign/campaign_progress.dart';
 import 'command_frame.dart';
 import 'mission_report_content.dart';
+import 'orion_atlas_sprite.dart';
 import 'run_module_draft_panel.dart';
 import 'orion_ui_theme.dart';
 
+/// Scene 1h mission debrief: approved backdrop art with a readability scrim,
+/// one victory/defeat result banner selected through `OrionArt.result`, and
+/// the real stage facts as subordinate sections over the state-dependent
+/// action row.
 class MissionReportPanel extends StatelessWidget {
   const MissionReportPanel({
     super.key,
@@ -25,42 +31,38 @@ class MissionReportPanel extends StatelessWidget {
     final uiTheme = OrionUiTheme.of(context);
 
     return Material(
-      color: uiTheme.voidBlack.withValues(alpha: 0.92),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: CommandFrame(
-                    key: const ValueKey('mission-report-frame'),
-                    padding: const EdgeInsets.all(14),
-                    color: uiTheme.hullBlack,
-                    borderColor: _reportAccent(uiTheme, content),
-                    emphasized: true,
-                    chamfer: 14,
+      color: uiTheme.voidBlack,
+      child: Stack(
+        children: [
+          const Positioned.fill(child: _ReportBackdrop()),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
                     child: _ReportBody(content: content),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  for (var index = 0; index < actions.length; index++) ...[
-                    if (index > 0) const SizedBox(width: 8),
-                    Expanded(
-                      child: _MissionActionButton(action: actions[index]),
-                    ),
-                  ],
-                ],
-              ),
-            ],
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      for (var index = 0; index < actions.length; index++) ...[
+                        if (index > 0) const SizedBox(width: 8),
+                        Expanded(
+                          child: _MissionActionButton(action: actions[index]),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
@@ -121,6 +123,55 @@ class MissionReportPanel extends StatelessWidget {
   }
 }
 
+/// Approved debrief-hall scene art behind the report, dimmed by a readability
+/// scrim so the facts stay legible. The art is square, so it is cover-fitted
+/// (never stretched) into the portrait aperture.
+class _ReportBackdrop extends StatelessWidget {
+  const _ReportBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Stack(
+      key: const ValueKey('mission-report-backdrop'),
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(color: uiTheme.voidBlack),
+        // ponytail: square art, so any square child size cover-fits correctly;
+        // recompute from the decoded image if the asset ever stops being 1:1.
+        FittedBox(
+          key: const ValueKey('mission-report-backdrop-art'),
+          fit: BoxFit.cover,
+          clipBehavior: Clip.hardEdge,
+          child: SizedBox.square(
+            dimension: 640,
+            child: OrionAtlasSprite(
+              art: OrionArt.scene(OrionSceneArt.missionReport),
+              size: const Size.square(640),
+            ),
+          ),
+        ),
+        const DecoratedBox(
+          key: ValueKey('mission-report-scrim'),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Color(0xAA05080D),
+                Color(0x3305080D),
+                Color(0x4405080D),
+                Color(0x8805080D),
+              ],
+              stops: [0, 0.28, 0.72, 1],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ReportBody extends StatelessWidget {
   const _ReportBody({required this.content});
 
@@ -132,63 +183,91 @@ class _ReportBody extends StatelessWidget {
     final theme = Theme.of(context);
     final reward = content.reward;
     final accent = _reportAccent(uiTheme, content);
+    final result = content.result;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          child: Column(
-            children: [
-              Icon(
-                content.didWin ? Icons.emoji_events : Icons.warning_amber,
-                size: 42,
-                color: accent,
-              ),
-              const SizedBox(height: 6),
-              Text(
-                content.didWin ? 'Victory' : 'Mission Failed',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  color: accent,
-                  fontWeight: FontWeight.w900,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
         Text(
-          content.stageName,
+          content.didWin ? 'Victory' : 'Mission Failed',
           textAlign: TextAlign.center,
-          style: theme.textTheme.titleLarge?.copyWith(
-            color: uiTheme.textPrimary,
-            fontWeight: FontWeight.w800,
+          style: theme.textTheme.labelMedium?.copyWith(
+            color: accent,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2.4,
+            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
         const SizedBox(height: 4),
+        Text(
+          content.stageName,
+          textAlign: TextAlign.center,
+          style: theme.textTheme.headlineSmall?.copyWith(
+            color: uiTheme.textPrimary,
+            fontWeight: FontWeight.w900,
+            shadows: const [Shadow(color: Colors.black, blurRadius: 8)],
+          ),
+        ),
+        const SizedBox(height: 14),
+        // Exactly one victory/defeat banner, selected from the real result.
+        Center(
+          child: OrionAtlasSprite(
+            key: const ValueKey('mission-report-result-art'),
+            art: OrionArt.result(result),
+            size: const Size.square(208),
+          ),
+        ),
+        if (result != null) ...[
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              for (var i = 0; i < result.medal.rank; i++) ...[
+                if (i > 0) const SizedBox(width: 4),
+                Icon(
+                  Icons.workspace_premium,
+                  color: _medalColor(uiTheme, result.medal),
+                  semanticLabel: '${result.medal.label} medal',
+                  shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
+                ),
+              ],
+            ],
+          ),
+        ],
+        const SizedBox(height: 10),
         Text(
           content.outcomeText,
           textAlign: TextAlign.center,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: uiTheme.textPrimary,
+            fontWeight: FontWeight.w700,
+            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
         if (content.didWin && content.comparisonText != null) ...[
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             content.comparisonText!,
             textAlign: TextAlign.center,
             style: theme.textTheme.bodySmall?.copyWith(
               color: uiTheme.textMuted,
+              shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
             ),
           ),
         ],
+        if (content.didWin && content.saveText != null) ...[
+          const SizedBox(height: 10),
+          _SaveStateRow(state: content.saveState, text: content.saveText!),
+        ],
         const SizedBox(height: 18),
         Text(
-          'Salvage Modules',
+          content.moduleIds.isEmpty
+              ? 'Salvage Modules'
+              : 'Salvage Modules · ${content.moduleIds.length}',
           style: theme.textTheme.titleMedium?.copyWith(
             color: uiTheme.systemCyan,
             fontWeight: FontWeight.w800,
+            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
         const SizedBox(height: 8),
@@ -201,10 +280,6 @@ class _ReportBody extends StatelessWidget {
               color: uiTheme.textMuted,
             ),
           ),
-        if (content.didWin && content.saveText != null) ...[
-          const SizedBox(height: 18),
-          _SaveStateRow(state: content.saveState, text: content.saveText!),
-        ],
         if (reward != null) ...[
           const SizedBox(height: 18),
           Text(
@@ -230,6 +305,14 @@ class _ReportBody extends StatelessWidget {
       ],
     );
   }
+}
+
+Color _medalColor(OrionUiTheme uiTheme, StageMedal medal) {
+  return switch (medal) {
+    StageMedal.gold => uiTheme.creditGold,
+    StageMedal.silver => uiTheme.textMuted,
+    StageMedal.clear => uiTheme.systemCyan,
+  };
 }
 
 class _SaveStateRow extends StatelessWidget {

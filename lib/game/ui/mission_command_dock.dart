@@ -1,12 +1,41 @@
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
-import 'command_frame.dart';
 import 'mission_command_hud.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_ui_theme.dart';
 import 'tower_inspector.dart';
+
+/// Closed scene-1e placement-preview event family. The dock emits, Chrome
+/// forwards, and the page maps onto [OrionDefenseGame]'s preview methods.
+/// One family, no controller; commit carries the FINAL global pointer
+/// position and an off-board commit always cancels downstream.
+sealed class TowerPlacementPreviewEvent {
+  const TowerPlacementPreviewEvent();
+}
+
+final class TowerPlacementPreviewBegin extends TowerPlacementPreviewEvent {
+  const TowerPlacementPreviewBegin(this.type);
+
+  final TowerType type;
+}
+
+final class TowerPlacementPreviewUpdate extends TowerPlacementPreviewEvent {
+  const TowerPlacementPreviewUpdate(this.globalPosition);
+
+  final Offset globalPosition;
+}
+
+final class TowerPlacementPreviewCommit extends TowerPlacementPreviewEvent {
+  const TowerPlacementPreviewCommit(this.globalPosition);
+
+  final Offset globalPosition;
+}
+
+final class TowerPlacementPreviewCancel extends TowerPlacementPreviewEvent {
+  const TowerPlacementPreviewCancel();
+}
 
 class MissionCommandDock extends StatelessWidget {
   const MissionCommandDock({
@@ -21,6 +50,7 @@ class MissionCommandDock extends StatelessWidget {
     required this.onSpecialize,
     required this.onTargetingChanged,
     required this.onSell,
+    this.onPlacementPreviewEvent,
   });
 
   final GameSnapshot snapshot;
@@ -33,6 +63,7 @@ class MissionCommandDock extends StatelessWidget {
   final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
   final VoidCallback onSell;
+  final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
 
   @override
   Widget build(BuildContext context) {
@@ -55,6 +86,7 @@ class MissionCommandDock extends StatelessWidget {
         gold: snapshot.gold,
         unlockedTowerTypes: snapshot.unlockedTowerTypes,
         onPlaceTower: onPlaceTower,
+        onPlacementPreviewEvent: onPlacementPreviewEvent,
       );
     } else {
       contentKey = const ValueKey('command-dock-idle');
@@ -106,6 +138,7 @@ class IdleCommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
     final countdown = snapshot.autoStartCountdownRemaining;
     final reactorLabel = _reactorLabel(snapshot, countdown);
     final reactorTooltip = snapshot.phase == GamePhase.wave
@@ -113,10 +146,16 @@ class IdleCommandBar extends StatelessWidget {
         : reactorLabel;
 
     return MissionSurface(
+      // The shell is a low grouping surface for the idle row, not a strong
+      // cyan frame: reduced vertical padding and a quiet border let the dark
+      // translucent fill group the controls.
+      padding: const EdgeInsets.all(6),
+      backgroundColor: uiTheme.hullBlack.withValues(alpha: 0.92),
+      borderColor: uiTheme.systemCyan.withValues(alpha: 0.10),
       child: Row(
         children: [
           // Pacing flexes and wraps on narrow viewports; the fixed-size
-          // reactor keeps the primary action pinned to the dock's edge.
+          // primary action stays pinned to the dock's edge.
           Expanded(
             child: MissionPacingControls(
               snapshot: snapshot,
@@ -134,7 +173,7 @@ class IdleCommandBar extends StatelessWidget {
             ),
             layoutBuilder: (currentChild, previousChildren) =>
                 currentChild ?? const SizedBox.shrink(),
-            child: ReactorButton(
+            child: _PrimaryActionPill(
               key: ValueKey(reactorLabel),
               tooltip: reactorTooltip,
               label: reactorLabel,
@@ -158,19 +197,186 @@ class IdleCommandBar extends StatelessWidget {
   }
 }
 
-class TowerBuildRail extends StatelessWidget {
+/// Wide filled pill for the dock's single primary action: 48-56dp tall,
+/// filled cyan with dark content while enabled, and the dock's only glow.
+/// The wave-progress and countdown variants share the same footprint so the
+/// idle dock never reflows when the phase label changes.
+class _PrimaryActionPill extends StatelessWidget {
+  const _PrimaryActionPill({
+    super.key,
+    required this.tooltip,
+    required this.label,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String tooltip;
+  final String label;
+  final IconData icon;
+  final VoidCallback? onPressed;
+
+  static const double _width = 98;
+  static const double _height = 52;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final enabled = onPressed != null;
+    final foreground = enabled ? uiTheme.voidBlack : uiTheme.textMuted;
+    final accent = enabled ? uiTheme.systemCyanStrong : uiTheme.frameSteel;
+    final radius = BorderRadius.circular(_height / 2);
+
+    return Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: tooltip,
+        onTap: onPressed,
+        excludeSemantics: true,
+        child: SizedBox(
+          width: _width,
+          height: _height,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              // The strongest glow in the idle dock is reserved for this
+              // one action; pacing and the shell carry none.
+              boxShadow: enabled
+                  ? [
+                      BoxShadow(
+                        color: uiTheme.systemCyanStrong.withValues(alpha: 0.30),
+                        blurRadius: 12,
+                      ),
+                    ]
+                  : null,
+            ),
+            child: Material(
+              color: enabled
+                  ? uiTheme.systemCyan
+                  : uiTheme.hullBlack.withValues(alpha: 0.55),
+              shape: RoundedRectangleBorder(
+                borderRadius: radius,
+                side: BorderSide(color: accent, width: 1),
+              ),
+              child: InkWell(
+                onTap: onPressed,
+                borderRadius: radius,
+                splashColor: uiTheme.voidBlack.withValues(alpha: 0.12),
+                highlightColor: uiTheme.voidBlack.withValues(alpha: 0.06),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 18, color: foreground),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          label,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textScaler: MediaQuery.textScalerOf(
+                            context,
+                          ).clamp(maxScaleFactor: 1.15),
+                          style: Theme.of(context).textTheme.labelSmall
+                              ?.copyWith(
+                                color: foreground,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class TowerBuildRail extends StatefulWidget {
   const TowerBuildRail({
     super.key,
     required this.phase,
     required this.gold,
     required this.unlockedTowerTypes,
     required this.onPlaceTower,
+    this.onPlacementPreviewEvent,
   });
 
   final GamePhase phase;
   final int gold;
   final List<TowerType> unlockedTowerTypes;
   final ValueChanged<TowerType> onPlaceTower;
+  final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
+
+  @override
+  State<TowerBuildRail> createState() => _TowerBuildRailState();
+}
+
+class _TowerBuildRailState extends State<TowerBuildRail> {
+  /// Local transient drag presentation: the lifted tower and the latest
+  /// global pointer position. Nothing here reaches game state — the game
+  /// resolves validity, mutation, and cleanup through the emitted events.
+  TowerType? _activeDraggedType;
+  Offset? _latestGlobalPointer;
+
+  /// Set when the OS cancels the drag pointer (see [_handleDragCanceled]);
+  /// LongPressDraggable then still reports a drag end, which must not commit.
+  bool _dragCancelledBySystem = false;
+
+  void _emit(TowerPlacementPreviewEvent event) {
+    widget.onPlacementPreviewEvent?.call(event);
+  }
+
+  void _handleDragStarted(TowerType type) {
+    _dragCancelledBySystem = false;
+    setState(() {
+      _activeDraggedType = type;
+      _latestGlobalPointer = null;
+    });
+    _emit(TowerPlacementPreviewBegin(type));
+  }
+
+  void _handleDragUpdate(Offset globalPosition) {
+    _latestGlobalPointer = globalPosition;
+    _emit(TowerPlacementPreviewUpdate(globalPosition));
+  }
+
+  void _handleDragEnded() {
+    if (_dragCancelledBySystem) {
+      _dragCancelledBySystem = false;
+      return;
+    }
+    setState(() => _activeDraggedType = null);
+    final pointer = _latestGlobalPointer;
+    _latestGlobalPointer = null;
+    if (pointer != null) {
+      _emit(TowerPlacementPreviewCommit(pointer));
+    } else {
+      _emit(TowerPlacementPreviewCancel());
+    }
+  }
+
+  /// Recognizer-level cancel (OS pointer interruption: incoming call,
+  /// notification shade, app switcher, or rail unmount). This SDK has no
+  /// onDragCancel callback and surfaces cancels as onDragEnd — the raw
+  /// pointer cancel preempts it here; the trailing drag end is ignored.
+  /// Never commits at the last pointer — always cancels the preview.
+  void _handleDragCanceled() {
+    if (_activeDraggedType == null) return;
+    _dragCancelledBySystem = true;
+    setState(() {
+      _activeDraggedType = null;
+      _latestGlobalPointer = null;
+    });
+    _emit(TowerPlacementPreviewCancel());
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -181,21 +387,65 @@ class TowerBuildRail extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 4),
       child: SizedBox(
         height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
-        child: ListView.separated(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-          scrollDirection: Axis.horizontal,
-          itemCount: TowerType.values.length,
-          separatorBuilder: (_, index) => const SizedBox(width: 6),
-          itemBuilder: (context, index) {
-            final type = TowerType.values[index];
-            return _TowerBuildCard(
-              type: type,
-              phase: phase,
-              gold: gold,
-              unlocked: unlockedTowerTypes.contains(type),
-              onPlaceTower: onPlaceTower,
-            );
-          },
+        child: Stack(
+          children: [
+            ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              scrollDirection: Axis.horizontal,
+              itemCount: TowerType.values.length,
+              separatorBuilder: (_, index) => const SizedBox(width: 6),
+              itemBuilder: (context, index) {
+                final type = TowerType.values[index];
+                return _TowerBuildCard(
+                  type: type,
+                  phase: widget.phase,
+                  gold: widget.gold,
+                  unlocked: widget.unlockedTowerTypes.contains(type),
+                  onPlaceTower: widget.onPlaceTower,
+                  onDragStarted: () => _handleDragStarted(type),
+                  onDragUpdate: _handleDragUpdate,
+                  onDragEnded: _handleDragEnded,
+                  onDragCanceled: _handleDragCanceled,
+                );
+              },
+            ),
+            // 1e treatment: the rail reads DROP TO BUILD while a long-press
+            // drag is airborne. Overlay only — the rail's height never shifts.
+            if (_activeDraggedType != null)
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                child: IgnorePointer(
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: OrionUiTheme.of(
+                          context,
+                        ).hullBlack.withValues(alpha: 0.92),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: OrionUiTheme.of(context).systemCyan,
+                        ),
+                      ),
+                      child: Text(
+                        'DROP TO BUILD',
+                        textScaler: textScaler,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: OrionUiTheme.of(context).systemCyan,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -209,6 +459,10 @@ class _TowerBuildCard extends StatelessWidget {
     required this.gold,
     required this.unlocked,
     required this.onPlaceTower,
+    this.onDragStarted,
+    this.onDragUpdate,
+    this.onDragEnded,
+    this.onDragCanceled,
   });
 
   final TowerType type;
@@ -216,6 +470,13 @@ class _TowerBuildCard extends StatelessWidget {
   final int gold;
   final bool unlocked;
   final ValueChanged<TowerType> onPlaceTower;
+
+  /// Long-press drag wiring. Only invoked for eligible cards (build phase +
+  /// unlocked); affordability stays authority-driven (game validation).
+  final VoidCallback? onDragStarted;
+  final ValueChanged<Offset>? onDragUpdate;
+  final VoidCallback? onDragEnded;
+  final VoidCallback? onDragCanceled;
 
   static const double baseWidth = 64;
   static const double baseHeight = 92;
@@ -240,7 +501,7 @@ class _TowerBuildCard extends StatelessWidget {
     ).clamp(maxScaleFactor: 1.3);
     final scaleFactor = textScaler.scale(1);
 
-    return Semantics(
+    final card = Semantics(
       button: true,
       enabled: canAttempt,
       label: cardLabel,
@@ -359,6 +620,110 @@ class _TowerBuildCard extends StatelessWidget {
                   ],
                 ),
               ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Locked or wrong-phase cards never begin a preview; affordability stays
+    // authority-driven (the game denies on validate/place).
+    if (!canAttempt) {
+      return card;
+    }
+
+    // Delayed long-press recognizer only: an immediate pan drag would fight
+    // the horizontal rail scroll. A quick tap still reaches the card's tap
+    // handler; a horizontal swipe scrolls the rail and never begins preview.
+    // The Flame board is NOT a DragTarget — game validation decides, never
+    // wasAccepted/onDragCompleted.
+    // Listener observes the raw pointer cancel, which the GestureBinding
+    // dispatches before the avatar's drag-end cleanup, letting the rail
+    // treat a recognizer cancel as a cancel instead of a commit.
+    return Listener(
+      onPointerCancel: (_) => onDragCanceled?.call(),
+      child: LongPressDraggable<TowerType>(
+        data: type,
+        // The game holds exactly one transient preview; a second concurrent
+        // drag would overwrite its type and commit the wrong tower.
+        maxSimultaneousDrags: 1,
+        onDragStarted: onDragStarted,
+        onDragUpdate: (details) => onDragUpdate?.call(details.globalPosition),
+        onDragEnd: (_) => onDragEnded?.call(),
+        feedback: _buildDragFeedback(context),
+        childWhenDragging: _buildLiftedSource(context, scaleFactor),
+        child: card,
+      ),
+    );
+  }
+
+  /// 1e treatment: tower ghost follows the pointer over a soft shadow, with
+  /// a cost pill showing −cost → remaining gold; an unaffordable drag states
+  /// the real need instead of pretending placement is allowed.
+  Widget _buildDragFeedback(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final stats = GameBalance.towerStats(type, level: 1);
+    final affordable = gold >= stats.cost;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            boxShadow: [
+              BoxShadow(
+                color: uiTheme.voidBlack.withValues(alpha: 0.45),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: OrionAtlasSprite(
+            art: OrionArt.tower(type),
+            size: const Size(48, 48),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+          decoration: BoxDecoration(
+            color: uiTheme.hullBlack.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(
+              color: affordable ? uiTheme.systemCyan : uiTheme.dangerRed,
+            ),
+          ),
+          child: Text(
+            affordable
+                ? '−${stats.cost} → ${gold - stats.cost}'
+                : 'need ${stats.cost - gold} more',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: affordable ? uiTheme.creditGold : uiTheme.dangerRed,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// 1e treatment: the source card reads LIFTED while its drag is airborne.
+  Widget _buildLiftedSource(BuildContext context, double scaleFactor) {
+    final uiTheme = OrionUiTheme.of(context);
+    return SizedBox(
+      width: baseWidth * scaleFactor,
+      height: baseHeight * scaleFactor,
+      child: MissionSurface(
+        padding: const EdgeInsets.all(2),
+        radius: 10,
+        backgroundColor: uiTheme.panelBlue,
+        borderColor: uiTheme.frameSteel,
+        child: Center(
+          child: Text(
+            'LIFTED',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: uiTheme.textMuted,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1,
             ),
           ),
         ),

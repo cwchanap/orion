@@ -32,6 +32,17 @@ class BoardComponent extends PositionComponent {
   final GamePathTiles? pathTiles;
   GridPosition? selectedCell;
 
+  // Placement-preview presentation only (scene 1e). The board owns no
+  // placement logic; the game resolves candidate validity and range.
+  bool previewActive = false;
+  GridPosition? previewCandidate;
+  bool previewAllowed = false;
+  double previewRange = 0;
+
+  /// Whether the normal selected-cell highlight may paint. Preview rendering
+  /// replaces it while a placement preview is active — never both.
+  bool get showsSelectionHighlight => selectedCell != null && !previewActive;
+
   final Paint _backgroundPaint = Paint()..color = const Color(0xFF17202A);
   final Paint _gridPaint = Paint()
     ..color = const Color(0x6636454F)
@@ -50,6 +61,18 @@ class BoardComponent extends PositionComponent {
     ..strokeWidth = 2;
   final Paint _spawnPaint = Paint()..color = const Color(0xFF58C4F6);
   final Paint _basePaint = Paint()..color = const Color(0xFFFFD166);
+  final Paint _pathDangerPaint = Paint()
+    ..color = const Color(0x66E35D6A)
+    ..style = PaintingStyle.fill;
+  final Paint _rangeRingPaint = Paint()
+    ..color = const Color(0xB3FFFFFF)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2;
+  final Paint _deniedGlyphPaint = Paint()
+    ..color = const Color(0xFFFFFFFF)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2
+    ..strokeCap = StrokeCap.round;
 
   Rect cellRect(GridPosition position) {
     return Rect.fromLTWH(
@@ -99,8 +122,31 @@ class BoardComponent extends PositionComponent {
       }
     }
 
-    final activeSelection = selectedCell;
-    if (activeSelection != null) {
+    // While a placement preview is active its rendering replaces the normal
+    // selected-cell paint: danger wash over the path, then the candidate
+    // cell, then the resolved range ring on an allowed candidate.
+    if (previewActive) {
+      for (final pathCell in pathCells) {
+        canvas.drawRect(cellRect(pathCell).deflate(1), _pathDangerPaint);
+      }
+    }
+
+    final candidate = previewCandidate;
+    if (previewActive && candidate != null) {
+      final paint = previewAllowed
+          ? _buildableSelectionPaint
+          : _blockedSelectionPaint;
+      final rect = cellRect(candidate).deflate(2);
+      canvas.drawRect(rect, paint);
+      canvas.drawRect(rect, _selectionStrokePaint);
+      if (previewAllowed && previewRange > 0) {
+        canvas.drawCircle(cellCenter(candidate), previewRange, _rangeRingPaint);
+      }
+      if (!previewAllowed) {
+        _renderDeniedGlyph(canvas, candidate);
+      }
+    } else if (showsSelectionHighlight) {
+      final activeSelection = selectedCell!;
       final paint =
           BoardLayout.isBuildableCell(activeSelection, pathCells: pathCells)
           ? _buildableSelectionPaint
@@ -141,6 +187,16 @@ class BoardComponent extends PositionComponent {
       final y = row * cellSize;
       canvas.drawLine(Offset(0, y), Offset(boardWidth, y), _gridPaint);
     }
+  }
+
+  /// Non-color-only denied affordance: a small ✗ glyph over the blocked
+  /// candidate fill, mirroring the mock's crosshair, so denial does not rely
+  /// on the red fill alone.
+  void _renderDeniedGlyph(Canvas canvas, GridPosition position) {
+    final rect = cellRect(position).deflate(cellSize * 0.3);
+    canvas
+      ..drawLine(rect.topLeft, rect.bottomRight, _deniedGlyphPaint)
+      ..drawLine(rect.topRight, rect.bottomLeft, _deniedGlyphPaint);
   }
 
   void _renderMarker(

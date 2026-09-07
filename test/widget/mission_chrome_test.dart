@@ -1,8 +1,6 @@
-import 'dart:io';
-
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
@@ -11,8 +9,11 @@ import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
+import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 const _productViewport = Size(390, 844);
 
@@ -20,6 +21,8 @@ Widget chromeHost(
   GameSnapshot snapshot, {
   VoidCallback? onBackgroundTap,
   TextScaler textScaler = TextScaler.noScaling,
+  Color? backgroundColor,
+  ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
 }) {
   return MaterialApp(
     builder: (context, child) => MediaQuery(
@@ -27,6 +30,7 @@ Widget chromeHost(
       child: child!,
     ),
     home: Scaffold(
+      backgroundColor: backgroundColor,
       body: Stack(
         children: [
           // Tappable stand-in for the board beneath the chrome.
@@ -50,6 +54,7 @@ Widget chromeHost(
               onSpecialize: (_) {},
               onTargetingChanged: (_) {},
               onSell: () {},
+              onPlacementPreviewEvent: onPlacementPreviewEvent,
             ),
           ),
         ],
@@ -77,33 +82,90 @@ void _expectIdlePacingAbsent(WidgetTester tester) {
   expect(find.text('Start Wave'), findsNothing);
 }
 
-/// Loads the Flutter SDK's real Roboto so text measurements in this suite
-/// use proportional metrics. The host test harness otherwise falls back to
-/// 1em-per-glyph placeholder glyphs, which cannot expose real truncation.
-Future<void> _loadRealRoboto() async {
-  final root = Platform.environment['FLUTTER_ROOT'];
-  if (root == null) {
-    fail('FLUTTER_ROOT is not set; cannot load real Roboto metrics.');
-  }
-  final loader = FontLoader('Roboto');
-  for (final file in [
-    'Roboto-Regular.ttf',
-    'Roboto-Medium.ttf',
-    'Roboto-Bold.ttf',
-  ]) {
-    final fontFile = File('$root/bin/cache/artifacts/material_fonts/$file');
-    if (!fontFile.existsSync()) fail('Missing SDK font: ${fontFile.path}');
-    final bytes = fontFile.readAsBytesSync();
-    loader.addFont(Future.value(ByteData.view(bytes.buffer)));
-  }
-  await loader.load();
-}
-
 void main() {
+  testWidgets(
+    'dock preview events pass through chrome; board taps recover after drag',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final events = <TowerPlacementPreviewEvent>[];
+      var backgroundTaps = 0;
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(selectedCell: const GridPosition(1, 1)),
+          onBackgroundTap: () => backgroundTaps++,
+          onPlacementPreviewEvent: events.add,
+        ),
+      );
+      await tester.pump();
+
+      // One long-press drag passes its begin/update/commit family through
+      // MissionChrome untouched.
+      final start = tester.getCenter(
+        find.byKey(const ValueKey('tower-card-laser')),
+      );
+      final gesture = await tester.startGesture(start);
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      expect(events, hasLength(1));
+      expect(events.single, isA<TowerPlacementPreviewBegin>());
+
+      await gesture.moveBy(const Offset(40, -120));
+      await tester.pump();
+      await gesture.up();
+      await tester.pump();
+
+      expect(events.last, isA<TowerPlacementPreviewCommit>());
+      expect(
+        (events.last as TowerPlacementPreviewCommit).globalPosition,
+        start + const Offset(40, -120),
+      );
+
+      // The ended drag leaves no arena winner behind: normal board taps pass.
+      await tester.tapAt(
+        Offset(_productViewport.width / 2, _productViewport.height / 2),
+      );
+      await tester.pump();
+      expect(backgroundTaps, 1);
+    },
+  );
+
+  testWidgets('capture scene 1a fixture', (tester) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Representative scene 1a state: build-idle, no cell/tower selected,
+    // scanner/modules collapsed (no acquired modules). Real Roboto so the
+    // evidence shows true text metrics, not Ahem blocks.
+    await loadRealFonts(withMaterialIcons: false);
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: chromeHost(
+          commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+          // The scene's ground is the board's hull black; the chrome bands
+          // are the parity subject, the dark ground keeps the fixture
+          // readable against the mock.
+          backgroundColor: OrionUiTheme.dark.hullBlack,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+    // real async engine work and deadlocks the FakeAsync zone otherwise.
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1a.png'),
+    );
+  });
+
   testWidgets('mission actions render their labels fully at product width', (
     tester,
   ) async {
-    await _loadRealRoboto();
+    await loadRealFonts(withMaterialIcons: false);
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -114,18 +176,19 @@ void main() {
     await tester.pump();
 
     // Roboto is marginally narrower than the device's SF Pro; the regenerated
-    // fixture evidence covers the device metrics. Both mission actions must
-    // fit their labels at 390px width and 1.0x text scale without ellipsis.
-    for (final label in const ['Start Wave', 'World Map']) {
-      final paragraph = tester.renderObject<RenderParagraph>(find.text(label));
-      expect(
-        paragraph.didExceedMaxLines,
-        isFalse,
-        reason:
-            '"$label" ellipsizes at 390px width; the mission actions '
-            'must render their labels without truncation.',
-      );
-    }
+    // fixture evidence covers the device metrics. The primary action label
+    // must fit at 390px width and 1.0x text scale without ellipsis. (World
+    // Map is an icon-scale chip now; its label lives in tooltip/semantics.)
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.text('Start Wave'),
+    );
+    expect(
+      paragraph.didExceedMaxLines,
+      isFalse,
+      reason:
+          '"Start Wave" ellipsizes at 390px width; the primary mission '
+          'action must render its label without truncation.',
+    );
   });
 
   testWidgets(
@@ -134,7 +197,7 @@ void main() {
     (tester) async {
       // Placeholder test glyphs are wider than any real font and cannot
       // expose a real-font wrap; Roboto approximates the device metrics.
-      await _loadRealRoboto();
+      await loadRealFonts(withMaterialIcons: false);
       tester.view.physicalSize = _productViewport;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -775,6 +838,155 @@ void main() {
           _productViewport,
         );
       }
+    },
+  );
+
+  testWidgets('World Map shell matches the scanner utility scale', (
+    tester,
+  ) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+    );
+    await tester.pump();
+
+    // World Map is a compact top-band utility now, not the largest control:
+    // it matches the scanner's ~48dp shell (keeping the touch minimum) and
+    // shares its top alignment in the utility row.
+    final mapRect = tester.getRect(find.byTooltip('World Map'));
+    final scannerRect = tester.getRect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+    );
+    expect(mapRect.width, inInclusiveRange(48, 60));
+    expect(mapRect.height, inInclusiveRange(48, 60));
+    expect(
+      (mapRect.top - scannerRect.top).abs(),
+      lessThan(0.5),
+      reason: 'World Map must align with the scanner in the top utility row.',
+    );
+    // The shell is icon-scale: no label text beside the map glyph.
+    expect(find.text('World Map'), findsNothing);
+  });
+
+  // Semantic contracts migrated from the deleted ReactorButton: the World
+  // Map action chip is the production control implementing the same
+  // Tooltip + explicit-Semantics pattern (per the HPA-14 migration rule).
+  group(
+    'World Map action chip semantics (migrated ReactorButton contracts)',
+    () {
+      testWidgets(
+        'chip is at least 48dp and its tooltip merges into one label',
+        (tester) async {
+          var opens = 0;
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Scaffold(
+                body: Center(
+                  child: WorldMapAction(
+                    enabled: true,
+                    onWorldMap: () => opens++,
+                  ),
+                ),
+              ),
+            ),
+          );
+
+          final rect = tester.getRect(find.byTooltip('World Map'));
+          expect(rect.width, greaterThanOrEqualTo(48));
+          expect(rect.height, greaterThanOrEqualTo(48));
+          await tester.tap(find.byTooltip('World Map'));
+          expect(opens, 1);
+
+          // The Tooltip must not duplicate the explicit Semantics label, or
+          // VoiceOver/TalkBack will announce "World Map" twice (once as the
+          // label, once as the tooltip). With excludeFromSemantics on the
+          // Tooltip, exactly one semantics node carries the label and its
+          // tooltip is empty.
+          final handle = tester.ensureSemantics();
+          try {
+            await tester.pump();
+            expect(find.bySemanticsLabel('World Map'), findsOneWidget);
+            expect(
+              tester.getSemantics(find.bySemanticsLabel('World Map')),
+              matchesSemantics(
+                label: 'World Map',
+                tooltip: '',
+                isButton: true,
+                hasEnabledState: true,
+                isEnabled: true,
+                hasTapAction: true,
+              ),
+            );
+          } finally {
+            handle.dispose();
+          }
+        },
+      );
+
+      testWidgets('semantics tap action fires the World Map callback', (
+        tester,
+      ) async {
+        // excludeSemantics: true on the chip replaces the gesture surface's
+        // tap action, so the outer Semantics must carry its own onTap or
+        // screen readers cannot activate it via the accessibility double-tap.
+        var opens = 0;
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: WorldMapAction(enabled: true, onWorldMap: () => opens++),
+              ),
+            ),
+          ),
+        );
+
+        final handle = tester.ensureSemantics();
+        try {
+          await tester.pump();
+          final data = tester.getSemantics(find.bySemanticsLabel('World Map'));
+          // ignore: deprecated_member_use
+          tester.binding.pipelineOwner.semanticsOwner!.performAction(
+            data.id,
+            SemanticsAction.tap,
+          );
+          expect(opens, 1);
+        } finally {
+          handle.dispose();
+        }
+      });
+
+      testWidgets('disabled chip carries no tap action', (tester) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: WorldMapAction(enabled: false, onWorldMap: () {}),
+              ),
+            ),
+          ),
+        );
+
+        final handle = tester.ensureSemantics();
+        try {
+          await tester.pump();
+          expect(
+            tester.getSemantics(find.bySemanticsLabel('World Map')),
+            matchesSemantics(
+              label: 'World Map',
+              tooltip: '',
+              isButton: true,
+              hasEnabledState: true,
+              isEnabled: false,
+              hasTapAction: false,
+            ),
+          );
+        } finally {
+          handle.dispose();
+        }
+      });
     },
   );
 }

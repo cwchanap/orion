@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import '../campaign/stage_modifier_metadata.dart';
 import '../models/game_models.dart';
 import 'acquired_run_module_control.dart';
-import 'command_frame.dart';
 import 'command_toast.dart';
 import 'mission_command_dock.dart';
 import 'mission_command_hud.dart';
+import 'mission_surface.dart';
 import 'next_wave_scanner.dart';
+import 'orion_ui_theme.dart';
 
 /// Horizontal padding for the top and bottom mission overlay bands.
 const double _commandDeckPadding = 12;
@@ -35,6 +36,7 @@ class MissionChrome extends StatefulWidget {
     required this.onSpecialize,
     required this.onTargetingChanged,
     required this.onSell,
+    this.onPlacementPreviewEvent,
   });
 
   final GameSnapshot snapshot;
@@ -52,6 +54,10 @@ class MissionChrome extends StatefulWidget {
   final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
   final VoidCallback onSell;
+
+  /// Closed scene-1e drag-preview event family, forwarded from the dock to
+  /// the page. Presentation only — the page maps events onto the game.
+  final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
 
   @override
   State<MissionChrome> createState() => _MissionChromeState();
@@ -224,6 +230,8 @@ class _MissionChromeState extends State<MissionChrome> {
                           onSpecialize: widget.onSpecialize,
                           onTargetingChanged: widget.onTargetingChanged,
                           onSell: widget.onSell,
+                          onPlacementPreviewEvent:
+                              widget.onPlacementPreviewEvent,
                         ),
                       ),
                     ),
@@ -241,6 +249,10 @@ class _MissionChromeState extends State<MissionChrome> {
 /// Chrome action for returning to the world map. Owned by the chrome
 /// composition (not the dock contract); enabled only while the mission is in
 /// its build phase.
+///
+/// The visible shell is a compact 48dp icon chip at the scanner's scale so
+/// the map exit reads as a top-band utility, not a primary control; the full
+/// "World Map" label lives in the tooltip and semantics, unchanged.
 class WorldMapAction extends StatelessWidget {
   const WorldMapAction({
     super.key,
@@ -253,11 +265,39 @@ class WorldMapAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ReactorButton(
-      tooltip: 'World Map',
-      label: 'World Map',
-      icon: Icons.map_outlined,
-      onPressed: enabled ? onWorldMap : null,
+    final uiTheme = OrionUiTheme.of(context);
+    return Tooltip(
+      message: 'World Map',
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        enabled: enabled,
+        label: 'World Map',
+        onTap: enabled ? onWorldMap : null,
+        excludeSemantics: true,
+        child: GestureDetector(
+          // The opaque gesture surface owns the full 48dp chip so taps in
+          // every corner reach the action (mirrors the scanner chip).
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled ? onWorldMap : null,
+          child: SizedBox.square(
+            key: const ValueKey('world-map-action'),
+            dimension: 48,
+            child: MissionSurface(
+              padding: const EdgeInsets.all(10),
+              radius: 12,
+              borderColor: enabled
+                  ? uiTheme.systemCyan.withValues(alpha: 0.5)
+                  : uiTheme.frameSteel,
+              child: Icon(
+                Icons.map_outlined,
+                size: 24,
+                color: enabled ? uiTheme.textPrimary : uiTheme.textMuted,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

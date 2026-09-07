@@ -95,9 +95,22 @@ class _InspectorBody extends StatelessWidget {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            OrionAtlasSprite(
-              art: OrionArt.tower(tower.type),
-              size: const Size(32, 32),
+            Container(
+              key: const ValueKey('tower-inspector-hero'),
+              width: 72,
+              height: 72,
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: uiTheme.panelRaised,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: uiTheme.frameSteel.withValues(alpha: 0.55),
+                ),
+              ),
+              child: OrionAtlasSprite(
+                art: OrionArt.tower(tower.type),
+                size: const Size(58, 58),
+              ),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -178,18 +191,21 @@ class _InspectorBody extends StatelessWidget {
             label: 'Damage',
             value: number(stats.damage),
             fill: scale.damageFill(stats),
+            accent: uiTheme.dangerRed,
           ),
           _StatRow(
             key: const ValueKey('tower-stat-fire'),
             label: 'Fire',
             value: '${cadence(stats.fireInterval)}s',
             fill: scale.fireFill(stats),
+            accent: uiTheme.warningOrange,
           ),
           _StatRow(
             key: const ValueKey('tower-stat-range'),
             label: 'Range',
             value: number(stats.range),
             fill: scale.rangeFill(stats),
+            accent: uiTheme.systemCyan,
           ),
           if (scale.secondaryMetric case final metric?)
             _StatRow(
@@ -197,6 +213,7 @@ class _InspectorBody extends StatelessWidget {
               label: _secondaryLabel(metric),
               value: _secondaryValue(metric, stats),
               fill: scale.secondaryFill(stats) ?? 0,
+              accent: uiTheme.systemViolet,
             ),
         ],
       ],
@@ -228,11 +245,13 @@ class _StatRow extends StatelessWidget {
     required this.label,
     required this.value,
     required this.fill,
+    required this.accent,
   });
 
   final String label;
   final String value;
   final double fill;
+  final Color accent;
 
   @override
   Widget build(BuildContext context) {
@@ -259,14 +278,12 @@ class _StatRow extends StatelessWidget {
             Expanded(
               child: ExcludeSemantics(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: fill,
-                    minHeight: 5,
+                    minHeight: 8,
                     backgroundColor: uiTheme.frameSteel.withValues(alpha: 0.35),
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      uiTheme.systemCyan,
-                    ),
+                    valueColor: AlwaysStoppedAnimation<Color>(accent),
                   ),
                 ),
               ),
@@ -309,6 +326,7 @@ class _ProgressionActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
     if (tower.isMaxLevel) {
       return Align(
         alignment: Alignment.centerLeft,
@@ -343,22 +361,113 @@ class _ProgressionActions extends StatelessWidget {
         canMutate &&
         resolvedStats != null &&
         snapshot.gold >= resolvedStats.specializationCost;
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
       children: [
-        for (final specialization in GameBalance.specializationsFor(tower.type))
-          FilledButton.tonalIcon(
-            key: ValueKey('tower-specialization-${specialization.name}'),
-            onPressed: enabled ? () => onSpecialize(specialization) : null,
-            icon: const Icon(Icons.call_split, size: 16),
-            label: Text(
-              cost == null
-                  ? specialization.label
-                  : '${specialization.label} $cost',
+        Text(
+          'SPECIALIZE - LV ${tower.level + 1}',
+          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+            color: uiTheme.textMuted,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            for (final (index, specialization)
+                in GameBalance.specializationsFor(tower.type).indexed) ...[
+              if (index > 0) const SizedBox(width: 8),
+              Expanded(
+                child: _SpecializationCard(
+                  towerType: tower.type,
+                  specialization: specialization,
+                  cost: cost,
+                  enabled: enabled,
+                  onSpecialize: onSpecialize,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _SpecializationCard extends StatelessWidget {
+  const _SpecializationCard({
+    required this.towerType,
+    required this.specialization,
+    required this.cost,
+    required this.enabled,
+    required this.onSpecialize,
+  });
+
+  final TowerType towerType;
+  final TowerSpecialization specialization;
+  final int? cost;
+  final bool enabled;
+  final ValueChanged<TowerSpecialization> onSpecialize;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Semantics(
+      key: ValueKey('tower-specialization-${specialization.name}'),
+      button: true,
+      enabled: enabled,
+      onTap: enabled ? () => onSpecialize(specialization) : null,
+      excludeSemantics: true,
+      label: cost == null
+          ? specialization.label
+          : '${specialization.label} $cost',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: enabled ? () => onSpecialize(specialization) : null,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          decoration: BoxDecoration(
+            color: uiTheme.panelRaised.withValues(alpha: 0.9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: enabled
+                  ? uiTheme.systemViolet.withValues(alpha: 0.55)
+                  : uiTheme.frameSteel.withValues(alpha: 0.45),
             ),
           ),
-      ],
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OrionAtlasSprite(
+                art: OrionArt.tower(towerType),
+                size: const Size(44, 44),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                specialization.label,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: uiTheme.textPrimary,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 2),
+              if (cost != null)
+                Text(
+                  '$cost',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: uiTheme.creditGold,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

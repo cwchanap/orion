@@ -182,21 +182,25 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
           button: true,
           label: 'Collapse next-wave scanner',
           onTap: toggle,
-          child: SizedBox(
-            width: 212,
-            height: 168,
+          child: ConstrainedBox(
+            // Content-sized like the sibling AcquiredRunModuleControl panel:
+            // the representative multi-group preview fits without scrolling,
+            // while pathological content stays bounded and scrollable.
+            constraints: const BoxConstraints(maxWidth: 212, maxHeight: 320),
+            // ponytail: 320 is a flat cap, not a scale-derived value — it
+            // keeps the expanded panel inside the 390pt-landscape viewport
+            // floor (MediaQuery height) beside the HUD/dock bands; past the
+            // cap the scroll view takes over instead of the panel growing.
             child: MissionSurface(
               key: const ValueKey('next-wave-scanner-expanded'),
               padding: const EdgeInsets.all(8),
               radius: 10,
               emphasized: true,
-              child: SizedBox.expand(
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.zero,
-                  child: _ExpandedPreviewBody(
-                    preview: widget.preview,
-                    modifierTitles: widget.modifierTitles,
-                  ),
+              child: SingleChildScrollView(
+                padding: EdgeInsets.zero,
+                child: _ExpandedPreviewBody(
+                  preview: widget.preview,
+                  modifierTitles: widget.modifierTitles,
                 ),
               ),
             ),
@@ -315,7 +319,9 @@ class _ExpandedPreviewBody extends StatelessWidget {
           ),
         ],
         if (preview.recommendedTowerTypes.isNotEmpty) ...[
-          const SizedBox(height: 5),
+          const SizedBox(height: 7),
+          const _SectionLabel('RECOMMENDED COUNTERS'),
+          const SizedBox(height: 4),
           Semantics(
             container: true,
             explicitChildNodes: true,
@@ -327,7 +333,9 @@ class _ExpandedPreviewBody extends StatelessWidget {
           ),
         ],
         if (modifierTitles.isNotEmpty) ...[
-          const SizedBox(height: 5),
+          const SizedBox(height: 7),
+          const _SectionLabel('MODIFIERS'),
+          const SizedBox(height: 4),
           Semantics(
             container: true,
             label: 'Modifiers: ${modifierTitles.join(', ')}',
@@ -341,6 +349,45 @@ class _ExpandedPreviewBody extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Row(
+      children: [
+        DecoratedBox(
+          decoration: BoxDecoration(
+            color: uiTheme.naniteGreen,
+            borderRadius: BorderRadius.circular(1),
+          ),
+          child: const SizedBox(width: 3, height: 11),
+        ),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            // Deliberate: fixed-width section chips must keep their line
+            // count at any accessibility text scale; ellipsis absorbs the
+            // overflow instead.
+            textScaler: TextScaler.noScaling,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: uiTheme.textMuted,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -393,7 +440,7 @@ class _PreviewGroupRow extends StatelessWidget {
         children: [
           OrionAtlasSprite(
             art: OrionArt.previewGroup(group),
-            size: const Size.square(30),
+            size: const Size.square(44),
           ),
           const SizedBox(width: 6),
           Expanded(
@@ -477,30 +524,35 @@ class _TraitBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final art = OrionArt.trait(trait);
-    if (art != null) {
-      return Semantics(
-        image: true,
-        label: art.semanticLabel,
-        child: ExcludeSemantics(
-          child: OrionAtlasSprite(art: art, size: const Size.square(17)),
-        ),
-      );
-    }
-
     final uiTheme = OrionUiTheme.of(context);
-    final (icon, label) = switch (trait) {
-      EnemyTrait.swarm => (Icons.change_history, _traitSemanticLabel(trait)),
-      EnemyTrait.heavy => (Icons.square, _traitSemanticLabel(trait)),
-      EnemyTrait.armored ||
-      EnemyTrait.shielded ||
-      EnemyTrait.regen => (Icons.help_outline, _traitSemanticLabel(trait)),
-    };
+    final art = OrionArt.trait(trait);
     return Semantics(
       image: true,
-      label: label,
+      label: art?.semanticLabel ?? _traitSemanticLabel(trait),
       child: ExcludeSemantics(
-        child: Icon(icon, size: 17, color: uiTheme.warningOrange),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            color: uiTheme.panelRaised,
+            borderRadius: BorderRadius.circular(5),
+            border: Border.all(color: uiTheme.frameSteel),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(2.5),
+            child: art != null
+                ? OrionAtlasSprite(art: art, size: const Size.square(17))
+                : Icon(
+                    switch (trait) {
+                      EnemyTrait.swarm => Icons.change_history,
+                      EnemyTrait.heavy => Icons.square,
+                      EnemyTrait.armored ||
+                      EnemyTrait.shielded ||
+                      EnemyTrait.regen => Icons.help_outline,
+                    },
+                    size: 17,
+                    color: uiTheme.warningOrange,
+                  ),
+          ),
+        ),
       ),
     );
   }
@@ -534,16 +586,15 @@ class _RecommendationRow extends StatelessWidget {
       runSpacing: 3,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Icon(Icons.auto_awesome, color: uiTheme.systemViolet, size: 15),
         for (final type in towerTypes)
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               OrionAtlasSprite(
                 art: OrionArt.tower(type),
-                size: const Size.square(19),
+                size: const Size.square(26),
               ),
-              const SizedBox(width: 2),
+              const SizedBox(width: 3),
               Text(
                 type.label,
                 maxLines: 1,
@@ -554,6 +605,8 @@ class _RecommendationRow extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              const SizedBox(width: 3),
+              Icon(Icons.check_circle, color: uiTheme.naniteGreen, size: 14),
             ],
           ),
       ],

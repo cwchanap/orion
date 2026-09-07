@@ -1,12 +1,17 @@
-import 'dart:math' as math;
 import 'dart:ui' show SemanticsAction;
 
+import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/world_map_view.dart';
+
+import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 CampaignProgress clearedCampaignProgress() => CampaignProgress(
   bestResultsByStageId: {
@@ -84,20 +89,270 @@ void main() {
     },
   );
 
-  testWidgets('optional missions use diamond aperture frames', (tester) async {
+  testWidgets('optional missions use smaller circular crests', (tester) async {
     await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
 
+    final mainCrest = tester.getSize(
+      find.byKey(const ValueKey('stage-status-ring-outpost-alpha')),
+    );
     final optionalStages = OrionCampaign.stages.where(
       (stage) => !stage.isMainPath,
     );
     for (final stage in optionalStages) {
-      final finder = find.byKey(
-        ValueKey('optional-stage-aperture-${stage.id}'),
-      );
+      final finder = find.byKey(ValueKey('stage-status-ring-${stage.id}'));
       expect(finder, findsOneWidget);
-      final rotation = tester.widget<Transform>(finder);
-      expect(rotation.transform.entry(0, 0), closeTo(math.sqrt1_2, 0.001));
+      expect(tester.getSize(finder).width, lessThan(mainCrest.width));
     }
+  });
+
+  testWidgets('approved world-map backdrop sits behind the map with a '
+      'readability scrim', (tester) async {
+    await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+
+    final backdrop = find.byKey(const ValueKey('world-map-backdrop'));
+    expect(backdrop, findsOneWidget);
+    final art = find.descendant(
+      of: backdrop,
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is OrionAtlasSprite &&
+            widget.art.fileName == 'reactor_rim_ui/backdrops/world-map.png',
+      ),
+    );
+    expect(art, findsOneWidget);
+    // The backdrop art is square, cover-fit into the portrait aperture —
+    // never stretched to the viewport aspect.
+    final sprite = tester.widget<OrionAtlasSprite>(art);
+    expect(sprite.size!.width, sprite.size!.height);
+    final fittedBox = tester.widget<FittedBox>(
+      find.ancestor(of: art, matching: find.byType(FittedBox)).first,
+    );
+    expect(fittedBox.fit, BoxFit.cover);
+
+    // The readability scrim paints above the art, inside the backdrop layer.
+    final stack = tester.widget<Stack>(
+      find.ancestor(of: art, matching: find.byType(Stack)).first,
+    );
+    final keys = [
+      for (final child in stack.children)
+        (child is Positioned ? child.child : child).key,
+    ];
+    final artIndex = keys.indexOf(const ValueKey('world-map-backdrop-art'));
+    final scrimIndex = keys.indexOf(const ValueKey('world-map-scrim'));
+    expect(artIndex, greaterThanOrEqualTo(0));
+    expect(scrimIndex, greaterThan(artIndex));
+
+    // The backdrop layer sits BEHIND the map plot layers in the outer
+    // composition stack, mirroring the inner art/scrim ordering above.
+    final outerStack = tester.widget<Stack>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('world-map-backdrop')),
+            matching: find.byType(Stack),
+          )
+          .first,
+    );
+    final outerKeys = [
+      for (final child in outerStack.children)
+        (child is Positioned ? child.child : child).key,
+    ];
+    final backdropLayerIndex = outerKeys.indexOf(
+      const ValueKey('world-map-backdrop'),
+    );
+    final plotLayerIndex = outerKeys.indexOf(const ValueKey('world-map-plot'));
+    expect(backdropLayerIndex, greaterThanOrEqualTo(0));
+    expect(plotLayerIndex, greaterThan(backdropLayerIndex));
+  });
+
+  testWidgets('stage nodes use square-cropped map art, never stretched wide '
+      'art', (tester) async {
+    await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+    for (final stage in OrionCampaign.stages) {
+      final node = find.byKey(ValueKey('sector-stage-${stage.id}'));
+      final sprite = tester.widget<OrionAtlasSprite>(
+        find.descendant(of: node, matching: find.byType(OrionAtlasSprite)),
+      );
+      expect(
+        sprite.art.fileName,
+        'reactor_rim_ui/stages/${stage.id}.png',
+        reason: stage.id,
+      );
+      final source = sprite.art.sourceRectFor(
+        imageWidth: 1600,
+        imageHeight: 900,
+      );
+      expect(source.width, source.height, reason: stage.id);
+      expect(sprite.size!.width, sprite.size!.height, reason: stage.id);
+    }
+  });
+
+  testWidgets('crest, status ring and medal hierarchy exist on stage nodes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+    for (final stage in OrionCampaign.stages) {
+      expect(
+        find.byKey(ValueKey('stage-crest-${stage.id}')),
+        findsOneWidget,
+        reason: stage.id,
+      );
+      expect(
+        find.byKey(ValueKey('stage-status-ring-${stage.id}')),
+        findsOneWidget,
+        reason: stage.id,
+      );
+    }
+    // The medal indicator only appears once a result exists.
+    expect(
+      find.byKey(const ValueKey('stage-medal-outpost-alpha')),
+      findsNothing,
+    );
+
+    await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+    for (final stage in OrionCampaign.stages) {
+      expect(
+        find.byKey(ValueKey('stage-medal-${stage.id}')),
+        findsOneWidget,
+        reason: stage.id,
+      );
+    }
+  });
+
+  testWidgets('locked, available and cleared states are explicit without '
+      'color alone', (tester) async {
+    // Outpost Alpha cleared with a gold medal -> Nebula Relay available; the
+    // rest of the campaign stays locked.
+    await tester.pumpWidget(
+      buildMap(
+        progress: CampaignProgress(
+          bestResultsByStageId: const {
+            'outpost-alpha': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
+        ),
+      ),
+    );
+
+    // Cleared: medal badge with the per-tier medal icon on the node.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('stage-medal-outpost-alpha')),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Icon && widget.icon == Icons.emoji_events,
+        ),
+      ),
+      findsOneWidget,
+    );
+    // Available: an explicit open marker, not just the cyan ring color.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('stage-open-nebula-relay')),
+        matching: find.byType(Icon),
+      ),
+      findsOneWidget,
+    );
+    // Locked: a lock icon on the node.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('sector-stage-singularity-core')),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Icon && widget.icon == Icons.lock_rounded,
+        ),
+      ),
+      findsOneWidget,
+    );
+    // Available nodes must not carry the lock icon.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('sector-stage-nebula-relay')),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Icon && widget.icon == Icons.lock_rounded,
+        ),
+      ),
+      findsNothing,
+    );
+  });
+
+  testWidgets('every stage node keeps a >=48dp semantic tap target', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+      for (final stage in OrionCampaign.stages) {
+        final data = tester.getSemantics(
+          find.bySemanticsLabel(RegExp('^${stage.name}')),
+        );
+        expect(data.rect.width, greaterThanOrEqualTo(48), reason: stage.id);
+        expect(data.rect.height, greaterThanOrEqualTo(48), reason: stage.id);
+      }
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets('route layer still paints SectorMapLayout routes', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+
+    final painter = tester
+        .widget<CustomPaint>(find.byKey(const ValueKey('sector-route-layer')))
+        .painter;
+    expect(painter, isA<SectorRoutePainter>());
+    final routes = (painter as SectorRoutePainter).routes;
+    expect(routes, hasLength(6));
+    expect(
+      routes.where((route) => route.isOptional).map((route) => route.to.id),
+      {'salvage-rift', 'void-bastion'},
+    );
+  });
+
+  testWidgets('stage tap fires exactly once and introduces no persistent '
+      'selection bar', (tester) async {
+    var selections = 0;
+    await tester.pumpWidget(
+      buildMap(
+        progress: clearedCampaignProgress(),
+        onStageSelected: (stage) => selections++,
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
+    expect(selections, 1);
+    // No persistent selected-stage detail/launch bar may exist on the map:
+    // Stage Briefing is the single detail/launch surface.
+    expect(find.byKey(const ValueKey('selected-stage-bar')), findsNothing);
+    expect(find.byKey(const ValueKey('stage-launch-bar')), findsNothing);
+  });
+
+  testWidgets('medal legend is replaced by node-integrated medal indicators', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+    expect(find.byTooltip('Clear medal'), findsNothing);
+    expect(find.byTooltip('Silver medal'), findsNothing);
+    expect(find.byTooltip('Gold medal'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('stage-medal-outpost-alpha')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('header and utility controls shed their command-frame chrome', (
+    tester,
+  ) async {
+    await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+
+    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byType(WorldMapView),
+        matching: find.byType(CommandFrame),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('empty campaign preserves the existing empty state', (
@@ -522,4 +777,73 @@ void main() {
       expect(selected, [OrionCampaign.stageOneId]);
     },
   );
+
+  testWidgets('capture scene 1f fixture', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Representative scene 1f state: Outpost Alpha cleared with a gold medal
+    // (medal ring + badge), Nebula Relay available (open marker + cyan ring),
+    // the rest locked (lock icons), over the approved world-map backdrop.
+    // Real Roboto + Material icons so the evidence shows true text metrics.
+    await loadRealFonts();
+    // Image decode is real async engine work that cannot complete under the
+    // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
+    // same keys the OrionArt descriptors use) so the art renders.
+    await tester.runAsync(() async {
+      await Flame.images.load('reactor_rim_ui/backdrops/world-map.png');
+      for (final stage in OrionCampaign.stages) {
+        await Flame.images.load('reactor_rim_ui/stages/${stage.id}.png');
+      }
+    });
+
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: buildMap(
+          progress: CampaignProgress(
+            bestResultsByStageId: const {
+              'outpost-alpha': StageResult(
+                medal: StageMedal.gold,
+                bestBaseHealth: 20,
+              ),
+            },
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey('world-map-backdrop')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('stage-medal-outpost-alpha')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('stage-open-nebula-relay')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('stage-status-ring-singularity-core')),
+      findsOneWidget,
+    );
+    // Side-stage nodes render in the capture state so the fixture shows the
+    // full route graph, optional legs included.
+    expect(
+      find.byKey(const ValueKey('sector-stage-salvage-rift')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey('sector-stage-void-bastion')),
+      findsOneWidget,
+    );
+
+    // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+    // real async engine work and deadlocks the FakeAsync zone otherwise.
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1f.png'),
+    );
+  });
 }

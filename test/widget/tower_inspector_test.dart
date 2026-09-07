@@ -1,14 +1,22 @@
 import 'dart:ui' show Tristate;
 
+import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/assets/game_sprite_sheet.dart';
+import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_surface.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tower_inspector.dart';
+import 'package:orion/game/ui/tower_stat_scale.dart';
 import 'package:orion/game/util/format.dart';
 
 import '../support/command_deck_fixtures.dart';
+import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 void main() {
   testWidgets('inspector uses resolved costs and invokes public callbacks', (
@@ -260,6 +268,180 @@ void main() {
         findsNothing,
       );
     }
+  });
+
+  testWidgets(
+    'L2 inspector: dominant hero art, art-forward specialization cards',
+    (tester) async {
+      // Representative scene 1d state: level-2 tower with both specialization
+      // choices affordable and visible.
+      final tower = const PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      final stats = GameBalance.towerStats(tower.type, level: tower.level);
+      final specializations = GameBalance.specializationsFor(tower.type);
+      final chosen = <TowerSpecialization>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TowerInspector(
+            snapshot: commandDeckSnapshot(
+              gold: 9999,
+              selectedTower: tower,
+              selectedTowerStats: stats,
+            ),
+            onUpgrade: () {},
+            onSpecialize: (specialization) => chosen.add(specialization),
+            onTargetingChanged: (_) {},
+            onSell: () {},
+            sellRefund: 84,
+          ),
+        ),
+      );
+
+      // Tower art dominates the header instead of sitting inline at icon size.
+      final heroArt = tester.getSize(
+        find
+            .descendant(
+              of: find.byKey(const ValueKey('tower-inspector-hero')),
+              matching: find.byType(OrionAtlasSprite),
+            )
+            .first,
+      );
+      expect(heroArt.shortestSide, greaterThanOrEqualTo(56));
+
+      // The specialization choices surface under their own section label.
+      expect(find.text('SPECIALIZE - LV 3'), findsOneWidget);
+
+      // Each choice renders as an art-forward card with its resolved cost.
+      for (final specialization in specializations) {
+        final card = find.byKey(
+          ValueKey('tower-specialization-${specialization.name}'),
+        );
+        expect(card, findsOneWidget, reason: specialization.name);
+        final cardArt = tester.getSize(
+          find
+              .descendant(of: card, matching: find.byType(OrionAtlasSprite))
+              .first,
+        );
+        expect(
+          cardArt.shortestSide,
+          greaterThanOrEqualTo(28),
+          reason: specialization.name,
+        );
+        expect(
+          find.descendant(of: card, matching: find.text(specialization.label)),
+          findsOneWidget,
+          reason: specialization.name,
+        );
+        expect(
+          find.descendant(
+            of: card,
+            matching: find.text('${stats.specializationCost}'),
+          ),
+          findsOneWidget,
+          reason: specialization.name,
+        );
+      }
+
+      // Both cards call onSpecialize independently.
+      await tester.ensureVisible(
+        find.byKey(
+          ValueKey('tower-specialization-${specializations.first.name}'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(
+          ValueKey('tower-specialization-${specializations.first.name}'),
+        ),
+      );
+      await tester.tap(
+        find.byKey(
+          ValueKey('tower-specialization-${specializations.last.name}'),
+        ),
+      );
+      expect(chosen, specializations);
+
+      // Existing gauge pipeline stays TowerStatScale-driven, restyled with
+      // per-stat accents and a readable gauge height.
+      final scale = TowerStatScale.forType(tower.type);
+      final damageBar = tester.widget<LinearProgressIndicator>(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-stat-damage')),
+          matching: find.byType(LinearProgressIndicator),
+        ),
+      );
+      expect(damageBar.value, scale.damageFill(stats));
+      expect(damageBar.valueColor?.value, OrionUiTheme.dark.dangerRed);
+      expect(damageBar.minHeight, greaterThanOrEqualTo(7));
+    },
+  );
+
+  testWidgets('capture scene 1d fixture', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Representative scene 1d state: L2 laser with both specialization
+    // choices affordable. Real Roboto so the evidence shows true metrics.
+    await loadRealFonts();
+    // Image decode is real async engine work that cannot complete under the
+    // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
+    // same keys the OrionArt descriptors use) so tower art renders.
+    await tester.runAsync(() async {
+      await Flame.images.load(GameSpriteSheet.fileName);
+      await Flame.images.load(GameTowerVarietySheet.fileName);
+    });
+    final tower = const PlacedTower(
+      id: 7,
+      type: TowerType.laser,
+      position: GridPosition(2, 3),
+      level: 2,
+    );
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: MaterialApp(
+          // Evidence frame: hide the debug CheckedModeBanner that would
+          // otherwise stamp the top-right corner of the capture.
+          debugShowCheckedModeBanner: false,
+          home: Scaffold(
+            backgroundColor: OrionUiTheme.dark.voidBlack,
+            body: Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: TowerInspector(
+                  snapshot: commandDeckSnapshot(
+                    gold: 9999,
+                    selectedTower: tower,
+                    selectedTowerStats: GameBalance.towerStats(
+                      tower.type,
+                      level: tower.level,
+                    ),
+                  ),
+                  onUpgrade: () {},
+                  onSpecialize: (_) {},
+                  onTargetingChanged: (_) {},
+                  onSell: () {},
+                  sellRefund: 84,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+    // real async engine work and deadlocks the FakeAsync zone otherwise.
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1d.png'),
+    );
   });
 
   testWidgets('inspector is surfaced with MissionSurface, not CommandFrame', (
