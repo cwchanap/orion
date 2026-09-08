@@ -259,13 +259,16 @@ void main() {
         findsOneWidget,
       );
       expect(find.byType(MissionSurface), findsNWidgets(3));
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('mission-status-hud')),
-          matching: find.byType(OrionSurface),
-        ),
-        findsNothing,
+      // MissionSurface is a thin deprecated adapter now, so each of the
+      // three chips also delegates to an unemphasized (t2) OrionSurface.
+      final chipSurfaces = find.descendant(
+        of: find.byKey(const ValueKey('mission-status-hud')),
+        matching: find.byType(OrionSurface),
       );
+      expect(chipSurfaces, findsNWidgets(3));
+      for (final element in chipSurfaces.evaluate()) {
+        expect((element.widget as OrionSurface).tier, OrionSurfaceTier.t2);
+      }
     },
   );
 

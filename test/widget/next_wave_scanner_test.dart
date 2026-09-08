@@ -581,7 +581,7 @@ void main() {
     }
   });
 
-  testWidgets('collapsed and expanded shells use MissionSurface', (
+  testWidgets('collapsed and expanded shells are surfaced via MissionSurface', (
     tester,
   ) async {
     await tester.pumpWidget(scannerHost(commandDeckPreview()));
@@ -590,18 +590,20 @@ void main() {
       of: find.byType(NextWaveScanner),
       matching: find.byType(MissionSurface),
     );
-    Finder scannerFrames() => find.descendant(
+    // MissionSurface is a thin deprecated adapter now, so every shell
+    // also delegates to an OrionSurface tier internally.
+    Finder scannerTiers() => find.descendant(
       of: find.byType(NextWaveScanner),
       matching: find.byType(OrionSurface),
     );
 
     expect(scannerSurfaces(), findsWidgets);
-    expect(scannerFrames(), findsNothing);
+    expect(scannerTiers(), findsWidgets);
 
     await tester.tap(find.byTooltip('Expand next-wave scanner'));
     await tester.pumpAndSettle();
     expect(scannerSurfaces(), findsWidgets);
-    expect(scannerFrames(), findsNothing);
+    expect(scannerTiers(), findsWidgets);
   });
 
   testWidgets('reduced motion expands and collapses after one pump', (

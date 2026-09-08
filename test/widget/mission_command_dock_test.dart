@@ -370,12 +370,11 @@ void main() {
     },
   );
 
-  testWidgets('rail and tower cards use MissionSurface, not OrionSurface', (
+  testWidgets('rail and tower cards are surfaced via MissionSurface', (
     tester,
   ) async {
     await tester.pumpWidget(railHost());
 
-    expect(find.byType(OrionSurface), findsNothing);
     // The rail shell surfaces the whole strip...
     expect(
       find.ancestor(
@@ -384,11 +383,19 @@ void main() {
       ),
       findsOneWidget,
     );
-    // ...and each card is itself surfaced.
+    // ...and each card is itself surfaced. MissionSurface is a thin
+    // deprecated adapter now, so both delegate to OrionSurface internally.
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('tower-card-laser')),
         matching: find.byType(MissionSurface),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('tower-card-laser')),
+        matching: find.byType(OrionSurface),
       ),
       findsOneWidget,
     );

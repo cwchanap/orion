@@ -133,17 +133,11 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
               child: MissionSurface(
                 padding: const EdgeInsets.all(_radarInset),
                 radius: 12,
-                borderColor: widget.collapseRequested
-                    ? uiTheme.frameSteel
-                    : uiTheme.systemCyan,
                 emphasized: !widget.collapseRequested,
                 child: MissionSurface(
                   padding: EdgeInsets.zero,
                   radius: 8,
-                  backgroundColor: uiTheme.panelBlue,
-                  borderColor: widget.collapseRequested
-                      ? uiTheme.frameSteel
-                      : uiTheme.systemCyan.withValues(alpha: 0.68),
+                  emphasized: !widget.collapseRequested,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [

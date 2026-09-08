@@ -138,7 +138,6 @@ class IdleCommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uiTheme = OrionUiTheme.of(context);
     final countdown = snapshot.autoStartCountdownRemaining;
     final reactorLabel = _reactorLabel(snapshot, countdown);
     final reactorTooltip = snapshot.phase == GamePhase.wave
@@ -147,11 +146,9 @@ class IdleCommandBar extends StatelessWidget {
 
     return MissionSurface(
       // The shell is a low grouping surface for the idle row, not a strong
-      // cyan frame: reduced vertical padding and a quiet border let the dark
-      // translucent fill group the controls.
+      // cyan frame: reduced vertical padding groups the controls into the
+      // dock's quiet default (unemphasized) tier.
       padding: const EdgeInsets.all(6),
-      backgroundColor: uiTheme.hullBlack.withValues(alpha: 0.92),
-      borderColor: uiTheme.systemCyan.withValues(alpha: 0.10),
       child: Row(
         children: [
           // Pacing flexes and wraps on narrow viewports; the fixed-size
@@ -514,8 +511,6 @@ class _TowerBuildCard extends StatelessWidget {
         child: MissionSurface(
           padding: const EdgeInsets.all(2),
           radius: 10,
-          backgroundColor: uiTheme.panelBlue,
-          borderColor: accent,
           emphasized: canAttempt && affordable,
           child: Material(
             color: Colors.transparent,
@@ -715,8 +710,6 @@ class _TowerBuildCard extends StatelessWidget {
       child: MissionSurface(
         padding: const EdgeInsets.all(2),
         radius: 10,
-        backgroundColor: uiTheme.panelBlue,
-        borderColor: uiTheme.frameSteel,
         child: Center(
           child: Text(
             'LIFTED',
