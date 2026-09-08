@@ -444,7 +444,7 @@ void main() {
     );
   });
 
-  testWidgets('inspector is surfaced with MissionSurface, not OrionSurface', (
+  testWidgets('inspector is surfaced with MissionSurface, a t2 tier', (
     tester,
   ) async {
     const tower = PlacedTower(
@@ -472,7 +472,12 @@ void main() {
     );
 
     expect(find.byType(MissionSurface), findsOneWidget);
-    expect(find.byType(OrionSurface), findsNothing);
+    // MissionSurface is a thin deprecated adapter now, delegating to an
+    // unemphasized (t2) OrionSurface internally.
+    expect(
+      tester.widget<OrionSurface>(find.byType(OrionSurface)).tier,
+      OrionSurfaceTier.t2,
+    );
     expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });
 

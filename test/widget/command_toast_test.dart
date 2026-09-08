@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/ui/command_toast.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
 Widget toastHost(
@@ -191,10 +190,11 @@ void main() {
 
     for (final testCase in cases) {
       await tester.pumpWidget(toastHost(testCase.feedback));
-      final surface = tester.widget<MissionSurface>(
-        find.byKey(const ValueKey('command-toast')),
-      );
-      expect(surface.borderColor, testCase.color, reason: testCase.feedback);
+      // The toast's chrome is a fixed emphasized tier now (no per-instance
+      // border tint); tone still reaches the player through the message's
+      // text color.
+      final text = tester.widget<Text>(find.text(testCase.feedback));
+      expect(text.style?.color, testCase.color, reason: testCase.feedback);
     }
   });
 

@@ -32,46 +32,43 @@ BoxDecoration surfaceDecoration(WidgetTester tester) {
 }
 
 void main() {
-  testWidgets('default surface is a translucent rounded hull panel', (
-    tester,
-  ) async {
+  testWidgets('default surface delegates to the t2 tier', (tester) async {
     await tester.pumpWidget(surfaceHost());
 
     final decoration = surfaceDecoration(tester);
-    expect(
-      decoration.color,
-      OrionUiTheme.dark.hullBlack.withValues(alpha: 0.85),
-    );
+    expect(decoration.color, isNull);
+    final gradient = decoration.gradient! as LinearGradient;
+    expect(gradient.colors, [
+      OrionUiTheme.dark.panelRaised.withValues(alpha: 0.66),
+      OrionUiTheme.dark.hullBlack.withValues(alpha: 0.76),
+    ]);
     expect(decoration.borderRadius, BorderRadius.circular(18));
 
     final border = decoration.border! as Border;
-    expect(
-      border.top.color,
-      OrionUiTheme.dark.systemCyan.withValues(alpha: 0.25),
-    );
+    expect(border.top.color, OrionUiTheme.dark.frameSteel);
     expect(border.top.width, 1);
     expect(decoration.boxShadow, isNull);
   });
 
-  testWidgets(
-    'emphasized surface uses strong cyan border and one restrained shadow',
-    (tester) async {
-      await tester.pumpWidget(surfaceHost(emphasized: true));
+  testWidgets('emphasized surface delegates to the t3 tier', (tester) async {
+    await tester.pumpWidget(surfaceHost(emphasized: true));
 
-      final decoration = surfaceDecoration(tester);
-      final border = decoration.border! as Border;
-      expect(border.top.color, OrionUiTheme.dark.systemCyanStrong);
-      expect(border.top.width, 2);
+    final decoration = surfaceDecoration(tester);
+    expect(decoration.color, isNull);
+    final gradient = decoration.gradient! as LinearGradient;
+    expect(gradient.colors, [
+      OrionUiTheme.dark.panelBlue.withValues(alpha: 0.90),
+      OrionUiTheme.dark.sheetBlack.withValues(alpha: 0.94),
+    ]);
 
-      expect(decoration.boxShadow, hasLength(1));
-      final shadow = decoration.boxShadow!.single;
-      expect(
-        shadow.color,
-        OrionUiTheme.dark.systemCyanStrong.withValues(alpha: 0.25),
-      );
-      expect(shadow.blurRadius, 12);
-    },
-  );
+    final border = decoration.border! as Border;
+    expect(
+      border.top.color,
+      OrionUiTheme.dark.systemCyan.withValues(alpha: 0.3),
+    );
+    expect(border.top.width, 1);
+    expect(decoration.boxShadow, isNull);
+  });
 
   testWidgets('custom radius and padding are honored', (tester) async {
     const padding = EdgeInsets.symmetric(horizontal: 4, vertical: 2);
