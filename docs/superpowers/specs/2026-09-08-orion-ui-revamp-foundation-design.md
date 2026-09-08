@@ -71,15 +71,25 @@ Two rules are encoded rather than documented:
 - All three styles carry the tier text-shadow `0 1px 4px rgba(5,8,13,.9)`, so
   contrast never depends on a surface fill.
 
-The 26 existing `Theme.of(context).textTheme.*` sites migrate to these three.
-Material's `TextTheme` stays populated in `main.dart` for non-game UI, but the
-game UI stops reading it.
+The **97** existing `Theme.of(context).textTheme.*` references in the game UI
+migrate to these three. Material's `TextTheme` stays populated in `main.dart` for
+non-game UI, but the game UI stops reading it.
+
+97 is the largest single mechanical task in PR A and the main driver of its size.
+It is migrated file-by-file (20 files under `lib/game/ui/`), each file a separate
+commit, so review stays tractable and a bad mapping is revertible in isolation.
 
 ## Surface tiers
 
-`OrionSurface(tier:)`. Every color derives from an existing `OrionUiTheme` token —
-the export's rgba literals are exactly `hullBlack` / `panelRaised` / `panelBlue` /
-`voidBlack` at alpha, so the palette is genuinely unchanged.
+`OrionSurface(tier:)`. Nearly every color derives from an existing `OrionUiTheme`
+token — the export's rgba literals are `hullBlack` / `panelRaised` / `panelBlue` /
+`voidBlack` at alpha.
+
+**One exception.** The t3 gradient's bottom stop is `rgba(8,13,19,.94)` = `#080D13`,
+which is not in the current palette (it sits between `voidBlack` `#05080D` and
+`hullBlack` `#0B1118`, and is also 1i's own card ground). It ships as a single new
+token, `sheetBlack`. So 1i's claim that the palette is "unchanged from
+orion_ui_theme.dart" is very nearly true but not exactly: it is 14 tokens plus one.
 
 | Tier | Blur | Fill | Border | Role |
 |---|---|---|---|---|
@@ -97,9 +107,20 @@ merely discouraged.
 Solid primary actions (`WAVE`, `DEPLOY`) stay unblurred by design and do not use
 `OrionSurface`.
 
+### Migration
+
+`MissionSurface` becomes a deprecated thin adapter over `OrionSurface(tier: t2)`.
+Its 15 call sites therefore keep compiling and convert incrementally, rather than
+forcing one 25-site commit alongside the `CommandFrame` removal. The adapter is
+deleted in PR D once the last site is gone.
+
+`CommandFrame` gets no adapter: its 10 sites are re-pointed in PR A and the file
+is deleted, because leaving a chamfered primitive importable would let scene PRs
+reintroduce exactly the geometry 1i forbids.
+
 ### Risk: this is the one change that can cost frame budget
 
-The app currently uses **zero** `BackdropFilter`. Making 16 opaque surfaces
+The app currently uses **zero** `BackdropFilter`. Making 15 opaque surfaces
 translucent is the riskiest part of this spec, and the exposure is the board
 during a live wave. Mitigation: measure 1a's 9-blur target on device before the
 scene PRs commit to it. If it does not hold, the fallback is tier-selective blur
