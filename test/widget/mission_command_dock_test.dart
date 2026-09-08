@@ -4,10 +4,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_surface.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
@@ -370,12 +370,12 @@ void main() {
     },
   );
 
-  testWidgets('rail and tower cards use MissionSurface, not CommandFrame', (
+  testWidgets('rail and tower cards use MissionSurface, not OrionSurface', (
     tester,
   ) async {
     await tester.pumpWidget(railHost());
 
-    expect(find.byType(CommandFrame), findsNothing);
+    expect(find.byType(OrionSurface), findsNothing);
     // The rail shell surfaces the whole strip...
     expect(
       find.ancestor(
@@ -419,10 +419,10 @@ void main() {
       matching: find.byType(MissionSurface),
     );
     expect(surface, findsOneWidget);
-    // The reactor button carries its own internal octagon frames; no legacy
-    // CommandFrame chrome may wrap the idle surface itself.
+    // The reactor button carries its own internal octagon frames; no
+    // OrionSurface chrome may wrap the idle surface itself.
     expect(
-      find.ancestor(of: surface, matching: find.byType(CommandFrame)),
+      find.ancestor(of: surface, matching: find.byType(OrionSurface)),
       findsNothing,
     );
   });
