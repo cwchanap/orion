@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
-import 'command_frame.dart';
 import 'mission_report_content.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_surface.dart';
 import 'run_module_draft_panel.dart';
 import 'orion_ui_theme.dart';
 
@@ -402,17 +402,12 @@ class _MissionActionButton extends StatelessWidget {
 
     return Tooltip(
       message: action.label,
-      child: CommandFrame(
+      child: OrionSurface(
+        tier: enabled ? OrionSurfaceTier.t3 : OrionSurfaceTier.t2,
         padding: const EdgeInsets.all(3),
-        color: uiTheme.hullBlack,
-        borderColor: accent,
-        emphasized: enabled,
-        chamfer: 12,
-        child: CommandFrame(
+        child: OrionSurface(
+          tier: OrionSurfaceTier.t2,
           padding: EdgeInsets.zero,
-          color: uiTheme.panelBlue,
-          borderColor: accent.withValues(alpha: enabled ? 0.68 : 0.4),
-          chamfer: 8,
           child: IconButton(
             onPressed: action.onPressed,
             style: IconButton.styleFrom(

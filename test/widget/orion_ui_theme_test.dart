@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
 void main() {
@@ -56,7 +56,10 @@ void main() {
                 const Duration(milliseconds: 220),
               );
               sheetStyle = orionSheetAnimationStyle(context);
-              return const CommandFrame(child: Text('Hull'));
+              return const OrionSurface(
+                tier: OrionSurfaceTier.t2,
+                child: Text('Hull'),
+              );
             },
           ),
         ),

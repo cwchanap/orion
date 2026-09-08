@@ -6,8 +6,8 @@ import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_reward_label.dart';
 import 'campaign_presentation.dart';
-import 'command_frame.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_surface.dart';
 import 'orion_ui_theme.dart';
 import 'sector_map_layout.dart';
 
@@ -268,8 +268,8 @@ class _EmptySectorMap extends StatelessWidget {
           child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
         ),
         Center(
-          child: CommandFrame(
-            borderColor: uiTheme.frameSteel,
+          child: OrionSurface(
+            tier: OrionSurfaceTier.t2,
             child: Text(
               'No stages available',
               style: Theme.of(

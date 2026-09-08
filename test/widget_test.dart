@@ -20,7 +20,6 @@ import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
@@ -28,6 +27,7 @@ import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -1260,7 +1260,7 @@ void main() {
     expect(find.text('Start Wave'), findsNothing);
   });
 
-  testWidgets('reset confirmation uses command frame and keeps behavior', (
+  testWidgets('reset confirmation uses OrionSurface and keeps behavior', (
     tester,
   ) async {
     final store = await storeWithResults({
@@ -1275,7 +1275,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsOneWidget);
-    expect(find.byType(CommandFrame), findsWidgets);
+    expect(find.byType(OrionSurface), findsWidgets);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
     expectSemanticsLabel(
