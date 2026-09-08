@@ -137,7 +137,6 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
                 child: MissionSurface(
                   padding: EdgeInsets.zero,
                   radius: 8,
-                  emphasized: !widget.collapseRequested,
                   child: Stack(
                     alignment: Alignment.center,
                     children: [
