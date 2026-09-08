@@ -149,25 +149,39 @@ unchanged.
 
 ## Art intake
 
-Twelve files pulled from the design project into the existing `reactor_rim_ui/`
-layout:
+Nine files, verified complete, into the existing `reactor_rim_ui/` layout:
 
-- `crests/` ×7 — one per campaign stage. The export renders five; all seven are
-  taken so `singularity-core` and `void-bastion` are not a later gap.
-- `boards/` ×3 — `nebula`, `foundry`, `void`.
-- `backdrops/command-center.png` — `scene_cic`, the 1c scanner backdrop.
+- `crests/` ×7 — one per campaign stage, 160×160 RGBA, ~50KB each. The export
+  renders five; all seven are taken so `singularity-core` and `void-bastion` are
+  not a later gap.
+- `boards/nebula.png` — 512×768, 871KB.
+- `backdrops/command-center.png` — `scene_cic`, 512×1110, 857KB.
 
-`orion_terrain_mock.png` is **skipped**: nothing in 1a–1h references it and it
-reads as a mock leftover.
+**Not `board_foundry` / `board_void`.** They exist in the design project but are
+referenced by *no* scene in 1a–1h: aligning the 103 `url()` references across the
+export against the standalone bundle yields only `board_nebula`. There is one
+board skin in this design, not three. `orion_terrain_mock.png` is likewise
+unreferenced and skipped.
 
-`OrionSceneArt` gains `commandCenter`. Crests get a `Map<StageId, OrionArtDescriptor>`
-alongside the existing stage map, reusing `sourceRectFor` rather than adding a
-parallel path API — the constraint `bd294f3` locked in. Files are normalized to
-render size with `sips`, as `6e3f878` did, to avoid repeating that cleanup.
+### Extraction route
 
-**PR A lands the board skins; it does not adopt them.** Whether the board is
-actually skinned per stage is a case-by-case ratification against #29's explicit
-rejection, and it belongs to PR B where the board is rebuilt.
+`DesignSync.get_file` **silently truncates at 256 KiB**. It returns a valid PNG
+header with the pixel data cut off and no `IEND` chunk — `board_nebula` came back
+as 196,608 bytes of a 871,473-byte file, and `file(1)` still reports it as a valid
+512×768 PNG. Anything read through that tool must be checked for `IEND` before it
+is trusted.
+
+The reliable route is the project's `Orion UI Revamp - standalone.html` bundle,
+which inlines every referenced asset as base64 in a UUID-keyed blob map. UUIDs map
+to filenames by positionally aligning its template's `url("<uuid>")` references
+against the export's `url(assets/images/<name>.png)` references — 103 refs on both
+sides, zero ambiguity. Every extracted file is verified for PNG magic and a
+trailing `IEND` chunk before it is committed.
+
+**PR A lands the board skin; it does not adopt it.** Whether the board is skinned
+at all is a case-by-case ratification against #29's explicit rejection, and it
+belongs to PR B where the board is rebuilt. Note that with a single skin the
+"per-stage board skins" #29 rejected is not even what this design asks for.
 
 ## Testing
 
@@ -186,7 +200,7 @@ Existing gates continue to apply: `flutter test` (857 baseline), `flutter analyz
 
 ## Open items deferred to scene PRs
 
-- Board-skin adoption (PR B) — against #29's rejection.
+- Board-skin adoption (PR B) — against #29's rejection. One shared skin, not per-stage.
 - Radial tower actions and hold-to-salvage (PR B).
 - Persistent tower tray (PR B) — against #29's "mock-only removed".
 - `≤6 TOWER CAP` (PR C) — **known export error, to be rejected, not implemented.**
