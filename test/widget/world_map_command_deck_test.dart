@@ -6,8 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
@@ -349,7 +349,7 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(WorldMapView),
-        matching: find.byType(CommandFrame),
+        matching: find.byType(OrionSurface),
       ),
       findsNothing,
     );

@@ -4,10 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
@@ -592,7 +592,7 @@ void main() {
     );
     Finder scannerFrames() => find.descendant(
       of: find.byType(NextWaveScanner),
-      matching: find.byType(CommandFrame),
+      matching: find.byType(OrionSurface),
     );
 
     expect(scannerSurfaces(), findsWidgets);

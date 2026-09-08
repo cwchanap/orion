@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
@@ -510,7 +510,7 @@ Future<void> _pumpPanel(
     ),
   );
 
-  expect(find.byType(CommandFrame), findsWidgets);
+  expect(find.byType(OrionSurface), findsWidgets);
 }
 
 GameSnapshot _syntheticSnapshot({

@@ -6,8 +6,8 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/stage_briefing_sheet.dart';
 
@@ -129,7 +129,7 @@ void main() {
 
     // No framed inset around the image.
     expect(
-      find.ancestor(of: hero, matching: find.byType(CommandFrame)),
+      find.ancestor(of: hero, matching: find.byType(OrionSurface)),
       findsNothing,
     );
     expect(tester.takeException(), isNull);

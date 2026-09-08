@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
-import 'command_frame.dart';
+import 'orion_surface.dart';
 import 'orion_ui_theme.dart';
 
 class RunModuleDraftPanel extends StatelessWidget {
@@ -23,13 +23,10 @@ class RunModuleDraftPanel extends StatelessWidget {
       child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: CommandFrame(
+          child: OrionSurface(
             key: const ValueKey('run-module-draft-frame'),
+            tier: OrionSurfaceTier.t3,
             padding: const EdgeInsets.all(14),
-            color: uiTheme.hullBlack,
-            borderColor: uiTheme.systemCyan,
-            emphasized: true,
-            chamfer: 14,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -76,12 +73,9 @@ class _RunModuleCard extends StatelessWidget {
           'Affinity: ${definition.affinity.label}',
       onTap: onPressed,
       excludeSemantics: true,
-      child: CommandFrame(
+      child: OrionSurface(
+        tier: OrionSurfaceTier.t3,
         padding: EdgeInsets.zero,
-        color: uiTheme.panelBlue,
-        borderColor: uiTheme.systemCyanStrong,
-        emphasized: true,
-        chamfer: 10,
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -152,11 +146,9 @@ class _AcquiredModuleLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return CommandFrame(
+    return OrionSurface(
+      tier: OrionSurfaceTier.t2,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      color: uiTheme.panelBlue,
-      borderColor: uiTheme.frameSteel,
-      chamfer: 6,
       child: Text(
         '${definition.title} — ${definition.effectText}',
         maxLines: 2,

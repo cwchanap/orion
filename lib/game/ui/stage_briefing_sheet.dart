@@ -6,8 +6,8 @@ import '../campaign/stage_definition.dart';
 import '../campaign/stage_modifier_metadata.dart';
 import '../models/game_models.dart';
 import 'campaign_presentation.dart';
-import 'command_frame.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_surface.dart';
 import 'orion_ui_theme.dart';
 
 /// Full-height modal stage briefing (scene 1b): full-bleed wide stage-key-art
@@ -203,11 +203,9 @@ class StageBriefingSheet extends StatelessWidget {
                     child: Semantics(
                       button: true,
                       label: actionLabel,
-                      child: CommandFrame(
+                      child: OrionSurface(
+                        tier: OrionSurfaceTier.t3,
                         padding: EdgeInsets.zero,
-                        color: uiTheme.panelBlue,
-                        borderColor: uiTheme.systemCyan,
-                        emphasized: true,
                         child: Material(
                           color: Colors.transparent,
                           child: InkWell(
@@ -319,11 +317,9 @@ class _BriefingStatTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return CommandFrame(
+    return OrionSurface(
+      tier: OrionSurfaceTier.t2,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      color: uiTheme.panelBlue,
-      borderColor: color.withValues(alpha: 0.62),
-      chamfer: 9,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -402,11 +398,9 @@ class _BriefingIntelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return CommandFrame(
+    return OrionSurface(
+      tier: OrionSurfaceTier.t2,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-      color: uiTheme.panelBlue,
-      borderColor: color.withValues(alpha: 0.62),
-      chamfer: 7,
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

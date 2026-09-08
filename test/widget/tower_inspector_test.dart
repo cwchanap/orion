@@ -6,9 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tower_inspector.dart';
 import 'package:orion/game/ui/tower_stat_scale.dart';
@@ -444,7 +444,7 @@ void main() {
     );
   });
 
-  testWidgets('inspector is surfaced with MissionSurface, not CommandFrame', (
+  testWidgets('inspector is surfaced with MissionSurface, not OrionSurface', (
     tester,
   ) async {
     const tower = PlacedTower(
@@ -472,7 +472,7 @@ void main() {
     );
 
     expect(find.byType(MissionSurface), findsOneWidget);
-    expect(find.byType(CommandFrame), findsNothing);
+    expect(find.byType(OrionSurface), findsNothing);
     expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });
 

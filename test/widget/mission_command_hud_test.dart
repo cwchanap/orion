@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 import '../support/command_deck_fixtures.dart';
@@ -262,7 +262,7 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('mission-status-hud')),
-          matching: find.byType(CommandFrame),
+          matching: find.byType(OrionSurface),
         ),
         findsNothing,
       );

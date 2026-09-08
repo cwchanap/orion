@@ -18,12 +18,12 @@ import '../orion_defense_game.dart';
 import '../rules/run_module_unlocks.dart';
 import '../rules/stage_modifier_rules.dart';
 import 'codex_view.dart';
-import 'command_frame.dart';
 import 'feedback_settings_sheet.dart';
 import 'mission_chrome.dart';
 import 'mission_command_dock.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
+import 'orion_surface.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
 import 'stage_briefing_sheet.dart';
@@ -872,11 +872,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
           backgroundColor: Colors.transparent,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 380),
-            child: CommandFrame(
+            child: OrionSurface(
               key: const ValueKey('reset-campaign-dialog'),
-              borderColor: uiTheme.dangerRed,
-              color: uiTheme.hullBlack,
-              emphasized: true,
+              tier: OrionSurfaceTier.t3,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
