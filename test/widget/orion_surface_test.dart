@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 
 void main() {
@@ -58,5 +59,32 @@ void main() {
         );
       }
     }
+  });
+
+  testWidgets('MissionSurface delegates to a tiered OrionSurface', (t) async {
+    await t.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: MissionSurface(child: Text('x'))),
+      ),
+    );
+    expect(find.byType(OrionSurface), findsOneWidget);
+    expect(
+      t.widget<OrionSurface>(find.byType(OrionSurface)).tier,
+      OrionSurfaceTier.t2,
+    );
+  });
+
+  testWidgets('an emphasized MissionSurface is a t3 sheet', (t) async {
+    await t.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: MissionSurface(emphasized: true, child: Text('x')),
+        ),
+      ),
+    );
+    expect(
+      t.widget<OrionSurface>(find.byType(OrionSurface)).tier,
+      OrionSurfaceTier.t3,
+    );
   });
 }

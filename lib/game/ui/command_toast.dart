@@ -174,7 +174,6 @@ class _CommandToastMessageState extends State<_CommandToastMessage> {
       key: const ValueKey('command-toast'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       radius: 12,
-      borderColor: widget.toneColor,
       emphasized: true,
       child: _renderText
           ? Semantics(

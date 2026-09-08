@@ -49,9 +49,6 @@ class MissionStatusHud extends StatelessWidget {
               'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
           child: MissionSurface(
             key: const ValueKey('mission-status-base'),
-            // Status chips group quietly behind the readouts; the default
-            // interactive-cyan edge reads as a button cluster.
-            borderColor: uiTheme.systemCyan.withValues(alpha: 0.12),
             child: _BaseHealthAnchor(
               snapshot: snapshot,
               uiTheme: uiTheme,
@@ -68,7 +65,6 @@ class MissionStatusHud extends StatelessWidget {
               '${_missionPhaseLabel(snapshot)}',
           child: MissionSurface(
             key: const ValueKey('mission-status-stage'),
-            borderColor: uiTheme.systemCyan.withValues(alpha: 0.12),
             child: _MissionStatusAnchor(
               snapshot: snapshot,
               uiTheme: uiTheme,
@@ -82,7 +78,6 @@ class MissionStatusHud extends StatelessWidget {
           label: 'Credits ${snapshot.gold}',
           child: MissionSurface(
             key: const ValueKey('mission-status-credits'),
-            borderColor: uiTheme.systemCyan.withValues(alpha: 0.12),
             child: _CreditsAnchor(
               snapshot: snapshot,
               uiTheme: uiTheme,
