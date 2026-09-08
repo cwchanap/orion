@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
   const OrionUiTheme({
     required this.voidBlack,
+    required this.sheetBlack,
     required this.hullBlack,
     required this.panelBlue,
     required this.panelRaised,
@@ -21,6 +22,7 @@ final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
 
   static const dark = OrionUiTheme(
     voidBlack: Color(0xFF05080D),
+    sheetBlack: Color(0xFF080D13),
     hullBlack: Color(0xFF0B1118),
     panelBlue: Color(0xFF111B25),
     panelRaised: Color(0xFF182532),
@@ -37,6 +39,7 @@ final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
   );
 
   final Color voidBlack;
+  final Color sheetBlack;
   final Color hullBlack;
   final Color panelBlue;
   final Color panelRaised;
@@ -57,6 +60,7 @@ final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
   @override
   OrionUiTheme copyWith({
     Color? voidBlack,
+    Color? sheetBlack,
     Color? hullBlack,
     Color? panelBlue,
     Color? panelRaised,
@@ -73,6 +77,7 @@ final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
   }) {
     return OrionUiTheme(
       voidBlack: voidBlack ?? this.voidBlack,
+      sheetBlack: sheetBlack ?? this.sheetBlack,
       hullBlack: hullBlack ?? this.hullBlack,
       panelBlue: panelBlue ?? this.panelBlue,
       panelRaised: panelRaised ?? this.panelRaised,
@@ -94,6 +99,7 @@ final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
     if (other == null) return this;
     return OrionUiTheme(
       voidBlack: Color.lerp(voidBlack, other.voidBlack, t)!,
+      sheetBlack: Color.lerp(sheetBlack, other.sheetBlack, t)!,
       hullBlack: Color.lerp(hullBlack, other.hullBlack, t)!,
       panelBlue: Color.lerp(panelBlue, other.panelBlue, t)!,
       panelRaised: Color.lerp(panelRaised, other.panelRaised, t)!,
@@ -117,6 +123,14 @@ final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
 
 Duration orionMotionDuration(BuildContext context, Duration normal) =>
     MediaQuery.disableAnimationsOf(context) ? Duration.zero : normal;
+
+/// Motion durations from the Revamp system sheet (scene 1i). Route each through
+/// [orionMotionDuration] at the call site so `disableAnimationsOf` still wins.
+const orionPressDuration = Duration(milliseconds: 90);
+const orionSheetDuration = Duration(milliseconds: 220);
+const orionLaneFlowDuration = Duration(milliseconds: 1100);
+const orionHullPulseDuration = Duration(milliseconds: 2400);
+const orionIdleBobDuration = Duration(milliseconds: 1600);
 
 AnimationStyle? orionSheetAnimationStyle(BuildContext context) =>
     MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null;
