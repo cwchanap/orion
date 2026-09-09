@@ -392,21 +392,43 @@ class _MissionActionButton extends StatelessWidget {
       child: OrionSurface(
         tier: enabled ? OrionSurfaceTier.t3 : OrionSurfaceTier.t2,
         padding: const EdgeInsets.all(3),
-        child: OrionSurface(
-          tier: OrionSurfaceTier.t2,
-          padding: EdgeInsets.zero,
-          child: IconButton(
-            onPressed: action.onPressed,
-            style: IconButton.styleFrom(
-              foregroundColor: foreground,
-              disabledForegroundColor: uiTheme.textMuted,
-              backgroundColor: Colors.transparent,
-              disabledBackgroundColor: Colors.transparent,
-              overlayColor: accent.withValues(alpha: enabled ? 0.16 : 0),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              minimumSize: const Size(48, 48),
+        // The inner tile sat directly inside the outer OrionSurface's
+        // already-blurred fill, so its own BackdropFilter blurred a
+        // backdrop that was already blurred — a second blur pass that was
+        // visually almost a no-op. This DecoratedBox reproduces
+        // OrionSurfaceTier.t2's exact fill, border and radius (see
+        // OrionSurface.build) without paying for that blur again; padding
+        // is unchanged (zero).
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  uiTheme.panelRaised.withValues(alpha: 0.66),
+                  uiTheme.hullBlack.withValues(alpha: 0.76),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.fromBorderSide(
+                BorderSide(color: uiTheme.frameSteel),
+              ),
             ),
-            icon: icon,
+            child: IconButton(
+              onPressed: action.onPressed,
+              style: IconButton.styleFrom(
+                foregroundColor: foreground,
+                disabledForegroundColor: uiTheme.textMuted,
+                backgroundColor: Colors.transparent,
+                disabledBackgroundColor: Colors.transparent,
+                overlayColor: accent.withValues(alpha: enabled ? 0.16 : 0),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                minimumSize: const Size(48, 48),
+              ),
+              icon: icon,
+            ),
           ),
         ),
       ),

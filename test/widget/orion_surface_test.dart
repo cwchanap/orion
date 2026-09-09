@@ -61,6 +61,39 @@ void main() {
     }
   });
 
+  testWidgets('topBorderOnly renders a top-only Border, not all four sides', (
+    t,
+  ) async {
+    await t.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: OrionSurface(
+            tier: OrionSurfaceTier.t4,
+            topBorderOnly: true,
+            child: const Text('x'),
+          ),
+        ),
+      ),
+    );
+    final box = t.widget<DecoratedBox>(
+      find
+          .descendant(
+            of: find.byType(OrionSurface),
+            matching: find.byType(DecoratedBox),
+          )
+          .first,
+    );
+    // Border(top: ...) leaves left/right/bottom at BorderSide.none, unlike
+    // Border.fromBorderSide (the default), which sets all four sides equal
+    // to the same visible side.
+    final border = (box.decoration as BoxDecoration).border! as Border;
+    expect(border.top.style, BorderStyle.solid);
+    expect(border.top.width, greaterThan(0));
+    expect(border.left, BorderSide.none);
+    expect(border.right, BorderSide.none);
+    expect(border.bottom, BorderSide.none);
+  });
+
   testWidgets('MissionSurface delegates to a tiered OrionSurface', (t) async {
     await t.pumpWidget(
       const MaterialApp(
