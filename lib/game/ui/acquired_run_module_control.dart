@@ -137,7 +137,7 @@ class _AcquiredModuleRow extends StatelessWidget {
       children: [
         Text(
           definition.title,
-          style: OrionTypography.microLabel(color: uiTheme.textMuted),
+          style: OrionTypography.microLabel(size: 11, color: uiTheme.textMuted),
         ),
         const SizedBox(height: 2),
         Text(
