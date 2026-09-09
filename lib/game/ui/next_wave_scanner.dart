@@ -135,26 +135,49 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
                 padding: const EdgeInsets.all(_radarInset),
                 radius: 12,
                 emphasized: !widget.collapseRequested,
-                child: MissionSurface(
-                  padding: EdgeInsets.zero,
-                  radius: 8,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Icon(
-                        Icons.radar,
-                        color: widget.collapseRequested
-                            ? uiTheme.textMuted
-                            : uiTheme.systemCyan,
-                        size: 27,
+                // The inner tile sat directly inside the outer
+                // MissionSurface's already-blurred fill, so its own
+                // BackdropFilter blurred a backdrop that was already
+                // blurred — a second blur pass that was visually almost a
+                // no-op. This DecoratedBox reproduces OrionSurfaceTier.t2's
+                // exact fill and border (see OrionSurface.build) without
+                // paying for that blur again; padding and rounding are
+                // unchanged.
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          uiTheme.panelRaised.withValues(alpha: 0.66),
+                          uiTheme.hullBlack.withValues(alpha: 0.76),
+                        ],
                       ),
-                      if (_hasUnreadPreview)
-                        Positioned(
-                          top: 5,
-                          right: 5,
-                          child: _UnreadBeacon(color: uiTheme.warningOrange),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.fromBorderSide(
+                        BorderSide(color: uiTheme.frameSteel),
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(
+                          Icons.radar,
+                          color: widget.collapseRequested
+                              ? uiTheme.textMuted
+                              : uiTheme.systemCyan,
+                          size: 27,
                         ),
-                    ],
+                        if (_hasUnreadPreview)
+                          Positioned(
+                            top: 5,
+                            right: 5,
+                            child: _UnreadBeacon(color: uiTheme.warningOrange),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
               ),
