@@ -677,7 +677,7 @@ class _IllustratedStageNode extends StatelessWidget {
                         context,
                       ).clamp(maxScaleFactor: 1.15),
                       style: OrionTypography.microLabel(
-                        color: uiTheme.textMuted,
+                        color: isLocked ? uiTheme.textMuted : statusColor,
                       ),
                     ),
                   ),
