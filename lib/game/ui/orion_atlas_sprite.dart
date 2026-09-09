@@ -18,7 +18,7 @@ typedef OrionSourceRectResolver =
 
 enum OrionStageArtCrop { briefingWide, mapSquare }
 
-enum OrionSceneArt { worldMap, techTree, missionReport }
+enum OrionSceneArt { worldMap, techTree, missionReport, commandCenter }
 
 @immutable
 final class OrionArtDescriptor {
@@ -143,7 +143,24 @@ abstract final class OrionArt {
           semanticLabel: 'Mission debrief backdrop',
           fallbackIcon: Icons.description,
         ),
+        OrionSceneArt.commandCenter: OrionArtDescriptor(
+          fileName: 'reactor_rim_ui/backdrops/command-center.png',
+          sourceRectFor: _fullRectFor,
+          semanticLabel: 'Command center backdrop',
+          fallbackIcon: Icons.dashboard,
+        ),
       });
+
+  static final Map<String, OrionArtDescriptor> _crests = Map.unmodifiable({
+    for (final stage in OrionCampaign.stages)
+      stage.id: OrionArtDescriptor(
+        fileName: 'reactor_rim_ui/crests/${stage.id}.png',
+        sourceRectFor: ({required imageWidth, required imageHeight}) =>
+            ui.Rect.fromLTWH(0, 0, imageWidth, imageHeight),
+        semanticLabel: '${stage.name} crest',
+        fallbackIcon: Icons.shield_outlined,
+      ),
+  });
 
   static final OrionArtDescriptor _victoryArt = OrionArtDescriptor(
     fileName: 'reactor_rim_ui/results/victory.png',
@@ -185,6 +202,9 @@ abstract final class OrionArt {
   }
 
   static OrionArtDescriptor scene(OrionSceneArt scene) => _scenes[scene]!;
+
+  static OrionArtDescriptor crestFor(StageDefinition stage) =>
+      _crests[stage.id]!;
 
   static ui.Rect _stageRectFor(
     OrionStageArtCrop crop, {

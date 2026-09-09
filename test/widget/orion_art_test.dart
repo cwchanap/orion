@@ -130,4 +130,16 @@ void main() {
       expect(offenders, isEmpty);
     },
   );
+
+  test('every campaign stage has a crest descriptor', () {
+    for (final stage in OrionCampaign.stages) {
+      final crest = OrionArt.crestFor(stage);
+      expect(crest.fileName, contains('crests/'));
+      expect(crest.semanticLabel, isNotEmpty);
+    }
+  });
+
+  test('commandCenter scene art is registered', () {
+    expect(OrionSceneArt.values, contains(OrionSceneArt.commandCenter));
+  });
 }
