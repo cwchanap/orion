@@ -27,7 +27,7 @@ Future<void> loadRealFonts({bool withMaterialIcons = true}) async {
 
   for (final family in const {
     'Oxanium': ['Oxanium[wght].ttf'],
-    'ChakraPetch': ['ChakraPetch-Medium.ttf', 'ChakraPetch-Bold.ttf'],
+    'ChakraPetch': ['ChakraPetch-Bold.ttf'],
   }.entries) {
     final familyLoader = FontLoader(family.key);
     for (final fileName in family.value) {
