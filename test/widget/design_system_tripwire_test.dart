@@ -13,20 +13,18 @@ Iterable<File> _libDartFiles() sync* {
 
 void main() {
   test('ImageFilter.blur is centralised in OrionSurface', () {
-    final offenders = <String>[];
-    for (final file in _libDartFiles()) {
-      final matches = 'ImageFilter.blur'.allMatches(file.readAsStringSync());
-      if (matches.isNotEmpty && !file.path.endsWith('orion_surface.dart')) {
-        offenders.add(file.path);
-      }
-    }
+    final filesWithBlur = <String>{
+      for (final file in _libDartFiles())
+        if (file.readAsStringSync().contains('ImageFilter.blur')) file.path,
+    };
     expect(
-      offenders,
-      isEmpty,
+      filesWithBlur,
+      {'lib/game/ui/orion_surface.dart'},
       reason:
           'every blur must go through OrionSurface, the one place the blur '
           'budget is enforced; a second call site can drift from the four '
-          'sanctioned sigmas unnoticed',
+          'sanctioned sigmas unnoticed — and an empty set here would mean '
+          'the sanctioned call itself was deleted, not just moved',
     );
   });
 
