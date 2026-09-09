@@ -38,6 +38,28 @@ abstract final class OrionTypography {
   );
 
   /// Every label. Muted by construction: the sheet says "muted, never white".
+  ///
+  /// The sheet describes this role as a 7-9px range, but there is no role
+  /// above [title] for a label bigger than that, so the migration also
+  /// reaches for [microLabel] at larger sizes the sheet never wrote down.
+  /// Each step below is deliberate and reviewed; this list exists so the
+  /// next feature copies from it instead of picking a new number:
+  ///
+  ///  - 8 (the default) — the base label size for the tightest chrome:
+  ///    tower-build cards, dock pills, chips, and other high-density
+  ///    controls.
+  ///  - 9 — supporting/secondary text one step up from the base: a subtitle
+  ///    under a title (e.g. "Level 3 • Piercing"), feedback text, badges.
+  ///  - 10 — a card title with a little more room to read; currently only
+  ///    the tech-tree node label inside its fixed-width card.
+  ///  - 11 — section and detail labels inside expanded panels, and the
+  ///    caption beside a numeral-heavy [readout] (e.g. "Targeting",
+  ///    "SPECIALIZE - LV 4", a cost figure's label).
+  ///  - 13 — a primary, tappable call-to-action label inside a t3 sheet
+  ///    (e.g. the stage-briefing Launch/Retry button); the largest step,
+  ///    reserved for the one label per sheet that reads as an action.
+  ///
+  /// Do not add a new size without updating this list.
   static TextStyle microLabel({Color? color, double size = 8}) {
     final resolved = color ?? OrionUiTheme.dark.textMuted;
     if (resolved == OrionUiTheme.dark.textPrimary) {
@@ -84,12 +106,22 @@ class OrionReadout extends StatelessWidget {
     required this.color,
     this.denominator,
     this.size = 24,
+    this.maxLines,
+    this.overflow,
+    this.textScaler,
   });
 
   final String value;
   final Color color;
   final String? denominator;
   final double size;
+
+  /// Applied to both the value and denominator [Text]s, unset by default —
+  /// matching a plain [Text] until a caller opts in (e.g. a constrained
+  /// [Flexible] row that must ellipsize and honour text-size preferences).
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final TextScaler? textScaler;
 
   @override
   Widget build(BuildContext context) {
@@ -99,14 +131,26 @@ class OrionReadout extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.baseline,
       textBaseline: TextBaseline.alphabetic,
       children: [
-        Text(
-          value,
-          style: OrionTypography.readout(size: size, color: color),
+        // Flexible, not a plain Text: the denominator is short and keeps its
+        // natural width, so under a tight constraint (a Flexible ancestor at
+        // small widths) it is the value that must be able to shrink and
+        // ellipsize instead of the Row overflowing.
+        Flexible(
+          child: Text(
+            value,
+            maxLines: maxLines,
+            overflow: overflow,
+            textScaler: textScaler,
+            style: OrionTypography.readout(size: size, color: color),
+          ),
         ),
         if (denominator != null)
           Text(
             '/$denominator',
-            style: OrionTypography.readout(size: size * 0.45, color: muted),
+            maxLines: maxLines,
+            overflow: overflow,
+            textScaler: textScaler,
+            style: OrionTypography.readout(size: size * 0.62, color: muted),
           ),
       ],
     );

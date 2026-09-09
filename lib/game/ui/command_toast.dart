@@ -10,7 +10,7 @@ class CommandToast extends StatefulWidget {
   const CommandToast({
     super.key,
     required this.feedback,
-    this.visibleDuration = const Duration(milliseconds: 2400),
+    this.visibleDuration = orionHullPulseDuration,
   });
 
   final String? feedback;

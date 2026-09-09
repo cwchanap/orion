@@ -536,8 +536,10 @@ void main() {
 
     // Health and credits numbers are the primary readouts: one theme step
     // above the stage chip's label text so they no longer read as small
-    // button labels.
-    for (final value in ['20/20', '150']) {
+    // button labels. Base health renders through OrionReadout, so the
+    // whole-health value is its own Text node ('20'), separate from its
+    // muted '/20' denominator.
+    for (final value in ['20', '150']) {
       final text = tester.widget<Text>(find.text(value));
       expect(
         text.style?.fontSize,
