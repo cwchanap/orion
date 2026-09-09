@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tech_tree_view.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
@@ -466,6 +467,84 @@ void main() {
     await tester.pump();
     expect(backInvoked, isTrue);
   });
+
+  testWidgets('_TechNode label color differs across purchased, affordable and '
+      'locked states', (tester) async {
+    // Regression coverage for a bug where the muted-label rule
+    // ("microLabel cannot be white") was satisfied by deleting the
+    // node's purchased/affordable/locked conditional and collapsing the
+    // label to a single flat color. Assert the actual resolved
+    // TextStyle.color per state so a future collapse back to one color
+    // fails here, the way world_map_command_deck_test.dart does for the
+    // map's stage-node labels.
+    final progress = progressWithRanks(const [3, 3, 1]); // 7 earned
+    final techTree = CampaignTechTree(
+      purchased: {CampaignTechUpgrade.solarCapacitors}, // spent 3, unspent 4
+    );
+    await pumpTree(
+      tester,
+      progress: progress,
+      techTree: techTree,
+      onPurchase: (_) {},
+      onBack: () async {},
+    );
+
+    Color nodeLabelColor(CampaignTechUpgrade upgrade) {
+      final text = tester.widget<Text>(
+        find.descendant(
+          of: nodeFinder(upgrade),
+          matching: find.text(upgrade.label),
+        ),
+      );
+      return text.style!.color!;
+    }
+
+    // Solar Capacitors: purchased -> naniteGreen.
+    final purchasedColor = nodeLabelColor(CampaignTechUpgrade.solarCapacitors);
+    // Hardened Core: costs 4, unspent is 4 -> affordable but unpurchased
+    // -> systemCyan.
+    final affordableColor = nodeLabelColor(CampaignTechUpgrade.hardenedCore);
+    // Cryo Coolant: costs 5, unspent is 4 -> locked/unaffordable ->
+    // textMuted.
+    final lockedColor = nodeLabelColor(CampaignTechUpgrade.cryoCoolant);
+
+    const uiTheme = OrionUiTheme.dark;
+    expect(purchasedColor, uiTheme.naniteGreen);
+    expect(affordableColor, uiTheme.systemCyan);
+    expect(lockedColor, uiTheme.textMuted);
+
+    expect(purchasedColor, isNot(equals(affordableColor)));
+    expect(affordableColor, isNot(equals(lockedColor)));
+    expect(purchasedColor, isNot(equals(lockedColor)));
+  });
+
+  testWidgets(
+    '_TechDetail heading resolves to systemViolet, never textPrimary',
+    (tester) async {
+      // Regression coverage for the same muted-label failure mode: the
+      // detail panel heading used to be textPrimary before the design-
+      // system migration and must now resolve to the panel's own
+      // systemViolet border accent, not collapse back to textPrimary.
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      final first = CampaignTechUpgrade.values.first;
+      final heading = tester.widget<Text>(
+        find.descendant(
+          of: detailFinder(first),
+          matching: find.text(first.label),
+        ),
+      );
+
+      const uiTheme = OrionUiTheme.dark;
+      expect(heading.style!.color, uiTheme.systemViolet);
+      expect(heading.style!.color, isNot(equals(uiTheme.textPrimary)));
+    },
+  );
 
   testWidgets('capture scene 1g fixture', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
