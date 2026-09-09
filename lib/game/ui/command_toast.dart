@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'mission_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 class CommandToast extends StatefulWidget {
@@ -186,10 +187,7 @@ class _CommandToastMessageState extends State<_CommandToastMessage> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textScaler: widget.textScaler,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: widget.toneColor,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: OrionTypography.microLabel(color: widget.toneColor),
               ),
             )
           : const SizedBox.shrink(),
