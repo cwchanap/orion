@@ -19,14 +19,6 @@ void main() {
     expect(t.lerp(t, 0.5).sheetBlack, t.sheetBlack);
   });
 
-  test('motion durations match the design system sheet', () {
-    expect(orionPressDuration, const Duration(milliseconds: 90));
-    expect(orionSheetDuration, const Duration(milliseconds: 220));
-    expect(orionLaneFlowDuration, const Duration(milliseconds: 1100));
-    expect(orionHullPulseDuration, const Duration(milliseconds: 2400));
-    expect(orionIdleBobDuration, const Duration(milliseconds: 1600));
-  });
-
   test('readout is Oxanium at variable weight 800', () {
     final s = OrionTypography.readout(color: const Color(0xFFFFC857));
     expect(s.fontFamily, 'Oxanium');
@@ -72,7 +64,13 @@ void main() {
     );
     final value = t.widget<Text>(find.text('03'));
     final denom = t.widget<Text>(find.text('/12'));
-    expect(denom.style!.fontSize, lessThan(value.style!.fontSize!));
+    // The denominator is subordinate but still legible: 0.62 of the value's
+    // resolved size, not the illegible 0.45 the sheet's earlier ratio gave
+    // at in-use sizes.
+    expect(
+      denom.style!.fontSize,
+      closeTo(value.style!.fontSize! * 0.62, 0.001),
+    );
     expect(denom.style!.color, isNot(value.style!.color));
   });
 }

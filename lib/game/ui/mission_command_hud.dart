@@ -123,15 +123,14 @@ class _BaseHealthAnchor extends StatelessWidget {
             Icon(Icons.shield_outlined, color: uiTheme.systemCyan, size: 18),
             const SizedBox(width: 4),
             Flexible(
-              child: Text(
-                '${snapshot.baseHealth}/${snapshot.startingBaseHealth}',
+              child: OrionReadout(
+                value: '${snapshot.baseHealth}',
+                denominator: '${snapshot.startingBaseHealth}',
+                color: uiTheme.textPrimary,
+                size: 16,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: textScaler,
-                style: OrionTypography.readout(
-                  size: 16,
-                  color: uiTheme.textPrimary,
-                ),
               ),
             ),
           ],
@@ -198,15 +197,14 @@ class _MissionStatusAnchor extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Flexible(
-                child: Text(
-                  '${snapshot.waveNumber}/${snapshot.waveTotal}',
+                child: OrionReadout(
+                  value: '${snapshot.waveNumber}',
+                  denominator: '${snapshot.waveTotal}',
+                  color: uiTheme.systemCyan,
+                  size: 14,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textScaler: textScaler,
-                  style: OrionTypography.readout(
-                    size: 14,
-                    color: uiTheme.systemCyan,
-                  ),
                 ),
               ),
               const SizedBox(width: 6),
