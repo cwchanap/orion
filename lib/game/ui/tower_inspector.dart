@@ -6,6 +6,7 @@ import '../models/game_models.dart';
 import '../util/format.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'tower_stat_scale.dart';
 
@@ -120,20 +121,16 @@ class _InspectorBody extends StatelessWidget {
                 children: [
                   Text(
                     '${tower.type.label} Tower',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: uiTheme.textPrimary,
-                      fontWeight: FontWeight.w900,
-                    ),
+                    style: OrionTypography.title(color: uiTheme.textPrimary),
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  OrionText.micro(
                     tower.specialization == null
                         ? 'Level ${tower.level}'
                         : 'Level ${tower.level} • '
                               '${tower.specialization!.label}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelMedium?.copyWith(color: uiTheme.textMuted),
+                    color: uiTheme.textMuted,
+                    size: 9,
                   ),
                 ],
               ),
@@ -267,13 +264,7 @@ class _StatRow extends StatelessWidget {
           children: [
             SizedBox(
               width: 76,
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: uiTheme.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+              child: OrionText.micro(label, color: uiTheme.textMuted),
             ),
             Expanded(
               child: ExcludeSemantics(
@@ -294,9 +285,9 @@ class _StatRow extends StatelessWidget {
               child: Text(
                 value,
                 textAlign: TextAlign.end,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                style: OrionTypography.readout(
+                  size: 11,
                   color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
@@ -365,12 +356,10 @@ class _ProgressionActions extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        OrionText.micro(
           'SPECIALIZE - LV ${tower.level + 1}',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: uiTheme.textMuted,
-            fontWeight: FontWeight.w800,
-          ),
+          color: uiTheme.textMuted,
+          size: 11,
         ),
         const SizedBox(height: 6),
         Row(
@@ -450,18 +439,18 @@ class _SpecializationCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w800,
+                style: OrionTypography.microLabel(
+                  size: 11,
+                  color: uiTheme.systemViolet,
                 ),
               ),
               const SizedBox(height: 2),
               if (cost != null)
                 Text(
                   '$cost',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  style: OrionTypography.readout(
+                    size: 11,
                     color: uiTheme.creditGold,
-                    fontWeight: FontWeight.w900,
                   ),
                 ),
             ],
@@ -490,13 +479,7 @@ class _TargetingActions extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Targeting',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: uiTheme.textMuted,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        OrionText.micro('Targeting', color: uiTheme.textMuted, size: 11),
         const SizedBox(height: 4),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
