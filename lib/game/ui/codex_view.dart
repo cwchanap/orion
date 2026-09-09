@@ -447,8 +447,12 @@ class _CodexViewState extends State<CodexView> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: uiTheme.frameSteel,
+        // panelRaised fills, frameSteel outlines: the pairing every other
+        // filled chip in the UI uses (see next_wave_scanner.dart). frameSteel
+        // is a border accent everywhere else, never a fill.
+        color: uiTheme.panelRaised,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: uiTheme.frameSteel),
       ),
       child: Text(
         text,
