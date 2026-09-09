@@ -286,10 +286,6 @@ class WorldMapAction extends StatelessWidget {
             child: MissionSurface(
               padding: const EdgeInsets.all(10),
               radius: 12,
-              // Enabled reads as the stronger, cyan-bordered tier; disabled
-              // settles to the quiet steel-bordered default (the icon color
-              // below carries the rest of the enabled/disabled contrast).
-              emphasized: enabled,
               child: Icon(
                 Icons.map_outlined,
                 size: 24,
