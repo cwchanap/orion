@@ -443,12 +443,11 @@ class _CodexViewState extends State<CodexView> {
   }
 
   Widget _badge(String text) {
-    final theme = Theme.of(context);
     final uiTheme = OrionUiTheme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
+        color: uiTheme.frameSteel,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Text(

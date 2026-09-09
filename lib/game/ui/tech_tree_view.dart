@@ -48,7 +48,6 @@ class _TechTreeViewState extends State<TechTreeView> {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final theme = Theme.of(context);
     final progress = widget.progress;
     final techTree = widget.techTree;
     final earned = CampaignTechTree.totalMedalRank(progress);
@@ -110,7 +109,7 @@ class _TechTreeViewState extends State<TechTreeView> {
                       widget.feedback!,
                       style: OrionTypography.microLabel(
                         size: 9,
-                        color: theme.colorScheme.error,
+                        color: uiTheme.dangerRed,
                       ),
                     ),
                   ),
