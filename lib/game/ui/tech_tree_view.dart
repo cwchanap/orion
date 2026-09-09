@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../campaign/campaign_progress.dart';
 import '../campaign/tech_tree.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 /// Full-screen panel reached from the world map: five independent tech-tree
@@ -89,13 +90,8 @@ class _TechTreeViewState extends State<TechTreeView> {
                           'Campaign Tech Tree',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: theme.textTheme.titleSmall?.copyWith(
+                          style: OrionTypography.title(
                             color: uiTheme.textPrimary,
-                            fontWeight: FontWeight.w900,
-                            letterSpacing: 1.1,
-                            shadows: const [
-                              Shadow(color: Colors.black, blurRadius: 6),
-                            ],
                           ),
                         ),
                       ),
@@ -112,7 +108,8 @@ class _TechTreeViewState extends State<TechTreeView> {
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
                     child: Text(
                       widget.feedback!,
-                      style: theme.textTheme.bodyMedium?.copyWith(
+                      style: OrionTypography.microLabel(
+                        size: 9,
                         color: theme.colorScheme.error,
                       ),
                     ),
@@ -245,9 +242,9 @@ class _BankChip extends StatelessWidget {
             const SizedBox(width: 3),
             Text(
               '$unspent',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              style: OrionTypography.readout(
+                size: 11,
                 color: uiTheme.textPrimary,
-                fontWeight: FontWeight.w800,
               ),
             ),
           ],
@@ -292,9 +289,9 @@ class _BankBar extends StatelessWidget {
                 textScaler: MediaQuery.textScalerOf(
                   context,
                 ).clamp(maxScaleFactor: 1.15),
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                style: OrionTypography.readout(
+                  size: 14,
                   color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -323,7 +320,6 @@ class _TechNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final theme = Theme.of(context);
     // Purchased nodes glow green; affordable ones cyan; the rest stay muted.
     final accent = isPurchased
         ? uiTheme.naniteGreen
@@ -401,13 +397,12 @@ class _TechNode extends StatelessWidget {
                       textScaler: MediaQuery.textScalerOf(
                         context,
                       ).clamp(maxScaleFactor: 1.15),
-                      style: theme.textTheme.labelSmall?.copyWith(
-                        fontSize: 10,
-                        color: isPurchased || canAfford
-                            ? uiTheme.textPrimary
-                            : uiTheme.textMuted,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.3,
+                      // Muted-label rule forbids textPrimary here; reuse the
+                      // node's own purchased/affordable/locked accent instead
+                      // of collapsing to a single flat tone.
+                      style: OrionTypography.microLabel(
+                        size: 10,
+                        color: accent,
                       ),
                     ),
                     const SizedBox(height: 2),
@@ -418,7 +413,7 @@ class _TechNode extends StatelessWidget {
                       textScaler: MediaQuery.textScalerOf(
                         context,
                       ).clamp(maxScaleFactor: 1.15),
-                      style: theme.textTheme.labelSmall?.copyWith(
+                      style: OrionTypography.microLabel(
                         color: isPurchased || canAfford
                             ? uiTheme.naniteGreen
                             : uiTheme.textMuted,
@@ -436,9 +431,9 @@ class _TechNode extends StatelessWidget {
                         const SizedBox(width: 3),
                         Text(
                           '${upgrade.cost}',
-                          style: theme.textTheme.labelSmall?.copyWith(
+                          style: OrionTypography.readout(
+                            size: 11,
                             color: uiTheme.creditGold,
-                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ],
@@ -485,7 +480,6 @@ class _TechDetail extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final theme = Theme.of(context);
     final isPurchased = techTree.isPurchased(upgrade);
     // Single source of truth for affordability: the domain rule covers the
     // purchased and unspent-points checks; the view only adds its own
@@ -513,42 +507,42 @@ class _TechDetail extends StatelessWidget {
           children: [
             Text(
               upgrade.label,
-              style: theme.textTheme.titleMedium?.copyWith(
-                color: uiTheme.textPrimary,
-                fontWeight: FontWeight.w800,
+              // Detail-panel heading for the selected node; reuses the
+              // panel's own systemViolet border accent rather than the
+              // screen title role (already used once above) or the
+              // forbidden textPrimary. Sized as the established sub-heading
+              // scale, since its own description sits directly below it.
+              style: OrionTypography.microLabel(
+                size: 11,
+                color: uiTheme.systemViolet,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               upgrade.description,
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: OrionTypography.microLabel(
+                size: 9,
                 color: uiTheme.textMuted,
               ),
             ),
             const SizedBox(height: 4),
             Text(
               upgrade.effectLabel,
-              style: theme.textTheme.labelLarge?.copyWith(
+              style: OrionTypography.microLabel(
+                size: 11,
                 color: uiTheme.naniteGreen,
-                fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               'Cost: ${upgrade.cost} pts',
-              style: theme.textTheme.bodySmall?.copyWith(
+              style: OrionTypography.microLabel(
+                size: 9,
                 color: uiTheme.textMuted,
               ),
             ),
             const SizedBox(height: 10),
-            _buildAction(
-              theme,
-              uiTheme,
-              isPurchased,
-              canPurchase,
-              canAfford,
-              unspent,
-            ),
+            _buildAction(uiTheme, isPurchased, canPurchase, canAfford, unspent),
           ],
         ),
       ),
@@ -556,7 +550,6 @@ class _TechDetail extends StatelessWidget {
   }
 
   Widget _buildAction(
-    ThemeData theme,
     OrionUiTheme uiTheme,
     bool isPurchased,
     bool canPurchase,
@@ -578,9 +571,9 @@ class _TechDetail extends StatelessWidget {
               const SizedBox(width: 5),
               Text(
                 'Purchased',
-                style: theme.textTheme.labelLarge?.copyWith(
+                style: OrionTypography.microLabel(
+                  size: 11,
                   color: uiTheme.naniteGreen,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
             ],
