@@ -8,6 +8,7 @@ import '../campaign/stage_reward_label.dart';
 import 'campaign_presentation.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'sector_map_layout.dart';
 
@@ -270,11 +271,10 @@ class _EmptySectorMap extends StatelessWidget {
         Center(
           child: OrionSurface(
             tier: OrionSurfaceTier.t2,
-            child: Text(
+            child: OrionText.micro(
               'No stages available',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyLarge?.copyWith(color: uiTheme.textPrimary),
+              color: uiTheme.textMuted,
+              size: 9,
             ),
           ),
         ),
@@ -346,12 +346,7 @@ class _SectorHeader extends StatelessWidget {
                 'ORION SECTOR',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                  color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.1,
-                  shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
-                ),
+                style: OrionTypography.title(color: uiTheme.textPrimary),
               ),
             ),
             Semantics(
@@ -404,10 +399,7 @@ class _SectorHeader extends StatelessWidget {
                   feedback!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: uiTheme.textPrimary,
-                    shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
-                  ),
+                  style: OrionTypography.microLabel(color: uiTheme.textMuted),
                 ),
               ),
             ],
@@ -444,13 +436,7 @@ class _HeaderBadge extends StatelessWidget {
           children: [
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 3),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                color: color,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
+            Text(label, style: OrionTypography.readout(size: 11, color: color)),
           ],
         ),
       ),
@@ -690,14 +676,8 @@ class _IllustratedStageNode extends StatelessWidget {
                       textScaler: MediaQuery.textScalerOf(
                         context,
                       ).clamp(maxScaleFactor: 1.15),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: isLocked
-                            ? uiTheme.textMuted
-                            : uiTheme.textPrimary,
-                        fontWeight: FontWeight.w800,
-                        shadows: const [
-                          Shadow(color: Colors.black, blurRadius: 4),
-                        ],
+                      style: OrionTypography.microLabel(
+                        color: uiTheme.textMuted,
                       ),
                     ),
                   ),
