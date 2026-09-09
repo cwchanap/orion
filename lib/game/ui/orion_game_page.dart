@@ -24,6 +24,7 @@ import 'mission_command_dock.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
 import 'orion_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
 import 'stage_briefing_sheet.dart';
@@ -889,21 +890,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       Expanded(
                         child: Text(
                           'Reset Campaign',
-                          style: Theme.of(context).textTheme.titleLarge
-                              ?.copyWith(
-                                color: uiTheme.textPrimary,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style: OrionTypography.title(
+                            color: uiTheme.textPrimary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Text(
+                  OrionText.micro(
                     'Clear all campaign progress?',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodyMedium?.copyWith(color: uiTheme.textMuted),
+                    color: uiTheme.textMuted,
+                    size: 9,
                   ),
                   const SizedBox(height: 16),
                   Row(

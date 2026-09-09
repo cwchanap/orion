@@ -4,6 +4,7 @@ import '../models/game_models.dart';
 import 'mission_collapsible.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 class NextWaveScanner extends StatefulWidget {
@@ -262,11 +263,7 @@ class _ExpandedPreviewBody extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: textScaler,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                ),
+                style: OrionTypography.title(color: uiTheme.textPrimary),
               ),
             ),
           ],
@@ -300,9 +297,9 @@ class _ExpandedPreviewBody extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textScaler: textScaler,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      style: OrionTypography.microLabel(
+                        size: 9,
                         color: uiTheme.creditGold,
-                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
@@ -374,10 +371,9 @@ class _SectionLabel extends StatelessWidget {
             // count at any accessibility text scale; ellipsis absorbs the
             // overflow instead.
             textScaler: TextScaler.noScaling,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            style: OrionTypography.microLabel(
+              size: 11,
               color: uiTheme.textMuted,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.2,
             ),
           ),
         ),
@@ -452,11 +448,10 @@ class _PreviewGroupRow extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textScaler: textScaler,
-                          style: Theme.of(context).textTheme.labelMedium
-                              ?.copyWith(
-                                color: uiTheme.textPrimary,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style: OrionTypography.readout(
+                            size: 11,
+                            color: uiTheme.textPrimary,
+                          ),
                         ),
                       ),
                     ),
@@ -468,11 +463,9 @@ class _PreviewGroupRow extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textScaler: textScaler,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: uiTheme.textMuted,
-                                fontWeight: FontWeight.w700,
-                              ),
+                          style: OrionTypography.microLabel(
+                            color: uiTheme.textMuted,
+                          ),
                         ),
                       ),
                     ),
@@ -569,9 +562,7 @@ class _RecommendationRow extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         textScaler: textScaler,
-        style: Theme.of(
-          context,
-        ).textTheme.labelSmall?.copyWith(color: uiTheme.textMuted),
+        style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
       );
     }
     return Wrap(
@@ -593,10 +584,7 @@ class _RecommendationRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: textScaler,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: uiTheme.systemViolet,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: OrionTypography.microLabel(color: uiTheme.systemViolet),
               ),
               const SizedBox(width: 3),
               Icon(Icons.check_circle, color: uiTheme.naniteGreen, size: 14),
@@ -629,10 +617,7 @@ class _ModifierTitle extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textScaler: textScaler,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: uiTheme.textMuted,
-            fontWeight: FontWeight.w700,
-          ),
+          style: OrionTypography.microLabel(color: uiTheme.textMuted),
         ),
       ),
     );
