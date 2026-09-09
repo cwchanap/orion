@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'mission_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 Color baseHealthColor(GameSnapshot snapshot, OrionUiTheme uiTheme) {
@@ -127,9 +128,9 @@ class _BaseHealthAnchor extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: textScaler,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                style: OrionTypography.readout(
+                  size: 16,
                   color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -191,10 +192,7 @@ class _MissionStatusAnchor extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textScaler: textScaler,
             textAlign: TextAlign.center,
-            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-              color: uiTheme.textPrimary,
-              fontWeight: FontWeight.w700,
-            ),
+            style: OrionTypography.microLabel(color: uiTheme.textMuted),
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
@@ -205,9 +203,9 @@ class _MissionStatusAnchor extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textScaler: textScaler,
-                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                  style: OrionTypography.readout(
+                    size: 14,
                     color: uiTheme.systemCyan,
-                    fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
@@ -230,11 +228,10 @@ class _MissionStatusAnchor extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textScaler: textScaler,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  style: OrionTypography.microLabel(
                     color: snapshot.isPaused
                         ? uiTheme.warningOrange
                         : uiTheme.textMuted,
-                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ),
@@ -275,10 +272,7 @@ class _CreditsAnchor extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textScaler: textScaler,
             textAlign: TextAlign.end,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: uiTheme.creditGold,
-              fontWeight: FontWeight.w800,
-            ),
+            style: OrionTypography.readout(size: 16, color: uiTheme.creditGold),
           ),
         ),
       ],
