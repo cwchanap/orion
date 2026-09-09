@@ -4,6 +4,7 @@ import '../models/game_models.dart';
 import 'mission_command_hud.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'tower_inspector.dart';
 
@@ -277,11 +278,7 @@ class _PrimaryActionPill extends StatelessWidget {
                           textScaler: MediaQuery.textScalerOf(
                             context,
                           ).clamp(maxScaleFactor: 1.15),
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: foreground,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style: OrionTypography.microLabel(color: foreground),
                         ),
                       ),
                     ],
@@ -432,10 +429,8 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
                       child: Text(
                         'DROP TO BUILD',
                         textScaler: textScaler,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        style: OrionTypography.microLabel(
                           color: OrionUiTheme.of(context).systemCyan,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1,
                         ),
                       ),
                     ),
@@ -579,11 +574,8 @@ class _TowerBuildCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       textScaler: textScaler,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: unlocked
-                            ? uiTheme.textPrimary
-                            : uiTheme.textMuted,
-                        fontWeight: FontWeight.w700,
+                      style: OrionTypography.microLabel(
+                        color: uiTheme.textMuted,
                       ),
                     ),
                     const SizedBox(height: 1),
@@ -602,13 +594,12 @@ class _TowerBuildCard extends StatelessWidget {
                           '${stats.cost}',
                           maxLines: 1,
                           textScaler: textScaler,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: affordable && unlocked
-                                    ? uiTheme.creditGold
-                                    : uiTheme.textMuted,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style: OrionTypography.readout(
+                            size: 11,
+                            color: affordable && unlocked
+                                ? uiTheme.creditGold
+                                : uiTheme.textMuted,
+                          ),
                         ),
                       ],
                     ),
@@ -691,9 +682,8 @@ class _TowerBuildCard extends StatelessWidget {
             affordable
                 ? '−${stats.cost} → ${gold - stats.cost}'
                 : 'need ${stats.cost - gold} more',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            style: OrionTypography.microLabel(
               color: affordable ? uiTheme.creditGold : uiTheme.dangerRed,
-              fontWeight: FontWeight.w800,
             ),
           ),
         ),
@@ -713,11 +703,7 @@ class _TowerBuildCard extends StatelessWidget {
         child: Center(
           child: Text(
             'LIFTED',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: uiTheme.textMuted,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-            ),
+            style: OrionTypography.microLabel(color: uiTheme.textMuted),
           ),
         ),
       ),

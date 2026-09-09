@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/game_models.dart';
 import 'mission_collapsible.dart';
 import 'mission_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 /// Mission-only acquired-module details: a compact "Modules n" trigger that
@@ -39,9 +40,12 @@ class AcquiredRunModuleControl extends StatelessWidget {
 
   Widget _buildCollapsed(BuildContext context, VoidCallback toggle) {
     final uiTheme = OrionUiTheme.of(context);
+    // Labels are muted-only under the system sheet; the active (tappable)
+    // state reads via the system-cyan accent instead of the forbidden
+    // near-white, mirroring the emphasized MissionSurface border below.
     final foreground = collapseRequested
         ? uiTheme.textMuted
-        : uiTheme.textPrimary;
+        : uiTheme.systemCyan;
     return Semantics(
       key: const ValueKey('acquired-modules-collapsed'),
       container: true,
@@ -63,11 +67,7 @@ class AcquiredRunModuleControl extends StatelessWidget {
                 'Modules ${moduleIds.length}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: foreground,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                ),
+                style: OrionTypography.microLabel(color: foreground),
               ),
             ),
           ),
@@ -131,30 +131,23 @@ class _AcquiredModuleRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final textTheme = Theme.of(context).textTheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         Text(
           definition.title,
-          style: textTheme.titleSmall?.copyWith(
-            color: uiTheme.textPrimary,
-            fontWeight: FontWeight.w800,
-          ),
+          style: OrionTypography.microLabel(color: uiTheme.textMuted),
         ),
         const SizedBox(height: 2),
         Text(
           definition.effectText,
-          style: textTheme.bodySmall?.copyWith(color: uiTheme.textPrimary),
+          style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
         ),
         const SizedBox(height: 2),
         Text(
           definition.affinity.label,
-          style: textTheme.labelSmall?.copyWith(
-            color: uiTheme.systemCyan,
-            fontWeight: FontWeight.w700,
-          ),
+          style: OrionTypography.microLabel(color: uiTheme.systemCyan),
         ),
       ],
     );
