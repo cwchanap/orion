@@ -274,7 +274,7 @@ class _EmptySectorMap extends StatelessWidget {
             child: OrionText.micro(
               'No stages available',
               color: uiTheme.textMuted,
-              size: 9,
+              size: 11,
             ),
           ),
         ),

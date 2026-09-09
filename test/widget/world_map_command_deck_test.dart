@@ -6,8 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/ui/campaign_presentation.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
@@ -274,6 +276,56 @@ void main() {
       findsNothing,
     );
   });
+
+  testWidgets(
+    'stage map label color distinguishes locked, unlocked and cleared '
+    'states',
+    (tester) async {
+      // Regression coverage for a bug where the map label's color was
+      // flattened to an unconditional uiTheme.textMuted, making every node
+      // (locked, available, and cleared) read identically. Assert on the
+      // actual resolved TextStyle.color for each state rather than on
+      // widget presence, so a future collapse back to one color fails here.
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(
+            bestResultsByStageId: const {
+              'outpost-alpha': StageResult(
+                medal: StageMedal.gold,
+                bestBaseHealth: 20,
+              ),
+            },
+          ),
+        ),
+      );
+
+      Color labelColor(String stageId, String label) {
+        final text = tester.widget<Text>(
+          find.descendant(
+            of: find.byKey(ValueKey('sector-stage-$stageId')),
+            matching: find.text(label),
+          ),
+        );
+        return text.style!.color!;
+      }
+
+      // Outpost Alpha: cleared with a gold medal -> medal color.
+      final clearedColor = labelColor('outpost-alpha', 'Alpha');
+      // Nebula Relay: unlocked by Outpost Alpha's clear -> systemCyan.
+      final unlockedColor = labelColor('nebula-relay', 'Relay');
+      // Singularity Core: still locked -> textMuted.
+      final lockedColor = labelColor('singularity-core', 'Core');
+
+      const uiTheme = OrionUiTheme.dark;
+      expect(lockedColor, uiTheme.textMuted);
+      expect(unlockedColor, uiTheme.systemCyan);
+      expect(clearedColor, medalColor(uiTheme, StageMedal.gold));
+
+      expect(lockedColor, isNot(equals(unlockedColor)));
+      expect(unlockedColor, isNot(equals(clearedColor)));
+      expect(lockedColor, isNot(equals(clearedColor)));
+    },
+  );
 
   testWidgets('every stage node keeps a >=48dp semantic tap target', (
     tester,

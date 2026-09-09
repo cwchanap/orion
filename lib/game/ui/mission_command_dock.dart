@@ -575,7 +575,13 @@ class _TowerBuildCard extends StatelessWidget {
                       textAlign: TextAlign.center,
                       textScaler: textScaler,
                       style: OrionTypography.microLabel(
-                        color: uiTheme.textMuted,
+                        // The muted-label rule forbids textPrimary here, so
+                        // fall back to the card's own unlocked accent
+                        // (systemCyan) instead of collapsing both states to
+                        // textMuted.
+                        color: unlocked
+                            ? uiTheme.systemCyan
+                            : uiTheme.textMuted,
                       ),
                     ),
                     const SizedBox(height: 1),
