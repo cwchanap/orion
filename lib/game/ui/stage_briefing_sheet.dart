@@ -8,6 +8,7 @@ import '../models/game_models.dart';
 import 'campaign_presentation.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 /// Full-height modal stage briefing (scene 1b): full-bleed wide stage-key-art
@@ -72,13 +73,9 @@ class StageBriefingSheet extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   stage.name,
-                                  style: Theme.of(context)
-                                      .textTheme
-                                      .headlineSmall
-                                      ?.copyWith(
-                                        color: uiTheme.textPrimary,
-                                        fontWeight: FontWeight.w900,
-                                      ),
+                                  style: OrionTypography.title(
+                                    color: uiTheme.textPrimary,
+                                  ),
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -91,8 +88,10 @@ class StageBriefingSheet extends StatelessWidget {
                           const SizedBox(height: 6),
                           Text(
                             stage.description,
-                            style: Theme.of(context).textTheme.bodyMedium
-                                ?.copyWith(color: uiTheme.textMuted),
+                            style: OrionTypography.microLabel(
+                              size: 9,
+                              color: uiTheme.textMuted,
+                            ),
                           ),
                           const SizedBox(height: 16),
                           Row(
@@ -126,12 +125,10 @@ class StageBriefingSheet extends StatelessWidget {
                           const SizedBox(height: 16),
                           Text(
                             'CONDITIONS',
-                            style: Theme.of(context).textTheme.labelSmall
-                                ?.copyWith(
-                                  color: uiTheme.systemCyan,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1.1,
-                                ),
+                            style: OrionTypography.microLabel(
+                              size: 11,
+                              color: uiTheme.systemCyan,
+                            ),
                           ),
                           const SizedBox(height: 7),
                           for (final entry in metadata) ...[
@@ -234,13 +231,10 @@ class StageBriefingSheet extends StatelessWidget {
                                       child: Text(
                                         actionLabel,
                                         maxLines: 1,
-                                        style: Theme.of(context)
-                                            .textTheme
-                                            .titleLarge
-                                            ?.copyWith(
-                                              color: uiTheme.textPrimary,
-                                              fontWeight: FontWeight.w900,
-                                            ),
+                                        style: OrionTypography.microLabel(
+                                          size: 13,
+                                          color: uiTheme.systemCyan,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -329,10 +323,7 @@ class _BriefingStatTile extends StatelessWidget {
             child: Text(
               value,
               textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                color: uiTheme.textPrimary,
-                fontWeight: FontWeight.w900,
-              ),
+              style: OrionTypography.readout(color: uiTheme.textPrimary),
             ),
           ),
           const SizedBox(height: 2),
@@ -341,11 +332,7 @@ class _BriefingStatTile extends StatelessWidget {
             textAlign: TextAlign.center,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: uiTheme.textMuted,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-            ),
+            style: OrionTypography.microLabel(color: uiTheme.textMuted),
           ),
         ],
       ),
@@ -369,14 +356,7 @@ class _BriefingBadge extends StatelessWidget {
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: color,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 0.8,
-          ),
-        ),
+        child: Text(label, style: OrionTypography.microLabel(color: color)),
       ),
     );
   }
@@ -412,18 +392,15 @@ class _BriefingIntelRow extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 0.6,
-                  ),
+                  style: OrionTypography.microLabel(size: 11, color: color),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   detail,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: uiTheme.textPrimary),
+                  style: OrionTypography.microLabel(
+                    size: 9,
+                    color: uiTheme.textMuted,
+                  ),
                 ),
               ],
             ),
