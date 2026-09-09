@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'orion_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 class RunModuleDraftPanel extends StatelessWidget {
@@ -17,7 +18,6 @@ class RunModuleDraftPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final textTheme = Theme.of(context).textTheme;
     return Material(
       color: uiTheme.voidBlack.withValues(alpha: 0.92),
       child: SafeArea(
@@ -33,10 +33,7 @@ class RunModuleDraftPanel extends StatelessWidget {
                 Text(
                   'Salvage Module ${offer.draftNumber} of ${offer.draftTotal}',
                   textAlign: TextAlign.center,
-                  style: textTheme.headlineSmall?.copyWith(
-                    color: uiTheme.textPrimary,
-                    fontWeight: FontWeight.w900,
-                  ),
+                  style: OrionTypography.title(color: uiTheme.textPrimary),
                 ),
                 const SizedBox(height: 12),
                 for (final id in offer.moduleIds) ...[
@@ -64,7 +61,6 @@ class _RunModuleCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final textTheme = Theme.of(context).textTheme;
     return Semantics(
       button: true,
       enabled: true,
@@ -89,24 +85,24 @@ class _RunModuleCard extends StatelessWidget {
                 children: [
                   Text(
                     definition.title,
-                    style: textTheme.titleMedium?.copyWith(
-                      color: uiTheme.textPrimary,
-                      fontWeight: FontWeight.w800,
+                    style: OrionTypography.microLabel(
+                      size: 11,
+                      color: uiTheme.textMuted,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     definition.effectText,
-                    style: textTheme.bodyMedium?.copyWith(
-                      color: uiTheme.textPrimary,
+                    style: OrionTypography.microLabel(
+                      size: 9,
+                      color: uiTheme.textMuted,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     definition.affinity.label,
-                    style: textTheme.labelMedium?.copyWith(
+                    style: OrionTypography.microLabel(
                       color: uiTheme.systemCyan,
-                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
@@ -153,9 +149,7 @@ class _AcquiredModuleLabel extends StatelessWidget {
         '${definition.title} — ${definition.effectText}',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: Theme.of(
-          context,
-        ).textTheme.labelMedium?.copyWith(color: uiTheme.textPrimary),
+        style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
       ),
     );
   }

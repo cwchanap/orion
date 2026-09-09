@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../feedback/feedback_preferences.dart';
+import 'orion_typography.dart';
+import 'orion_ui_theme.dart';
 
 /// Self-contained settings sheet for the two persisted feedback toggles.
 ///
@@ -26,7 +28,7 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final uiTheme = OrionUiTheme.of(context);
 
     return SafeArea(
       child: Padding(
@@ -38,9 +40,7 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
             children: [
               Text(
                 'Feedback',
-                style: theme.textTheme.headlineSmall?.copyWith(
-                  fontWeight: FontWeight.w700,
-                ),
+                style: OrionTypography.title(color: uiTheme.textPrimary),
               ),
               const SizedBox(height: 8),
               SwitchListTile(

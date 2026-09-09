@@ -4,6 +4,7 @@ import '../campaign/campaign_progress.dart';
 import 'mission_report_content.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
+import 'orion_typography.dart';
 import 'run_module_draft_panel.dart';
 import 'orion_ui_theme.dart';
 
@@ -180,7 +181,6 @@ class _ReportBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final theme = Theme.of(context);
     final reward = content.reward;
     final accent = _reportAccent(uiTheme, content);
     final result = content.result;
@@ -191,22 +191,13 @@ class _ReportBody extends StatelessWidget {
         Text(
           content.didWin ? 'Victory' : 'Mission Failed',
           textAlign: TextAlign.center,
-          style: theme.textTheme.labelMedium?.copyWith(
-            color: accent,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2.4,
-            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
-          ),
+          style: OrionTypography.microLabel(size: 11, color: accent),
         ),
         const SizedBox(height: 4),
         Text(
           content.stageName,
           textAlign: TextAlign.center,
-          style: theme.textTheme.headlineSmall?.copyWith(
-            color: uiTheme.textPrimary,
-            fontWeight: FontWeight.w900,
-            shadows: const [Shadow(color: Colors.black, blurRadius: 8)],
-          ),
+          style: OrionTypography.title(color: uiTheme.textPrimary),
         ),
         const SizedBox(height: 14),
         // Exactly one victory/defeat banner, selected from the real result.
@@ -238,20 +229,16 @@ class _ReportBody extends StatelessWidget {
         Text(
           content.outcomeText,
           textAlign: TextAlign.center,
-          style: theme.textTheme.bodyMedium?.copyWith(
-            color: uiTheme.textPrimary,
-            fontWeight: FontWeight.w700,
-            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
-          ),
+          style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
         ),
         if (content.didWin && content.comparisonText != null) ...[
           const SizedBox(height: 6),
           Text(
             content.comparisonText!,
             textAlign: TextAlign.center,
-            style: theme.textTheme.bodySmall?.copyWith(
+            style: OrionTypography.microLabel(
+              size: 9,
               color: uiTheme.textMuted,
-              shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
             ),
           ),
         ],
@@ -264,10 +251,9 @@ class _ReportBody extends StatelessWidget {
           content.moduleIds.isEmpty
               ? 'Salvage Modules'
               : 'Salvage Modules · ${content.moduleIds.length}',
-          style: theme.textTheme.titleMedium?.copyWith(
+          style: OrionTypography.microLabel(
+            size: 11,
             color: uiTheme.systemCyan,
-            fontWeight: FontWeight.w800,
-            shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
           ),
         ),
         const SizedBox(height: 8),
@@ -276,7 +262,8 @@ class _ReportBody extends StatelessWidget {
         else if (content.emptyModulesText != null)
           Text(
             content.emptyModulesText!,
-            style: theme.textTheme.bodyMedium?.copyWith(
+            style: OrionTypography.microLabel(
+              size: 9,
               color: uiTheme.textMuted,
             ),
           ),
@@ -284,23 +271,24 @@ class _ReportBody extends StatelessWidget {
           const SizedBox(height: 18),
           Text(
             reward.title,
-            style: theme.textTheme.titleMedium?.copyWith(
+            style: OrionTypography.microLabel(
+              size: 11,
               color: uiTheme.creditGold,
-              fontWeight: FontWeight.w800,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             reward.detail,
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: uiTheme.textPrimary,
+            style: OrionTypography.microLabel(
+              size: 9,
+              color: uiTheme.textMuted,
             ),
           ),
         ],
         const SizedBox(height: 18),
         Text(
           content.nextOpportunityText,
-          style: theme.textTheme.bodyMedium?.copyWith(color: uiTheme.textMuted),
+          style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
         ),
       ],
     );
@@ -344,10 +332,7 @@ class _SaveStateRow extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: stateColor,
-              fontWeight: FontWeight.w700,
-            ),
+            style: OrionTypography.microLabel(size: 9, color: stateColor),
           ),
         ),
       ],
@@ -392,9 +377,11 @@ class _MissionActionButton extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            color: foreground,
-            fontWeight: FontWeight.w700,
+          // Labels are muted-only under the system sheet; the enabled state
+          // reads via its accent instead of the forbidden near-white that
+          // the icon above still carries.
+          style: OrionTypography.microLabel(
+            color: enabled ? accent : uiTheme.textMuted,
           ),
         ),
       ],
