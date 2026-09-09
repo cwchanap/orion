@@ -49,7 +49,7 @@ abstract final class OrionTypography {
   ///    tower-build cards, dock pills, chips, and other high-density
   ///    controls.
   ///  - 9 — supporting/secondary text one step up from the base: a subtitle
-  ///    under a title (e.g. "Level 3 • Piercing"), feedback text, badges.
+  ///    under a title (e.g. "Level 3 • Piercing") and feedback text.
   ///  - 10 — a card title with a little more room to read; currently only
   ///    the tech-tree node label inside its fixed-width card.
   ///  - 11 — section and detail labels inside expanded panels, and the
