@@ -296,7 +296,10 @@ class _PrimaryActionPill extends StatelessWidget {
                       const SizedBox(width: 2),
                       Flexible(
                         child: Text(
-                          label,
+                          // Caps to match the artboard's pill; the pill
+                          // already excludes its own semantics in favour of
+                          // `tooltip`, so the real copy is untouched.
+                          label.toUpperCase(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textScaler: MediaQuery.textScalerOf(
@@ -622,7 +625,10 @@ class _TowerBuildCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      type.label,
+                      // The artboard sets every micro label in caps; the
+                      // card's Semantics carries the real copy, so the
+                      // display string is free to shout.
+                      type.label.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,

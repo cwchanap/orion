@@ -139,13 +139,13 @@ void main() {
 
     await pumpPhase(GamePhase.build);
     expect(
-      tester.widget<Text>(find.text('Build')).style!.color!.toARGB32(),
+      tester.widget<Text>(find.text('BUILD')).style!.color!.toARGB32(),
       OrionUiTheme.dark.naniteGreen.toARGB32(),
     );
 
     await pumpPhase(GamePhase.wave);
     expect(
-      tester.widget<Text>(find.text('Wave Active')).style!.color!.toARGB32(),
+      tester.widget<Text>(find.text('WAVE ACTIVE')).style!.color!.toARGB32(),
       OrionUiTheme.dark.textMuted.toARGB32(),
     );
   });

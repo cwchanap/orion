@@ -234,7 +234,9 @@ class _MissionStatusAnchor extends StatelessWidget {
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
-                  phaseLabel,
+                  // Caps, as the artboard sets it. The anchor's Semantics
+                  // and Tooltip carry the readable copy.
+                  phaseLabel.toUpperCase(),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textScaler: textScaler,
