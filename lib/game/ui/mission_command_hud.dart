@@ -38,23 +38,27 @@ class MissionStatusHud extends StatelessWidget {
       context,
     ).clamp(maxScaleFactor: 1.15);
 
+    // Unboxed, per artboard 1a: the status readouts float on the live board
+    // rather than each sitting in its own pill. Every OrionTypography role
+    // carries a shadow for exactly this — "contrast never depends on a
+    // surface fill" — and dropping three pills' padding buys back the width
+    // the hero-scale numerals need. Still a Wrap, so a narrow viewport or a
+    // large text scale reflows instead of overflowing.
     return Wrap(
       key: const ValueKey('mission-status-hud'),
-      spacing: 4,
-      runSpacing: 4,
+      spacing: 10,
+      runSpacing: 6,
       children: [
         Semantics(
           container: true,
           excludeSemantics: true,
           label:
               'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
-          child: MissionSurface(
+          child: _BaseHealthAnchor(
             key: const ValueKey('mission-status-base'),
-            child: _BaseHealthAnchor(
-              snapshot: snapshot,
-              uiTheme: uiTheme,
-              textScaler: textScaler,
-            ),
+            snapshot: snapshot,
+            uiTheme: uiTheme,
+            textScaler: textScaler,
           ),
         ),
         Semantics(
@@ -64,26 +68,22 @@ class MissionStatusHud extends StatelessWidget {
               '${snapshot.stageName}. '
               'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, '
               '${_missionPhaseLabel(snapshot)}',
-          child: MissionSurface(
+          child: _MissionStatusAnchor(
             key: const ValueKey('mission-status-stage'),
-            child: _MissionStatusAnchor(
-              snapshot: snapshot,
-              uiTheme: uiTheme,
-              textScaler: textScaler,
-            ),
+            snapshot: snapshot,
+            uiTheme: uiTheme,
+            textScaler: textScaler,
           ),
         ),
         Semantics(
           container: true,
           excludeSemantics: true,
           label: 'Credits ${snapshot.gold}',
-          child: MissionSurface(
+          child: _CreditsAnchor(
             key: const ValueKey('mission-status-credits'),
-            child: _CreditsAnchor(
-              snapshot: snapshot,
-              uiTheme: uiTheme,
-              textScaler: textScaler,
-            ),
+            snapshot: snapshot,
+            uiTheme: uiTheme,
+            textScaler: textScaler,
           ),
         ),
       ],
@@ -93,6 +93,7 @@ class MissionStatusHud extends StatelessWidget {
 
 class _BaseHealthAnchor extends StatelessWidget {
   const _BaseHealthAnchor({
+    super.key,
     required this.snapshot,
     required this.uiTheme,
     required this.textScaler,
@@ -120,14 +121,14 @@ class _BaseHealthAnchor extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.shield_outlined, color: uiTheme.systemCyan, size: 18),
+            Icon(Icons.shield_outlined, color: uiTheme.systemCyan, size: 22),
             const SizedBox(width: 4),
             Flexible(
               child: OrionReadout(
                 value: '${snapshot.baseHealth}',
                 denominator: '${snapshot.startingBaseHealth}',
                 color: uiTheme.textPrimary,
-                size: 16,
+                size: 26,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: textScaler,
@@ -139,7 +140,7 @@ class _BaseHealthAnchor extends StatelessWidget {
         SizedBox(
           key: const ValueKey('base-health-fill-track'),
           height: 4,
-          width: 72,
+          width: 84,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: ColoredBox(
@@ -165,6 +166,7 @@ class _BaseHealthAnchor extends StatelessWidget {
 
 class _MissionStatusAnchor extends StatelessWidget {
   const _MissionStatusAnchor({
+    super.key,
     required this.snapshot,
     required this.uiTheme,
     required this.textScaler,
@@ -201,7 +203,7 @@ class _MissionStatusAnchor extends StatelessWidget {
                   value: '${snapshot.waveNumber}',
                   denominator: '${snapshot.waveTotal}',
                   color: uiTheme.systemCyan,
-                  size: 14,
+                  size: 26,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textScaler: textScaler,
@@ -243,6 +245,7 @@ class _MissionStatusAnchor extends StatelessWidget {
 
 class _CreditsAnchor extends StatelessWidget {
   const _CreditsAnchor({
+    super.key,
     required this.snapshot,
     required this.uiTheme,
     required this.textScaler,
@@ -260,7 +263,7 @@ class _CreditsAnchor extends StatelessWidget {
         Icon(
           Icons.account_balance_wallet_outlined,
           color: uiTheme.creditGold,
-          size: 18,
+          size: 22,
         ),
         const SizedBox(width: 4),
         Flexible(
@@ -270,7 +273,7 @@ class _CreditsAnchor extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             textScaler: textScaler,
             textAlign: TextAlign.end,
-            style: OrionTypography.readout(size: 16, color: uiTheme.creditGold),
+            style: OrionTypography.readout(size: 26, color: uiTheme.creditGold),
           ),
         ),
       ],
