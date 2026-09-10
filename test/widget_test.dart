@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
+import 'package:flame/widgets.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -267,6 +268,11 @@ void main() {
       }
     });
 
+    // A cold-cache test earlier in this process can leave a pending future
+    // in the sprite memo; clear it so this fixture resolves against the warm
+    // cache instead of waiting on a load that already failed to arrive.
+    OrionArtDescriptor.resetSpriteCache();
+
     final boundaryKey = GlobalKey();
     OrionDefenseGame? game;
     await tester.pumpWidget(
@@ -298,6 +304,23 @@ void main() {
     expect(find.bySubtype<GameWidget>(), findsOneWidget);
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
+
+    // The rail's cards render an empty SizedBox until their sprite futures
+    // resolve, so capturing straight away photographs text-only cards. Give
+    // the futures real time, then require the art: an OrionAtlasSprite only
+    // becomes a SpriteWidget once it has a sprite.
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('command-dock-persistent-rail')),
+        matching: find.byType(SpriteWidget),
+      ),
+      findsWidgets,
+      reason: 'the tower rail captured before its card art resolved',
+    );
 
     await tester.runAsync(
       () => captureReactorRimFixture(boundaryKey, 'fixture-1a.png'),

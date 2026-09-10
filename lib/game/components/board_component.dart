@@ -60,21 +60,37 @@ class BoardComponent extends PositionComponent {
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
   final Paint _pathPaint = Paint()..color = const Color(0xFF56616B);
-  // systemCyan. The lane is the one board element the mock draws in the
+  // systemCyan. The lane is the one board element the artboard draws in the
   // accent, and it is drawn rather than tiled: the path tile art is a
   // full-cell panel with the channel baked in, so on any board skin the
   // route reads as grey-on-grey and the player cannot see where enemies go.
+  //
+  // The artboard draws it as two polylines, and the split matters -- a single
+  // fat dashed stroke reads as a pipe, not a route:
+  //
+  //   bed   stroke rgba(70,230,255,.14)  width 28    (no dash)
+  //   core  stroke #46E6FF               width 3.4   dasharray 16 16
+  //         plus drop-shadow(0 0 4px #46E6FF)
+  //
+  // Against the artboard's 49.125px cell those are the _lane* fractions
+  // below. The bed is continuous: it is the channel the dashes travel down.
+  final Paint _laneBedPaint = Paint()
+    ..color =
+        const Color(0x2446E6FF) // systemCyan @ 14%
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
   final Paint _lanePaint = Paint()
     ..color = const Color(0xFF46E6FF)
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
   final Paint _laneGlowPaint = Paint()
-    ..color = const Color(0x5946E6FF)
+    ..color = const Color(0x9946E6FF)
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round
-    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
   // The 1e artboard's placement palette, in tokens: naniteGreen for an
   // allowed cell, dangerRed for a blocked one, each a light wash under a
   // full-strength stroke. The previous fills were #3DDC84 and #E35D6A --
@@ -202,9 +218,17 @@ class BoardComponent extends PositionComponent {
     }
   }
 
-  /// The mock's lane: a dashed, glowing cyan channel down the centre of the
-  /// enemy path. Dash geometry scales with [cellSize] so the lane keeps the
-  /// same rhythm on every board size.
+  /// The artboard's lane fractions, against its 49.125px cell.
+  @visibleForTesting
+  static const double laneBedWidth = 28 / 49.125; // 0.570
+  @visibleForTesting
+  static const double laneCoreWidth = 3.4 / 49.125; // 0.069
+  @visibleForTesting
+  static const double laneDash = 16 / 49.125; // 0.326
+
+  /// The artboard's lane: a wide, faint, continuous channel with a thin
+  /// bright dashed core running down it. Every dimension scales with
+  /// [cellSize] so the rhythm holds on any board size.
   void _renderLane(Canvas canvas) {
     if (pathCells.length < 2) {
       return;
@@ -217,17 +241,18 @@ class BoardComponent extends PositionComponent {
       centreLine.lineTo(centre.dx, centre.dy);
     }
 
-    final lane = dashed(
-      centreLine,
-      dash: cellSize * 0.46,
-      gap: cellSize * 0.34,
-    );
+    final dashLength = cellSize * laneDash;
+    final core = dashed(centreLine, dash: dashLength, gap: dashLength);
 
-    _laneGlowPaint.strokeWidth = cellSize * 0.30;
-    _lanePaint.strokeWidth = cellSize * 0.18;
+    // A hairline core would disappear on a small board, so hold a floor.
+    final coreWidth = math.max(cellSize * laneCoreWidth, 1.5);
+    _laneBedPaint.strokeWidth = cellSize * laneBedWidth;
+    _laneGlowPaint.strokeWidth = coreWidth * 2;
+    _lanePaint.strokeWidth = coreWidth;
     canvas
-      ..drawPath(lane, _laneGlowPaint)
-      ..drawPath(lane, _lanePaint);
+      ..drawPath(centreLine, _laneBedPaint)
+      ..drawPath(core, _laneGlowPaint)
+      ..drawPath(core, _lanePaint);
   }
 
   /// [source] cut into [dash]-long segments separated by [gap].

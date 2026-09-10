@@ -92,13 +92,36 @@ class MissionCommandDock extends StatelessWidget {
       );
     } else {
       contentKey = const ValueKey('command-dock-idle');
-      content = IdleCommandBar(
+      final idleBar = IdleCommandBar(
         snapshot: snapshot,
         onTogglePause: onTogglePause,
         onSpeedSelected: onSpeedSelected,
         onToggleAutoStart: onToggleAutoStart,
         onStartWave: onStartWave,
       );
+      // Artboard 1a's dock is two rows during build: the pacing controls
+      // beside the primary action, and the tower rail beneath them. The rail
+      // was reachable only after selecting a cell, so the artboard's own
+      // scene could not be produced -- and a rail you have to summon cannot
+      // be dragged from, which is how 1e says a tower is placed.
+      content = snapshot.phase == GamePhase.build && !snapshot.isEnded
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                idleBar,
+                const SizedBox(height: 8),
+                TowerBuildRail(
+                  key: const ValueKey('command-dock-persistent-rail'),
+                  phase: snapshot.phase,
+                  gold: snapshot.gold,
+                  unlockedTowerTypes: snapshot.unlockedTowerTypes,
+                  onPlaceTower: onPlaceTower,
+                  onPlacementPreviewEvent: onPlacementPreviewEvent,
+                ),
+              ],
+            )
+          : idleBar;
     }
 
     // Every dock state surfaces itself: idle, build rail, and inspector
