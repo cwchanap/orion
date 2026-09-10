@@ -255,6 +255,48 @@ void main() {
     },
   );
 
+  testWidgets('the unboxed status readouts stay on one row', (tester) async {
+    // Unboxing the status band freed width, and hero-scale numerals spend
+    // it: at 26 the credits group wrapped to a second row behind the two
+    // band buttons. This pins the row at the product viewport with the real
+    // face, because Roboto is narrower and would not catch a regression.
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // The same snapshot the 1a fixture uses: a next-wave preview puts the
+    // scanner in the band, which is the band's worst case for width.
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+    );
+    await tester.pump();
+
+    final centres = [
+      'mission-status-base',
+      'mission-status-stage',
+      'mission-status-credits',
+    ].map((key) => tester.getCenter(find.byKey(ValueKey(key))).dy).toList();
+    for (final centre in centres) {
+      expect(
+        (centre - centres.first).abs(),
+        lessThan(8),
+        reason: 'a status readout wrapped off the band row',
+      );
+    }
+
+    // And the run must clear the band's trailing actions.
+    final credits = tester.getRect(
+      find.byKey(const ValueKey('mission-status-credits')),
+    );
+    final worldMap = tester.getRect(find.byTooltip('World Map'));
+    expect(
+      credits.right,
+      lessThanOrEqualTo(worldMap.left),
+      reason: 'the credits readout runs under the band actions',
+    );
+  });
+
   testWidgets('composes the mission overlay bands at the product viewport', (
     tester,
   ) async {
