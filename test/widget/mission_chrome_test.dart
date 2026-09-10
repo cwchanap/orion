@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
@@ -144,6 +145,9 @@ void main() {
     // scanner/modules collapsed (no acquired modules). Real Roboto so the
     // evidence shows true text metrics, not Ahem blocks.
     await loadRealFonts(withMaterialIcons: false);
+    // The memo can hold a pending future from an earlier cold-cache test
+    // in this process; clear it so this fixture's warmed cache is used.
+    OrionArtDescriptor.resetSpriteCache();
     final boundaryKey = GlobalKey();
     await tester.pumpWidget(
       RepaintBoundary(
