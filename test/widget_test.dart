@@ -144,7 +144,7 @@ void main() {
     // never complete under the fake-async test binding.
     await tester.runAsync(() async {
       for (final name in [
-        'orion_terrain_background.png',
+        'reactor_rim_ui/boards/nebula.png',
         'orion_path_tiles.png',
         'orion_sprite_sheet.png',
         'orion_tower_variety_sheet.png',

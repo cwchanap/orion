@@ -6,11 +6,11 @@ import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
 
+import 'assets/game_board_skin.dart';
 import 'assets/game_boss_sheet.dart';
 import 'assets/game_path_tiles.dart';
 import 'assets/game_sprite_sheet.dart';
 import 'assets/game_tower_variety_sheet.dart';
-import 'assets/game_terrain.dart';
 import 'campaign/campaign_progress.dart';
 import 'campaign/orion_campaign.dart';
 import 'campaign/stage_definition.dart';
@@ -105,7 +105,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   GameSpriteSheet? _spriteSheet;
   GameTowerVarietySheet? _towerVarietySheet;
   GameBossSheet? _bossSheet;
-  Image? _terrainImage;
+  Image? _boardImage;
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
   int? _inspectedEnemyId;
@@ -132,7 +132,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   @override
   Future<void> onLoad() async {
     await super.onLoad();
-    _terrainImage = await images.load(GameTerrain.fileName);
+    _boardImage = await images.load(GameBoardSkin.fileName);
     _pathTiles = await GamePathTiles.load(images);
     _spriteSheet = await GameSpriteSheet.load(images);
     _towerVarietySheet = await GameTowerVarietySheet.load(images);
@@ -647,7 +647,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       pathCells: stage.pathCells,
       selectedCell: _selectedTower?.position ?? _selectedCell,
       spriteSheet: _spriteSheet,
-      terrainImage: _terrainImage,
+      boardImage: _boardImage,
       pathTiles: _pathTiles,
       position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
       priority: 0,
