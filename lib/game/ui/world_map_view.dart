@@ -342,11 +342,11 @@ class _SectorHeader extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(
-                'ORION SECTOR',
+              child: OrionTitle(
+                'Orion Sector',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: OrionTypography.title(color: uiTheme.textPrimary),
+                color: uiTheme.textPrimary,
               ),
             ),
             Semantics(

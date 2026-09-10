@@ -86,6 +86,50 @@ abstract final class OrionTypography {
   }
 }
 
+/// The screen title, set in caps.
+///
+/// The caps are presentational: [data] is kept verbatim as the semantics
+/// label, so assistive tech announces "Outpost Alpha" rather than spelling
+/// out a shouted string, and the visible Text is excluded from the tree.
+/// Call sites therefore pass normal copy — never a pre-uppercased literal.
+class OrionTitle extends StatelessWidget {
+  const OrionTitle(
+    this.data, {
+    super.key,
+    required this.color,
+    this.size = 15,
+    this.textAlign,
+    this.maxLines,
+    this.overflow,
+    this.textScaler,
+  });
+
+  final String data;
+  final Color color;
+  final double size;
+  final TextAlign? textAlign;
+  final int? maxLines;
+  final TextOverflow? overflow;
+  final TextScaler? textScaler;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: data,
+      child: ExcludeSemantics(
+        child: Text(
+          data.toUpperCase(),
+          textAlign: textAlign,
+          maxLines: maxLines,
+          overflow: overflow,
+          textScaler: textScaler,
+          style: OrionTypography.title(color: color, size: size),
+        ),
+      ),
+    );
+  }
+}
+
 /// A micro-label. Exists so call sites read as intent, not as styling.
 class OrionText extends StatelessWidget {
   const OrionText.micro(this.data, {super.key, this.color, this.size = 8});

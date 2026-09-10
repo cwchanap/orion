@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'game/ui/orion_game_page.dart';
-import 'game/ui/orion_ui_theme.dart';
+import 'game/ui/orion_theme_data.dart';
 
 void main() {
   _registerFontLicenses();
@@ -34,21 +34,7 @@ class OrionApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Orion',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF31E6A1),
-          brightness: Brightness.dark,
-        ),
-        // Material *components* (button labels, dialog text, segmented
-        // controls, ...) never read OrionTypography and so never picked up
-        // the Revamp faces; they rendered in Roboto beside migrated Oxanium
-        // and ChakraPetch text. OrionTypography's roles set their own
-        // fontFamily explicitly (see orion_typography.dart), so they are
-        // unaffected by this default.
-        fontFamily: 'ChakraPetch',
-        extensions: const [OrionUiTheme.dark],
-        useMaterial3: true,
-      ),
+      theme: orionThemeData,
       home: const OrionGamePage(),
     );
   }

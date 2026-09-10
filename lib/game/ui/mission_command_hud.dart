@@ -327,8 +327,25 @@ class MissionPacingControls extends StatelessWidget {
             // wrap (covering bottom-row board cells). Horizontal density -4
             // lowers that floor to the 48dp touch minimum; vertical density
             // stays 0 so the padded 48dp hit height is preserved.
-            style: const ButtonStyle(
-              visualDensity: VisualDensity(horizontal: -4),
+            //
+            // KNOWN: density -4 was believed to fix the wrap, and it did
+            // while the tests rendered these labels in Roboto. Under the
+            // app's own ChakraPetch the dock still wraps at 390: measured at
+            // the real dock width of 366, pacing needs 249.5px (pause 48 +
+            // segments 144 + auto 49.5 + 8 of Wrap spacing) but only gets
+            // ~97 beside the primary action pill. The segments are already
+            // at the 48dp touch floor, so closing the gap means shrinking
+            // the primary action, dropping a speed step, or accepting two
+            // rows — a design call, not a styling one. Left wrapping.
+            style: ButtonStyle(
+              visualDensity: const VisualDensity(horizontal: -4),
+              // Segment labels on the Orion scale rather than Material's
+              // default, which is set for a wider face. This narrows the
+              // control but does NOT on its own keep the idle dock to one
+              // row: see the measurements on MissionPacingControls.
+              textStyle: WidgetStatePropertyAll(
+                OrionTypography.microLabel(size: 11),
+              ),
             ),
             segments: const [
               ButtonSegment<double>(value: 1.0, label: Text('1x')),

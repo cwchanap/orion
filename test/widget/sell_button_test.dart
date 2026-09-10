@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/orion_finders.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
@@ -309,7 +311,7 @@ void main() {
       pendingRunModuleOffer: offer,
     );
 
-    expect(find.text('Salvage Module 1 of 3'), findsOneWidget);
+    expect(findOrionTitle('Salvage Module 1 of 3'), findsOneWidget);
     for (final id in offer.moduleIds) {
       expect(find.text(runModuleDefinition(id).title), findsOneWidget);
     }
@@ -341,8 +343,8 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Alpha'));
   await tester.pumpAndSettle();
-  expect(find.text('Start Mission'), findsOneWidget);
-  await tester.tap(find.text('Start Mission'));
+  expect(findOrionTitle('Start Mission'), findsOneWidget);
+  await tester.tap(findOrionTitle('Start Mission'));
   await tester.pump();
 
   final snapshot = game!.stateNotifier.value;

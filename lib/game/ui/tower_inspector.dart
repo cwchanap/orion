@@ -119,9 +119,9 @@ class _InspectorBody extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  OrionTitle(
                     '${tower.type.label} Tower',
-                    style: OrionTypography.title(color: uiTheme.textPrimary),
+                    color: uiTheme.textPrimary,
                   ),
                   const SizedBox(height: 2),
                   OrionText.micro(
