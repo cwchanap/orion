@@ -5,6 +5,7 @@ import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_surface.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 import '../support/command_deck_fixtures.dart';
@@ -124,6 +125,83 @@ void main() {
     expect(find.text('Auto 5s'), findsOneWidget);
   });
 
+  testWidgets('the phase pair is green while building, muted in a wave', (
+    tester,
+  ) async {
+    // Artboard 1a colours this pair by phase: BUILD is the state that invites
+    // action, so it is naniteGreen, not chrome grey.
+    Future<void> pumpPhase(GamePhase phase) => tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: MissionStatusHud(snapshot: commandDeckSnapshot(phase: phase)),
+      ),
+    );
+
+    await pumpPhase(GamePhase.build);
+    expect(
+      tester.widget<Text>(find.text('Build')).style!.color!.toARGB32(),
+      OrionUiTheme.dark.naniteGreen.toARGB32(),
+    );
+
+    await pumpPhase(GamePhase.wave);
+    expect(
+      tester.widget<Text>(find.text('Wave Active')).style!.color!.toARGB32(),
+      OrionUiTheme.dark.textMuted.toARGB32(),
+    );
+  });
+
+  testWidgets('the three pacing chips share one shape', (tester) async {
+    // They used to be a circular IconButton, a stadium OutlinedButton and a
+    // rounded FilterChip, so the row read as three unrelated controls.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: MissionPacingControls(
+          snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+        ),
+      ),
+    );
+
+    final sizes = [
+      'Pause',
+      'Game speed',
+      'Auto-start waves',
+    ].map((tooltip) => tester.getSize(find.byTooltip(tooltip))).toList();
+    for (final size in sizes) {
+      expect(
+        size.height,
+        sizes.first.height,
+        reason: 'a pacing chip is a different height from its neighbours',
+      );
+      expect(
+        size.width,
+        sizes.first.width,
+        reason: 'a pacing chip is a different width from its neighbours',
+      );
+    }
+
+    // Size alone would pass for a circle and a square of the same box, so the
+    // corner radius is the half of "one shape" that size cannot see.
+    for (final tooltip in ['Pause', 'Game speed', 'Auto-start waves']) {
+      final shape =
+          tester
+                  .widget<Material>(
+                    find.descendant(
+                      of: find.byTooltip(tooltip),
+                      matching: find.byType(Material),
+                    ),
+                  )
+                  .shape
+              as RoundedRectangleBorder;
+
+      expect(shape.borderRadius, BorderRadius.circular(14));
+      expect(shape.side.width, 1);
+    }
+  });
+
   testWidgets('pacing controls preserve 48dp hit targets', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -136,18 +214,22 @@ void main() {
       ),
     );
 
+    // All three are one widget now, told apart by tooltip rather than by
+    // Material type.
     const minimumHitTarget = 48.0;
-    final pauseRect = tester.getRect(find.byType(IconButton));
-    expect(pauseRect.width, greaterThanOrEqualTo(minimumHitTarget));
-    expect(pauseRect.height, greaterThanOrEqualTo(minimumHitTarget));
-
-    final speedRect = tester.getRect(find.byTooltip('Game speed'));
-    expect(speedRect.width, greaterThanOrEqualTo(minimumHitTarget));
-    expect(speedRect.height, greaterThanOrEqualTo(minimumHitTarget));
-
-    final autoRect = tester.getRect(find.byType(FilterChip));
-    expect(autoRect.width, greaterThanOrEqualTo(minimumHitTarget));
-    expect(autoRect.height, greaterThanOrEqualTo(minimumHitTarget));
+    for (final tooltip in ['Pause', 'Game speed', 'Auto-start waves']) {
+      final rect = tester.getRect(find.byTooltip(tooltip));
+      expect(
+        rect.width,
+        greaterThanOrEqualTo(minimumHitTarget),
+        reason: '$tooltip is narrower than a 48dp target',
+      );
+      expect(
+        rect.height,
+        greaterThanOrEqualTo(minimumHitTarget),
+        reason: '$tooltip is shorter than a 48dp target',
+      );
+    }
   });
 
   testWidgets('status passes taps through while pacing consumes them', (
