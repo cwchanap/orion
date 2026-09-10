@@ -258,6 +258,60 @@ void main() {
     },
   );
 
+  testWidgets(
+    'the status readouts spread across the band rather than clustering left',
+    (tester) async {
+      // Real fonts: the arrangement is measured in laid-out pixels, so
+      // placeholder glyph metrics would measure the wrong widths.
+      await loadRealFonts(withMaterialIcons: false);
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+      );
+      await tester.pump();
+
+      final band = tester.getRect(
+        find.byKey(const ValueKey('mission-status-hud')),
+      );
+      final hull = tester.getRect(
+        find.byKey(const ValueKey('mission-status-base')),
+      );
+      final wave = tester.getRect(
+        find.byKey(const ValueKey('mission-status-stage')),
+      );
+      final credits = tester.getRect(
+        find.byKey(const ValueKey('mission-status-credits')),
+      );
+
+      // Artboard 1a pins hull left, centres the wave group and pins credits
+      // right. Position is how the player finds each reading, so assert the
+      // arrangement, not merely that all three are present.
+      expect(
+        hull.left - band.left,
+        lessThan(1),
+        reason: 'the hull readout is not pinned to the band\'s left edge',
+      );
+      expect(
+        band.right - credits.right,
+        lessThan(1),
+        reason: 'the credits readout is not pinned to the band\'s right edge',
+      );
+      expect(
+        (wave.center.dx - band.center.dx).abs(),
+        lessThan(band.width * 0.1),
+        reason: 'the wave group is not centred in the band',
+      );
+
+      // Clustered left, the two gaps would both sit at the Wrap's 10px
+      // minimum; spread, each is far wider than that.
+      expect(wave.left - hull.right, greaterThan(24));
+      expect(credits.left - wave.right, greaterThan(24));
+    },
+  );
+
   testWidgets('the unboxed status readouts stay on one row', (tester) async {
     // Unboxing the status band freed width, and hero-scale numerals spend
     // it: at 26 the credits group wrapped to a second row behind the two
