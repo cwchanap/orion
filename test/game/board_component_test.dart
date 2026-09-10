@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -71,6 +72,61 @@ void main() {
         cellSize: 0,
         pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
       );
+
+      expect(() => renderTo(board), returnsNormally);
+    });
+  });
+
+  group('BoardComponent range ring', () {
+    BoardComponent previewBoard() =>
+        BoardComponent(
+            cellSize: 32,
+            pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+          )
+          ..previewActive = true
+          ..previewCandidate = const GridPosition(4, 4)
+          ..previewAllowed = true
+          ..previewRange = 90;
+
+    void renderTo(BoardComponent board) {
+      final recorder = PictureRecorder();
+      board.render(Canvas(recorder));
+      recorder.endRecording();
+    }
+
+    test('is dashed, not a solid circle', () {
+      const radius = 90.0;
+      final board = previewBoard();
+
+      final ring = board.rangeRingPath(Offset.zero, radius);
+
+      // Equal dash and gap, so about half the circumference survives. The
+      // slack absorbs what computeMetrics loses walking a polyline
+      // approximation of the oval.
+      const circumference = 2 * math.pi * radius;
+      expect(
+        _totalLength(ring),
+        closeTo(circumference / 2, 0.1 * circumference / 2),
+      );
+      expect(ring.computeMetrics().length, greaterThan(20));
+    });
+
+    test('is the artboard\'s naniteGreen, at full-strength 2px', () {
+      final board = previewBoard();
+
+      renderTo(board);
+
+      // The ring belongs to the allowed state, so it matches the buildable
+      // cell's green rather than the dragged tower's own colour.
+      expect(
+        board.rangeRingPaint.color.toARGB32(),
+        const Color(0xB37BE495).toARGB32(),
+      );
+      expect(board.rangeRingPaint.strokeWidth, 2);
+    });
+
+    test('renders without throwing over a blocked candidate', () {
+      final board = previewBoard()..previewAllowed = false;
 
       expect(() => renderTo(board), returnsNormally);
     });

@@ -66,25 +66,38 @@ class BoardComponent extends PositionComponent {
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round
     ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+  // The 1e artboard's placement palette, in tokens: naniteGreen for an
+  // allowed cell, dangerRed for a blocked one, each a light wash under a
+  // full-strength stroke. The previous fills were #3DDC84 and #E35D6A --
+  // a near-green and a near-red belonging to no token.
   final Paint _buildableSelectionPaint = Paint()
-    ..color = const Color(0x663DDC84)
+    ..color =
+        const Color(0x297BE495) // naniteGreen @ 16%
     ..style = PaintingStyle.fill;
   final Paint _blockedSelectionPaint = Paint()
-    ..color = const Color(0x66E35D6A)
+    ..color =
+        const Color(0x24FF5D6C) // dangerRed @ 14%
     ..style = PaintingStyle.fill;
   final Paint _selectionStrokePaint = Paint()
-    ..color = const Color(0xFFFFFFFF)
+    ..color =
+        const Color(0xFF7BE495) // naniteGreen
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2;
   final Paint _spawnPaint = Paint()..color = const Color(0xFF58C4F6);
   final Paint _basePaint = Paint()..color = const Color(0xFFFFD166);
   final Paint _pathDangerPaint = Paint()
-    ..color = const Color(0x66E35D6A)
+    ..color =
+        const Color(0x24FF5D6C) // dangerRed @ 14%
     ..style = PaintingStyle.fill;
+  // The range ring belongs to the allowed state, not to the tower: the
+  // artboard strokes it in the same naniteGreen as the buildable cell it
+  // surrounds, and draws no ring at all over a blocked candidate.
   final Paint _rangeRingPaint = Paint()
-    ..color = const Color(0xB3FFFFFF)
+    ..color =
+        const Color(0xB37BE495) // naniteGreen @ 70%
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2;
+  final Paint _rangeWashPaint = Paint()..style = PaintingStyle.fill;
   final Paint _deniedGlyphPaint = Paint()
     ..color = const Color(0xFFFFFFFF)
     ..style = PaintingStyle.stroke
@@ -144,7 +157,7 @@ class BoardComponent extends PositionComponent {
       canvas.drawRect(rect, paint);
       canvas.drawRect(rect, _selectionStrokePaint);
       if (previewAllowed && previewRange > 0) {
-        canvas.drawCircle(cellCenter(candidate), previewRange, _rangeRingPaint);
+        _renderRangeRing(canvas, cellCenter(candidate), previewRange);
       }
       if (!previewAllowed) {
         _renderDeniedGlyph(canvas, candidate);
@@ -227,6 +240,36 @@ class BoardComponent extends PositionComponent {
     }
     return result;
   }
+
+  /// The artboard's range ring: a naniteGreen wash fading out at 70% of the
+  /// radius, under a dashed ring.
+  void _renderRangeRing(Canvas canvas, Offset centre, double radius) {
+    _rangeWashPaint.shader = Gradient.radial(
+      centre,
+      radius,
+      const <Color>[
+        Color(0x247BE495), // naniteGreen @ 14%
+        Color(0x007BE495),
+        Color(0x007BE495),
+      ],
+      const <double>[0, 0.7, 1],
+    );
+    canvas
+      ..drawCircle(centre, radius, _rangeWashPaint)
+      ..drawPath(rangeRingPath(centre, radius), _rangeRingPaint);
+  }
+
+  /// The dashed ring the preview strokes at [radius] around [centre].
+  @visibleForTesting
+  Path rangeRingPath(Offset centre, double radius) => dashed(
+    Path()..addOval(Rect.fromCircle(center: centre, radius: radius)),
+    dash: cellSize * 0.17,
+    gap: cellSize * 0.17,
+  );
+
+  /// The range ring's stroke paint as the last render configured it.
+  @visibleForTesting
+  Paint get rangeRingPaint => _rangeRingPaint;
 
   void _renderGrid(Canvas canvas) {
     final boardWidth = BoardLayout.columns * cellSize;
