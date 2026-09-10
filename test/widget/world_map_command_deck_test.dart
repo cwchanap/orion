@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/campaign_presentation.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
@@ -38,6 +39,7 @@ Widget buildMap({
   bool isSavingFeedback = false,
 }) {
   return MaterialApp(
+    theme: orionThemeData,
     home: Scaffold(
       body: WorldMapView(
         stages: stages ?? OrionCampaign.stages,
@@ -715,6 +717,7 @@ void main() {
       // tracked separately.
       await tester.pumpWidget(
         MaterialApp(
+          theme: orionThemeData,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tech_tree_view.dart';
 
@@ -39,6 +40,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TechTreeView(
           progress: progress,
           techTree: techTree,
@@ -574,6 +576,7 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          theme: orionThemeData,
           home: TechTreeView(
             progress: progress,
             techTree: techTree,
