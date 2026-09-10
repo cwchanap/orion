@@ -27,12 +27,18 @@ abstract final class OrionTypography {
       );
 
   /// The one title per screen.
-  static TextStyle title({required Color color}) => TextStyle(
+  ///
+  /// 15 is the chrome size — a title sharing a band with other controls.
+  /// A sheet whose title *is* its hero (the stage briefing) passes a display
+  /// [size]; the sheet's own briefing artboard sets that title far above the
+  /// chrome step, and a single fixed size could not express both.
+  /// Tracking scales with the size so the caps keep their measured rhythm.
+  static TextStyle title({required Color color, double size = 15}) => TextStyle(
     fontFamily: 'Oxanium',
     fontVariations: const [FontVariation('wght', 800)],
-    fontSize: 15,
+    fontSize: size,
     height: 1,
-    letterSpacing: 1.2,
+    letterSpacing: size * 0.08,
     color: color,
     shadows: const [shadow],
   );

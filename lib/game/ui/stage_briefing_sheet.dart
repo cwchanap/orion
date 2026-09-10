@@ -67,31 +67,10 @@ class StageBriefingSheet extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  stage.name,
-                                  style: OrionTypography.title(
-                                    color: uiTheme.textPrimary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              _BriefingBadge(
-                                label: isOptional ? 'OPTIONAL' : 'PRIMARY',
-                                color: accent,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            stage.description,
-                            style: OrionTypography.microLabel(
-                              size: 9,
-                              color: uiTheme.textMuted,
-                            ),
+                          _BriefingIdentity(
+                            stage: stage,
+                            accent: accent,
+                            badgeLabel: isOptional ? 'OPTIONAL' : 'PRIMARY',
                           ),
                           const SizedBox(height: 16),
                           Row(
@@ -122,6 +101,8 @@ class StageBriefingSheet extends StatelessWidget {
                               ),
                             ],
                           ),
+                          const SizedBox(height: 16),
+                          _BriefingThreatProfile(stage: stage),
                           const SizedBox(height: 16),
                           Text(
                             'CONDITIONS',
@@ -194,57 +175,17 @@ class StageBriefingSheet extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Tooltip(
-                    message: actionLabel,
-                    excludeFromSemantics: true,
-                    child: Semantics(
-                      button: true,
-                      label: actionLabel,
-                      child: OrionSurface(
-                        tier: OrionSurfaceTier.t3,
-                        padding: EdgeInsets.zero,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: InkWell(
-                            onTap: () => Navigator.of(context).pop(true),
-                            splashColor: uiTheme.systemCyan.withValues(
-                              alpha: 0.18,
-                            ),
-                            highlightColor: uiTheme.systemCyan.withValues(
-                              alpha: 0.10,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(14),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    result == null
-                                        ? Icons.rocket_launch_rounded
-                                        : Icons.replay_rounded,
-                                    color: uiTheme.textPrimary,
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Flexible(
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: Text(
-                                        actionLabel,
-                                        maxLines: 1,
-                                        style: OrionTypography.microLabel(
-                                          size: 13,
-                                          color: uiTheme.systemCyan,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+                  // Solid, not an OrionSurface: orion_surface.dart says
+                  // "Solid primary actions (WAVE, DEPLOY) deliberately do not
+                  // use this", and a translucent launch button read as
+                  // secondary against the sheet.
+                  _BriefingLaunchAction(
+                    label: actionLabel,
+                    accent: accent,
+                    icon: result == null
+                        ? Icons.rocket_launch_rounded
+                        : Icons.replay_rounded,
+                    onPressed: () => Navigator.of(context).pop(true),
                   ),
                   const SizedBox(height: 2),
                   TextButton.icon(
@@ -256,6 +197,282 @@ class StageBriefingSheet extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Centred stage identity: sector eyebrow, display-scale name, blurb.
+///
+/// The artboard treats the stage name as the sheet's hero rather than a
+/// chrome title, so this is the one place [OrionTypography.title] is asked
+/// for a display size. Casing is left as written: the artboard sets this
+/// title in caps, but that is a copy decision across all ten title sites,
+/// and forcing it here with toUpperCase would also make screen readers
+/// announce the name letter-shouted.
+class _BriefingIdentity extends StatelessWidget {
+  const _BriefingIdentity({
+    required this.stage,
+    required this.accent,
+    required this.badgeLabel,
+  });
+
+  final StageDefinition stage;
+  final Color accent;
+  final String badgeLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final sector = OrionCampaign.stages.indexWhere((s) => s.id == stage.id) + 1;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Wrap, not a Row: at 3x text scale the eyebrow and the badge no
+        // longer fit side by side, and reflowing to a second line keeps both
+        // readable where a Row would overflow.
+        Wrap(
+          alignment: WrapAlignment.center,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            if (sector > 0)
+              OrionText.micro(
+                'SECTOR ${sector.toString().padLeft(2, '0')}',
+                color: accent,
+                size: 11,
+              ),
+            _BriefingBadge(label: badgeLabel, color: accent),
+          ],
+        ),
+        const SizedBox(height: 8),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            stage.name,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            style: OrionTypography.title(color: uiTheme.textPrimary, size: 30),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          stage.description,
+          textAlign: TextAlign.center,
+          style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
+        ),
+      ],
+    );
+  }
+}
+
+/// What the run is actually made of, counted off [StageDefinition.waves].
+///
+/// Every figure here is derived from committed wave data — the artboard's
+/// threat panel also shows a per-objective row, but this game has no leak or
+/// tower-cap objective to report, so those are omitted rather than mocked.
+class _BriefingThreatProfile extends StatelessWidget {
+  const _BriefingThreatProfile({required this.stage});
+
+  final StageDefinition stage;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final threat = _StageThreat.of(stage);
+
+    return OrionSurface(
+      tier: OrionSurfaceTier.t2,
+      padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OrionText.micro('THREAT PROFILE', color: uiTheme.dangerRed, size: 11),
+          const SizedBox(height: 9),
+          Row(
+            children: [
+              Expanded(
+                child: _ThreatFigure(
+                  value: '${threat.enemies}',
+                  label: 'HOSTILES',
+                  color: uiTheme.textPrimary,
+                ),
+              ),
+              Expanded(
+                child: _ThreatFigure(
+                  value: '${threat.armored}',
+                  label: 'ARMORED',
+                  color: threat.armored > 0
+                      ? uiTheme.warningOrange
+                      : uiTheme.textMuted,
+                ),
+              ),
+              Expanded(
+                child: _ThreatFigure(
+                  value: '${threat.shielded}',
+                  label: 'SHIELDED',
+                  color: threat.shielded > 0
+                      ? uiTheme.systemViolet
+                      : uiTheme.textMuted,
+                ),
+              ),
+            ],
+          ),
+          if (threat.traits.isNotEmpty) ...[
+            const SizedBox(height: 9),
+            Text(
+              threat.traits.map((trait) => trait.label).join(' • '),
+              style: OrionTypography.microLabel(
+                size: 9,
+                color: uiTheme.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One numeral over its caps label, sized for a three-across row.
+class _ThreatFigure extends StatelessWidget {
+  const _ThreatFigure({
+    required this.value,
+    required this.label,
+    required this.color,
+  });
+
+  final String value;
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            value,
+            style: OrionTypography.readout(size: 21, color: color),
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: OrionTypography.microLabel(color: uiTheme.textMuted),
+        ),
+      ],
+    );
+  }
+}
+
+/// Enemy totals for a whole stage, summed across every wave group.
+class _StageThreat {
+  const _StageThreat({
+    required this.enemies,
+    required this.armored,
+    required this.shielded,
+    required this.traits,
+  });
+
+  factory _StageThreat.of(StageDefinition stage) {
+    var enemies = 0;
+    var armored = 0;
+    var shielded = 0;
+    final traits = <EnemyTrait>{};
+    for (final wave in stage.waves) {
+      for (final group in wave.groups) {
+        final stats = group.enemyStats;
+        enemies += group.enemyCount;
+        if (stats.armorReduction > 0) {
+          armored += group.enemyCount;
+        }
+        if (stats.shieldHealth > 0) {
+          shielded += group.enemyCount;
+        }
+        traits.addAll(stats.traits);
+      }
+    }
+    // Enum order, so the same stage always lists its traits the same way.
+    final ordered = EnemyTrait.values.where(traits.contains);
+    return _StageThreat(
+      enemies: enemies,
+      armored: armored,
+      shielded: shielded,
+      traits: List.unmodifiable(ordered),
+    );
+  }
+
+  final int enemies;
+  final int armored;
+  final int shielded;
+  final List<EnemyTrait> traits;
+}
+
+/// The sheet's one solid, filled action.
+class _BriefingLaunchAction extends StatelessWidget {
+  const _BriefingLaunchAction({
+    required this.label,
+    required this.accent,
+    required this.icon,
+    required this.onPressed,
+  });
+
+  final String label;
+  final Color accent;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Tooltip(
+      message: label,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        label: label,
+        child: Material(
+          color: accent,
+          borderRadius: BorderRadius.circular(22),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(22),
+            splashColor: uiTheme.voidBlack.withValues(alpha: 0.18),
+            highlightColor: uiTheme.voidBlack.withValues(alpha: 0.10),
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(icon, color: uiTheme.voidBlack),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        // On a filled accent the label must be the dark ink,
+                        // which microLabel's muted-only rule cannot express.
+                        style: OrionTypography.title(
+                          color: uiTheme.voidBlack,
+                          size: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );
