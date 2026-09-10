@@ -237,6 +237,78 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   });
 
+  testWidgets('capture scene 1a fixture', (tester) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // Scene 1a is the playable HUD *over the board* — the artboard's whole
+    // subject is chrome reading against a live mission. Captured from the
+    // real game page rather than a chrome-only host, which could only ever
+    // show the bands floating on a flat fill.
+    //
+    // State: build phase, stage just started, nothing selected. The artboard
+    // additionally shows a selected tower's radial actions, which this build
+    // has no equivalent for yet.
+    await loadRealFonts();
+
+    // Warm Flame's global image cache BEFORE the game exists so its onLoad
+    // resolves from cache instead of racing real engine decodes, which never
+    // complete under the fake-async test binding.
+    await tester.runAsync(() async {
+      for (final name in [
+        'reactor_rim_ui/boards/nebula.png',
+        'orion_path_tiles.png',
+        'orion_sprite_sheet.png',
+        'orion_tower_variety_sheet.png',
+        'orion_boss_sheet.png',
+      ]) {
+        await Flame.images.load(name);
+      }
+    });
+
+    final boundaryKey = GlobalKey();
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: testGamePage(onGameCreated: (created) => game = created),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    // Fixed pumps from here: the mounted game's live loop never settles, so
+    // pumpAndSettle would hang. The briefing is a route over the game page
+    // and leaves on a 220ms transition, so give it real frames -- two bare
+    // pumps capture the sheet still sitting on top of the scene.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(game!.isMounted, isTrue);
+    addTearDown(Flame.images.clearCache);
+
+    // Guard the state, not merely the widgets: 'Start Wave' lives in the dock
+    // *underneath* the briefing, so asserting it alone would pass on a
+    // capture of the briefing sheet. The briefing being gone is the check.
+    expect(
+      find.text('Start Mission'),
+      findsNothing,
+      reason: 'the briefing route is still over the scene',
+    );
+    expect(find.bySubtype<GameWidget>(), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+    expect(find.text('Start Wave'), findsOneWidget);
+
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1a.png'),
+    );
+
+    // Tear the mounted game down so its ticker does not leak into the tests
+    // that follow.
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump(const Duration(milliseconds: 100));
+  });
+
   testWidgets('boots into the Orion world map first', (tester) async {
     await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();

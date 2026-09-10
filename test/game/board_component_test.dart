@@ -131,4 +131,45 @@ void main() {
       expect(() => renderTo(board), returnsNormally);
     });
   });
+
+  group('BoardComponent placement grid', () {
+    void renderTo(BoardComponent board) {
+      final recorder = PictureRecorder();
+      board.render(Canvas(recorder));
+      recorder.endRecording();
+    }
+
+    BoardComponent board() => BoardComponent(
+      cellSize: 32,
+      pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    );
+
+    test('is hidden at rest and shown while a placement is armed', () {
+      // The artboard draws cell lines only while armed; at rest the board is
+      // its own art.
+      expect(board().showsPlacementGrid, isFalse);
+
+      final armed = board()
+        ..previewActive = true
+        ..previewCandidate = const GridPosition(4, 4);
+
+      expect(armed.showsPlacementGrid, isTrue);
+      expect(() => renderTo(armed), returnsNormally);
+    });
+
+    test('is naniteGreen at the artboard alpha, not grey chrome', () {
+      expect(
+        board().gridPaint.color.toARGB32(),
+        const Color(0x2E7BE495).toARGB32(),
+      );
+    });
+
+    test('a selected cell alone does not arm the grid', () {
+      // Selecting a cell shows its highlight; only a placement shows the grid.
+      final selected = board()..selectedCell = const GridPosition(2, 2);
+
+      expect(selected.showsSelectionHighlight, isTrue);
+      expect(selected.showsPlacementGrid, isFalse);
+    });
+  });
 }

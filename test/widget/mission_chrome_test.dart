@@ -139,14 +139,15 @@ void main() {
     },
   );
 
-  testWidgets('capture scene 1a fixture', (tester) async {
+  testWidgets('capture scene 1a band close-up', (tester) async {
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    // Representative scene 1a state: build-idle, no cell/tower selected,
-    // scanner/modules collapsed (no acquired modules). Real Roboto so the
-    // evidence shows true text metrics, not Ahem blocks.
+    // A close-up of the two chrome bands on a flat ground, for reading the
+    // band layout without board art behind it. Scene 1a's own fixture is
+    // captured from the real game page in test/widget_test.dart -- chrome
+    // over a live board is what the artboard actually shows.
     await loadRealFonts();
     // The memo can hold a pending future from an earlier cold-cache test
     // in this process; clear it so this fixture's warmed cache is used.
@@ -169,7 +170,7 @@ void main() {
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.
     await tester.runAsync(
-      () => captureReactorRimFixture(boundaryKey, 'fixture-1a.png'),
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1a-band.png'),
     );
   });
 
