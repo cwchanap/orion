@@ -1,6 +1,8 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flame/components.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 
 import '../assets/game_path_tiles.dart';
 import '../assets/game_sprite_sheet.dart';
@@ -13,7 +15,7 @@ class BoardComponent extends PositionComponent {
     required this.pathCells,
     this.selectedCell,
     this.spriteSheet,
-    this.terrainImage,
+    this.boardImage,
     this.pathTiles,
     super.position,
     super.priority,
@@ -28,7 +30,9 @@ class BoardComponent extends PositionComponent {
   final double cellSize;
   final List<GridPosition> pathCells;
   final GameSpriteSheet? spriteSheet;
-  final Image? terrainImage;
+
+  /// The board skin painted under the lane and the grid.
+  final Image? boardImage;
   final GamePathTiles? pathTiles;
   GridPosition? selectedCell;
 
@@ -49,6 +53,21 @@ class BoardComponent extends PositionComponent {
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
   final Paint _pathPaint = Paint()..color = const Color(0xFF56616B);
+  // systemCyan. The lane is the one board element the mock draws in the
+  // accent, and it is drawn rather than tiled: the path tile art is a
+  // full-cell panel with the channel baked in, so on any board skin the
+  // route reads as grey-on-grey and the player cannot see where enemies go.
+  final Paint _lanePaint = Paint()
+    ..color = const Color(0xFF46E6FF)
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final Paint _laneGlowPaint = Paint()
+    ..color = const Color(0x5946E6FF)
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round
+    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
   final Paint _buildableSelectionPaint = Paint()
     ..color = const Color(0x663DDC84)
     ..style = PaintingStyle.fill;
@@ -94,17 +113,17 @@ class BoardComponent extends PositionComponent {
   void render(Canvas canvas) {
     super.render(canvas);
 
-    final terrainImage = this.terrainImage;
-    if (terrainImage == null) {
+    final boardImage = this.boardImage;
+    if (boardImage == null) {
       canvas.drawRect(Offset.zero & size.toSize(), _backgroundPaint);
     } else {
       canvas.drawImageRect(
-        terrainImage,
+        boardImage,
         Rect.fromLTWH(
           0,
           0,
-          terrainImage.width.toDouble(),
-          terrainImage.height.toDouble(),
+          boardImage.width.toDouble(),
+          boardImage.height.toDouble(),
         ),
         Offset.zero & size.toSize(),
         Paint(),
@@ -130,6 +149,10 @@ class BoardComponent extends PositionComponent {
         canvas.drawRect(cellRect(pathCell).deflate(1), _pathDangerPaint);
       }
     }
+
+    // After the danger wash: the lane is the board's primary legibility
+    // element and must not be tinted by a transient preview overlay.
+    _renderLane(canvas);
 
     final candidate = previewCandidate;
     if (previewActive && candidate != null) {
@@ -172,6 +195,56 @@ class BoardComponent extends PositionComponent {
     );
 
     _renderGrid(canvas);
+  }
+
+  /// The mock's lane: a dashed, glowing cyan channel down the centre of the
+  /// enemy path. Dash geometry scales with [cellSize] so the lane keeps the
+  /// same rhythm on every board size.
+  void _renderLane(Canvas canvas) {
+    if (pathCells.length < 2) {
+      return;
+    }
+
+    final centreLine = Path()
+      ..moveTo(cellCenter(pathCells.first).dx, cellCenter(pathCells.first).dy);
+    for (final cell in pathCells.skip(1)) {
+      final centre = cellCenter(cell);
+      centreLine.lineTo(centre.dx, centre.dy);
+    }
+
+    final lane = dashed(
+      centreLine,
+      dash: cellSize * 0.46,
+      gap: cellSize * 0.34,
+    );
+
+    _laneGlowPaint.strokeWidth = cellSize * 0.30;
+    _lanePaint.strokeWidth = cellSize * 0.18;
+    canvas
+      ..drawPath(lane, _laneGlowPaint)
+      ..drawPath(lane, _lanePaint);
+  }
+
+  /// [source] cut into [dash]-long segments separated by [gap].
+  ///
+  /// A non-positive [dash] would advance the walk by nothing and never
+  /// terminate, so a degenerate board (zero [cellSize], before the first
+  /// resize) yields the undashed line rather than a hang.
+  @visibleForTesting
+  static Path dashed(Path source, {required double dash, required double gap}) {
+    if (dash <= 0) {
+      return source;
+    }
+    final result = Path();
+    for (final metric in source.computeMetrics()) {
+      var start = 0.0;
+      while (start < metric.length) {
+        final end = math.min(start + dash, metric.length);
+        result.addPath(metric.extractPath(start, end), Offset.zero);
+        start = end + gap;
+      }
+    }
+    return result;
   }
 
   void _renderGrid(Canvas canvas) {
