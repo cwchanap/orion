@@ -85,13 +85,11 @@ class _TechTreeViewState extends State<TechTreeView> {
                         icon: const Icon(Icons.arrow_back),
                       ),
                       Expanded(
-                        child: Text(
+                        child: OrionTitle(
                           'Campaign Tech Tree',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: OrionTypography.title(
-                            color: uiTheme.textPrimary,
-                          ),
+                          color: uiTheme.textPrimary,
                         ),
                       ),
                       Semantics(

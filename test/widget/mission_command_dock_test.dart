@@ -370,12 +370,10 @@ void main() {
     },
   );
 
-  testWidgets('rail and tower cards are surfaced via MissionSurface', (
-    tester,
-  ) async {
+  testWidgets('the rail blurs once and its tiles are flat', (tester) async {
     await tester.pumpWidget(railHost());
 
-    // The rail shell surfaces the whole strip...
+    // The rail shell surfaces — and blurs — the whole strip once.
     expect(
       find.ancestor(
         of: find.byKey(const ValueKey('tower-card-laser')),
@@ -383,12 +381,13 @@ void main() {
       ),
       findsOneWidget,
     );
-    // ...and each card is itself surfaced. MissionSurface is a thin
-    // deprecated adapter now, so both delegate to OrionSurface internally.
+    // Each tile still carries tier chrome, but flat: blurring a child of a
+    // blurred container is the anti-pattern OrionSurface names, and eight
+    // blurred tiles are what pushed this scene past its 5-9 budget.
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('tower-card-laser')),
-        matching: find.byType(MissionSurface),
+        matching: find.byType(OrionInnerSurface),
       ),
       findsOneWidget,
     );
@@ -397,8 +396,16 @@ void main() {
         of: find.byKey(const ValueKey('tower-card-laser')),
         matching: find.byType(OrionSurface),
       ),
-      findsOneWidget,
+      findsNothing,
     );
+  });
+
+  testWidgets('the whole rail costs one blur, not one per tile', (
+    tester,
+  ) async {
+    await tester.pumpWidget(railHost());
+
+    expect(find.byType(BackdropFilter), findsOneWidget);
   });
 
   testWidgets('idle dock is a single MissionSurface with no frame chrome', (

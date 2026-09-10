@@ -206,11 +206,9 @@ class StageBriefingSheet extends StatelessWidget {
 /// Centred stage identity: sector eyebrow, display-scale name, blurb.
 ///
 /// The artboard treats the stage name as the sheet's hero rather than a
-/// chrome title, so this is the one place [OrionTypography.title] is asked
-/// for a display size. Casing is left as written: the artboard sets this
-/// title in caps, but that is a copy decision across all ten title sites,
-/// and forcing it here with toUpperCase would also make screen readers
-/// announce the name letter-shouted.
+/// chrome title, so this is the one place [OrionTitle] is asked for a display
+/// size. It renders the caps the artboard sets while keeping the real copy as
+/// the semantics label.
 class _BriefingIdentity extends StatelessWidget {
   const _BriefingIdentity({
     required this.stage,
@@ -250,11 +248,12 @@ class _BriefingIdentity extends StatelessWidget {
         const SizedBox(height: 8),
         FittedBox(
           fit: BoxFit.scaleDown,
-          child: Text(
+          child: OrionTitle(
             stage.name,
             textAlign: TextAlign.center,
             maxLines: 1,
-            style: OrionTypography.title(color: uiTheme.textPrimary, size: 30),
+            color: uiTheme.textPrimary,
+            size: 30,
           ),
         ),
         const SizedBox(height: 8),
@@ -457,15 +456,13 @@ class _BriefingLaunchAction extends StatelessWidget {
                   Flexible(
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text(
+                      // On a filled accent the label must be the dark ink,
+                      // which microLabel's muted-only rule cannot express.
+                      child: OrionTitle(
                         label,
                         maxLines: 1,
-                        // On a filled accent the label must be the dark ink,
-                        // which microLabel's muted-only rule cannot express.
-                        style: OrionTypography.title(
-                          color: uiTheme.voidBlack,
-                          size: 14,
-                        ),
+                        color: uiTheme.voidBlack,
+                        size: 14,
                       ),
                     ),
                   ),

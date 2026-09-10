@@ -27,11 +27,13 @@ import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'support/orion_finders.dart';
 import 'support/command_deck_fixtures.dart';
 import 'support/reactor_rim_visual_capture.dart';
 import 'support/real_fonts.dart';
@@ -46,6 +48,11 @@ Widget testGamePage({
   GameFeedback gameFeedback = const NoOpGameFeedback(),
 }) {
   return MaterialApp(
+    // The real theme, not Flutter's defaults: Material components the game
+    // still uses (segmented button, chips, text buttons) take their colours
+    // from here, so a bare MaterialApp renders evidence fixtures that do not
+    // match the shipped app.
+    theme: orionThemeData,
     home: OrionGamePage(
       progressStore: progressStore,
       progressStoreLoader: progressStoreLoader,
@@ -63,8 +70,8 @@ Future<void> startStageFromBriefing(
 }) async {
   await tester.tap(find.text(mapLabel));
   await tester.pumpAndSettle();
-  expect(find.text(actionLabel), findsOneWidget);
-  await tester.tap(find.text(actionLabel));
+  expect(findOrionTitle(actionLabel), findsOneWidget);
+  await tester.tap(findOrionTitle(actionLabel));
   await tester.pump();
 }
 
@@ -253,12 +260,12 @@ void main() {
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('Standard Conditions'), findsOneWidget);
     expect(find.text('No environmental modifiers'), findsOneWidget);
     expect(createdGame, isNull);
 
-    await tester.tap(find.text('Start Mission'));
+    await tester.tap(findOrionTitle('Start Mission'));
     await tester.pump();
     expect(createdGame?.stage.id, 'outpost-alpha');
   });
@@ -283,7 +290,7 @@ void main() {
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
-    expect(find.text('Replay Mission'), findsOneWidget);
+    expect(findOrionTitle('Replay Mission'), findsOneWidget);
     expect(find.text('Best: Silver • 14 base health'), findsOneWidget);
     await tester.tap(find.text('Dismiss'));
     await tester.pumpAndSettle();
@@ -312,7 +319,7 @@ void main() {
         find.text('Blueprint recovered: Relay Calibration'),
         findsOneWidget,
       );
-      expect(find.text('Replay Mission'), findsOneWidget);
+      expect(findOrionTitle('Replay Mission'), findsOneWidget);
       expect(find.byType(OrionAtlasSprite), findsWidgets);
     },
   );
@@ -368,10 +375,10 @@ void main() {
 
     await tester.tap(find.text('Core'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Replay Mission'));
+    await tester.ensureVisible(findOrionTitle('Replay Mission'));
     await tester.pump();
 
-    expect(find.text('Replay Mission'), findsOneWidget);
+    expect(findOrionTitle('Replay Mission'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -409,9 +416,9 @@ void main() {
 
         await tester.tap(find.text('Alpha'));
         await tester.pump();
-        expect(find.text('Outpost Alpha'), findsOneWidget);
+        expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
 
-        final action = find.text('Start Mission');
+        final action = findOrionTitle('Start Mission');
         await tester.ensureVisible(action);
         await tester.pump();
         final actionRect = tester.getRect(action);
@@ -444,7 +451,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Core'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Replay Mission'));
+    await tester.tap(findOrionTitle('Replay Mission'));
     await tester.pump();
 
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
@@ -1210,8 +1217,8 @@ void main() {
 
     expect(find.text('Singularity Core is locked.'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Start Mission'), findsNothing);
-    expect(find.text('Replay Mission'), findsNothing);
+    expect(findOrionTitle('Start Mission'), findsNothing);
+    expect(findOrionTitle('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
   });
 
@@ -1243,7 +1250,7 @@ void main() {
     await tester.tap(find.byTooltip('Reset Campaign'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Reset Campaign'), findsOneWidget);
+    expect(findOrionTitle('Reset Campaign'), findsOneWidget);
     expect(find.text('Clear all campaign progress?'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
@@ -2071,8 +2078,8 @@ void main() {
 
     expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Start Mission'), findsNothing);
-    expect(find.text('Replay Mission'), findsNothing);
+    expect(findOrionTitle('Start Mission'), findsNothing);
+    expect(findOrionTitle('Replay Mission'), findsNothing);
 
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
@@ -2343,8 +2350,8 @@ void main() {
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
-    expect(find.text('Start Mission'), findsNothing);
-    expect(find.text('Replay Mission'), findsNothing);
+    expect(findOrionTitle('Start Mission'), findsNothing);
+    expect(findOrionTitle('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
 
     final resetButton = find.byTooltip('Reset Campaign');
@@ -2580,7 +2587,7 @@ void main() {
 
       // TechTreeView is now rendered (T12): its header appears and the
       // world-map header is replaced.
-      expect(find.text('Campaign Tech Tree'), findsOneWidget);
+      expect(findOrionTitle('Campaign Tech Tree'), findsOneWidget);
       expect(find.text('ORION SECTOR'), findsNothing);
 
       // The back arrow returns the player to the world map.
@@ -2588,7 +2595,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('ORION SECTOR'), findsOneWidget);
-      expect(find.text('Campaign Tech Tree'), findsNothing);
+      expect(findOrionTitle('Campaign Tech Tree'), findsNothing);
     },
   );
 
@@ -3690,13 +3697,13 @@ void main() {
       // slide transition under reduced motion.
       await tester.tap(find.text('Alpha'));
       await tester.pump();
-      expect(find.text('Outpost Alpha'), findsOneWidget);
-      expect(find.text('Start Mission'), findsOneWidget);
+      expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
+      expect(findOrionTitle('Start Mission'), findsOneWidget);
 
       // Dismiss without starting the mission.
       await tester.tap(find.text('Dismiss'));
       await tester.pumpAndSettle();
-      expect(find.text('Start Mission'), findsNothing);
+      expect(findOrionTitle('Start Mission'), findsNothing);
 
       // The Settings sheet is also visible immediately.
       await tester.tap(find.byTooltip('Settings'));

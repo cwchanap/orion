@@ -4,6 +4,7 @@ import '../models/game_models.dart';
 import 'mission_command_hud.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'tower_inspector.dart';
@@ -503,10 +504,14 @@ class _TowerBuildCard extends StatelessWidget {
         key: ValueKey('tower-card-${type.name}'),
         width: baseWidth * scaleFactor,
         height: baseHeight * scaleFactor,
-        child: MissionSurface(
+        // Flat: the rail around these tiles is already one blurred row, and
+        // blurring each tile inside it is the anti-pattern OrionSurface names.
+        child: OrionInnerSurface(
+          tier: canAttempt && affordable
+              ? OrionSurfaceTier.t3
+              : OrionSurfaceTier.t2,
           padding: const EdgeInsets.all(2),
           radius: 10,
-          emphasized: canAttempt && affordable,
           child: Material(
             color: Colors.transparent,
             child: InkResponse(

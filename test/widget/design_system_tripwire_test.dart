@@ -64,6 +64,50 @@ void main() {
     );
   });
 
+  test('screen titles go through OrionTitle', () {
+    // OrionTitle carries the caps and keeps the real copy as the semantics
+    // label. A bare Text styled with the title role renders sentence case and
+    // drifts the screen back off the sheet, so the role's only caller is the
+    // widget that owns it.
+    final offenders = [
+      for (final file in _libDartFiles())
+        if (!file.path.endsWith('orion_typography.dart') &&
+            file.readAsStringSync().contains('OrionTypography.title'))
+          file.path,
+    ];
+    expect(
+      offenders,
+      isEmpty,
+      reason: 'use OrionTitle; it owns the caps and the semantics label',
+    );
+  });
+
+  test('OrionTitle is handed real copy, never a shouted literal', () {
+    // Passing an already-uppercased string would double-apply the rule and
+    // leave assistive tech spelling out the shout.
+    final offenders = <String>[];
+    final call = RegExp(r"OrionTitle\(\s*'([^']*)'");
+    for (final file in _libDartFiles()) {
+      for (final match in call.allMatches(file.readAsStringSync())) {
+        final literal = match.group(1)!;
+        if (literal.toUpperCase() == literal &&
+            literal.toLowerCase() != literal) {
+          offenders.add('${file.path}: $literal');
+        }
+      }
+    }
+    expect(offenders, isEmpty, reason: 'OrionTitle uppercases for display');
+  });
+
+  test('Material components take Orion colours, not a generated seed', () {
+    final main = File('lib/main.dart').readAsStringSync();
+    expect(
+      main.contains('ColorScheme.fromSeed'),
+      isFalse,
+      reason: 'a seeded scheme colours Material widgets off palette',
+    );
+  });
+
   test('microLabel cannot be white', () {
     expect(
       () => OrionTypography.microLabel(color: OrionUiTheme.dark.textPrimary),

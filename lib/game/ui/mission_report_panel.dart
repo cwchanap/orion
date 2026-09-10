@@ -194,10 +194,10 @@ class _ReportBody extends StatelessWidget {
           style: OrionTypography.microLabel(size: 11, color: accent),
         ),
         const SizedBox(height: 4),
-        Text(
+        OrionTitle(
           content.stageName,
           textAlign: TextAlign.center,
-          style: OrionTypography.title(color: uiTheme.textPrimary),
+          color: uiTheme.textPrimary,
         ),
         const SizedBox(height: 14),
         // Exactly one victory/defeat banner, selected from the real result.

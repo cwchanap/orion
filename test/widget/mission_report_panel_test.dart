@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
+import '../support/orion_finders.dart';
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
@@ -331,7 +333,7 @@ void main() {
 
     // Stage identity, real base-health result, comparison copy, save state.
     expect(find.text('Victory'), findsOneWidget);
-    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('Gold medal • Base 20/20'), findsOneWidget);
     expect(find.text('New first-clear result'), findsOneWidget);
     expect(find.text('Saved.'), findsOneWidget);
@@ -371,7 +373,7 @@ void main() {
     expect(_resultArt('reactor_rim_ui/results/victory.png'), findsNothing);
     expect(find.byIcon(Icons.workspace_premium), findsNothing);
     expect(find.text('Mission Failed'), findsOneWidget);
-    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('Reached Wave 5/8'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('World Map'), findsOneWidget);
@@ -424,6 +426,7 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          theme: orionThemeData,
           home: Scaffold(
             body: MissionReportPanel(
               content: _victoryContent(
@@ -461,7 +464,7 @@ void main() {
     );
     expect(_resultArt('reactor_rim_ui/results/victory.png'), findsOneWidget);
     expect(find.text('Victory'), findsOneWidget);
-    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('Gold medal • Base 20/20'), findsOneWidget);
     expect(find.text('New first-clear result'), findsOneWidget);
     expect(find.text('Saved.'), findsOneWidget);

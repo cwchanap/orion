@@ -20,6 +20,14 @@ enum OrionSurfaceTier {
   t3(12),
 
   /// The full-width dock shelf — the one surface that spans edge to edge.
+  ///
+  /// Deliberately unused in `lib/` today: the command deck is inset 12px on
+  /// all sides, so nothing in the current layout is edge to edge, and forcing
+  /// it would make [OrionSurface.topBorderOnly] draw a border that stops short
+  /// of the screen. Kept rather than deleted because the system sheet ships
+  /// four tiers and the in-battle scenes still to be built are where a shelf
+  /// would appear; the blur tripwire, not this member's use, is what keeps a
+  /// fifth value from creeping in.
   t4(14);
 
   const OrionSurfaceTier(this.blur);
@@ -53,6 +61,71 @@ class OrionSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(radius);
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: tier.blur, sigmaY: tier.blur),
+        child: DecoratedBox(
+          decoration: _tierDecoration(
+            context,
+            tier: tier,
+            borderRadius: borderRadius,
+            topBorderOnly: topBorderOnly,
+          ),
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+/// The same tier chrome as [OrionSurface], with no blur.
+///
+/// For a surface nested inside one that is already blurred — a rail tile in a
+/// blurred rail. Blurring a child of a blurred container is the anti-pattern
+/// orion_surface.dart names ("blur the container rather than each child"), and
+/// it is what pushed the mission scene to roughly 13 concurrent blurs against
+/// a documented budget of 5-9. Visually it is near-indistinguishable, because
+/// the parent has already blurred everything behind it.
+class OrionInnerSurface extends StatelessWidget {
+  const OrionInnerSurface({
+    super.key,
+    required this.tier,
+    required this.child,
+    this.padding = const EdgeInsets.all(12),
+    this.radius = 18,
+  });
+
+  final OrionSurfaceTier tier;
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+  final double radius;
+
+  @override
+  Widget build(BuildContext context) {
+    final borderRadius = BorderRadius.circular(radius);
+    return DecoratedBox(
+      decoration: _tierDecoration(
+        context,
+        tier: tier,
+        borderRadius: borderRadius,
+        topBorderOnly: false,
+      ),
+      child: Padding(padding: padding, child: child),
+    );
+  }
+}
+
+/// Fill, gradient and border for [tier] — shared so the blurred and flat
+/// surfaces cannot drift apart.
+BoxDecoration _tierDecoration(
+  BuildContext context, {
+  required OrionSurfaceTier tier,
+  required BorderRadius borderRadius,
+  required bool topBorderOnly,
+}) {
+  {
     final t = OrionUiTheme.of(context);
     final (Gradient? gradient, Color? color) = switch (tier) {
       OrionSurfaceTier.t1 => (null, t.hullBlack.withValues(alpha: 0.55)),
@@ -98,24 +171,13 @@ class OrionSurface extends StatelessWidget {
       OrionSurfaceTier.t4 => t.systemCyan.withValues(alpha: 0.14),
     };
 
-    final borderRadius = BorderRadius.circular(radius);
-
-    return ClipRRect(
+    return BoxDecoration(
+      color: color,
+      gradient: gradient,
       borderRadius: borderRadius,
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: tier.blur, sigmaY: tier.blur),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: color,
-            gradient: gradient,
-            borderRadius: borderRadius,
-            border: topBorderOnly
-                ? Border(top: BorderSide(color: borderColor))
-                : Border.fromBorderSide(BorderSide(color: borderColor)),
-          ),
-          child: Padding(padding: padding, child: child),
-        ),
-      ),
+      border: topBorderOnly
+          ? Border(top: BorderSide(color: borderColor))
+          : Border.fromBorderSide(BorderSide(color: borderColor)),
     );
   }
 }

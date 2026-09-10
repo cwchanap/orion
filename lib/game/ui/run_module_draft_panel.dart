@@ -30,10 +30,10 @@ class RunModuleDraftPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
+                OrionTitle(
                   'Salvage Module ${offer.draftNumber} of ${offer.draftTotal}',
                   textAlign: TextAlign.center,
-                  style: OrionTypography.title(color: uiTheme.textPrimary),
+                  color: uiTheme.textPrimary,
                 ),
                 const SizedBox(height: 12),
                 for (final id in offer.moduleIds) ...[

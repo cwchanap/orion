@@ -281,12 +281,12 @@ class _ExpandedPreviewBody extends StatelessWidget {
             Icon(Icons.radar, color: uiTheme.systemCyan, size: 17),
             const SizedBox(width: 5),
             Expanded(
-              child: Text(
-                'NEXT WAVE ${preview.waveNumber}/${preview.waveTotal}',
+              child: OrionTitle(
+                'Next wave ${preview.waveNumber}/${preview.waveTotal}',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: textScaler,
-                style: OrionTypography.title(color: uiTheme.textPrimary),
+                color: uiTheme.textPrimary,
               ),
             ),
           ],
