@@ -354,6 +354,56 @@ void main() {
     expect(recorder.popped, isTrue);
   });
 
+  group('artboard 1b fact row', () {
+    testWidgets('is four tiles: waves, hull, start, and the modifier', (
+      tester,
+    ) async {
+      await _pumpBriefing(tester, stage: OrionCampaign.stages.first);
+
+      final row = find.byKey(const ValueKey('briefing-facts'));
+      expect(row, findsOneWidget);
+      for (final label in ['WAVES', 'HULL', 'START', 'MODIFIER']) {
+        expect(
+          find.descendant(of: row, matching: find.text(label)),
+          findsOneWidget,
+          reason: 'the fact row is missing its $label tile',
+        );
+      }
+      expect(find.byKey(const ValueKey('briefing-modifier')), findsOneWidget);
+    });
+
+    testWidgets('renders the START figure in credit gold', (tester) async {
+      // The tile took a `color` and never read it, so START arrived as
+      // creditGold and rendered white with the rest. Assert the figure, not
+      // the argument.
+      await _pumpBriefing(tester, stage: OrionCampaign.stages.first);
+
+      final figure = tester.widget<Text>(
+        find.text('${GameBalance.startingGold}'),
+      );
+
+      expect(
+        figure.style!.color!.toARGB32(),
+        OrionUiTheme.dark.creditGold.toARGB32(),
+      );
+    });
+
+    testWidgets('fits four tiles at product width and 2x text scale', (
+      tester,
+    ) async {
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stages.first,
+        textScaler: const TextScaler.linear(2),
+      );
+
+      final row = tester.getRect(find.byKey(const ValueKey('briefing-facts')));
+      expect(row.left, greaterThanOrEqualTo(0));
+      expect(row.right, lessThanOrEqualTo(_productViewport.width));
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   testWidgets('capture scene 1b fixture', (tester) async {
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
