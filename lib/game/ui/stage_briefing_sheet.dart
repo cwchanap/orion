@@ -73,11 +73,16 @@ class StageBriefingSheet extends StatelessWidget {
                             badgeLabel: isOptional ? 'OPTIONAL' : 'PRIMARY',
                           ),
                           const SizedBox(height: 16),
+                          // Artboard 1b's fact row is four tiles, not three:
+                          // waves, hull, start, and the stage modifier as the
+                          // odd one out in warning orange. Each carries a
+                          // glyph above its figure.
                           Row(
                             key: const ValueKey('briefing-facts'),
                             children: [
                               Expanded(
                                 child: _BriefingStatTile(
+                                  icon: Icons.waves_rounded,
                                   value: '${stage.waves.length}',
                                   label: 'WAVES',
                                   color: uiTheme.systemCyan,
@@ -86,6 +91,7 @@ class StageBriefingSheet extends StatelessWidget {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: _BriefingStatTile(
+                                  icon: Icons.shield_outlined,
                                   value: '$startingBaseHealth',
                                   label: 'HULL',
                                   color: uiTheme.systemCyan,
@@ -94,11 +100,22 @@ class StageBriefingSheet extends StatelessWidget {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: _BriefingStatTile(
+                                  icon: Icons.hexagon,
                                   value: '$startingGold',
                                   label: 'START',
                                   color: uiTheme.creditGold,
+                                  valueColor: uiTheme.creditGold,
                                 ),
                               ),
+                              if (metadata.isNotEmpty) ...[
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _BriefingModifierTile(
+                                    key: const ValueKey('briefing-modifier'),
+                                    title: metadata.first.title,
+                                  ),
+                                ),
+                              ],
                             ],
                           ),
                           const SizedBox(height: 16),
@@ -511,33 +528,48 @@ class _BriefingHero extends StatelessWidget {
   }
 }
 
+/// One tile in artboard 1b's fact row: a glyph, a figure, a caption.
+///
+/// [color] carries the tile's role and tints the glyph. It used to be passed
+/// by every caller and read by none — the figure was hard-coded to
+/// textPrimary, so START arrived as creditGold and rendered white like the
+/// rest. [valueColor] now says explicitly when the figure takes the role
+/// colour too, which the artboard does only for credits.
 class _BriefingStatTile extends StatelessWidget {
   const _BriefingStatTile({
+    required this.icon,
     required this.value,
     required this.label,
     required this.color,
+    this.valueColor,
   });
 
+  final IconData icon;
   final String value;
   final String label;
   final Color color;
+  final Color? valueColor;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return OrionSurface(
+    final tile = OrionSurface(
       tier: OrionSurfaceTier.t2,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          Icon(icon, color: color, size: 17),
+          const SizedBox(height: 3),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
               textAlign: TextAlign.center,
-              style: OrionTypography.readout(color: uiTheme.textPrimary),
+              style: OrionTypography.readout(
+                color: valueColor ?? uiTheme.textPrimary,
+              ),
             ),
           ),
           const SizedBox(height: 2),
@@ -549,6 +581,60 @@ class _BriefingStatTile extends StatelessWidget {
             style: OrionTypography.microLabel(color: uiTheme.textMuted),
           ),
         ],
+      ),
+    );
+    return tile;
+  }
+}
+
+/// The fourth tile in artboard 1b's fact row.
+///
+/// Deliberately not a [_BriefingStatTile] with a colour override: the
+/// artboard's modifier tile has no figure. Its name *is* the value, set at
+/// label scale over two lines and ringed in warning orange so it reads as the
+/// odd one out — a modifier title like "Standard Conditions" would be
+/// unreadable shrunk into a numeral slot.
+class _BriefingModifierTile extends StatelessWidget {
+  const _BriefingModifierTile({super.key, required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border.all(color: uiTheme.warningOrange, width: 1),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 9),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Icon(Icons.bolt_rounded, color: uiTheme.warningOrange, size: 17),
+            const SizedBox(height: 3),
+            Text(
+              title.toUpperCase(),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: OrionTypography.microLabel(
+                size: 9,
+                color: uiTheme.warningOrange,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              'MODIFIER',
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: OrionTypography.microLabel(color: uiTheme.textMuted),
+            ),
+          ],
+        ),
       ),
     );
   }
