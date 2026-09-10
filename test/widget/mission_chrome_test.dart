@@ -87,7 +87,7 @@ void _expectIdlePacingAbsent(WidgetTester tester) {
   expect(find.byTooltip('Resume'), findsNothing);
   expect(find.byTooltip('Game speed'), findsNothing);
   expect(find.byTooltip('Auto-start waves'), findsNothing);
-  expect(find.text('Start Wave'), findsNothing);
+  expect(find.byTooltip('Start Wave'), findsNothing);
 }
 
 void main() {
@@ -191,14 +191,16 @@ void main() {
     // fixture evidence covers the device metrics. The primary action label
     // must fit at 390px width and 1.0x text scale without ellipsis. (World
     // Map is an icon-scale chip now; its label lives in tooltip/semantics.)
+    // The pill displays the label in caps, which is wider than the title
+    // case it replaced -- so this fit check matters more, not less.
     final paragraph = tester.renderObject<RenderParagraph>(
-      find.text('Start Wave'),
+      find.text('START WAVE'),
     );
     expect(
       paragraph.didExceedMaxLines,
       isFalse,
       reason:
-          '"Start Wave" ellipsizes at 390px width; the primary mission '
+          '"START WAVE" ellipsizes at 390px width; the primary mission '
           'action must render its label without truncation.',
     );
   });
@@ -396,7 +398,7 @@ void main() {
     expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
 
     // Board-first chrome carries no ORION branding.
     expect(find.textContaining('ORION'), findsNothing);

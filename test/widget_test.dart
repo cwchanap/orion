@@ -303,7 +303,7 @@ void main() {
     );
     expect(find.bySubtype<GameWidget>(), findsOneWidget);
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
 
     // The rail's cards render an empty SizedBox until their sprite futures
     // resolve, so capturing straight away photographs text-only cards. Give
@@ -338,7 +338,7 @@ void main() {
 
     expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Start Wave'), findsNothing);
+    expect(find.byTooltip('Start Wave'), findsNothing);
   });
 
   testWidgets('unlocked stage opens briefing before game creation', (
@@ -657,7 +657,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('Next Wave'), findsNothing);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
   });
 
   testWidgets('long-press drag commits placement through the page', (
@@ -892,7 +892,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester);
-    await tester.tap(find.text('Start Wave'));
+    await tester.tap(find.byTooltip('Start Wave'));
     await tester.pump();
 
     final gameRect = tester.getRect(find.bySubtype<GameWidget>());
@@ -1095,7 +1095,7 @@ void main() {
     expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
 
     // Speed cycles during the build phase, and every multiplier is still
     // reachable: 1x -> 2x -> 3x -> 1x.
@@ -1113,7 +1113,7 @@ void main() {
     await tester.pump();
     expect(game!.speedMultiplier, 1.0);
     expect(find.text('1x'), findsOneWidget);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
 
     game!.stateNotifier.value = commandDeckSnapshot(
       phase: GamePhase.wave,
@@ -1182,7 +1182,7 @@ void main() {
       }
 
       // Mission-control coordinates recorded while the dock is reachable.
-      final startWaveCenter = tester.getCenter(find.text('Start Wave'));
+      final startWaveCenter = tester.getCenter(find.byTooltip('Start Wave'));
       final scannerCenter = tester.getCenter(
         find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       );
@@ -1322,7 +1322,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Singularity Core is locked.'), findsOneWidget);
-    expect(find.text('Start Wave'), findsNothing);
+    expect(find.byTooltip('Start Wave'), findsNothing);
     expect(findOrionTitle('Start Mission'), findsNothing);
     expect(findOrionTitle('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
@@ -1370,7 +1370,7 @@ void main() {
       RegExp(r'Singularity Core.*Locked'),
       findsOneWidget,
     );
-    expect(find.text('Start Wave'), findsNothing);
+    expect(find.byTooltip('Start Wave'), findsNothing);
   });
 
   testWidgets('reset confirmation uses OrionSurface and keeps behavior', (
@@ -1411,7 +1411,7 @@ void main() {
     expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.text('Could not load campaign progress.'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
-    expect(find.text('Start Wave'), findsNothing);
+    expect(find.byTooltip('Start Wave'), findsNothing);
   });
 
   testWidgets(
@@ -1515,7 +1515,7 @@ void main() {
 
     // The mission report is gone and the stage is back in build phase.
     expect(find.text('Saved.'), findsNothing);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
     expect(game!.snapshot.phase, GamePhase.build);
   });
 
@@ -1595,7 +1595,7 @@ void main() {
         firstAttemptGame.availableRunModules,
         contains(RunModuleId.relayCalibration),
       );
-      expect(find.text('Start Wave'), findsOneWidget);
+      expect(find.byTooltip('Start Wave'), findsOneWidget);
     },
   );
 
@@ -2183,7 +2183,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('ORION SECTOR'), findsOneWidget);
-    expect(find.text('Start Wave'), findsNothing);
+    expect(find.byTooltip('Start Wave'), findsNothing);
     expect(findOrionTitle('Start Mission'), findsNothing);
     expect(findOrionTitle('Replay Mission'), findsNothing);
 
@@ -2196,7 +2196,7 @@ void main() {
       actionLabel: 'Replay Mission',
     );
 
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
   });
 
   testWidgets(

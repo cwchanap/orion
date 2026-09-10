@@ -478,7 +478,7 @@ void main() {
     );
     final name = find.descendant(
       of: card,
-      matching: find.text(TowerType.laser.label),
+      matching: find.text(TowerType.laser.label.toUpperCase()),
     );
 
     expect(
@@ -636,7 +636,7 @@ void main() {
     expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
     // World Map left the dock contract; the chrome layer owns it now.
     expect(find.text('World Map'), findsNothing);
 
@@ -706,8 +706,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Start Now'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsNothing);
+    expect(find.byTooltip('Start Now'), findsOneWidget);
     final handle = tester.ensureSemantics();
     try {
       expect(
@@ -935,7 +935,7 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
     expect(find.byTooltip('World Map'), findsOneWidget);
   });
 
