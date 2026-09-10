@@ -541,6 +541,9 @@ void main() {
     // convoy with traits, clear bonus, recommendations, and a modifier.
     // Real Roboto so the evidence shows true text metrics.
     await loadRealFonts();
+    // The memo can hold a pending future from an earlier cold-cache test
+    // in this process; clear it so this fixture's warmed cache is used.
+    OrionArtDescriptor.resetSpriteCache();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same keys the OrionArt descriptors use) so enemy/tower art renders.
