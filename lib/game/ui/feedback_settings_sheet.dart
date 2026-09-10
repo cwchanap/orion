@@ -38,10 +38,7 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                'Feedback',
-                style: OrionTypography.title(color: uiTheme.textPrimary),
-              ),
+              OrionTitle('Feedback', color: uiTheme.textPrimary),
               const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text('Sound Effects'),

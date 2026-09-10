@@ -888,11 +888,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       ),
                       const SizedBox(width: 8),
                       Expanded(
-                        child: Text(
+                        child: OrionTitle(
                           'Reset Campaign',
-                          style: OrionTypography.title(
-                            color: uiTheme.textPrimary,
-                          ),
+                          color: uiTheme.textPrimary,
                         ),
                       ),
                     ],

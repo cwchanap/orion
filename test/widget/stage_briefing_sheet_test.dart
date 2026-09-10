@@ -6,11 +6,13 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/stage_briefing_sheet.dart';
 
+import '../support/orion_finders.dart';
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
@@ -79,7 +81,7 @@ Future<_PopRecorder> _pumpBriefing(
 }
 
 void _expectActionWithinViewport(WidgetTester tester, Size viewport) {
-  final action = find.text('Start Mission');
+  final action = findOrionTitle('Start Mission');
   expect(action, findsOneWidget);
   tester.ensureVisible(action);
   final rect = tester.getRect(action);
@@ -139,7 +141,7 @@ void main() {
     tester,
   ) async {
     await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
-    expect(find.text(OrionCampaign.stageOne.name), findsOneWidget);
+    expect(findOrionTitle(OrionCampaign.stageOne.name), findsOneWidget);
     expect(find.text('PRIMARY'), findsOneWidget);
 
     final optional = OrionCampaign.stages.firstWhere(
@@ -147,7 +149,7 @@ void main() {
     );
     await _dismissBriefing(tester);
     await _pumpBriefing(tester, stage: optional);
-    expect(find.text(optional.name), findsOneWidget);
+    expect(findOrionTitle(optional.name), findsOneWidget);
     expect(find.text('OPTIONAL'), findsOneWidget);
   });
 
@@ -277,10 +279,10 @@ void main() {
   ) async {
     final recorder = await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
 
-    expect(find.text('Start Mission'), findsOneWidget);
-    expect(find.text('Replay Mission'), findsNothing);
+    expect(findOrionTitle('Start Mission'), findsOneWidget);
+    expect(findOrionTitle('Replay Mission'), findsNothing);
 
-    await tester.tap(find.text('Start Mission'));
+    await tester.tap(findOrionTitle('Start Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -292,10 +294,10 @@ void main() {
       result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
     );
 
-    expect(find.text('Replay Mission'), findsOneWidget);
-    expect(find.text('Start Mission'), findsNothing);
+    expect(findOrionTitle('Replay Mission'), findsOneWidget);
+    expect(findOrionTitle('Start Mission'), findsNothing);
 
-    await tester.tap(find.text('Replay Mission'));
+    await tester.tap(findOrionTitle('Replay Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -346,8 +348,8 @@ void main() {
       disableAnimations: true,
     );
 
-    expect(find.text('Start Mission'), findsOneWidget);
-    await tester.tap(find.text('Start Mission'));
+    expect(findOrionTitle('Start Mission'), findsOneWidget);
+    await tester.tap(findOrionTitle('Start Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -374,6 +376,7 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          theme: orionThemeData,
           home: Scaffold(
             backgroundColor: const Color(0xFF05080D),
             body: StageBriefingSheet(

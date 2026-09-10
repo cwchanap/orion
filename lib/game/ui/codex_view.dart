@@ -60,10 +60,7 @@ class _CodexViewState extends State<CodexView> {
                     icon: const Icon(Icons.arrow_back),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    'Codex',
-                    style: OrionTypography.title(color: uiTheme.textPrimary),
-                  ),
+                  OrionTitle('Codex', color: uiTheme.textPrimary),
                 ],
               ),
             ),
