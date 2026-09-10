@@ -38,14 +38,21 @@ class MissionStatusHud extends StatelessWidget {
       context,
     ).clamp(maxScaleFactor: 1.15);
 
-    // Unboxed, per artboard 1a: the status readouts float on the live board
-    // rather than each sitting in its own pill. Every OrionTypography role
-    // carries a shadow for exactly this — "contrast never depends on a
-    // surface fill" — and dropping three pills' padding buys back the width
-    // the hero-scale numerals need. Still a Wrap, so a narrow viewport or a
-    // large text scale reflows instead of overflowing.
+    // Unboxed and spread, per artboard 1a: the status readouts float on the
+    // live board rather than each sitting in its own pill. Every
+    // OrionTypography role carries a shadow for exactly this — "contrast
+    // never depends on a surface fill" — and dropping three pills' padding
+    // buys back the width the hero-scale numerals need.
+    //
+    // spaceBetween is the arrangement, not decoration: the artboard pins hull
+    // to the left edge, centres the wave group and pins credits to the right,
+    // so the three readings are found by position rather than by reading
+    // along a row. Still a Wrap, so a narrow viewport or a large text scale
+    // reflows to a second run instead of overflowing; `spacing` is then the
+    // minimum gap rather than the actual one.
     return Wrap(
       key: const ValueKey('mission-status-hud'),
+      alignment: WrapAlignment.spaceBetween,
       spacing: 10,
       runSpacing: 6,
       children: [
@@ -183,33 +190,26 @@ class _MissionStatusAnchor extends StatelessWidget {
     return Tooltip(
       message: snapshot.stageName,
       excludeFromSemantics: true,
+      // Artboard 1a stacks the wave group: the count on top, the phase
+      // centred beneath it. The stage name is not in the band at all there —
+      // the band carries three numbers, not prose — so it stays in this
+      // widget's tooltip and in the Semantics label its parent supplies.
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            snapshot.stageLabel,
+          OrionReadout(
+            value: '${snapshot.waveNumber}',
+            denominator: '${snapshot.waveTotal}',
+            color: uiTheme.systemCyan,
+            size: 26,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textScaler: textScaler,
-            textAlign: TextAlign.center,
-            style: OrionTypography.microLabel(color: uiTheme.textMuted),
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Flexible(
-                child: OrionReadout(
-                  value: '${snapshot.waveNumber}',
-                  denominator: '${snapshot.waveTotal}',
-                  color: uiTheme.systemCyan,
-                  size: 26,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textScaler: textScaler,
-                ),
-              ),
-              const SizedBox(width: 6),
               SizedBox.square(
                 dimension: 6,
                 child: DecoratedBox(
@@ -257,15 +257,11 @@ class _CreditsAnchor extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Artboard order: the figure, then the credit mark -- "410 (hex)". The
+    // number is what the player reads, so it leads.
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          Icons.account_balance_wallet_outlined,
-          color: uiTheme.creditGold,
-          size: 22,
-        ),
-        const SizedBox(width: 4),
         Flexible(
           child: Text(
             '${snapshot.gold}',
@@ -276,6 +272,8 @@ class _CreditsAnchor extends StatelessWidget {
             style: OrionTypography.readout(size: 26, color: uiTheme.creditGold),
           ),
         ),
+        const SizedBox(width: 5),
+        Icon(Icons.hexagon, color: uiTheme.creditGold, size: 19),
       ],
     );
   }
