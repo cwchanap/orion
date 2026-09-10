@@ -21,6 +21,9 @@ Widget scannerHost(
   List<String> modifierTitles = const ['Standard Conditions'],
 }) {
   return MaterialApp(
+    // The product app hides this banner; a fixture host must too, or the
+    // parity evidence carries a stripe the shipped game never shows.
+    debugShowCheckedModeBanner: false,
     theme: orionThemeData,
     // A Material ancestor: without one Flutter stamps its debug
     // underlines on every label, which is what made the 1c fixture
@@ -260,6 +263,9 @@ void main() {
       final preview = commandDeckPreview();
       Widget host({required bool collapseRequested}) {
         return MaterialApp(
+          // The product app hides this banner; a fixture host must too, or the
+          // parity evidence carries a stripe the shipped game never shows.
+          debugShowCheckedModeBanner: false,
           theme: orionThemeData,
           // A Material ancestor: without one Flutter stamps its debug
           // underlines on every label, which is what made the 1c fixture
