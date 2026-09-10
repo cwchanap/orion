@@ -39,6 +39,9 @@ Widget buildMap({
   bool isSavingFeedback = false,
 }) {
   return MaterialApp(
+    // The product app hides this banner; a fixture host must too, or the
+    // parity evidence carries a stripe the shipped game never shows.
+    debugShowCheckedModeBanner: false,
     theme: orionThemeData,
     home: Scaffold(
       body: WorldMapView(
@@ -717,6 +720,9 @@ void main() {
       // tracked separately.
       await tester.pumpWidget(
         MaterialApp(
+          // The product app hides this banner; a fixture host must too, or the
+          // parity evidence carries a stripe the shipped game never shows.
+          debugShowCheckedModeBanner: false,
           theme: orionThemeData,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
