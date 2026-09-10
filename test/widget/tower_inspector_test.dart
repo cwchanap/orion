@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
@@ -34,6 +35,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             gold: 9999,
@@ -79,6 +81,7 @@ void main() {
     ).copyWith(damage: 9.5, fireInterval: 0.57, range: 151, slowDuration: 2.7);
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: const PlacedTower(
@@ -146,6 +149,7 @@ void main() {
         final stats = GameBalance.towerStats(tower.type, level: tower.level);
         await tester.pumpWidget(
           MaterialApp(
+            theme: orionThemeData,
             home: TowerInspector(
               snapshot: commandDeckSnapshot(
                 phase: GamePhase.wave,
@@ -201,6 +205,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
@@ -242,6 +247,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
@@ -286,6 +292,7 @@ void main() {
       final chosen = <TowerSpecialization>[];
       await tester.pumpWidget(
         MaterialApp(
+          theme: orionThemeData,
           home: TowerInspector(
             snapshot: commandDeckSnapshot(
               gold: 9999,
@@ -405,6 +412,7 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          theme: orionThemeData,
           // Evidence frame: hide the debug CheckedModeBanner that would
           // otherwise stamp the top-right corner of the capture.
           debugShowCheckedModeBanner: false,
@@ -454,6 +462,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
@@ -494,6 +503,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
