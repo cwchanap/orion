@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
@@ -25,6 +26,11 @@ Widget chromeHost(
   ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
 }) {
   return MaterialApp(
+    // The app's real theme: Material components (the pacing segments, the
+    // auto-start chip) take their face from it. Without it they render in
+    // Roboto, which is narrower than ChakraPetch — and a wrap guard that
+    // measures the wrong face cannot see a wrap.
+    theme: orionThemeData,
     builder: (context, child) => MediaQuery(
       data: MediaQuery.of(context).copyWith(textScaler: textScaler),
       child: child!,
@@ -75,9 +81,7 @@ void _expectIdlePacingAbsent(WidgetTester tester) {
   // A selection replaces the idle dock entirely: no pacing, no reactor.
   expect(find.byTooltip('Pause'), findsNothing);
   expect(find.byTooltip('Resume'), findsNothing);
-  expect(find.text('1x'), findsNothing);
-  expect(find.text('2x'), findsNothing);
-  expect(find.text('3x'), findsNothing);
+  expect(find.byTooltip('Game speed'), findsNothing);
   expect(find.byTooltip('Auto-start waves'), findsNothing);
   expect(find.text('Start Wave'), findsNothing);
 }
@@ -196,7 +200,8 @@ void main() {
     'width with real fonts',
     (tester) async {
       // Placeholder test glyphs are wider than any real font and cannot
-      // expose a real-font wrap; Roboto approximates the device metrics.
+      // expose a real-font wrap. chromeHost carries the app's theme, so
+      // Material labels here are ChakraPetch, the face the device uses.
       await loadRealFonts(withMaterialIcons: false);
       tester.view.physicalSize = _productViewport;
       tester.view.devicePixelRatio = 1;
@@ -230,9 +235,7 @@ void main() {
       // Every idle control shares the row: equal vertical centers.
       final centers = [
         find.byTooltip('Pause'),
-        find.text('1x'),
-        find.text('2x'),
-        find.text('3x'),
+        find.byTooltip('Game speed'),
         find.byType(FilterChip),
         find.byTooltip('Start Wave'),
       ].map(tester.getCenter).toList();
@@ -285,9 +288,9 @@ void main() {
 
     // The idle dock hosts pacing plus the primary action.
     expect(find.byTooltip('Pause'), findsOneWidget);
+    // One speed button, showing the current speed and cycling on tap.
+    expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
-    expect(find.text('2x'), findsOneWidget);
-    expect(find.text('3x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
 

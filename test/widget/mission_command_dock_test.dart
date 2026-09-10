@@ -585,15 +585,15 @@ void main() {
 
     expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
     expect(find.byTooltip('Pause'), findsOneWidget);
+    // One speed button showing the current speed, not three segments.
+    expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
-    expect(find.text('2x'), findsOneWidget);
-    expect(find.text('3x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
     // World Map left the dock contract; the chrome layer owns it now.
     expect(find.text('World Map'), findsNothing);
 
-    await tester.tap(find.text('2x'));
+    await tester.tap(find.byTooltip('Game speed'));
     await tester.tap(find.byTooltip('Auto-start waves'));
     await tester.tap(find.byTooltip('Start Wave'));
     // Pause is gated off during a plain build phase (no countdown, not
