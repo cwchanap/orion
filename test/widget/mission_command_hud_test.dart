@@ -236,36 +236,34 @@ void main() {
     }
   });
 
-  testWidgets(
-    'status HUD renders three compact mission surfaces without command frames',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
-      );
+  testWidgets('status HUD is unboxed: three readouts, no surfaces', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
+    );
 
-      expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
-      expect(find.byKey(const ValueKey('mission-status-base')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('mission-status-stage')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('mission-status-credits')),
-        findsOneWidget,
-      );
-      expect(find.byType(MissionSurface), findsNWidgets(3));
-      // MissionSurface is a thin deprecated adapter now, so each of the
-      // three chips also delegates to an unemphasized (t2) OrionSurface.
-      final chipSurfaces = find.descendant(
+    expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-status-base')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-status-stage')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('mission-status-credits')),
+      findsOneWidget,
+    );
+
+    // Artboard 1a floats these readouts on the live board rather than giving
+    // each its own pill. Their contrast comes from the type roles' shadow,
+    // which exists so it never depends on a surface fill.
+    expect(
+      find.descendant(
         of: find.byKey(const ValueKey('mission-status-hud')),
         matching: find.byType(OrionSurface),
-      );
-      expect(chipSurfaces, findsNWidgets(3));
-      for (final element in chipSurfaces.evaluate()) {
-        expect((element.widget as OrionSurface).tier, OrionSurfaceTier.t2);
-      }
-    },
-  );
+      ),
+      findsNothing,
+      reason: 'the status band is unboxed; a pill per readout is the old look',
+    );
+    expect(find.byType(MissionSurface), findsNothing);
+  });
 
   testWidgets(
     'status anchors stay on screen for long stage names at 390x844 scale 1.3',
@@ -522,54 +520,41 @@ void main() {
     );
   }
 
-  testWidgets('status readouts grow a text step and cluster reads as status', (
+  testWidgets('status readouts are hero scale with room to breathe', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
     );
 
-    // Health and credits numbers are the primary readouts: one theme step
-    // above the stage chip's label text so they no longer read as small
-    // button labels. Base health renders through OrionReadout, so the
-    // whole-health value is its own Text node ('20'), separate from its
-    // muted '/20' denominator.
+    // The sheet puts readout's hero range at 22-40. These were sitting at
+    // 14-16 inside pills, which read as small button labels; unboxing frees
+    // the width to run them at hero scale. Base health renders through
+    // OrionReadout, so the whole value is its own Text node separate from
+    // its muted denominator.
     for (final value in ['20', '150']) {
       final text = tester.widget<Text>(find.text(value));
       expect(
         text.style?.fontSize,
-        greaterThanOrEqualTo(15),
-        reason:
-            '"$value" stays at button-label size; status readouts need a '
-            'larger text step.',
+        greaterThanOrEqualTo(22),
+        reason: '"$value" is below the sheet\'s hero readout range',
       );
     }
 
-    // Status surfaces are grouped, not interactive: tight spacing and a
-    // whisper-quiet border rather than the button cyan.
-    final base = find.byKey(const ValueKey('mission-status-base'));
-    final stage = find.byKey(const ValueKey('mission-status-stage'));
-    final baseRect = tester.getRect(base);
-    final stageRect = tester.getRect(stage);
+    // Without pills, the gap between groups is what separates them, so it
+    // has to be generous rather than the old chip-to-chip tightness.
+    final baseRect = tester.getRect(
+      find.byKey(const ValueKey('mission-status-base')),
+    );
+    final stageRect = tester.getRect(
+      find.byKey(const ValueKey('mission-status-stage')),
+    );
     expect(
       stageRect.left - baseRect.right,
-      lessThanOrEqualTo(5),
+      greaterThanOrEqualTo(10),
       reason:
-          'Status surfaces are ${stageRect.left - baseRect.right}px '
-          'apart; the loose spacing reads as separate buttons.',
+          'Unboxed readouts ${stageRect.left - baseRect.right}px apart read '
+          'as one run-together string.',
     );
-    for (final chip in [base, stage]) {
-      final box = tester.widget<DecoratedBox>(
-        find.descendant(of: chip, matching: find.byType(DecoratedBox)).first,
-      );
-      final side = ((box.decoration as BoxDecoration).border as Border).top;
-      expect(
-        side.color.a / 255,
-        lessThan(0.25),
-        reason:
-            'Status chip border opacity ${side.color.a / 255} is as strong '
-            'as an interactive control.',
-      );
-    }
   });
 }
