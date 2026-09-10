@@ -14,6 +14,7 @@ import 'assets/game_tower_variety_sheet.dart';
 import 'campaign/campaign_progress.dart';
 import 'campaign/orion_campaign.dart';
 import 'campaign/stage_definition.dart';
+import 'components/board_backdrop_component.dart';
 import 'components/board_component.dart';
 import 'components/drone_component.dart';
 import 'components/enemy_component.dart';
@@ -106,6 +107,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   GameTowerVarietySheet? _towerVarietySheet;
   GameBossSheet? _bossSheet;
   Image? _boardImage;
+  BoardBackdropComponent? _boardBackdrop;
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
   int? _inspectedEnemyId;
@@ -641,13 +643,21 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
     _cellSize = cellSize;
     _boardOrigin = boardOrigin;
+    // The skin covers the whole viewport; the grid stays centred at its own
+    // cellSize, so the board reads full-bleed without moving a single cell.
+    _boardBackdrop?.removeFromParent();
+    _boardBackdrop = BoardBackdropComponent(
+      image: _boardImage,
+      size: gameSize.clone(),
+      priority: -1,
+    );
+    add(_boardBackdrop!);
     _board?.removeFromParent();
     _board = BoardComponent(
       cellSize: _cellSize,
       pathCells: stage.pathCells,
       selectedCell: _selectedTower?.position ?? _selectedCell,
       spriteSheet: _spriteSheet,
-      boardImage: _boardImage,
       pathTiles: _pathTiles,
       position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
       priority: 0,
