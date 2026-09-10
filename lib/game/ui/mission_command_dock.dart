@@ -494,8 +494,12 @@ class _TowerBuildCard extends StatelessWidget {
   final VoidCallback? onDragEnded;
   final VoidCallback? onDragCanceled;
 
-  static const double baseWidth = 64;
-  static const double baseHeight = 92;
+  // Artboard 1a's rail card: 70x88, radius 16, a 58px sprite, then the cost,
+  // then the name. Ours was 64x92 with a 42px sprite and the name above a
+  // bolt-prefixed cost -- the sprite is what the player picks from, so it
+  // gets the room, and the cost is the decision, so it outranks the name.
+  static const double baseWidth = 70;
+  static const double baseHeight = 88;
 
   @override
   Widget build(BuildContext context) {
@@ -533,8 +537,11 @@ class _TowerBuildCard extends StatelessWidget {
           tier: canAttempt && affordable
               ? OrionSurfaceTier.t3
               : OrionSurfaceTier.t2,
-          padding: const EdgeInsets.all(2),
-          radius: 10,
+          // No inset: the artboard bottom-aligns the card's contents and
+          // lets the sprite overhang the top edge, which is the only way a
+          // 58px sprite, a cost and a name fit inside 88px.
+          padding: EdgeInsets.zero,
+          radius: 16,
           child: Material(
             color: Colors.transparent,
             child: InkResponse(
@@ -544,9 +551,9 @@ class _TowerBuildCard extends StatelessWidget {
               splashColor: accent.withValues(alpha: 0.18),
               highlightColor: accent.withValues(alpha: 0.10),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.only(left: 2, right: 2, bottom: 6),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     Stack(
                       alignment: Alignment.center,
@@ -583,7 +590,7 @@ class _TowerBuildCard extends StatelessWidget {
                             opacity: affordable ? 1 : 0.48,
                             child: OrionAtlasSprite(
                               art: OrionArt.tower(type),
-                              size: const Size(42, 42),
+                              size: const Size(50, 50),
                             ),
                           ),
                         ),
@@ -595,6 +602,24 @@ class _TowerBuildCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    const SizedBox(height: 2),
+                    // Cost above name, per the artboard's card template
+                    // (icon, cost, name). An unaffordable cost goes red
+                    // rather than muted: the artboard says *why* the card is
+                    // dimmed instead of only that it is.
+                    Text(
+                      '${stats.cost}',
+                      maxLines: 1,
+                      textScaler: textScaler,
+                      style: OrionTypography.readout(
+                        size: 14,
+                        color: !unlocked
+                            ? uiTheme.textMuted
+                            : affordable
+                            ? uiTheme.creditGold
+                            : uiTheme.dangerRed,
+                      ),
+                    ),
                     const SizedBox(height: 1),
                     Text(
                       type.label,
@@ -602,40 +627,13 @@ class _TowerBuildCard extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       textScaler: textScaler,
+                      // Muted in every state, as the artboard sets it: the
+                      // cost carries the affordability signal now, so the
+                      // name does not need to.
                       style: OrionTypography.microLabel(
-                        // The muted-label rule forbids textPrimary here, so
-                        // fall back to the card's own unlocked accent
-                        // (systemCyan) instead of collapsing both states to
-                        // textMuted.
-                        color: unlocked
-                            ? uiTheme.systemCyan
-                            : uiTheme.textMuted,
+                        size: 7.5,
+                        color: uiTheme.textMuted,
                       ),
-                    ),
-                    const SizedBox(height: 1),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.bolt,
-                          size: 11,
-                          color: affordable && unlocked
-                              ? uiTheme.creditGold
-                              : uiTheme.textMuted,
-                        ),
-                        const SizedBox(width: 1),
-                        Text(
-                          '${stats.cost}',
-                          maxLines: 1,
-                          textScaler: textScaler,
-                          style: OrionTypography.readout(
-                            size: 11,
-                            color: affordable && unlocked
-                                ? uiTheme.creditGold
-                                : uiTheme.textMuted,
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),

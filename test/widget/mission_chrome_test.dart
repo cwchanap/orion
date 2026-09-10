@@ -244,7 +244,7 @@ void main() {
       final centers = [
         find.byTooltip('Pause'),
         find.byTooltip('Game speed'),
-        find.byType(FilterChip),
+        find.byTooltip('Auto-start waves'),
         find.byTooltip('Start Wave'),
       ].map(tester.getCenter).toList();
       for (final center in centers) {
@@ -883,9 +883,13 @@ void main() {
         find.byKey(const ValueKey('tower-card-laser')),
         _productViewport,
       );
-      await tester.drag(
-        find.byKey(const ValueKey('tower-card-laser')),
-        const Offset(-400, 0),
+      // Scroll until it is actually visible rather than by a fixed distance:
+      // a -400 drag was calibrated to the old 64dp card and silently stopped
+      // 22px short once the artboard's 70dp card widened the rail.
+      await tester.scrollUntilVisible(
+        find.byKey(ValueKey('tower-card-${TowerType.values.last.name}')),
+        120,
+        scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
       _expectWithinViewport(

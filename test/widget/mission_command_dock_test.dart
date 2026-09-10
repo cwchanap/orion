@@ -463,6 +463,31 @@ void main() {
     }
   });
 
+  testWidgets('rail cards put the cost above the name', (tester) async {
+    // The artboard's card template is icon, cost, name -- the cost is the
+    // decision, so it outranks the name. Ours had the name above a
+    // bolt-prefixed cost.
+    await tester.pumpWidget(railHost());
+
+    final card = find.byKey(const ValueKey('tower-card-laser'));
+    final cost = find.descendant(
+      of: card,
+      matching: find.text(
+        '${GameBalance.towerStats(TowerType.laser, level: 1).cost}',
+      ),
+    );
+    final name = find.descendant(
+      of: card,
+      matching: find.text(TowerType.laser.label),
+    );
+
+    expect(
+      tester.getCenter(cost).dy,
+      lessThan(tester.getCenter(name).dy),
+      reason: 'the cost does not sit above the name',
+    );
+  });
+
   testWidgets('five art cards fit or peek at 375dp and the rail scrolls', (
     tester,
   ) async {
@@ -476,7 +501,7 @@ void main() {
     final fifth = tester.getRect(
       find.byKey(ValueKey('tower-card-${TowerType.values[4].name}')),
     );
-    expect(first.width, 64);
+    expect(first.width, 70); // artboard 1a's rail card
     expect(fifth.left, lessThan(375));
     expect(find.byType(Scrollable), findsWidgets);
   });
@@ -500,7 +525,7 @@ void main() {
     final first = tester.getRect(
       find.byKey(const ValueKey('tower-card-laser')),
     );
-    expect(first.width, closeTo(64 * 1.3, 0.01));
+    expect(first.width, closeTo(70 * 1.3, 0.01));
     expect(find.byType(TowerBuildRail), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
