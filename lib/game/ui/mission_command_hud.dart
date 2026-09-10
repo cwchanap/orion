@@ -319,43 +319,9 @@ class MissionPacingControls extends StatelessWidget {
             onPressed: canTogglePause ? onTogglePause : null,
             icon: Icon(snapshot.isPaused ? Icons.play_arrow : Icons.pause),
           ),
-          SegmentedButton<double>(
-            showSelectedIcon: false,
-            // M3 floors every segment at the inner button's 64px minimum
-            // width, which alone pushes pause + 3 speeds + auto-start past
-            // the idle dock's row at the product width and makes the dock
-            // wrap (covering bottom-row board cells). Horizontal density -4
-            // lowers that floor to the 48dp touch minimum; vertical density
-            // stays 0 so the padded 48dp hit height is preserved.
-            //
-            // KNOWN: density -4 was believed to fix the wrap, and it did
-            // while the tests rendered these labels in Roboto. Under the
-            // app's own ChakraPetch the dock still wraps at 390: measured at
-            // the real dock width of 366, pacing needs 249.5px (pause 48 +
-            // segments 144 + auto 49.5 + 8 of Wrap spacing) but only gets
-            // ~97 beside the primary action pill. The segments are already
-            // at the 48dp touch floor, so closing the gap means shrinking
-            // the primary action, dropping a speed step, or accepting two
-            // rows — a design call, not a styling one. Left wrapping.
-            style: ButtonStyle(
-              visualDensity: const VisualDensity(horizontal: -4),
-              // Segment labels on the Orion scale rather than Material's
-              // default, which is set for a wider face. This narrows the
-              // control but does NOT on its own keep the idle dock to one
-              // row: see the measurements on MissionPacingControls.
-              textStyle: WidgetStatePropertyAll(
-                OrionTypography.microLabel(size: 11),
-              ),
-            ),
-            segments: const [
-              ButtonSegment<double>(value: 1.0, label: Text('1x')),
-              ButtonSegment<double>(value: 2.0, label: Text('2x')),
-              ButtonSegment<double>(value: 3.0, label: Text('3x')),
-            ],
-            selected: {snapshot.speedMultiplier},
-            onSelectionChanged: canUsePacing
-                ? (selection) => onSpeedSelected(selection.single)
-                : null,
+          _SpeedCycleButton(
+            speed: snapshot.speedMultiplier,
+            onSelected: canUsePacing ? onSpeedSelected : null,
           ),
           AnimatedSwitcher(
             duration: orionMotionDuration(
@@ -392,6 +358,72 @@ class MissionPacingControls extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Mission speed as one button that cycles 1x -> 2x -> 3x -> 1x.
+///
+/// A three-segment control costs three 48dp touch targets (144px). At the
+/// product width the idle dock has 248px for pacing and needs 249.5 with the
+/// segments, so it wrapped onto a second row over the board — and the
+/// auto-start countdown label ("Auto 5s") widens that further. Segments
+/// cannot shrink below the touch floor, so the control had to stop costing
+/// three of them. One button costs 48px and leaves real headroom.
+///
+/// Every speed stays reachable, and the artboard shows a single speed button
+/// rather than a segmented control, so this also moves toward the sheet.
+class _SpeedCycleButton extends StatelessWidget {
+  const _SpeedCycleButton({required this.speed, required this.onSelected});
+
+  final double speed;
+
+  /// Null while pacing is unavailable, which disables the button.
+  final ValueChanged<double>? onSelected;
+
+  static const List<double> _cycle = [1, 2, 3];
+
+  double get _next {
+    final index = _cycle.indexOf(speed);
+    // An unrecognised speed restarts the cycle rather than throwing.
+    return index == -1 ? _cycle.first : _cycle[(index + 1) % _cycle.length];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final onSelected = this.onSelected;
+    final label = '${speed.toStringAsFixed(0)}x';
+    final next = '${_next.toStringAsFixed(0)}x';
+    return Semantics(
+      button: true,
+      enabled: onSelected != null,
+      // The bare label would announce "2x" with no hint that it changes, so
+      // the semantics say what the control is and what a tap does.
+      label: 'Game speed $label, tap for $next',
+      onTap: onSelected == null ? null : () => onSelected(_next),
+      child: ExcludeSemantics(
+        child: Tooltip(
+          message: 'Game speed',
+          excludeFromSemantics: true,
+          child: OutlinedButton(
+            onPressed: onSelected == null ? null : () => onSelected(_next),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(48, 48),
+              padding: EdgeInsets.zero,
+              side: BorderSide(color: uiTheme.frameSteel),
+              shape: const StadiumBorder(),
+            ),
+            child: Text(
+              label,
+              style: OrionTypography.microLabel(
+                size: 11,
+                color: speed > 1 ? uiTheme.systemCyan : uiTheme.textMuted,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

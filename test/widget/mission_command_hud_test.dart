@@ -93,7 +93,8 @@ void main() {
     );
 
     await tester.tap(find.byTooltip('Pause'));
-    await tester.tap(find.text('2x'));
+    // The speed button cycles: from the fixture's 1x, one tap selects 2x.
+    await tester.tap(find.byTooltip('Game speed'));
     await tester.tap(find.byTooltip('Auto-start waves'));
     expect((pauseTaps, speed, autoTaps), (1, 2.0, 1));
   });
@@ -140,15 +141,9 @@ void main() {
     expect(pauseRect.width, greaterThanOrEqualTo(minimumHitTarget));
     expect(pauseRect.height, greaterThanOrEqualTo(minimumHitTarget));
 
-    for (final label in ['1x', '2x', '3x']) {
-      final segment = find.ancestor(
-        of: find.text(label),
-        matching: find.byType(TextButton),
-      );
-      final segmentRect = tester.getRect(segment);
-      expect(segmentRect.width, greaterThanOrEqualTo(minimumHitTarget));
-      expect(segmentRect.height, greaterThanOrEqualTo(minimumHitTarget));
-    }
+    final speedRect = tester.getRect(find.byTooltip('Game speed'));
+    expect(speedRect.width, greaterThanOrEqualTo(minimumHitTarget));
+    expect(speedRect.height, greaterThanOrEqualTo(minimumHitTarget));
 
     final autoRect = tester.getRect(find.byType(FilterChip));
     expect(autoRect.width, greaterThanOrEqualTo(minimumHitTarget));

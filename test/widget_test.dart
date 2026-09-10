@@ -986,25 +986,27 @@ void main() {
     // Pacing lives inside the idle dock: pause must be reachable while an
     // auto-start countdown runs, and countdowns run during the build phase.
     expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
-    expect(find.text('2x'), findsOneWidget);
-    expect(find.text('3x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
 
-    // Speed selection works during the build phase, jumping straight to the
-    // tapped multiplier.
-    await tester.tap(find.text('2x'));
+    // Speed cycles during the build phase, and every multiplier is still
+    // reachable: 1x -> 2x -> 3x -> 1x.
+    await tester.tap(find.byTooltip('Game speed'));
     await tester.pump();
     expect(game!.speedMultiplier, 2.0);
-    game!.setSpeedMultiplier(1);
-    await tester.pump();
+    expect(find.text('2x'), findsOneWidget);
 
-    await tester.tap(find.text('3x'));
+    await tester.tap(find.byTooltip('Game speed'));
     await tester.pump();
     expect(game!.speedMultiplier, 3.0);
-    game!.setSpeedMultiplier(1);
+    expect(find.text('3x'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Game speed'));
     await tester.pump();
+    expect(game!.speedMultiplier, 1.0);
+    expect(find.text('1x'), findsOneWidget);
     expect(find.text('Start Wave'), findsOneWidget);
 
     game!.stateNotifier.value = commandDeckSnapshot(
@@ -1018,9 +1020,7 @@ void main() {
     // interactive (it collapses on selection) and pacing stays interactive
     // inside the idle dock in the bottom command chrome.
     expect(find.byTooltip('Pause'), findsOneWidget);
-    expect(find.text('1x'), findsOneWidget);
-    expect(find.text('2x'), findsOneWidget);
-    expect(find.text('3x'), findsOneWidget);
+    expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
     final gameRect = tester.getRect(find.bySubtype<GameWidget>());
     final safeAreaRect = tester.getRect(
