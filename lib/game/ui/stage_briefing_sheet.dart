@@ -118,26 +118,45 @@ class StageBriefingSheet extends StatelessWidget {
                               ],
                             ],
                           ),
+                          // The tile above names the modifier, so this is
+                          // its effect, not its name again. The artboard has
+                          // no conditions section at all -- it expects the
+                          // player to know what ION STORM does -- but a
+                          // modifier's actual numbers are worth a line, and
+                          // repeating the title alongside the tile is not.
+                          if (metadata.isNotEmpty) ...[
+                            const SizedBox(height: 7),
+                            Text(
+                              metadata.first.description,
+                              key: const ValueKey('briefing-modifier-effect'),
+                              style: OrionTypography.microLabel(
+                                color: uiTheme.textMuted,
+                              ),
+                            ),
+                          ],
                           const SizedBox(height: 16),
                           _BriefingThreatProfile(stage: stage),
-                          const SizedBox(height: 16),
-                          Text(
-                            'CONDITIONS',
-                            style: OrionTypography.microLabel(
-                              size: 11,
-                              color: uiTheme.systemCyan,
-                            ),
-                          ),
-                          const SizedBox(height: 7),
-                          for (final entry in metadata) ...[
-                            _BriefingIntelRow(
-                              icon: Icons.radar_rounded,
-                              color: uiTheme.systemCyan,
-                              title: entry.title,
-                              detail: entry.description,
+                          if (metadata.length > 1) ...[
+                            const SizedBox(height: 16),
+                            Text(
+                              'CONDITIONS',
+                              style: OrionTypography.microLabel(
+                                size: 11,
+                                color: uiTheme.systemCyan,
+                              ),
                             ),
                             const SizedBox(height: 7),
+                            for (final entry in metadata.skip(1)) ...[
+                              _BriefingIntelRow(
+                                icon: Icons.radar_rounded,
+                                color: uiTheme.systemCyan,
+                                title: entry.title,
+                                detail: entry.description,
+                              ),
+                              const SizedBox(height: 7),
+                            ],
                           ],
+                          const SizedBox(height: 9),
                           if (stage.reward != null) ...[
                             _BriefingIntelRow(
                               icon: rewardIcon(stage.reward!),
@@ -615,14 +634,23 @@ class _BriefingModifierTile extends StatelessWidget {
           children: [
             Icon(Icons.bolt_rounded, color: uiTheme.warningOrange, size: 17),
             const SizedBox(height: 3),
-            Text(
-              title.toUpperCase(),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: OrionTypography.microLabel(
-                size: 9,
-                color: uiTheme.warningOrange,
+            // OrionTitle's pattern rather than a bare toUpperCase(): caps
+            // for display, the real copy kept as the semantics label, so a
+            // screen reader announces "Standard Conditions" instead of
+            // spelling out a shout -- and finders still match real copy.
+            Semantics(
+              label: title,
+              child: ExcludeSemantics(
+                child: Text(
+                  title.toUpperCase(),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: OrionTypography.microLabel(
+                    size: 9,
+                    color: uiTheme.warningOrange,
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: 2),

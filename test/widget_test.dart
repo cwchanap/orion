@@ -336,7 +336,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
-    expect(find.text('Standard Conditions'), findsOneWidget);
+    expect(find.bySemanticsLabel('Standard Conditions'), findsOneWidget);
     expect(find.text('No environmental modifiers'), findsOneWidget);
     expect(createdGame, isNull);
 
@@ -415,7 +415,15 @@ void main() {
       await tester.pumpAndSettle();
       for (final modifier in stage.modifiers) {
         final metadata = StageModifierMetadata.forModifier(modifier);
-        expect(find.text(metadata.title), findsOneWidget);
+        // The lead modifier's name is the fact-row tile, which shows caps and
+        // keeps real copy as its semantics label; later ones stay as
+        // conditions rows. bySemanticsLabel matches both.
+        expect(
+          find.bySemanticsLabel(metadata.title),
+          findsOneWidget,
+          reason:
+              '${stage.id}: ${metadata.title} is not announced in the briefing',
+        );
         expect(find.text(metadata.description), findsOneWidget);
       }
       if (stage.id == 'salvage-rift') {
