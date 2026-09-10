@@ -22,6 +22,12 @@ Widget scannerHost(
 }) {
   return MaterialApp(
     theme: orionThemeData,
+    // A Material ancestor: without one Flutter stamps its debug
+    // underlines on every label, which is what made the 1c fixture
+    // look like a styling bug. transparency paints nothing and adds
+    // no layout.
+    builder: (context, child) =>
+        Material(type: MaterialType.transparency, child: child!),
     home: MediaQuery(
       data: MediaQueryData(disableAnimations: disableAnimations),
       child: Align(
@@ -110,6 +116,12 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: orionThemeData,
+          // A Material ancestor: without one Flutter stamps its debug
+          // underlines on every label, which is what made the 1c fixture
+          // look like a styling bug. transparency paints nothing and adds
+          // no layout.
+          builder: (context, child) =>
+              Material(type: MaterialType.transparency, child: child!),
           home: Align(
             alignment: Alignment.topRight,
             child: NextWaveScanner(
@@ -141,6 +153,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: orionThemeData,
+        // A Material ancestor: without one Flutter stamps its debug
+        // underlines on every label, which is what made the 1c fixture
+        // look like a styling bug. transparency paints nothing and adds
+        // no layout.
+        builder: (context, child) =>
+            Material(type: MaterialType.transparency, child: child!),
         home: Align(
           alignment: Alignment.topRight,
           child: NextWaveScanner(
@@ -168,6 +186,12 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           theme: orionThemeData,
+          // A Material ancestor: without one Flutter stamps its debug
+          // underlines on every label, which is what made the 1c fixture
+          // look like a styling bug. transparency paints nothing and adds
+          // no layout.
+          builder: (context, child) =>
+              Material(type: MaterialType.transparency, child: child!),
           home: Align(
             alignment: Alignment.topRight,
             child: NextWaveScanner(
@@ -237,6 +261,12 @@ void main() {
       Widget host({required bool collapseRequested}) {
         return MaterialApp(
           theme: orionThemeData,
+          // A Material ancestor: without one Flutter stamps its debug
+          // underlines on every label, which is what made the 1c fixture
+          // look like a styling bug. transparency paints nothing and adds
+          // no layout.
+          builder: (context, child) =>
+              Material(type: MaterialType.transparency, child: child!),
           home: Stack(
             children: [
               Positioned.fill(
@@ -288,6 +318,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: orionThemeData,
+        // A Material ancestor: without one Flutter stamps its debug
+        // underlines on every label, which is what made the 1c fixture
+        // look like a styling bug. transparency paints nothing and adds
+        // no layout.
+        builder: (context, child) =>
+            Material(type: MaterialType.transparency, child: child!),
         home: Stack(
           children: [
             Positioned.fill(
