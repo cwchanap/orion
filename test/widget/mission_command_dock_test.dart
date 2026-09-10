@@ -408,13 +408,11 @@ void main() {
     expect(find.byType(BackdropFilter), findsOneWidget);
   });
 
-  testWidgets('idle dock is a single MissionSurface with no frame chrome', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
+  testWidgets('idle dock surfaces carry no frame chrome', (tester) async {
+    Future<void> pumpIdle(GameSnapshot snapshot) => tester.pumpWidget(
       MaterialApp(
         home: MissionCommandDock(
-          snapshot: commandDeckSnapshot(),
+          snapshot: snapshot,
           onTogglePause: () {},
           onSpeedSelected: (_) {},
           onToggleAutoStart: () {},
@@ -428,17 +426,41 @@ void main() {
       ),
     );
 
-    final surface = find.descendant(
+    Finder surfaces() => find.descendant(
       of: find.byKey(const ValueKey('command-dock-idle')),
       matching: find.byType(MissionSurface),
     );
-    expect(surface, findsOneWidget);
-    // The reactor button carries its own internal octagon frames; no
-    // OrionSurface chrome may wrap the idle surface itself.
+
+    // Artboard 1a's dock is two rows during build -- pacing controls, then
+    // the tower rail -- so two surfaces, not one.
+    await pumpIdle(commandDeckSnapshot());
+    expect(surfaces(), findsNWidgets(2));
     expect(
-      find.ancestor(of: surface, matching: find.byType(OrionSurface)),
+      find.byKey(const ValueKey('command-dock-persistent-rail')),
+      findsOneWidget,
+    );
+
+    // Once the wave is running there is nothing to build, and the dock
+    // collapses back to the single control row.
+    await pumpIdle(commandDeckSnapshot(phase: GamePhase.wave));
+    expect(surfaces(), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('command-dock-persistent-rail')),
       findsNothing,
     );
+
+    // The invariant this test exists for: the reactor button carries its own
+    // internal octagon frames, so no OrionSurface chrome may wrap a dock
+    // surface in either state.
+    for (final element in surfaces().evaluate()) {
+      expect(
+        find.ancestor(
+          of: find.byWidget(element.widget),
+          matching: find.byType(OrionSurface),
+        ),
+        findsNothing,
+      );
+    }
   });
 
   testWidgets('five art cards fit or peek at 375dp and the rail scrolls', (
