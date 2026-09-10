@@ -43,11 +43,20 @@ class BoardComponent extends PositionComponent {
   /// replaces it while a placement preview is active — never both.
   bool get showsSelectionHighlight => selectedCell != null && !previewActive;
 
+  /// Whether the cell grid paints. At rest the board is its own art, as in
+  /// the artboard; the grid appears only to answer a placement in progress.
+  bool get showsPlacementGrid => previewActive;
+
   /// Only the marker fallback's inner cut-out; the board's ground belongs
   /// to BoardBackdropComponent.
   final Paint _backgroundPaint = Paint()..color = const Color(0xFF17202A);
+  // The armed-placement grid. The artboard shows cell lines only while a
+  // placement is armed -- `s.armed ? ... : {display:'none'}` -- and draws
+  // them in naniteGreen, so the grid reads as "here is where this can go"
+  // rather than as permanent chrome over the board art.
   final Paint _gridPaint = Paint()
-    ..color = const Color(0x6636454F)
+    ..color =
+        const Color(0x2E7BE495) // naniteGreen @ 18%
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
   final Paint _pathPaint = Paint()..color = const Color(0xFF56616B);
@@ -188,7 +197,9 @@ class BoardComponent extends PositionComponent {
       sprite: GameSprite.baseReactor,
     );
 
-    _renderGrid(canvas);
+    if (showsPlacementGrid) {
+      _renderGrid(canvas);
+    }
   }
 
   /// The mock's lane: a dashed, glowing cyan channel down the centre of the
@@ -270,6 +281,10 @@ class BoardComponent extends PositionComponent {
   /// The range ring's stroke paint as the last render configured it.
   @visibleForTesting
   Paint get rangeRingPaint => _rangeRingPaint;
+
+  /// The placement grid's stroke paint.
+  @visibleForTesting
+  Paint get gridPaint => _gridPaint;
 
   void _renderGrid(Canvas canvas) {
     final boardWidth = BoardLayout.columns * cellSize;
