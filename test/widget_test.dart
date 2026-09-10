@@ -48,6 +48,9 @@ Widget testGamePage({
   GameFeedback gameFeedback = const NoOpGameFeedback(),
 }) {
   return MaterialApp(
+    // The product app hides this banner; a fixture host must too, or the
+    // parity evidence carries a stripe the shipped game never shows.
+    debugShowCheckedModeBanner: false,
     // The real theme, not Flutter's defaults: Material components the game
     // still uses (segmented button, chips, text buttons) take their colours
     // from here, so a bare MaterialApp renders evidence fixtures that do not
@@ -144,7 +147,7 @@ void main() {
     // LIFTED, rail header DROP TO BUILD, finger ghost + cost pill airborne)
     // and the pointer hovers a valid cell (allowed candidate, resolved range
     // ring, path danger wash on the board). Real Roboto for true metrics.
-    await loadRealFonts(withMaterialIcons: false);
+    await loadRealFonts();
 
     // Warm Flame's global image cache BEFORE the game exists so its onLoad
     // resolves from cache instead of racing real engine decodes, which

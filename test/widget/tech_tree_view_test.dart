@@ -580,6 +580,9 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          // The product app hides this banner; a fixture host must too, or the
+          // parity evidence carries a stripe the shipped game never shows.
+          debugShowCheckedModeBanner: false,
           theme: orionThemeData,
           home: TechTreeView(
             progress: progress,

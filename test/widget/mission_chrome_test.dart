@@ -27,6 +27,9 @@ Widget chromeHost(
   ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
 }) {
   return MaterialApp(
+    // The product app hides this banner; a fixture host must too, or the
+    // parity evidence carries a stripe the shipped game never shows.
+    debugShowCheckedModeBanner: false,
     // The app's real theme: Material components (the pacing segments, the
     // auto-start chip) take their face from it. Without it they render in
     // Roboto, which is narrower than ChakraPetch — and a wrap guard that
@@ -144,7 +147,7 @@ void main() {
     // Representative scene 1a state: build-idle, no cell/tower selected,
     // scanner/modules collapsed (no acquired modules). Real Roboto so the
     // evidence shows true text metrics, not Ahem blocks.
-    await loadRealFonts(withMaterialIcons: false);
+    await loadRealFonts();
     // The memo can hold a pending future from an earlier cold-cache test
     // in this process; clear it so this fixture's warmed cache is used.
     OrionArtDescriptor.resetSpriteCache();
