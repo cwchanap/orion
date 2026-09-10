@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
@@ -20,6 +21,7 @@ Widget scannerHost(
   List<String> modifierTitles = const ['Standard Conditions'],
 }) {
   return MaterialApp(
+    theme: orionThemeData,
     home: MediaQuery(
       data: MediaQueryData(disableAnimations: disableAnimations),
       child: Align(
@@ -107,6 +109,7 @@ void main() {
       var interceptedPositions = <Offset>[];
       await tester.pumpWidget(
         MaterialApp(
+          theme: orionThemeData,
           home: Align(
             alignment: Alignment.topRight,
             child: NextWaveScanner(
@@ -137,6 +140,7 @@ void main() {
   ) async {
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: Align(
           alignment: Alignment.topRight,
           child: NextWaveScanner(
@@ -163,6 +167,7 @@ void main() {
       var intercepted = 0;
       await tester.pumpWidget(
         MaterialApp(
+          theme: orionThemeData,
           home: Align(
             alignment: Alignment.topRight,
             child: NextWaveScanner(
@@ -231,6 +236,7 @@ void main() {
       final preview = commandDeckPreview();
       Widget host({required bool collapseRequested}) {
         return MaterialApp(
+          theme: orionThemeData,
           home: Stack(
             children: [
               Positioned.fill(
@@ -281,6 +287,7 @@ void main() {
     var backgroundTaps = 0;
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: Stack(
           children: [
             Positioned.fill(
