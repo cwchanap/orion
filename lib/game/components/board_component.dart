@@ -15,7 +15,6 @@ class BoardComponent extends PositionComponent {
     required this.pathCells,
     this.selectedCell,
     this.spriteSheet,
-    this.boardImage,
     this.pathTiles,
     super.position,
     super.priority,
@@ -30,9 +29,6 @@ class BoardComponent extends PositionComponent {
   final double cellSize;
   final List<GridPosition> pathCells;
   final GameSpriteSheet? spriteSheet;
-
-  /// The board skin painted under the lane and the grid.
-  final Image? boardImage;
   final GamePathTiles? pathTiles;
   GridPosition? selectedCell;
 
@@ -47,6 +43,8 @@ class BoardComponent extends PositionComponent {
   /// replaces it while a placement preview is active — never both.
   bool get showsSelectionHighlight => selectedCell != null && !previewActive;
 
+  /// Only the marker fallback's inner cut-out; the board's ground belongs
+  /// to BoardBackdropComponent.
   final Paint _backgroundPaint = Paint()..color = const Color(0xFF17202A);
   final Paint _gridPaint = Paint()
     ..color = const Color(0x6636454F)
@@ -112,23 +110,6 @@ class BoardComponent extends PositionComponent {
   @override
   void render(Canvas canvas) {
     super.render(canvas);
-
-    final boardImage = this.boardImage;
-    if (boardImage == null) {
-      canvas.drawRect(Offset.zero & size.toSize(), _backgroundPaint);
-    } else {
-      canvas.drawImageRect(
-        boardImage,
-        Rect.fromLTWH(
-          0,
-          0,
-          boardImage.width.toDouble(),
-          boardImage.height.toDouble(),
-        ),
-        Offset.zero & size.toSize(),
-        Paint(),
-      );
-    }
 
     final pathTiles = this.pathTiles;
     for (final pathCell in pathCells) {
