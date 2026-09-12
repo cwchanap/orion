@@ -29,11 +29,12 @@ void main() {
   });
 
   test('only the four sanctioned blur values exist in lib/', () {
-    expect(
-      OrionSurfaceTier.values.map((t) => t.blur).toSet(),
-      {6.0, 7.0, 12.0, 14.0},
-      reason: 'the system sheet ships four blur values; a fifth is a bug',
-    );
+    expect(OrionSurfaceTier.values.map((t) => t.blur).toSet(), {
+      6.0,
+      7.0,
+      12.0,
+      14.0,
+    }, reason: 'the system sheet ships four blur values; a fifth is a bug');
   });
 
   test('the chamfered CommandFrame primitive is gone', () {
