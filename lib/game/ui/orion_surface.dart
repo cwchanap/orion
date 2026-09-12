@@ -20,14 +20,6 @@ enum OrionSurfaceTier {
   t3(12),
 
   /// The full-width dock shelf — the one surface that spans edge to edge.
-  ///
-  /// Deliberately unused in `lib/` today: the command deck is inset 12px on
-  /// all sides, so nothing in the current layout is edge to edge, and forcing
-  /// it would make [OrionSurface.topBorderOnly] draw a border that stops short
-  /// of the screen. Kept rather than deleted because the system sheet ships
-  /// four tiers and the in-battle scenes still to be built are where a shelf
-  /// would appear; the blur tripwire, not this member's use, is what keeps a
-  /// fifth value from creeping in.
   t4(14);
 
   const OrionSurfaceTier(this.blur);

@@ -81,7 +81,7 @@ Future<_PopRecorder> _pumpBriefing(
 }
 
 void _expectActionWithinViewport(WidgetTester tester, Size viewport) {
-  final action = findOrionTitle('Start Mission');
+  final action = find.byTooltip('Start Mission');
   expect(action, findsOneWidget);
   tester.ensureVisible(action);
   final rect = tester.getRect(action);
@@ -95,7 +95,7 @@ void _expectActionWithinViewport(WidgetTester tester, Size viewport) {
 /// the tree with a clean Navigator (identical widget shape would otherwise
 /// update in place and keep the old modal route open).
 Future<void> _dismissBriefing(WidgetTester tester) async {
-  await tester.tap(find.text('Dismiss'));
+  await tester.tap(find.byTooltip('Dismiss'));
   await tester.pumpAndSettle();
 }
 
@@ -109,7 +109,14 @@ void main() {
     expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
 
     // The hero consumes the briefingWide descriptor for the stage.
-    final hero = find.byType(OrionAtlasSprite);
+    final hero = find.byWidgetPredicate(
+      (widget) =>
+          widget is OrionAtlasSprite &&
+          identical(
+            widget.art,
+            OrionArt.stage(stage, crop: OrionStageArtCrop.briefingWide),
+          ),
+    );
     expect(hero, findsOneWidget);
     final sprite = tester.widget<OrionAtlasSprite>(hero);
     expect(
@@ -124,7 +131,9 @@ void main() {
     final sheetRect = tester.getRect(
       find.byKey(const ValueKey('stage-briefing')),
     );
-    final heroRect = tester.getRect(hero);
+    final heroRect = tester.getRect(
+      find.ancestor(of: hero, matching: find.byType(ClipRect)).first,
+    );
     expect(heroRect.left, sheetRect.left);
     expect(heroRect.top, sheetRect.top);
     expect(heroRect.width, sheetRect.width);
@@ -286,10 +295,10 @@ void main() {
   ) async {
     final recorder = await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
 
-    expect(findOrionTitle('Start Mission'), findsOneWidget);
-    expect(findOrionTitle('Replay Mission'), findsNothing);
+    expect(find.byTooltip('Start Mission'), findsOneWidget);
+    expect(find.byTooltip('Replay Mission'), findsNothing);
 
-    await tester.tap(findOrionTitle('Start Mission'));
+    await tester.tap(find.byTooltip('Start Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -301,10 +310,10 @@ void main() {
       result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
     );
 
-    expect(findOrionTitle('Replay Mission'), findsOneWidget);
-    expect(findOrionTitle('Start Mission'), findsNothing);
+    expect(find.byTooltip('Replay Mission'), findsOneWidget);
+    expect(find.byTooltip('Start Mission'), findsNothing);
 
-    await tester.tap(findOrionTitle('Replay Mission'));
+    await tester.tap(find.byTooltip('Replay Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -312,7 +321,7 @@ void main() {
   testWidgets('dismiss path never pops true', (tester) async {
     final recorder = await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
 
-    await tester.tap(find.text('Dismiss'));
+    await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isNot(true));
   });
@@ -330,7 +339,7 @@ void main() {
         _expectActionWithinViewport(tester, viewport);
         expect(tester.takeException(), isNull);
 
-        await tester.tap(find.text('Dismiss'));
+        await tester.tap(find.byTooltip('Dismiss'));
         await tester.pumpAndSettle();
       }
     },
@@ -355,8 +364,8 @@ void main() {
       disableAnimations: true,
     );
 
-    expect(findOrionTitle('Start Mission'), findsOneWidget);
-    await tester.tap(findOrionTitle('Start Mission'));
+    expect(find.byTooltip('Start Mission'), findsOneWidget);
+    await tester.tap(find.byTooltip('Start Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -426,11 +435,13 @@ void main() {
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same key the OrionArt descriptors use) so the hero art renders.
-    await tester.runAsync(
-      () => Flame.images.load(
+    await tester.runAsync(() async {
+      await Flame.images.load(
         'reactor_rim_ui/stages/${OrionCampaign.stageOne.id}.png',
-      ),
-    );
+      );
+      await Flame.images.load('orion_sprite_sheet.png');
+      await Flame.images.load('orion_tower_variety_sheet.png');
+    });
     final boundaryKey = GlobalKey();
     await tester.pumpWidget(
       RepaintBoundary(
@@ -453,6 +464,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/images/reactor_rim_ui/boards/nebula.png'),
+        tester.element(find.byType(StageBriefingSheet)),
+      ),
+    );
+    await tester.pump();
 
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.

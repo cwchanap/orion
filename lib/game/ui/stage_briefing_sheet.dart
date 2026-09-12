@@ -48,188 +48,258 @@ class StageBriefingSheet extends StatelessWidget {
               .map(StageModifierMetadata.forModifier)
               .toList(growable: false);
 
-    return ClipRRect(
-      borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
-      child: Container(
+    return Material(
+      color: uiTheme.voidBlack,
+      child: SizedBox.expand(
         key: const ValueKey('stage-briefing'),
-        color: uiTheme.hullBlack,
-        height: double.infinity,
-        child: Column(
+        child: Stack(
           children: [
-            Expanded(
-              child: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _BriefingHero(stage: stage, scrimColor: uiTheme.hullBlack),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _BriefingIdentity(
-                            stage: stage,
-                            accent: accent,
-                            badgeLabel: isOptional ? 'OPTIONAL' : 'PRIMARY',
-                          ),
-                          const SizedBox(height: 16),
-                          // Artboard 1b's fact row is four tiles, not three:
-                          // waves, hull, start, and the stage modifier as the
-                          // odd one out in warning orange. Each carries a
-                          // glyph above its figure.
-                          Row(
-                            key: const ValueKey('briefing-facts'),
-                            children: [
-                              Expanded(
-                                child: _BriefingStatTile(
-                                  icon: Icons.waves_rounded,
-                                  value: '${stage.waves.length}',
-                                  label: 'WAVES',
-                                  color: uiTheme.systemCyan,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _BriefingStatTile(
-                                  icon: Icons.shield_outlined,
-                                  value: '$startingBaseHealth',
-                                  label: 'HULL',
-                                  color: uiTheme.systemCyan,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _BriefingStatTile(
-                                  icon: Icons.hexagon,
-                                  value: '$startingGold',
-                                  label: 'START',
-                                  color: uiTheme.creditGold,
-                                  valueColor: uiTheme.creditGold,
-                                ),
-                              ),
-                              if (metadata.isNotEmpty) ...[
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _BriefingModifierTile(
-                                    key: const ValueKey('briefing-modifier'),
-                                    title: metadata.first.title,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                          // The tile above names the modifier, so this is
-                          // its effect, not its name again. The artboard has
-                          // no conditions section at all -- it expects the
-                          // player to know what ION STORM does -- but a
-                          // modifier's actual numbers are worth a line, and
-                          // repeating the title alongside the tile is not.
-                          if (metadata.isNotEmpty) ...[
-                            const SizedBox(height: 7),
-                            Text(
-                              metadata.first.description,
-                              key: const ValueKey('briefing-modifier-effect'),
-                              style: OrionTypography.microLabel(
-                                color: uiTheme.textMuted,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 16),
-                          _BriefingThreatProfile(stage: stage),
-                          if (metadata.length > 1) ...[
-                            const SizedBox(height: 16),
-                            Text(
-                              'CONDITIONS',
-                              style: OrionTypography.microLabel(
-                                size: 11,
-                                color: uiTheme.systemCyan,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            for (final entry in metadata.skip(1)) ...[
-                              _BriefingIntelRow(
-                                icon: Icons.radar_rounded,
-                                color: uiTheme.systemCyan,
-                                title: entry.title,
-                                detail: entry.description,
-                              ),
-                              const SizedBox(height: 7),
-                            ],
-                          ],
-                          const SizedBox(height: 9),
-                          if (stage.reward != null) ...[
-                            _BriefingIntelRow(
-                              icon: rewardIcon(stage.reward!),
-                              color: uiTheme.creditGold,
-                              title: 'SALVAGE',
-                              detail: _briefingRewardLabel(
-                                stage.reward!,
-                                earned: result != null,
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                          ],
-                          if (result != null) ...[
-                            _BriefingIntelRow(
-                              icon: medalIcon(result!.medal),
-                              color: medalColor(uiTheme, result!.medal),
-                              title: 'BEST RESULT',
-                              detail:
-                                  'Best: ${result!.medal.label} • '
-                                  '${result!.bestBaseHealth} base health',
-                            ),
-                            const SizedBox(height: 7),
-                          ],
-                          // HPA-528: a committed Outpost Alpha clear also
-                          // recovers the Relay Calibration blueprint; the
-                          // committed `result` is the first-clear signal.
-                          if (stage.id == OrionCampaign.stageOneId &&
-                              result != null) ...[
-                            _BriefingIntelRow(
-                              icon: Icons.memory_rounded,
-                              color: uiTheme.systemViolet,
-                              title: 'BLUEPRINT',
-                              detail: 'Blueprint recovered: Relay Calibration',
-                            ),
-                            const SizedBox(height: 7),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
+            Positioned.fill(
+              child: Opacity(
+                opacity: 0.5,
+                child: Image.asset(
+                  'assets/images/reactor_rim_ui/boards/nebula.png',
+                  fit: BoxFit.cover,
+                  excludeFromSemantics: true,
                 ),
               ),
             ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(
-                16,
-                8,
-                16,
-                12 + MediaQuery.viewInsetsOf(context).bottom,
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      uiTheme.voidBlack,
+                      uiTheme.voidBlack.withValues(alpha: 0.28),
+                    ],
+                  ),
+                ),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Solid, not an OrionSurface: orion_surface.dart says
-                  // "Solid primary actions (WAVE, DEPLOY) deliberately do not
-                  // use this", and a translucent launch button read as
-                  // secondary against the sheet.
-                  _BriefingLaunchAction(
+            ),
+            Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        SizedBox(
+                          height: (MediaQuery.sizeOf(context).height * 0.4)
+                              .clamp(260, 360),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _BriefingHero(
+                                stage: stage,
+                                scrimColor: uiTheme.voidBlack,
+                              ),
+                              Positioned(
+                                left: 16,
+                                right: 16,
+                                bottom: 24,
+                                child: _BriefingIdentity(
+                                  stage: stage,
+                                  accent: accent,
+                                  badgeLabel: isOptional
+                                      ? 'OPTIONAL'
+                                      : 'PRIMARY',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                key: const ValueKey('briefing-facts'),
+                                children: [
+                                  Expanded(
+                                    child: _BriefingStatTile(
+                                      icon: Icons.waves_rounded,
+                                      value: '${stage.waves.length}',
+                                      label: 'WAVES',
+                                      color: uiTheme.systemCyan,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _BriefingStatTile(
+                                      icon: Icons.shield_outlined,
+                                      value: '$startingBaseHealth',
+                                      label: 'HULL',
+                                      color: uiTheme.systemCyan,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _BriefingStatTile(
+                                      icon: Icons.hexagon,
+                                      value: '$startingGold',
+                                      label: 'START',
+                                      color: uiTheme.creditGold,
+                                      valueColor: uiTheme.creditGold,
+                                    ),
+                                  ),
+                                  if (metadata.isNotEmpty) ...[
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: _BriefingModifierTile(
+                                        key: const ValueKey(
+                                          'briefing-modifier',
+                                        ),
+                                        title: metadata.first.title,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              // The tile above names the modifier, so this is
+                              // its effect, not its name again. The artboard has
+                              // no conditions section at all -- it expects the
+                              // player to know what ION STORM does -- but a
+                              // modifier's actual numbers are worth a line, and
+                              // repeating the title alongside the tile is not.
+                              if (metadata.isNotEmpty) ...[
+                                const SizedBox(height: 7),
+                                Text(
+                                  metadata.first.description,
+                                  key: const ValueKey(
+                                    'briefing-modifier-effect',
+                                  ),
+                                  style: OrionTypography.microLabel(
+                                    color: uiTheme.textMuted,
+                                  ),
+                                ),
+                              ],
+                              const SizedBox(height: 16),
+                              _BriefingThreatProfile(stage: stage),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _BriefingIntelRow(
+                                      icon: medalIcon(StageMedal.gold),
+                                      color: uiTheme.creditGold,
+                                      title:
+                                          '$startingBaseHealth/$startingBaseHealth',
+                                      detail: 'GOLD · NO LEAKS',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _BriefingIntelRow(
+                                      icon: medalIcon(StageMedal.silver),
+                                      color: uiTheme.textMuted,
+                                      title:
+                                          '${GameBalance.silverMedalThreshold}+ HULL',
+                                      detail: 'SILVER',
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (metadata.length > 1) ...[
+                                const SizedBox(height: 16),
+                                Text(
+                                  'CONDITIONS',
+                                  style: OrionTypography.microLabel(
+                                    size: 11,
+                                    color: uiTheme.systemCyan,
+                                  ),
+                                ),
+                                const SizedBox(height: 7),
+                                for (final entry in metadata.skip(1)) ...[
+                                  _BriefingIntelRow(
+                                    icon: Icons.radar_rounded,
+                                    color: uiTheme.systemCyan,
+                                    title: entry.title,
+                                    detail: entry.description,
+                                  ),
+                                  const SizedBox(height: 7),
+                                ],
+                              ],
+                              const SizedBox(height: 9),
+                              if (stage.reward != null) ...[
+                                _BriefingIntelRow(
+                                  icon: rewardIcon(stage.reward!),
+                                  color: uiTheme.creditGold,
+                                  title: 'SALVAGE',
+                                  detail: _briefingRewardLabel(
+                                    stage.reward!,
+                                    earned: result != null,
+                                  ),
+                                ),
+                                const SizedBox(height: 7),
+                              ],
+                              if (result != null) ...[
+                                _BriefingIntelRow(
+                                  icon: medalIcon(result!.medal),
+                                  color: medalColor(uiTheme, result!.medal),
+                                  title: 'BEST RESULT',
+                                  detail:
+                                      'Best: ${result!.medal.label} • '
+                                      '${result!.bestBaseHealth} base health',
+                                ),
+                                const SizedBox(height: 7),
+                              ],
+                              // HPA-528: a committed Outpost Alpha clear also
+                              // recovers the Relay Calibration blueprint; the
+                              // committed `result` is the first-clear signal.
+                              if (stage.id == OrionCampaign.stageOneId &&
+                                  result != null) ...[
+                                _BriefingIntelRow(
+                                  icon: Icons.memory_rounded,
+                                  color: uiTheme.systemViolet,
+                                  title: 'BLUEPRINT',
+                                  detail:
+                                      'Blueprint recovered: Relay Calibration',
+                                ),
+                                const SizedBox(height: 7),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    14,
+                    12,
+                    14,
+                    24 + MediaQuery.viewInsetsOf(context).bottom,
+                  ),
+                  child: _BriefingLaunchAction(
                     label: actionLabel,
                     accent: accent,
                     icon: result == null
-                        ? Icons.rocket_launch_rounded
+                        ? Icons.play_arrow_rounded
                         : Icons.replay_rounded,
                     onPressed: () => Navigator.of(context).pop(true),
                   ),
-                  const SizedBox(height: 2),
-                  TextButton.icon(
-                    onPressed: () => Navigator.of(context).pop(false),
-                    icon: const Icon(Icons.close_rounded),
-                    label: const Text('Dismiss'),
+                ),
+              ],
+            ),
+            Positioned(
+              top: 12,
+              left: 14,
+              child: OrionSurface(
+                tier: OrionSurfaceTier.t1,
+                padding: EdgeInsets.zero,
+                radius: 14,
+                child: IconButton(
+                  tooltip: 'Dismiss',
+                  onPressed: () => Navigator.of(context).pop(false),
+                  icon: Icon(
+                    Icons.chevron_left_rounded,
+                    color: uiTheme.systemCyan,
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -239,7 +309,7 @@ class StageBriefingSheet extends StatelessWidget {
   }
 }
 
-/// Centred stage identity: sector eyebrow, display-scale name, blurb.
+/// Centred stage identity: sector eyebrow and display-scale name.
 ///
 /// The artboard treats the stage name as the sheet's hero rather than a
 /// chrome title, so this is the one place [OrionTitle] is asked for a display
@@ -292,12 +362,6 @@ class _BriefingIdentity extends StatelessWidget {
             size: 30,
           ),
         ),
-        const SizedBox(height: 8),
-        Text(
-          stage.description,
-          textAlign: TextAlign.center,
-          style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
-        ),
       ],
     );
   }
@@ -320,16 +384,34 @@ class _BriefingThreatProfile extends StatelessWidget {
 
     return OrionSurface(
       tier: OrionSurfaceTier.t2,
-      padding: const EdgeInsets.fromLTRB(11, 9, 11, 10),
+      padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OrionText.micro('THREAT PROFILE', color: uiTheme.dangerRed, size: 11),
+          Row(
+            children: [
+              Container(width: 4, height: 12, color: uiTheme.dangerRed),
+              const SizedBox(width: 7),
+              Expanded(
+                child: OrionText.micro(
+                  'THREAT PROFILE',
+                  color: uiTheme.textMuted,
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: 9),
           Row(
             children: [
               Expanded(
                 child: _ThreatFigure(
+                  art: OrionArt.previewGroup(
+                    WavePreviewGroup(
+                      enemyCount: threat.enemies,
+                      label: 'Drones',
+                      traits: const {},
+                    ),
+                  ),
                   value: '${threat.enemies}',
                   label: 'HOSTILES',
                   color: uiTheme.textPrimary,
@@ -337,6 +419,7 @@ class _BriefingThreatProfile extends StatelessWidget {
               ),
               Expanded(
                 child: _ThreatFigure(
+                  art: OrionArt.trait(EnemyTrait.armored)!,
                   value: '${threat.armored}',
                   label: 'ARMORED',
                   color: threat.armored > 0
@@ -346,6 +429,7 @@ class _BriefingThreatProfile extends StatelessWidget {
               ),
               Expanded(
                 child: _ThreatFigure(
+                  art: OrionArt.trait(EnemyTrait.shielded)!,
                   value: '${threat.shielded}',
                   label: 'SHIELDED',
                   color: threat.shielded > 0
@@ -355,16 +439,6 @@ class _BriefingThreatProfile extends StatelessWidget {
               ),
             ],
           ),
-          if (threat.traits.isNotEmpty) ...[
-            const SizedBox(height: 9),
-            Text(
-              threat.traits.map((trait) => trait.label).join(' • '),
-              style: OrionTypography.microLabel(
-                size: 9,
-                color: uiTheme.textMuted,
-              ),
-            ),
-          ],
         ],
       ),
     );
@@ -377,8 +451,10 @@ class _ThreatFigure extends StatelessWidget {
     required this.value,
     required this.label,
     required this.color,
+    required this.art,
   });
 
+  final OrionArtDescriptor art;
   final String value;
   final String label;
   final Color color;
@@ -389,11 +465,13 @@ class _ThreatFigure extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
+        OrionAtlasSprite(art: art, size: const Size.square(46)),
+        const SizedBox(height: 3),
         FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
             value,
-            style: OrionTypography.readout(size: 21, color: color),
+            style: OrionTypography.readout(size: 14, color: color),
           ),
         ),
         const SizedBox(height: 3),
@@ -414,14 +492,12 @@ class _StageThreat {
     required this.enemies,
     required this.armored,
     required this.shielded,
-    required this.traits,
   });
 
   factory _StageThreat.of(StageDefinition stage) {
     var enemies = 0;
     var armored = 0;
     var shielded = 0;
-    final traits = <EnemyTrait>{};
     for (final wave in stage.waves) {
       for (final group in wave.groups) {
         final stats = group.enemyStats;
@@ -432,23 +508,14 @@ class _StageThreat {
         if (stats.shieldHealth > 0) {
           shielded += group.enemyCount;
         }
-        traits.addAll(stats.traits);
       }
     }
-    // Enum order, so the same stage always lists its traits the same way.
-    final ordered = EnemyTrait.values.where(traits.contains);
-    return _StageThreat(
-      enemies: enemies,
-      armored: armored,
-      shielded: shielded,
-      traits: List.unmodifiable(ordered),
-    );
+    return _StageThreat(enemies: enemies, armored: armored, shielded: shielded);
   }
 
   final int enemies;
   final int armored;
   final int shielded;
-  final List<EnemyTrait> traits;
 }
 
 /// The sheet's one solid, filled action.
@@ -474,35 +541,55 @@ class _BriefingLaunchAction extends StatelessWidget {
       child: Semantics(
         button: true,
         label: label,
-        child: Material(
-          color: accent,
-          borderRadius: BorderRadius.circular(22),
-          child: InkWell(
-            onTap: onPressed,
-            borderRadius: BorderRadius.circular(22),
-            splashColor: uiTheme.voidBlack.withValues(alpha: 0.18),
-            highlightColor: uiTheme.voidBlack.withValues(alpha: 0.10),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: uiTheme.voidBlack),
-                  const SizedBox(width: 10),
-                  Flexible(
-                    child: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      // On a filled accent the label must be the dark ink,
-                      // which microLabel's muted-only rule cannot express.
-                      child: OrionTitle(
-                        label,
-                        maxLines: 1,
-                        color: uiTheme.voidBlack,
-                        size: 14,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF7FF0FF), Color(0xFF13B8E6), Color(0xFF0A7EA3)],
+              stops: [0, 0.6, 1],
+            ),
+            boxShadow: [
+              BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 24),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(18),
+            child: InkWell(
+              onTap: onPressed,
+              borderRadius: BorderRadius.circular(18),
+              splashColor: uiTheme.voidBlack.withValues(alpha: 0.18),
+              highlightColor: uiTheme.voidBlack.withValues(alpha: 0.10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 22,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: uiTheme.voidBlack),
+                    const SizedBox(width: 10),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        // On a filled accent the label must be the dark ink,
+                        // which microLabel's muted-only rule cannot express.
+                        child: ExcludeSemantics(
+                          child: Text(
+                            label == 'Start Mission' ? 'DEPLOY' : 'REPLAY',
+                            style: OrionTypography.microLabel(
+                              color: uiTheme.voidBlack,
+                              size: 13,
+                            ).copyWith(letterSpacing: 3.6, shadows: const []),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -521,28 +608,39 @@ class _BriefingHero extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The briefingWide crop is 1.6:1, so an AspectRatio box makes the Flame
-    // sprite's contain-fit fill the band exactly — full-bleed, no insets.
-    return AspectRatio(
-      aspectRatio: OrionArt.briefingHeroAspect,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          OrionAtlasSprite(
-            art: OrionArt.stage(stage, crop: OrionStageArtCrop.briefingWide),
-          ),
-          DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [scrimColor.withValues(alpha: 0), scrimColor],
-                stops: const [0.82, 1],
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ClipRect(
+          child: FittedBox(
+            fit: BoxFit.cover,
+            child: SizedBox(
+              width: 640,
+              height: 400,
+              child: OrionAtlasSprite(
+                art: OrionArt.stage(
+                  stage,
+                  crop: OrionStageArtCrop.briefingWide,
+                ),
               ),
             ),
           ),
-        ],
-      ),
+        ),
+        DecoratedBox(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                scrimColor.withValues(alpha: 0.25),
+                scrimColor.withValues(alpha: 0),
+                scrimColor,
+              ],
+              stops: const [0, 0.35, 1],
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

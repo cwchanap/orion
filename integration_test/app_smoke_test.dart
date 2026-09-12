@@ -10,7 +10,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
-import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/main.dart';
 
 void main() {
@@ -52,9 +51,9 @@ void main() {
     expect(find.text('Outpost Alpha'), findsOneWidget);
     expect(find.text('Standard Conditions'), findsOneWidget);
     expect(find.text('No environmental modifiers'), findsOneWidget);
-    await tester.ensureVisible(find.text('Dismiss'));
+    await tester.ensureVisible(find.byTooltip('Dismiss'));
     await tester.pump();
-    await tester.tap(find.text('Dismiss'));
+    await tester.tap(find.byTooltip('Dismiss'));
     // The modal sheet slides out over an animation window during which the
     // map is already visible beneath it; wait for the sheet to leave too.
     await _pumpUntil(
@@ -541,38 +540,14 @@ Future<void> _runUntil(
 }
 
 Offset _cellCenter(WidgetTester tester, GridPosition cell) {
-  // The GameWidget fills the SafeArea; the board is centered inside it.
-  final boardRect = tester.getRect(find.bySubtype<GameWidget>());
-  final cellSize = (boardRect.width / BoardLayout.columns).clamp(
-    0.0,
-    boardRect.height / BoardLayout.rows,
-  );
-  final boardWidth = BoardLayout.columns * cellSize;
-  final boardHeight = BoardLayout.rows * cellSize;
-  final origin = Offset(
-    boardRect.left + (boardRect.width - boardWidth) / 2,
-    boardRect.top + (boardRect.height - boardHeight) / 2,
-  );
-  return Offset(
-    origin.dx + (cell.column + 0.5) * cellSize,
-    origin.dy + (cell.row + 0.5) * cellSize,
-  );
+  final finder = find.bySubtype<GameWidget>();
+  final game = tester.widget<GameWidget>(finder).game as OrionDefenseGame;
+  return tester.getRect(finder).topLeft + game.boardCellCenter(cell);
 }
 
 Offset _pointAboveBoard(WidgetTester tester) {
-  // A point inside the GameWidget but above the centered board, so tapping
-  // it clears the selection (cellAt returns null).
-  final boardRect = tester.getRect(find.bySubtype<GameWidget>());
-  final cellSize = (boardRect.width / BoardLayout.columns).clamp(
-    0.0,
-    boardRect.height / BoardLayout.rows,
-  );
-  final boardHeight = BoardLayout.rows * cellSize;
-  final boardTop = boardRect.top + (boardRect.height - boardHeight) / 2;
-  return Offset(
-    boardRect.center.dx,
-    boardRect.top + (boardTop - boardRect.top) / 2,
-  );
+  final rect = tester.getRect(find.bySubtype<GameWidget>());
+  return rect.topLeft + const Offset(1, 1);
 }
 
 /// Waits for the modal briefing sheet's entrance to settle by polling for

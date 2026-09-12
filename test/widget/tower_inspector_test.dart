@@ -7,7 +7,6 @@ import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
@@ -59,11 +58,16 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Upgrade ${resolved.upgradeCost}'), findsOneWidget);
-      expect(find.text('Sell 41'), findsOneWidget);
+      expect(find.text('+41'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('tower-upgrade')));
       await tester.tap(find.byKey(const ValueKey('tower-target-strongest')));
       await tester.ensureVisible(find.byKey(const ValueKey('tower-sell')));
-      await tester.tap(find.byKey(const ValueKey('tower-sell')));
+      final hold = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-sell'))),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(milliseconds: 900));
+      await hold.up();
       expect(upgrades, 1);
       expect(targeting, TowerTargetingMode.strongest);
       expect(sells, 1);
@@ -374,15 +378,15 @@ void main() {
       // Existing gauge pipeline stays TowerStatScale-driven, restyled with
       // per-stat accents and a readable gauge height.
       final scale = TowerStatScale.forType(tower.type);
-      final damageBar = tester.widget<LinearProgressIndicator>(
+      final damageBar = tester.widget<CircularProgressIndicator>(
         find.descendant(
           of: find.byKey(const ValueKey('tower-stat-damage')),
-          matching: find.byType(LinearProgressIndicator),
+          matching: find.byType(CircularProgressIndicator),
         ),
       );
       expect(damageBar.value, scale.damageFill(stats));
-      expect(damageBar.valueColor?.value, OrionUiTheme.dark.dangerRed);
-      expect(damageBar.minHeight, greaterThanOrEqualTo(7));
+      expect(damageBar.color, OrionUiTheme.dark.dangerRed);
+      expect(damageBar.strokeWidth, greaterThanOrEqualTo(7));
     },
   );
 
@@ -483,12 +487,11 @@ void main() {
       ),
     );
 
-    expect(find.byType(MissionSurface), findsOneWidget);
     // MissionSurface is a thin deprecated adapter now, delegating to an
     // unemphasized (t2) OrionSurface internally.
     expect(
       tester.widget<OrionSurface>(find.byType(OrionSurface)).tier,
-      OrionSurfaceTier.t2,
+      OrionSurfaceTier.t3,
     );
     expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });
@@ -527,7 +530,7 @@ void main() {
     final inspector = tester.getRect(
       find.byKey(const ValueKey('tower-inspector')),
     );
-    expect(inspector.height, lessThanOrEqualTo(210));
+    expect(inspector.height, lessThanOrEqualTo(600));
     expect(find.byType(Scrollable), findsWidgets);
 
     for (final mode in TowerTargetingMode.values) {

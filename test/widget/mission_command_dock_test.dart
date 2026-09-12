@@ -8,7 +8,6 @@ import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_surface.dart';
-import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
 import '../support/real_fonts.dart';
@@ -370,17 +369,12 @@ void main() {
     },
   );
 
-  testWidgets('the rail blurs once and its tiles are flat', (tester) async {
+  testWidgets('the rail reuses its dock blur and its tiles are flat', (
+    tester,
+  ) async {
     await tester.pumpWidget(railHost());
 
-    // The rail shell surfaces — and blurs — the whole strip once.
-    expect(
-      find.ancestor(
-        of: find.byKey(const ValueKey('tower-card-laser')),
-        matching: find.byType(MissionSurface),
-      ),
-      findsOneWidget,
-    );
+    expect(find.byType(BackdropFilter), findsNothing);
     // Each tile still carries tier chrome, but flat: blurring a child of a
     // blurred container is the anti-pattern OrionSurface names, and eight
     // blurred tiles are what pushed this scene past its 5-9 budget.
@@ -400,12 +394,10 @@ void main() {
     );
   });
 
-  testWidgets('the whole rail costs one blur, not one per tile', (
-    tester,
-  ) async {
+  testWidgets('the standalone rail adds no nested blur', (tester) async {
     await tester.pumpWidget(railHost());
 
-    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsNothing);
   });
 
   testWidgets('idle dock surfaces carry no frame chrome', (tester) async {
@@ -427,14 +419,19 @@ void main() {
     );
 
     Finder surfaces() => find.descendant(
-      of: find.byKey(const ValueKey('command-dock-idle')),
-      matching: find.byType(MissionSurface),
+      of: find.byType(MissionCommandDock),
+      matching: find.byType(OrionSurface),
     );
 
     // Artboard 1a's dock is two rows during build -- pacing controls, then
     // the tower rail -- so two surfaces, not one.
     await pumpIdle(commandDeckSnapshot());
-    expect(surfaces(), findsNWidgets(2));
+    expect(surfaces(), findsOneWidget);
+    final shelf = tester.widget<OrionSurface>(surfaces());
+    expect(shelf.tier, OrionSurfaceTier.t4);
+    expect(shelf.topBorderOnly, isTrue);
+    expect(shelf.radius, 0);
+    expect(find.byType(BackdropFilter), findsOneWidget);
     expect(
       find.byKey(const ValueKey('command-dock-persistent-rail')),
       findsOneWidget,
@@ -985,7 +982,7 @@ void main() {
         ),
       ),
     );
-    expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
+    expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
 
     await tester.pumpWidget(
       dock(commandDeckSnapshot(selectedCell: const GridPosition(1, 1))),
@@ -1051,46 +1048,9 @@ void main() {
       );
       await tester.pump();
 
-      final surface = find
-          .descendant(
-            of: find.byType(IdleCommandBar),
-            matching: find.byType(MissionSurface),
-          )
-          .first;
-      final dockRect = tester.getRect(surface);
-
-      // The idle dock no longer towers over the board: content row plus a
-      // reduced vertical inset.
-      expect(
-        dockRect.height,
-        lessThanOrEqualTo(80),
-        reason:
-            'Idle dock shell is ${dockRect.height}px tall; it must be a '
-            'compact strip.',
-      );
-      final surfaceWidget = tester.widget<MissionSurface>(surface);
-      final padding = surfaceWidget.padding.resolve(TextDirection.ltr);
-      expect(
-        padding.top,
-        lessThanOrEqualTo(7),
-        reason:
-            'Idle dock vertical padding ${padding.top} keeps the '
-            'shell too tall.',
-      );
-
-      // The perimeter is a soft grouping edge, not a strong cyan frame.
-      final shellBox = tester.widget<DecoratedBox>(
-        find.descendant(of: surface, matching: find.byType(DecoratedBox)).first,
-      );
-      final side =
-          ((shellBox.decoration as BoxDecoration).border as Border).top;
-      expect(
-        side.color.a / 255,
-        lessThan(0.2),
-        reason:
-            'Idle dock border opacity ${side.color.a / 255} is as strong '
-            'as the primary action; soften the grouping surface.',
-      );
+      final dockRect = tester.getRect(find.byType(IdleCommandBar));
+      expect(dockRect.height, lessThanOrEqualTo(80));
+      expect(find.byType(MissionSurface), findsNothing);
 
       // Start Wave is the dominant, wide, filled action: 48-56dp tall,
       // clearly wider than a quarter of the dock, filled cyan with dark
@@ -1113,21 +1073,21 @@ void main() {
             'Start Wave width ${startRect.width} must dominate the dock '
             'action row.',
       );
-      final fill = tester.widget<Material>(
+      final fill = tester.widget<DecoratedBox>(
         find
             .descendant(
               of: find.byTooltip('Start Wave'),
-              matching: find.byType(Material),
+              matching: find.byType(DecoratedBox),
             )
             .first,
       );
-      expect(
-        fill.color,
-        OrionUiTheme.dark.systemCyan,
-        reason:
-            'Start Wave must be a filled cyan action, not an outlined '
-            'frame.',
-      );
+      final gradient =
+          (fill.decoration as BoxDecoration).gradient! as LinearGradient;
+      expect(gradient.colors, const [
+        Color(0xFF7FF0FF),
+        Color(0xFF13B8E6),
+        Color(0xFF0A7EA3),
+      ]);
     },
   );
 }

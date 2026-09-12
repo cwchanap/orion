@@ -28,7 +28,7 @@ final class SectorMapLayout {
 
   static const railWidth = 52.0;
   static const horizontalPadding = 12.0;
-  static const nodeSize = Size(56, 80);
+  static const nodeSize = Size(72, 94);
   static const plotTop = 76.0;
   static const plotBottomInset = 40.0;
 
@@ -54,7 +54,29 @@ final class SectorMapLayout {
     );
   }
 
+  static const _anchors = <String, Offset>{
+    'outpost-alpha': Offset(70 / 393, 640 / 852),
+    'nebula-relay': Offset(150 / 393, 550 / 852),
+    'salvage-rift': Offset(262 / 393, 588 / 852),
+    'asteroid-foundry': Offset(118 / 393, 420 / 852),
+    'aurora-gate': Offset(228 / 393, 370 / 852),
+    'void-bastion': Offset(318 / 393, 440 / 852),
+    'singularity-core': Offset(232 / 393, 240 / 852),
+  };
+
+  double get plotContentHeight => _size.height.clamp(740, double.infinity);
+
   Rect nodeRect(StageDefinition stage) {
+    final anchor = _anchors[stage.id];
+    if (anchor != null) {
+      return Rect.fromLTWH(
+        anchor.dx * _size.width.clamp(360, double.infinity) -
+            nodeSize.width / 2,
+        anchor.dy * plotContentHeight - 52,
+        nodeSize.width,
+        nodeSize.height,
+      );
+    }
     final xStep = _horizontalStep;
     final availableHeight =
         (_size.height - plotTop - plotBottomInset - nodeSize.height).clamp(
@@ -88,6 +110,7 @@ final class SectorMapLayout {
   /// edge + right padding). When this exceeds the viewport's plot width the
   /// caller should wrap the plot in a horizontal scroll.
   double get plotContentWidth {
+    if (maxColumn <= 4) return _size.width.clamp(360, double.infinity);
     final xStep = _horizontalStep;
     return horizontalPadding +
         (maxColumn * xStep) +

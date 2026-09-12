@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'mission_surface.dart';
+import 'orion_atlas_sprite.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
@@ -136,7 +137,10 @@ class _BaseHealthAnchor extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.shield_outlined, color: uiTheme.systemCyan, size: 22),
+            OrionAtlasSprite(
+              art: OrionArt.trait(EnemyTrait.shielded)!,
+              size: const Size.square(34),
+            ),
             const SizedBox(width: 4),
             Flexible(
               child: OrionReadout(
@@ -155,7 +159,7 @@ class _BaseHealthAnchor extends StatelessWidget {
         SizedBox(
           key: const ValueKey('base-health-fill-track'),
           height: 4,
-          width: 84,
+          width: 76,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
             child: ColoredBox(
@@ -210,7 +214,7 @@ class _MissionStatusAnchor extends StatelessWidget {
             value: '${snapshot.waveNumber}',
             denominator: '${snapshot.waveTotal}',
             color: uiTheme.systemCyan,
-            size: 26,
+            size: 22,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             textScaler: textScaler,

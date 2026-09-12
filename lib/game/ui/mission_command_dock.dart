@@ -7,7 +7,6 @@ import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
-import 'tower_inspector.dart';
 
 /// Closed scene-1e placement-preview event family. The dock emits, Chrome
 /// forwards, and the page maps onto [OrionDefenseGame]'s preview methods.
@@ -53,8 +52,10 @@ class MissionCommandDock extends StatelessWidget {
     required this.onTargetingChanged,
     required this.onSell,
     this.onPlacementPreviewEvent,
+    this.worldMapAction,
   });
 
+  final Widget? worldMapAction;
   final GameSnapshot snapshot;
   final VoidCallback onTogglePause;
   final ValueChanged<double> onSpeedSelected;
@@ -71,17 +72,7 @@ class MissionCommandDock extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget content;
     final Key contentKey;
-    if (snapshot.selectedTower != null) {
-      contentKey = const ValueKey('command-dock-tower');
-      content = TowerInspector(
-        snapshot: snapshot,
-        onUpgrade: onUpgrade,
-        onSpecialize: onSpecialize,
-        onTargetingChanged: onTargetingChanged,
-        onSell: onSell,
-        sellRefund: GameBalance.refundValue(snapshot.selectedTower!),
-      );
-    } else if (snapshot.selectedCell != null) {
+    if (snapshot.selectedCell != null && snapshot.selectedTower == null) {
       contentKey = const ValueKey('command-dock-build');
       content = TowerBuildRail(
         phase: snapshot.phase,
@@ -93,6 +84,7 @@ class MissionCommandDock extends StatelessWidget {
     } else {
       contentKey = const ValueKey('command-dock-idle');
       final idleBar = IdleCommandBar(
+        worldMapAction: worldMapAction,
         snapshot: snapshot,
         onTogglePause: onTogglePause,
         onSpeedSelected: onSpeedSelected,
@@ -124,23 +116,28 @@ class MissionCommandDock extends StatelessWidget {
           : idleBar;
     }
 
-    // Every dock state surfaces itself: idle, build rail, and inspector
-    // each own a rounded MissionSurface — no outer frame chrome.
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AnimatedSwitcher(
-          key: const ValueKey('mission-command-dock-transition'),
-          duration: orionMotionDuration(
-            context,
-            const Duration(milliseconds: 180),
+    // One full-width shelf groups every dock state.
+    return OrionSurface(
+      tier: OrionSurfaceTier.t4,
+      radius: 0,
+      topBorderOnly: true,
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AnimatedSwitcher(
+            key: const ValueKey('mission-command-dock-transition'),
+            duration: orionMotionDuration(
+              context,
+              const Duration(milliseconds: 180),
+            ),
+            layoutBuilder: (currentChild, previousChildren) =>
+                currentChild ?? const SizedBox.shrink(),
+            child: KeyedSubtree(key: contentKey, child: content),
           ),
-          layoutBuilder: (currentChild, previousChildren) =>
-              currentChild ?? const SizedBox.shrink(),
-          child: KeyedSubtree(key: contentKey, child: content),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -153,8 +150,10 @@ class IdleCommandBar extends StatelessWidget {
     required this.onSpeedSelected,
     required this.onToggleAutoStart,
     required this.onStartWave,
+    this.worldMapAction,
   });
 
+  final Widget? worldMapAction;
   final GameSnapshot snapshot;
   final VoidCallback onTogglePause;
   final ValueChanged<double> onSpeedSelected;
@@ -169,11 +168,8 @@ class IdleCommandBar extends StatelessWidget {
         ? 'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}'
         : reactorLabel;
 
-    return MissionSurface(
-      // The shell is a low grouping surface for the idle row, not a strong
-      // cyan frame: reduced vertical padding groups the controls into the
-      // dock's quiet default (unemphasized) tier.
-      padding: const EdgeInsets.all(6),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
           // Pacing flexes and wraps on narrow viewports; the fixed-size
@@ -186,6 +182,10 @@ class IdleCommandBar extends StatelessWidget {
               onToggleAutoStart: onToggleAutoStart,
             ),
           ),
+          if (worldMapAction != null) ...[
+            const SizedBox(width: 8),
+            worldMapAction!,
+          ],
           const SizedBox(width: 8),
           AnimatedSwitcher(
             key: const ValueKey('idle-command-reactor-transition'),
@@ -198,7 +198,9 @@ class IdleCommandBar extends StatelessWidget {
             child: _PrimaryActionPill(
               key: ValueKey(reactorLabel),
               tooltip: reactorTooltip,
-              label: reactorLabel,
+              label: snapshot.canStartWave && countdown == null
+                  ? 'Wave ${snapshot.waveNumber}'
+                  : reactorLabel,
               icon: snapshot.phase == GamePhase.wave
                   ? Icons.radar
                   : Icons.play_arrow_rounded,
@@ -237,8 +239,8 @@ class _PrimaryActionPill extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onPressed;
 
-  static const double _width = 98;
-  static const double _height = 52;
+  static const double _width = 116;
+  static const double _height = 48;
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +265,18 @@ class _PrimaryActionPill extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: radius,
+              gradient: enabled
+                  ? const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFF7FF0FF),
+                        Color(0xFF13B8E6),
+                        Color(0xFF0A7EA3),
+                      ],
+                      stops: [0, 0.6, 1],
+                    )
+                  : null,
               // The strongest glow in the idle dock is reserved for this
               // one action; pacing and the shell carry none.
               boxShadow: enabled
@@ -276,7 +290,7 @@ class _PrimaryActionPill extends StatelessWidget {
             ),
             child: Material(
               color: enabled
-                  ? uiTheme.systemCyan
+                  ? Colors.transparent
                   : uiTheme.hullBlack.withValues(alpha: 0.55),
               shape: RoundedRectangleBorder(
                 borderRadius: radius,
@@ -305,7 +319,10 @@ class _PrimaryActionPill extends StatelessWidget {
                           textScaler: MediaQuery.textScalerOf(
                             context,
                           ).clamp(maxScaleFactor: 1.15),
-                          style: OrionTypography.microLabel(color: foreground),
+                          style: OrionTypography.microLabel(
+                            color: foreground,
+                            size: 10,
+                          ).copyWith(shadows: const []),
                         ),
                       ),
                     ],
@@ -404,17 +421,17 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
     final textScaler = MediaQuery.textScalerOf(
       context,
     ).clamp(maxScaleFactor: 1.3);
-    return MissionSurface(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+    return Padding(
+      padding: EdgeInsets.zero,
       child: SizedBox(
         height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
         child: Stack(
           children: [
             ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               scrollDirection: Axis.horizontal,
               itemCount: TowerType.values.length,
-              separatorBuilder: (_, index) => const SizedBox(width: 6),
+              separatorBuilder: (_, index) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final type = TowerType.values[index];
                 return _TowerBuildCard(
@@ -502,7 +519,7 @@ class _TowerBuildCard extends StatelessWidget {
   // bolt-prefixed cost -- the sprite is what the player picks from, so it
   // gets the room, and the cost is the decision, so it outranks the name.
   static const double baseWidth = 70;
-  static const double baseHeight = 88;
+  static const double baseHeight = 96;
 
   @override
   Widget build(BuildContext context) {
@@ -537,12 +554,8 @@ class _TowerBuildCard extends StatelessWidget {
         // Flat: the rail around these tiles is already one blurred row, and
         // blurring each tile inside it is the anti-pattern OrionSurface names.
         child: OrionInnerSurface(
-          tier: canAttempt && affordable
-              ? OrionSurfaceTier.t3
-              : OrionSurfaceTier.t2,
-          // No inset: the artboard bottom-aligns the card's contents and
-          // lets the sprite overhang the top edge, which is the only way a
-          // 58px sprite, a cost and a name fit inside 88px.
+          tier: OrionSurfaceTier.t2,
+          // Keep room for the sprite above the cost and name.
           padding: EdgeInsets.zero,
           radius: 16,
           child: Material(
@@ -558,52 +571,57 @@ class _TowerBuildCard extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        ColorFiltered(
-                          colorFilter: unlocked
-                              ? const ColorFilter.mode(
-                                  Colors.transparent,
-                                  BlendMode.dst,
-                                )
-                              : const ColorFilter.matrix(<double>[
-                                  0.2126,
-                                  0.7152,
-                                  0.0722,
-                                  0,
-                                  0,
-                                  0.2126,
-                                  0.7152,
-                                  0.0722,
-                                  0,
-                                  0,
-                                  0.2126,
-                                  0.7152,
-                                  0.0722,
-                                  0,
-                                  0,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  0,
-                                ]),
-                          child: Opacity(
-                            opacity: affordable ? 1 : 0.48,
-                            child: OrionAtlasSprite(
-                              art: OrionArt.tower(type),
-                              size: const Size(50, 50),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            ColorFiltered(
+                              colorFilter: unlocked
+                                  ? const ColorFilter.mode(
+                                      Colors.transparent,
+                                      BlendMode.dst,
+                                    )
+                                  : const ColorFilter.matrix(<double>[
+                                      0.2126,
+                                      0.7152,
+                                      0.0722,
+                                      0,
+                                      0,
+                                      0.2126,
+                                      0.7152,
+                                      0.0722,
+                                      0,
+                                      0,
+                                      0.2126,
+                                      0.7152,
+                                      0.0722,
+                                      0,
+                                      0,
+                                      0,
+                                      0,
+                                      0,
+                                      1,
+                                      0,
+                                    ]),
+                              child: Opacity(
+                                opacity: affordable ? 1 : 0.48,
+                                child: OrionAtlasSprite(
+                                  art: OrionArt.tower(type),
+                                  size: const Size(58, 58),
+                                ),
+                              ),
                             ),
-                          ),
+                            if (!unlocked)
+                              Icon(
+                                Icons.lock_outline,
+                                size: 17,
+                                color: uiTheme.textMuted,
+                              ),
+                          ],
                         ),
-                        if (!unlocked)
-                          Icon(
-                            Icons.lock_outline,
-                            size: 17,
-                            color: uiTheme.textMuted,
-                          ),
-                      ],
+                      ),
                     ),
                     const SizedBox(height: 2),
                     // Cost above name, per the artboard's card template
@@ -703,7 +721,7 @@ class _TowerBuildCard extends StatelessWidget {
           ),
           child: OrionAtlasSprite(
             art: OrionArt.tower(type),
-            size: const Size(48, 48),
+            size: const Size(64, 64),
           ),
         ),
         const SizedBox(height: 4),
@@ -720,7 +738,8 @@ class _TowerBuildCard extends StatelessWidget {
             affordable
                 ? '−${stats.cost} → ${gold - stats.cost}'
                 : 'need ${stats.cost - gold} more',
-            style: OrionTypography.microLabel(
+            style: OrionTypography.readout(
+              size: 13,
               color: affordable ? uiTheme.creditGold : uiTheme.dangerRed,
             ),
           ),

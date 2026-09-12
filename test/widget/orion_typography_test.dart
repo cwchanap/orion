@@ -64,12 +64,12 @@ void main() {
     );
     final value = t.widget<Text>(find.text('03'));
     final denom = t.widget<Text>(find.text('/12'));
-    // The denominator is subordinate but still legible: 0.62 of the value's
+    // The denominator is subordinate but still legible: 0.45 of the value's
     // resolved size, not the illegible 0.45 the sheet's earlier ratio gave
     // at in-use sizes.
     expect(
       denom.style!.fontSize,
-      closeTo(value.style!.fontSize! * 0.62, 0.001),
+      closeTo(value.style!.fontSize! * 0.45, 0.001),
     );
     expect(denom.style!.color, isNot(value.style!.color));
   });

@@ -18,6 +18,7 @@ Widget scannerHost(
   WavePreview preview, {
   bool disableAnimations = false,
   bool collapseRequested = false,
+  String? stageId,
   List<String> modifierTitles = const ['Standard Conditions'],
 }) {
   return MaterialApp(
@@ -37,8 +38,10 @@ Widget scannerHost(
         alignment: Alignment.topRight,
         child: NextWaveScanner(
           preview: preview,
+          stageId: stageId,
           modifierTitles: modifierTitles,
           collapseRequested: collapseRequested,
+          onStartWave: () {},
         ),
       ),
     ),
@@ -385,7 +388,7 @@ void main() {
     );
     expect(
       find.descendant(
-        of: find.byKey(const ValueKey('preview-group-0')),
+        of: find.byType(WaveScannerScene),
         matching: find.byIcon(Icons.change_history),
       ),
       findsOneWidget,
@@ -454,11 +457,17 @@ void main() {
       final frame = tester.getRect(
         find.byKey(const ValueKey('next-wave-scanner-expanded')),
       );
-      expect(frame.width, lessThanOrEqualTo(212));
-      expect(frame.height, lessThanOrEqualTo(320));
-      // Bounded AND scrollable: the 320 cap is real, so overflow content
-      // must be reachable through the scroll view, never clipped.
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(frame.width, equals(800));
+      expect(frame.height, equals(600));
+      // Details scroll vertically; the convoy has its own horizontal scroll.
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is SingleChildScrollView &&
+              widget.scrollDirection == Axis.vertical,
+        ),
+        findsOneWidget,
+      );
       expect(find.bySemanticsLabel('8 Armored Drones'), findsOneWidget);
       expect(find.bySemanticsLabel('2 Drones'), findsOneWidget);
       expect(find.bySemanticsLabel('Armored trait'), findsOneWidget);
@@ -500,21 +509,21 @@ void main() {
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('preview-group-0')),
-          matching: find.text('12x'),
+          matching: find.text('×12'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('preview-group-1')),
-          matching: find.text('4x'),
+          matching: find.text('×4'),
         ),
         findsOneWidget,
       );
       expect(
         find.descendant(
           of: find.byKey(const ValueKey('preview-group-2')),
-          matching: find.text('6x'),
+          matching: find.text('×6'),
         ),
         findsOneWidget,
       );
@@ -532,7 +541,7 @@ void main() {
 
       // Recommendation/modifier sections stay discoverable by label.
       expect(find.text('RECOMMENDED COUNTERS'), findsOneWidget);
-      expect(find.text('MODIFIERS'), findsOneWidget);
+      expect(find.text('Ion Storm'), findsOneWidget);
 
       // Recommended counters stay art-led with an affirmative mark each.
       final counters = find.bySemanticsLabel(
@@ -546,10 +555,7 @@ void main() {
       );
       expect(counterArt.shortestSide, greaterThanOrEqualTo(24));
       expect(
-        find.descendant(
-          of: counters,
-          matching: find.byIcon(Icons.check_circle),
-        ),
+        find.descendant(of: counters, matching: find.byIcon(Icons.check)),
         findsNWidgets(2),
       );
     },
@@ -592,6 +598,7 @@ void main() {
     await tester.runAsync(() async {
       await Flame.images.load(GameSpriteSheet.fileName);
       await Flame.images.load(GameTowerVarietySheet.fileName);
+      await Flame.images.load('orion_boss_sheet.png');
     });
     final boundaryKey = GlobalKey();
     await tester.pumpWidget(
@@ -599,6 +606,7 @@ void main() {
         key: boundaryKey,
         child: scannerHost(
           representativePreview(),
+          stageId: 'outpost-alpha',
           modifierTitles: const ['Ion Storm'],
         ),
       ),
@@ -607,6 +615,12 @@ void main() {
     await tester.tap(find.byTooltip('Expand next-wave scanner'));
     await tester.pumpAndSettle();
 
+    await tester.runAsync(
+      () => warmSceneImages(tester.element(find.byType(WaveScannerScene)), [
+        'reactor_rim_ui/backdrops/command-center.png',
+      ]),
+    );
+    await tester.pump();
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.
     await tester.runAsync(
@@ -633,31 +647,20 @@ void main() {
     }
   });
 
-  testWidgets('collapsed and expanded shells are surfaced via MissionSurface', (
-    tester,
-  ) async {
-    await tester.pumpWidget(scannerHost(commandDeckPreview()));
-
-    Finder scannerSurfaces() => find.descendant(
-      of: find.byType(NextWaveScanner),
-      matching: find.byType(MissionSurface),
-    );
-    // MissionSurface is a thin deprecated adapter now, so every shell
-    // also delegates to an OrionSurface tier internally.
-    Finder scannerTiers() => find.descendant(
-      of: find.byType(NextWaveScanner),
-      matching: find.byType(OrionSurface),
-    );
-
-    expect(scannerSurfaces(), findsWidgets);
-    expect(scannerTiers(), findsWidgets);
-
-    await tester.tap(find.byTooltip('Expand next-wave scanner'));
-    await tester.pumpAndSettle();
-    expect(scannerSurfaces(), findsWidgets);
-    expect(scannerTiers(), findsWidgets);
-  });
-
+  testWidgets(
+    'scanner opens a full scene and keeps its close action available',
+    (tester) async {
+      await tester.pumpWidget(scannerHost(commandDeckPreview()));
+      expect(find.byType(MissionSurface), findsOneWidget);
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+      expect(find.byType(WaveScannerScene), findsOneWidget);
+      expect(find.byType(OrionSurface), findsWidgets);
+      await tester.tap(find.byTooltip('Collapse next-wave scanner'));
+      await tester.pump();
+      expect(find.byType(WaveScannerScene), findsNothing);
+    },
+  );
   testWidgets('reduced motion expands and collapses after one pump', (
     tester,
   ) async {

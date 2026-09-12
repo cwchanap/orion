@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import '../models/game_models.dart';
 
 enum TowerSecondaryMetric {
+  chainCount,
+  pierceCount,
   slowDuration,
   splashRadius,
   corrosionDamagePerSecond,
@@ -11,6 +13,8 @@ enum TowerSecondaryMetric {
 
 extension TowerSecondaryMetricValue on TowerSecondaryMetric {
   double valueOf(TowerStats stats) => switch (this) {
+    TowerSecondaryMetric.chainCount => stats.chainCount.toDouble(),
+    TowerSecondaryMetric.pierceCount => stats.pierceCount.toDouble(),
     TowerSecondaryMetric.slowDuration => stats.slowDuration,
     TowerSecondaryMetric.splashRadius => stats.splashRadius,
     TowerSecondaryMetric.corrosionDamagePerSecond =>
@@ -52,10 +56,9 @@ final class TowerStatScale {
       TowerType.rocket => TowerSecondaryMetric.splashRadius,
       TowerType.nanite => TowerSecondaryMetric.corrosionDamagePerSecond,
       TowerType.droneBay => TowerSecondaryMetric.droneDamage,
-      TowerType.laser ||
-      TowerType.railgun ||
-      TowerType.ionChain ||
-      TowerType.gravityWell => null,
+      TowerType.ionChain => TowerSecondaryMetric.chainCount,
+      TowerType.railgun => TowerSecondaryMetric.pierceCount,
+      TowerType.laser || TowerType.gravityWell => null,
     };
     return TowerStatScale(
       damageMax: candidates.map((stats) => stats.damage).reduce(math.max),

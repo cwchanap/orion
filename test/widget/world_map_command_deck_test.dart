@@ -65,6 +65,42 @@ Widget buildMap({
 
 void main() {
   testWidgets(
+    'enlarged map title and feedback stay clear of utility controls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      final host =
+          buildMap(
+                progress: CampaignProgress(),
+                feedback: 'Singularity Core is locked.',
+              )
+              as MaterialApp;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: host.theme,
+          home: host.home,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3)),
+            child: child!,
+          ),
+        ),
+      );
+      await tester.pump();
+      final titleRect = tester.getRect(find.text('ORION SECTOR'));
+      final codexRect = tester.getRect(find.byTooltip('Codex'));
+      final feedbackRect = tester.getRect(
+        find.text('Singularity Core is locked.'),
+      );
+      expect(titleRect.overlaps(codexRect), isFalse);
+      expect(feedbackRect.overlaps(codexRect), isFalse);
+    },
+  );
+
+  testWidgets(
     'compact map exposes seven art-led stage targets without overlap',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(375, 812));
@@ -83,8 +119,11 @@ void main() {
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder), const Size(56, 80));
+        expect(tester.getSize(finder).width, closeTo(72, 0.001));
+        expect(tester.getSize(finder).height, closeTo(94, 0.001));
         rects.add(tester.getRect(finder));
+        await tester.ensureVisible(finder);
+        await tester.pump();
         await tester.tap(finder);
       }
       for (var left = 0; left < rects.length; left += 1) {
@@ -166,7 +205,15 @@ void main() {
     final backdropLayerIndex = outerKeys.indexOf(
       const ValueKey('world-map-backdrop'),
     );
-    final plotLayerIndex = outerKeys.indexOf(const ValueKey('world-map-plot'));
+    final plotLayer = tester.widget<Positioned>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('world-map-plot-viewport')),
+            matching: find.byType(Positioned),
+          )
+          .first,
+    );
+    final plotLayerIndex = outerStack.children.indexOf(plotLayer);
     expect(backdropLayerIndex, greaterThanOrEqualTo(0));
     expect(plotLayerIndex, greaterThan(backdropLayerIndex));
   });
@@ -181,12 +228,12 @@ void main() {
       );
       expect(
         sprite.art.fileName,
-        'reactor_rim_ui/stages/${stage.id}.png',
+        'reactor_rim_ui/crests/${stage.id}.png',
         reason: stage.id,
       );
       final source = sprite.art.sourceRectFor(
-        imageWidth: 1600,
-        imageHeight: 900,
+        imageWidth: 160,
+        imageHeight: 160,
       );
       expect(source.width, source.height, reason: stage.id);
       expect(sprite.size!.width, sprite.size!.height, reason: stage.id);
@@ -408,7 +455,11 @@ void main() {
         of: find.byType(WorldMapView),
         matching: find.byType(OrionSurface),
       ),
-      findsNothing,
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<OrionSurface>(find.byType(OrionSurface)).tier,
+      OrionSurfaceTier.t3,
     );
   });
 
@@ -638,6 +689,10 @@ void main() {
         ),
       );
 
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      await tester.pump();
       await tester.tap(
         find.byKey(const ValueKey('sector-stage-outpost-alpha')),
       );
@@ -771,7 +826,8 @@ void main() {
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder), const Size(56, 80));
+        expect(tester.getSize(finder).width, closeTo(72, 0.001));
+        expect(tester.getSize(finder).height, closeTo(94, 0.001));
         rects.add(tester.getRect(finder));
       }
 
@@ -785,7 +841,10 @@ void main() {
 
       // Tapping each stage still selects it.
       for (final stage in OrionCampaign.stages) {
-        await tester.tap(find.byKey(ValueKey('sector-stage-${stage.id}')));
+        final node = find.byKey(ValueKey('sector-stage-${stage.id}'));
+        await tester.ensureVisible(node);
+        await tester.pump();
+        await tester.tap(node);
       }
       expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
     },
@@ -809,13 +868,12 @@ void main() {
         ),
       );
 
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsNWidgets(2));
 
       // The plot actually scrolls horizontally: dragging the route layer
       // moves the scroll offset away from zero.
-      final scrollFinder = find.descendant(
-        of: find.byType(SingleChildScrollView),
-        matching: find.byType(Scrollable),
+      final scrollFinder = find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
       );
       final scrollable = tester.state<ScrollableState>(scrollFinder);
       expect(scrollable.position.pixels, 0);
@@ -832,6 +890,10 @@ void main() {
       expect(scrollable.position.pixels, greaterThan(0));
 
       // The first stage remains tappable after scrolling and still selects.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      await tester.pump();
       await tester.tap(
         find.byKey(const ValueKey('sector-stage-outpost-alpha')),
       );
@@ -859,6 +921,7 @@ void main() {
       await Flame.images.load('reactor_rim_ui/backdrops/world-map.png');
       for (final stage in OrionCampaign.stages) {
         await Flame.images.load('reactor_rim_ui/stages/${stage.id}.png');
+        await Flame.images.load('reactor_rim_ui/crests/${stage.id}.png');
       }
     });
 
@@ -879,6 +942,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/images/reactor_rim_ui/backdrops/map-room.png'),
+        tester.element(find.byType(WorldMapView)),
+      ),
+    );
+    await tester.pump();
 
     expect(find.byKey(const ValueKey('world-map-backdrop')), findsOneWidget);
     expect(

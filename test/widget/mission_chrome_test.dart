@@ -9,7 +9,6 @@ import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
@@ -193,9 +192,7 @@ void main() {
     // Map is an icon-scale chip now; its label lives in tooltip/semantics.)
     // The pill displays the label in caps, which is wider than the title
     // case it replaced -- so this fit check matters more, not less.
-    final paragraph = tester.renderObject<RenderParagraph>(
-      find.text('START WAVE'),
-    );
+    final paragraph = tester.renderObject<RenderParagraph>(find.text('WAVE 1'));
     expect(
       paragraph.didExceedMaxLines,
       isFalse,
@@ -226,14 +223,7 @@ void main() {
       // over bottom-row board cells and swallowing their taps. Bound the
       // idle surface to its single-row height: one 48dp control run and
       // the 84px reactor, plus the surface's own 8px padding.
-      final surfaceRect = tester.getRect(
-        find
-            .descendant(
-              of: find.byKey(const ValueKey('command-dock-idle')),
-              matching: find.byType(MissionSurface),
-            )
-            .first,
-      );
+      final surfaceRect = tester.getRect(find.byType(IdleCommandBar));
       expect(
         surfaceRect.height,
         lessThanOrEqualTo(100.5),
@@ -351,9 +341,9 @@ void main() {
     );
     final worldMap = tester.getRect(find.byTooltip('World Map'));
     expect(
-      credits.right,
-      lessThanOrEqualTo(worldMap.left),
-      reason: 'the credits readout runs under the band actions',
+      credits.bottom,
+      lessThanOrEqualTo(worldMap.top),
+      reason: 'the utility row must stay below the readouts',
     );
   });
 
@@ -387,10 +377,8 @@ void main() {
     final dockTop = tester.getTopLeft(find.byType(MissionCommandDock)).dy;
     expect(toastBottom, lessThanOrEqualTo(dockTop));
 
-    // World Map is a compact top-band mission action now, not a bottom-band
-    // dock companion.
     final worldMapTop = tester.getTopLeft(find.byTooltip('World Map')).dy;
-    expect(worldMapTop, lessThan(dockTop));
+    expect(worldMapTop, greaterThanOrEqualTo(dockTop));
 
     // The idle dock hosts pacing plus the primary action.
     expect(find.byTooltip('Pause'), findsOneWidget);
@@ -546,9 +534,9 @@ void main() {
 
       await tester.pumpWidget(chromeHost(snapshotWith()));
       await tester.pump();
-      await tester.tap(find.byTooltip('Expand next-wave scanner'));
-      await tester.pumpAndSettle();
       await tester.tap(find.text('Modules 2'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
       await tester.pumpAndSettle();
       expect(
         find.byKey(const ValueKey('next-wave-scanner-expanded')),
@@ -619,173 +607,159 @@ void main() {
     },
   );
 
-  testWidgets(
-    'collapsing one of two expanded top panels keeps World Map yielded',
-    (tester) async {
-      tester.view.physicalSize = _productViewport;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
+  testWidgets('top panels leave the dock World Map action available', (
+    tester,
+  ) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        chromeHost(
-          commandDeckSnapshot(
-            nextWavePreview: commandDeckPreview(),
-            acquiredRunModules: const [
-              RunModuleId.heavyCaliber,
-              RunModuleId.cryoReservoir,
-            ],
-          ),
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(),
+          acquiredRunModules: const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.cryoReservoir,
+          ],
         ),
-      );
-      await tester.pump();
+      ),
+    );
+    await tester.pump();
 
-      // Idle with no panel expanded: World Map is present.
-      expect(find.byTooltip('World Map'), findsOneWidget);
+    // Idle with no panel expanded: World Map is present.
+    expect(find.byTooltip('World Map'), findsOneWidget);
 
-      // Expand both top-band panels.
-      await tester.tap(find.byTooltip('Expand next-wave scanner'));
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('Modules 2'));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('next-wave-scanner-expanded')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('acquired-modules-expanded')),
-        findsOneWidget,
-      );
-      // World Map yields to the expanded panels.
-      expect(find.byTooltip('World Map'), findsNothing);
+    // Expand both top-band panels.
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Collapse next-wave scanner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Modules 2'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('acquired-modules-expanded')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('World Map'), findsOneWidget);
 
-      // Collapse only the scanner; modules is still expanded, so World Map
-      // must stay hidden — not reinserted to steal the modules panel's width.
-      await tester.tap(find.byTooltip('Collapse next-wave scanner'));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('next-wave-scanner-expanded')),
-        findsNothing,
-      );
-      expect(
-        find.byKey(const ValueKey('acquired-modules-expanded')),
-        findsOneWidget,
-      );
-      expect(find.byTooltip('World Map'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('acquired-modules-expanded')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('World Map'), findsOneWidget);
 
-      // Collapse the modules panel too; now World Map returns.
-      await tester.tap(find.byTooltip('Collapse acquired modules'));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('acquired-modules-expanded')),
-        findsNothing,
-      );
-      expect(find.byTooltip('World Map'), findsOneWidget);
-    },
-  );
+    await tester.tap(find.byTooltip('Collapse acquired modules'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('acquired-modules-expanded')),
+      findsNothing,
+    );
+    expect(find.byTooltip('World Map'), findsOneWidget);
+  });
 
-  testWidgets(
-    'a scanner-preview reset keeps the still-expanded modules panel yielded',
-    (tester) async {
-      tester.view.physicalSize = _productViewport;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
+  testWidgets('a scanner-preview reset keeps the modules panel expanded', (
+    tester,
+  ) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
 
-      // Build phase with modules and a wave-1 preview.
-      await tester.pumpWidget(
-        chromeHost(
-          commandDeckSnapshot(
-            nextWavePreview: commandDeckPreview(waveNumber: 1),
-            acquiredRunModules: const [
-              RunModuleId.heavyCaliber,
-              RunModuleId.cryoReservoir,
-            ],
-          ),
+    // Build phase with modules and a wave-1 preview.
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(waveNumber: 1),
+          acquiredRunModules: const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.cryoReservoir,
+          ],
         ),
-      );
-      await tester.pump();
+      ),
+    );
+    await tester.pump();
 
-      // Expand only the modules panel; World Map yields to it.
-      await tester.tap(find.text('Modules 2'));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('acquired-modules-expanded')),
-        findsOneWidget,
-      );
-      expect(find.byTooltip('World Map'), findsNothing);
+    await tester.tap(find.text('Modules 2'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('acquired-modules-expanded')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('World Map'), findsOneWidget);
 
-      // The scanner preview rolls to the next wave while the module list is
-      // unchanged. Only the scanner's reset token changed, so only the
-      // scanner may collapse — the still-expanded modules panel must keep
-      // World Map yielded, not reinsert it to steal the panel's width.
-      await tester.pumpWidget(
-        chromeHost(
-          commandDeckSnapshot(
-            nextWavePreview: commandDeckPreview(waveNumber: 2),
-            acquiredRunModules: const [
-              RunModuleId.heavyCaliber,
-              RunModuleId.cryoReservoir,
-            ],
-          ),
+    // A new scanner preview must not collapse the modules panel.
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(waveNumber: 2),
+          acquiredRunModules: const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.cryoReservoir,
+          ],
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('acquired-modules-expanded')),
-        findsOneWidget,
-      );
-      expect(find.byTooltip('World Map'), findsNothing);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('acquired-modules-expanded')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('World Map'), findsOneWidget);
+  });
 
-  testWidgets(
-    'a module-list reset keeps the still-expanded scanner panel yielded',
-    (tester) async {
-      tester.view.physicalSize = _productViewport;
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
+  testWidgets('a module-list reset keeps the scanner panel expanded', (
+    tester,
+  ) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
 
-      // Build phase with modules and a wave-1 preview.
-      await tester.pumpWidget(
-        chromeHost(
-          commandDeckSnapshot(
-            nextWavePreview: commandDeckPreview(waveNumber: 1),
-            acquiredRunModules: const [RunModuleId.heavyCaliber],
-          ),
+    // Build phase with modules and a wave-1 preview.
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(waveNumber: 1),
+          acquiredRunModules: const [RunModuleId.heavyCaliber],
         ),
-      );
-      await tester.pump();
+      ),
+    );
+    await tester.pump();
 
-      // Expand only the scanner; World Map yields to it.
-      await tester.tap(find.byTooltip('Expand next-wave scanner'));
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('next-wave-scanner-expanded')),
-        findsOneWidget,
-      );
-      expect(find.byTooltip('World Map'), findsNothing);
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('World Map'), findsOneWidget);
 
-      // The module list changes while the scanner preview is unchanged. Only
-      // the modules' reset token changed, so only the modules panel may
-      // collapse — the still-expanded scanner must keep World Map yielded.
-      await tester.pumpWidget(
-        chromeHost(
-          commandDeckSnapshot(
-            nextWavePreview: commandDeckPreview(waveNumber: 1),
-            acquiredRunModules: const [
-              RunModuleId.heavyCaliber,
-              RunModuleId.cryoReservoir,
-            ],
-          ),
+    // A changed module list must not collapse the scanner.
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(waveNumber: 1),
+          acquiredRunModules: const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.cryoReservoir,
+          ],
         ),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('next-wave-scanner-expanded')),
-        findsOneWidget,
-      );
-      expect(find.byTooltip('World Map'), findsNothing);
-    },
-  );
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsOneWidget,
+    );
+    expect(find.byTooltip('World Map'), findsOneWidget);
+  });
 
   testWidgets('landscape viewports render the same tree without overflow', (
     tester,
@@ -849,10 +823,10 @@ void main() {
       await tester.pumpWidget(chromeHost(towerSnapshot));
       await tester.pump();
       expect(tester.takeException(), isNull);
-      expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
+      expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
       _expectWithinViewport(
         tester,
-        find.byKey(const ValueKey('tower-inspector')),
+        find.byKey(const ValueKey('command-dock-persistent-rail')),
         size,
       );
       _expectWithinViewport(tester, find.byType(MissionStatusHud), size);
@@ -930,27 +904,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
-      _expectIdlePacingAbsent(tester);
-
-      // Both specialization actions, targeting, sell, and the final stat row
-      // are all reachable through the inspector's internal scroll.
-      final reachableKeys = <String>[
-        for (final specialization in GameBalance.specializationsFor(tower.type))
-          'tower-specialization-${specialization.name}',
-        'tower-target-first',
-        'tower-sell',
-        'tower-stat-range',
-      ];
-      for (final key in reachableKeys) {
-        await tester.ensureVisible(find.byKey(ValueKey(key)));
-        await tester.pumpAndSettle();
-        _expectWithinViewport(
-          tester,
-          find.byKey(ValueKey(key)),
-          _productViewport,
-        );
-      }
+      expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('command-dock-persistent-rail')),
+        findsOneWidget,
+      );
     },
   );
 
@@ -966,9 +924,6 @@ void main() {
     );
     await tester.pump();
 
-    // World Map is a compact top-band utility now, not the largest control:
-    // it matches the scanner's ~48dp shell (keeping the touch minimum) and
-    // shares its top alignment in the utility row.
     final mapRect = tester.getRect(find.byTooltip('World Map'));
     final scannerRect = tester.getRect(
       find.byKey(const ValueKey('next-wave-scanner-collapsed')),
@@ -976,9 +931,9 @@ void main() {
     expect(mapRect.width, inInclusiveRange(48, 60));
     expect(mapRect.height, inInclusiveRange(48, 60));
     expect(
-      (mapRect.top - scannerRect.top).abs(),
-      lessThan(0.5),
-      reason: 'World Map must align with the scanner in the top utility row.',
+      mapRect.top,
+      greaterThan(scannerRect.bottom),
+      reason: 'World Map belongs in the dock, clear of the top board cells.',
     );
     // The shell is icon-scale: no label text beside the map glyph.
     expect(find.text('World Map'), findsNothing);

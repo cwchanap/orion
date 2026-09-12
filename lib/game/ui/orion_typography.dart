@@ -200,7 +200,7 @@ class OrionReadout extends StatelessWidget {
             maxLines: maxLines,
             overflow: overflow,
             textScaler: textScaler,
-            style: OrionTypography.readout(size: size * 0.62, color: muted),
+            style: OrionTypography.readout(size: size * 0.45, color: muted),
           ),
       ],
     );

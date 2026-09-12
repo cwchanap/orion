@@ -31,10 +31,12 @@ class BoardComponent extends PositionComponent {
   final GameSpriteSheet? spriteSheet;
   final GamePathTiles? pathTiles;
   GridPosition? selectedCell;
+  double selectedRange = 0;
 
   // Placement-preview presentation only (scene 1e). The board owns no
   // placement logic; the game resolves candidate validity and range.
   bool previewActive = false;
+  Set<GridPosition> previewBuildableCells = const {};
   GridPosition? previewCandidate;
   bool previewAllowed = false;
   double previewRange = 0;
@@ -167,6 +169,10 @@ class BoardComponent extends PositionComponent {
       for (final pathCell in pathCells) {
         canvas.drawRect(cellRect(pathCell).deflate(1), _pathDangerPaint);
       }
+      for (final cell in previewBuildableCells) {
+        canvas.drawRect(cellRect(cell).deflate(1), _buildableSelectionPaint);
+        canvas.drawRect(cellRect(cell).deflate(1), _gridPaint);
+      }
     }
 
     // After the danger wash: the lane is the board's primary legibility
@@ -189,6 +195,9 @@ class BoardComponent extends PositionComponent {
       }
     } else if (showsSelectionHighlight) {
       final activeSelection = selectedCell!;
+      if (selectedRange > 0) {
+        _renderRangeRing(canvas, cellCenter(activeSelection), selectedRange);
+      }
       final paint =
           BoardLayout.isBuildableCell(activeSelection, pathCells: pathCells)
           ? _buildableSelectionPaint
@@ -246,6 +255,15 @@ class BoardComponent extends PositionComponent {
 
     // A hairline core would disappear on a small board, so hold a floor.
     final coreWidth = math.max(cellSize * laneCoreWidth, 1.5);
+    _laneBedPaint.color = previewActive
+        ? const Color(0x40FF5D6C)
+        : const Color(0x2446E6FF);
+    _lanePaint.color = previewActive
+        ? const Color(0xFFFF5D6C)
+        : const Color(0xFF46E6FF);
+    _laneGlowPaint.color = previewActive
+        ? const Color(0x66FF5D6C)
+        : const Color(0x9946E6FF);
     _laneBedPaint.strokeWidth = cellSize * laneBedWidth;
     _laneGlowPaint.strokeWidth = coreWidth * 2;
     _lanePaint.strokeWidth = coreWidth;
