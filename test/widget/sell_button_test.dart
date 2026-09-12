@@ -22,7 +22,7 @@ void main() {
     );
 
     expect(game!.snapshot.phase, GamePhase.build);
-    expect(find.text('Sell 35'), findsOneWidget);
+    expect(find.text('+35'), findsOneWidget);
   });
 
   testWidgets('Sell button is enabled during build phase', (tester) async {
@@ -35,10 +35,10 @@ void main() {
       ),
     );
 
-    final sellButton = tester.widget<OutlinedButton>(
+    final sellButton = tester.widget<GestureDetector>(
       find.byKey(const ValueKey('tower-sell')),
     );
-    expect(sellButton.onPressed, isNotNull);
+    expect(sellButton.onTapDown, isNotNull);
   });
 
   testWidgets('Sell button is disabled during an active wave', (tester) async {
@@ -52,10 +52,10 @@ void main() {
       phase: GamePhase.wave,
     );
 
-    final sellButton = tester.widget<OutlinedButton>(
+    final sellButton = tester.widget<GestureDetector>(
       find.byKey(const ValueKey('tower-sell')),
     );
-    expect(sellButton.onPressed, isNull);
+    expect(sellButton.onTapDown, isNull);
   });
 
   testWidgets('tapping Sell invokes game.sellSelectedTower', (tester) async {
@@ -69,7 +69,12 @@ void main() {
     );
 
     await tester.ensureVisible(find.byKey(const ValueKey('tower-sell')));
-    await tester.tap(find.byKey(const ValueKey('tower-sell')));
+    final hold = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('tower-sell'))),
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump(const Duration(milliseconds: 900));
+    await hold.up();
     await tester.pump();
 
     // The faked snapshot has a selectedTower but the real session has none, so
@@ -93,7 +98,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Sell 35'), findsOneWidget);
+    expect(find.text('+35'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -114,7 +119,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Sell 84'), findsOneWidget);
+      expect(find.text('+84'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -343,8 +348,8 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Alpha'));
   await tester.pumpAndSettle();
-  expect(findOrionTitle('Start Mission'), findsOneWidget);
-  await tester.tap(findOrionTitle('Start Mission'));
+  expect(find.byTooltip('Start Mission'), findsOneWidget);
+  await tester.tap(find.byTooltip('Start Mission'));
   await tester.pump();
 
   final snapshot = game!.stateNotifier.value;
@@ -374,5 +379,9 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   );
   await tester.pump();
 
+  if (pendingRunModuleOffer == null) {
+    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.pump();
+  }
   return game;
 }

@@ -228,6 +228,23 @@ abstract final class OrionArt {
     fallbackIcon: Icons.flag,
   );
 
+  static final _specializations = {
+    for (final type in TowerType.values)
+      for (final (index, specialization) in GameBalance.specializationsFor(
+        type,
+      ).indexed)
+        specialization: _varietyDescriptor(
+          index == 0
+              ? GameTowerVarietySprite.clusterBurst
+              : GameTowerVarietySprite.prismSplit,
+          semanticLabel: '${specialization.label} effect',
+          fallbackIcon: Icons.auto_awesome,
+        ),
+  };
+  static OrionArtDescriptor specialization(
+    TowerSpecialization specialization,
+  ) => _specializations[specialization]!;
+
   static OrionArtDescriptor tower(TowerType type) => _towers[type]!;
 
   static OrionArtDescriptor boss(BossSprite sprite) => _bosses[sprite]!;

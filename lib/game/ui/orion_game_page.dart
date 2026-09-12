@@ -29,6 +29,7 @@ import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
 import 'stage_briefing_sheet.dart';
 import 'tech_tree_view.dart';
+import 'tower_inspector.dart';
 import 'world_map_view.dart';
 
 enum _ShellView { worldMap, codex, techTree, stage }
@@ -65,6 +66,7 @@ class OrionGamePage extends StatefulWidget {
 
 class _OrionGamePageState extends State<OrionGamePage> {
   OrionDefenseGame? _game;
+  int? _inspectedTowerId;
   final GlobalKey _gameWidgetKey = GlobalKey();
   CampaignProgress _progress = CampaignProgress();
   CampaignTechTree _techTree = CampaignTechTree();
@@ -373,12 +375,42 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 Positioned.fill(
                   child: KeyedSubtree(
                     key: _gameWidgetKey,
-                    child: GameWidget(game: game),
+                    child: GestureDetector(
+                      onLongPressStart: (details) {
+                        final box = _gameRenderBox;
+                        if (box == null) return;
+                        game.handleBoardTap(
+                          box.globalToLocal(details.globalPosition),
+                        );
+                        setState(
+                          () => _inspectedTowerId =
+                              game.stateNotifier.value.selectedTower?.id,
+                        );
+                      },
+                      child: GameWidget(game: game),
+                    ),
                   ),
                 ),
                 Positioned.fill(
                   child: MissionChrome(
                     snapshot: snapshot,
+                    onBoardViewportChanged: (viewport) {
+                      if (mounted && game.setBoardViewport(viewport)) {
+                        setState(() {});
+                      }
+                    },
+                    towerAnchor: snapshot.selectedTower == null
+                        ? null
+                        : game.boardCellCenter(
+                            snapshot.selectedTower!.position,
+                          ),
+                    onInspectTower:
+                        _inspectedTowerId == snapshot.selectedTower?.id
+                        ? null
+                        : () => setState(
+                            () =>
+                                _inspectedTowerId = snapshot.selectedTower?.id,
+                          ),
                     onBoardTapIntercept: _routeTapToBoard,
                     onWorldMap: game.returnToMap,
                     onStartWave: game.startWave,
@@ -393,6 +425,40 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     onPlacementPreviewEvent: _handlePlacementPreviewEvent,
                   ),
                 ),
+                if (snapshot.selectedTower != null &&
+                    snapshot.selectedTower!.id == _inspectedTowerId &&
+                    !snapshot.isEnded &&
+                    snapshot.pendingRunModuleOffer == null)
+                  Positioned.fill(
+                    child: PopScope(
+                      canPop: false,
+                      onPopInvokedWithResult: (didPop, _) {
+                        if (!didPop) setState(() => _inspectedTowerId = null);
+                      },
+                      child: Stack(
+                        children: [
+                          ModalBarrier(
+                            color: Colors.black54,
+                            dismissible: true,
+                            onDismiss: () =>
+                                setState(() => _inspectedTowerId = null),
+                          ),
+                          TowerInspector(
+                            snapshot: snapshot,
+                            onUpgrade: game.upgradeSelectedTower,
+                            onSpecialize: game.specializeSelectedTower,
+                            onTargetingChanged: game.setTargetingMode,
+                            onSell: game.sellSelectedTower,
+                            sellRefund: GameBalance.refundValue(
+                              snapshot.selectedTower!,
+                            ),
+                            onClose: () =>
+                                setState(() => _inspectedTowerId = null),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 if (snapshot.pendingRunModuleOffer case final offer?)
                   Positioned.fill(
                     child: RunModuleDraftPanel(
@@ -584,6 +650,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     setState(() {
       _mapFeedback = null;
       _game = game;
+      _inspectedTowerId = null;
       _activeView = _ShellView.stage;
     });
   }
@@ -845,6 +912,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    _inspectedTowerId = null;
     _missionPriorResult = _committedProgress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
     _missionSaveState = null;

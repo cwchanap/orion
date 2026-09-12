@@ -1,3 +1,4 @@
+import 'dart:ui' show Rect;
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/gestures.dart';
@@ -66,6 +67,58 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('OrionDefenseGame', () {
+    test(
+      'board viewport transforms input without changing combat geometry',
+      () {
+        final game = OrionDefenseGame();
+        game.onGameResize(Vector2(360, 640));
+        const towerCell = GridPosition(4, 5);
+        game.handleBoardTap(game.boardCellCenter(towerCell));
+        game.placeTower(TowerType.laser);
+        game.update(0);
+        game.processLifecycleEvents();
+        final tower = game.children.whereType<TowerComponent>().single;
+        final originalPosition = tower.position.clone();
+        final originalRadius = tower.radius;
+        game.handleBoardTap(game.boardCellCenter(towerCell));
+        final originalRange = game.snapshot.selectedTowerStats!.range;
+
+        game.setBoardViewport(const Rect.fromLTWH(20, 80, 320, 360));
+        expect(
+          game.boardCellCenter(const GridPosition(0, 0)),
+          const Offset(75, 95),
+        );
+        expect(tower.position, originalPosition);
+        expect(tower.radius, originalRadius);
+        expect(game.snapshot.selectedTowerStats!.range, originalRange);
+        for (var row = 0; row < BoardLayout.rows; row++) {
+          for (var column = 0; column < BoardLayout.columns; column++) {
+            final cell = GridPosition(column, row);
+            expect(game.boardCellAt(game.boardCellCenter(cell)), cell);
+          }
+        }
+        const candidate = GridPosition(7, 11);
+        game.beginTowerPlacementPreview(TowerType.cryo);
+        game.updateTowerPlacementPreview(game.boardCellCenter(candidate));
+        expect(game.placementPreview.cell, candidate);
+        expect(game.placementPreview.allowed, isTrue);
+        game.commitTowerPlacementPreview(game.boardCellCenter(candidate));
+        game.update(0);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<TowerComponent>(), hasLength(2));
+
+        game.startWave();
+        game.update(.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().first;
+        // The independently computed 2/3 transform also applies to enemy taps.
+        final displayPosition =
+            enemy.position.toOffset() * (2 / 3) + const Offset(60, 80);
+        game.handleBoardTap(displayPosition + const Offset(20, 0));
+        expect(game.inspectedEnemyId, enemy.enemyId);
+      },
+    );
+
     test('defaults to campaign stage one', () {
       final game = OrionDefenseGame();
 
