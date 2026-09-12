@@ -42,14 +42,16 @@ void main() {
     //    launch action is "Start Mission", and Dismiss must return to the
     //    map without launching.
     await tester.tap(find.text('Alpha'));
-    await _pumpUntil(tester, () => tester.any(find.text('Start Mission')));
+    // The launch action renders "DEPLOY" (artboard 1b); its Tooltip and
+    // Semantics label keep the readable "Start Mission" copy.
+    await _pumpUntil(tester, () => tester.any(find.byTooltip('Start Mission')));
     // The briefing is a full-height modal sheet (scene 1b): its entrance
     // animation only advances with real frames, and until it settles the
     // bottom action row is still below the screen edge. Let it finish in
     // real time before tapping near-sheet-bottom controls.
     await _settleSheetEntrance(tester);
-    expect(find.text('Outpost Alpha'), findsOneWidget);
-    expect(find.text('Standard Conditions'), findsOneWidget);
+    expect(find.bySemanticsLabel('Outpost Alpha'), findsOneWidget);
+    expect(find.bySemanticsLabel('Standard Conditions'), findsOneWidget);
     expect(find.text('No environmental modifiers'), findsOneWidget);
     await tester.ensureVisible(find.byTooltip('Dismiss'));
     await tester.pump();
@@ -60,20 +62,22 @@ void main() {
       tester,
       () =>
           tester.any(find.text('ORION SECTOR')) &&
-          !tester.any(find.text('Start Mission')),
+          !tester.any(find.byTooltip('Start Mission')),
     );
     expect(find.text('Alpha'), findsOneWidget);
 
     // 3. Re-enter and start for real.
     await tester.tap(find.text('Alpha'));
-    await _pumpUntil(tester, () => tester.any(find.text('Start Mission')));
+    await _pumpUntil(tester, () => tester.any(find.byTooltip('Start Mission')));
     await _settleSheetEntrance(tester);
-    await tester.ensureVisible(find.text('Start Mission'));
+    await tester.ensureVisible(find.byTooltip('Start Mission'));
     await tester.pump();
-    await tester.tap(find.text('Start Mission'));
-    await _pumpUntil(tester, () => tester.any(find.text('Build')));
-    expect(find.text('Build'), findsOneWidget);
-    expect(find.text('Start Wave'), findsOneWidget);
+    await tester.tap(find.byTooltip('Start Mission'));
+    // The phase chip displays caps copy ("BUILD"); the readable label rides
+    // on its Semantics ("Outpost Alpha. Wave 1 of 8, Build").
+    await _pumpUntil(tester, () => tester.any(find.text('BUILD')));
+    expect(find.text('BUILD'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
     await _pumpUntil(tester, () {
       final game =
           (tester.state(find.bySubtype<GameWidget>())
@@ -201,17 +205,15 @@ void main() {
           'Could not dismiss the build rail to restore the idle dock.',
     );
     expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
-    await tester.tap(find.text('2x'));
+    // Speed is one cycling button (1x -> 2x -> 3x -> 1x), not segments: tap
+    // it once per step and confirm the multiplier lands on the live game.
+    await tester.tap(find.byTooltip('Game speed'));
     await _pumpUntil(tester, () => game.speedMultiplier == 2);
-    // The game field flips synchronously but the SegmentedButton only learns
-    // its new selection on the next frame; without this pump the next tap
-    // lands on the segment the button still considers selected and is
-    // silently dropped (onSelectionChanged is not called for it).
     await tester.pump();
-    await tester.tap(find.text('3x'));
+    await tester.tap(find.byTooltip('Game speed'));
     await _pumpUntil(tester, () => game.speedMultiplier == 3);
     await tester.pump();
-    await tester.tap(find.text('1x'));
+    await tester.tap(find.byTooltip('Game speed'));
     await _pumpUntil(tester, () => game.speedMultiplier == 1);
     await tester.pump();
     for (final cell in const [
@@ -258,15 +260,21 @@ void main() {
           'Could not dismiss the build rail to return to the idle dock.',
     );
 
-    // 8. Select the placed Laser: tapping its cell now opens the tower
-    //    inspector, and a targeting change hits the real game session.
+    // 8. Select the placed Laser: tapping its cell opens the radial tower
+    //    actions (artboard 1d); Inspect opens the tower inspector, and a
+    //    targeting change hits the real game session.
     await _tapUntil(
       tester,
       () => tester.tapAt(_cellCenter(tester, targetCell)),
-      () => tester.any(find.byKey(const ValueKey('command-dock-tower'))),
+      () => tester.any(find.byTooltip('Inspect tower')),
       timeoutMessage:
-          'Tapping the placed tower at (0,0) did not open the tower '
-          'inspector within the timeout.',
+          'Tapping the placed tower at (0,0) did not open the radial '
+          'tower actions within the timeout.',
+    );
+    await tester.tap(find.byTooltip('Inspect tower'));
+    await _pumpUntil(
+      tester,
+      () => tester.any(find.byKey(const ValueKey('tower-inspector'))),
     );
     await tester.ensureVisible(
       find.byKey(const ValueKey('tower-target-strongest')),
@@ -280,12 +288,20 @@ void main() {
           TowerTargetingMode.strongest,
     );
 
-    // 9. Return to idle and toggle auto-start on and off.
+    // 9. Close the inspector, then deselect the tower so the idle dock's
+    //    pacing controls are unobstructed; toggle auto-start on and off.
+    await tester.tap(find.byTooltip('Close tower inspector'));
+    await _pumpUntil(
+      tester,
+      () => !tester.any(find.byKey(const ValueKey('tower-inspector'))),
+    );
     await _tapUntil(
       tester,
       () => tester.tapAt(_pointAboveBoard(tester)),
-      () => tester.any(find.byKey(const ValueKey('command-dock-idle'))),
-      timeoutMessage: 'Could not dismiss the tower inspector.',
+      () =>
+          tester.any(find.byKey(const ValueKey('command-dock-idle'))) &&
+          game.stateNotifier.value.selectedTower == null,
+      timeoutMessage: 'Could not deselect the tower after inspection.',
     );
     await tester.tap(find.byTooltip('Auto-start waves'));
     await _pumpUntil(tester, () => game.autoStartEnabled);
@@ -294,14 +310,15 @@ void main() {
     await _pumpUntil(tester, () => !game.autoStartEnabled);
     await tester.pump();
 
-    // 10. Open and close the next-wave scanner.
+    // 10. Open and close the next-wave scanner. Expanded is now the
+    //     full-screen scene 1c; it closes via its own collapse button.
     await tester.tap(find.byKey(const ValueKey('next-wave-scanner-collapsed')));
     await _pumpUntil(
       tester,
       () =>
           tester.any(find.byKey(const ValueKey('next-wave-scanner-expanded'))),
     );
-    await tester.tap(find.byKey(const ValueKey('next-wave-scanner-expanded')));
+    await tester.tap(find.byTooltip('Collapse next-wave scanner'));
     await _pumpUntil(
       tester,
       () =>
@@ -316,13 +333,15 @@ void main() {
     //     Active, pause/resume both hit the live loop, and the wave clears
     //     back into the build phase (two towers cannot lose wave 1: eight
     //     leaking drones deal at most 8 of 20 base damage).
-    await tester.tap(find.text('3x'));
+    await tester.tap(find.byTooltip('Game speed'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Game speed'));
     await _pumpUntil(tester, () => game.speedMultiplier == 3);
     await tester.pump();
-    await tester.tap(find.text('Start Wave'));
-    await _pumpUntil(tester, () => tester.any(find.text('Wave Active')));
-    expect(find.text('Wave Active'), findsOneWidget);
-    expect(find.text('Build'), findsNothing);
+    await tester.tap(find.byTooltip('Start Wave'));
+    await _pumpUntil(tester, () => tester.any(find.text('WAVE ACTIVE')));
+    expect(find.text('WAVE ACTIVE'), findsOneWidget);
+    expect(find.text('BUILD'), findsNothing);
     expect(find.textContaining('Environment:'), findsNothing);
     await _tapUntil(
       tester,
@@ -331,14 +350,14 @@ void main() {
       timeoutMessage: 'Tapping Pause did not pause the active wave.',
     );
     expect(find.byTooltip('Resume'), findsOneWidget);
-    expect(find.text('Paused'), findsOneWidget);
+    expect(find.text('PAUSED'), findsOneWidget);
     await tester.tap(find.byTooltip('Resume'));
     await _pumpUntil(tester, () => !game.isPaused);
     // The tap flips the game field synchronously, but the HUD label only
     // updates on the next rendered frame.
     await tester.pump();
-    expect(find.text('Paused'), findsNothing);
-    expect(find.text('Wave Active'), findsOneWidget);
+    expect(find.text('PAUSED'), findsNothing);
+    expect(find.text('WAVE ACTIVE'), findsOneWidget);
     await _runUntil(
       tester,
       () =>
@@ -367,7 +386,9 @@ void main() {
       tester,
       () => tester.any(find.byKey(const ValueKey('tech-bank-bar'))),
     );
-    expect(find.textContaining('Unspent: 0'), findsOneWidget);
+    // The bank chip shows only the numeral; the "Unspent: N" copy is its
+    // Semantics label.
+    expect(find.bySemanticsLabel('Unspent: 0'), findsOneWidget);
     await tester.ensureVisible(
       find.byKey(const ValueKey('tech-node-solar-capacitors')),
     );
@@ -382,12 +403,12 @@ void main() {
     //     with no towers, let leaked waves destroy the base, and return to
     //     the map from the loss report.
     await tester.tap(find.text('Alpha'));
-    await _pumpUntil(tester, () => tester.any(find.text('Start Mission')));
+    await _pumpUntil(tester, () => tester.any(find.byTooltip('Start Mission')));
     await _settleSheetEntrance(tester);
-    await tester.ensureVisible(find.text('Start Mission'));
+    await tester.ensureVisible(find.byTooltip('Start Mission'));
     await tester.pump();
-    await tester.tap(find.text('Start Mission'));
-    await _pumpUntil(tester, () => tester.any(find.text('Build')));
+    await tester.tap(find.byTooltip('Start Mission'));
+    await _pumpUntil(tester, () => tester.any(find.text('BUILD')));
     await _pumpUntil(tester, () {
       final lossRunGame =
           (tester.state(find.bySubtype<GameWidget>())
@@ -400,7 +421,9 @@ void main() {
         (tester.state(find.bySubtype<GameWidget>())
                 as GameWidgetState<OrionDefenseGame>)
             .currentGame;
-    await tester.tap(find.text('3x'));
+    await tester.tap(find.byTooltip('Game speed'));
+    await tester.pump();
+    await tester.tap(find.byTooltip('Game speed'));
     await _pumpUntil(tester, () => lossRunGame.speedMultiplier == 3);
     await tester.pump();
 
@@ -408,8 +431,8 @@ void main() {
     // Module draft; take the first offer and keep starting waves — every
     // enemy leaks with no towers up, so the base (20 hp) is destroyed within
     // a few waves and the loss report appears.
-    await tester.tap(find.text('Start Wave'));
-    await _pumpUntil(tester, () => tester.any(find.text('Wave Active')));
+    await tester.tap(find.byTooltip('Start Wave'));
+    await _pumpUntil(tester, () => tester.any(find.text('WAVE ACTIVE')));
     while (!lossRunGame.stateNotifier.value.isEnded) {
       await _runUntil(
         tester,
@@ -421,12 +444,12 @@ void main() {
         break;
       }
       await _takeFirstDraftOffer(tester, lossRunGame);
-      await tester.tap(find.text('Start Wave'));
-      await _pumpUntil(tester, () => tester.any(find.text('Wave Active')));
+      await tester.tap(find.byTooltip('Start Wave'));
+      await _pumpUntil(tester, () => tester.any(find.text('WAVE ACTIVE')));
     }
     expect(lossRunGame.stateNotifier.value.phase, GamePhase.lost);
-    await _pumpUntil(tester, () => tester.any(find.text('Mission Failed')));
-    expect(find.text('Mission Failed'), findsOneWidget);
+    await _pumpUntil(tester, () => tester.any(find.text('MISSION FAILED')));
+    expect(find.text('MISSION FAILED'), findsOneWidget);
     await _tapUntil(
       tester,
       () => tester.tap(find.text('World Map')),
@@ -560,7 +583,7 @@ Future<void> _settleSheetEntrance(WidgetTester tester) async {
     final deadline = DateTime.now().add(const Duration(seconds: 10));
     Rect? previous;
     while (DateTime.now().isBefore(deadline)) {
-      final action = find.text('Start Mission');
+      final action = find.byTooltip('Start Mission');
       if (tester.any(action)) {
         final rect = tester.getRect(action);
         final onScreen =
@@ -576,7 +599,7 @@ Future<void> _settleSheetEntrance(WidgetTester tester) async {
       await tester.pump();
     }
   });
-  if (!tester.any(find.text('Start Mission'))) {
+  if (!tester.any(find.byTooltip('Start Mission'))) {
     fail('Briefing sheet action row never settled on-screen.');
   }
   await tester.pump();
