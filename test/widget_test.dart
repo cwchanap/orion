@@ -1,3 +1,4 @@
+import 'package:orion/game/ui/tower_inspector.dart';
 import 'dart:async';
 
 import 'package:flame/flame.dart';
@@ -7,12 +8,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
-import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
@@ -24,7 +25,6 @@ import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
@@ -72,10 +72,11 @@ Future<void> startStageFromBriefing(
   String mapLabel = 'Alpha',
   String actionLabel = 'Start Mission',
 }) async {
+  await tester.ensureVisible(find.text(mapLabel));
   await tester.tap(find.text(mapLabel));
   await tester.pumpAndSettle();
-  expect(findOrionTitle(actionLabel), findsOneWidget);
-  await tester.tap(findOrionTitle(actionLabel));
+  expect(find.byTooltip(actionLabel), findsOneWidget);
+  await tester.tap(find.byTooltip(actionLabel));
   await tester.pump();
 }
 
@@ -138,6 +139,48 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  testWidgets(
+    'top-row build cell remains selectable without exiting the mission',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      await tester.runAsync(() async {
+        for (final name in [
+          'reactor_rim_ui/boards/nebula.png',
+          'orion_path_tiles.png',
+          'orion_sprite_sheet.png',
+          'orion_tower_variety_sheet.png',
+          'orion_boss_sheet.png',
+        ]) {
+          await Flame.images.load(name);
+        }
+      });
+      addTearDown(Flame.images.clearCache);
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        testGamePage(onGameCreated: (value) => game = value),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+      await tester.pump();
+      await tester.pump();
+      final rect = tester.getRect(find.bySubtype<GameWidget>());
+      final point =
+          rect.topLeft + game!.boardCellCenter(const GridPosition(6, 0));
+      expect(game!.boardCellAt(point - rect.topLeft), const GridPosition(6, 0));
+      final mapRect = tester.getRect(
+        find.byKey(const ValueKey('world-map-action')),
+      );
+      expect(mapRect.contains(point), isFalse);
+      await tester.tapAt(point);
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.bySubtype<GameWidget>(), findsOneWidget);
+      expect(game!.stateNotifier.value.selectedCell, const GridPosition(6, 0));
+    },
+  );
+
   testWidgets('capture scene 1e fixture', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -186,18 +229,8 @@ void main() {
     addTearDown(Flame.images.clearCache);
 
     final gameRect = tester.getRect(find.bySubtype<GameWidget>());
-    final cellSize = (gameRect.width / BoardLayout.columns).clamp(
-      0.0,
-      gameRect.height / BoardLayout.rows,
-    );
-    final boardLeft =
-        gameRect.left + (gameRect.width - BoardLayout.columns * cellSize) / 2;
-    final boardTop =
-        gameRect.top + (gameRect.height - BoardLayout.rows * cellSize) / 2;
-    Offset globalFor(GridPosition cell) => Offset(
-      boardLeft + (cell.column + 0.5) * cellSize,
-      boardTop + (cell.row + 0.5) * cellSize,
-    );
+    Offset globalFor(GridPosition cell) =>
+        gameRect.topLeft + game!.boardCellCenter(cell);
 
     // The mounted game loop never settles under fake async, so every frame
     // wait from here on is a fixed pump.
@@ -211,7 +244,7 @@ void main() {
     final start = tester.getCenter(
       find.byKey(const ValueKey('tower-card-laser')),
     );
-    final holdTarget = globalFor(const GridPosition(4, 0));
+    final holdTarget = globalFor(const GridPosition(4, 5));
     final gesture = await tester.startGesture(start);
     await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
     await gesture.moveBy(holdTarget - start);
@@ -221,7 +254,7 @@ void main() {
     // All five 1e treatments must be live while the gesture is held.
     expect(find.text('LIFTED'), findsOneWidget);
     expect(find.text('DROP TO BUILD'), findsOneWidget);
-    expect(game!.placementPreview.cell, const GridPosition(4, 0));
+    expect(game!.placementPreview.cell, const GridPosition(4, 5));
     expect(game!.placementPreview.allowed, isTrue);
     expect(game!.placementPreview.range, greaterThan(0));
 
@@ -230,107 +263,170 @@ void main() {
       () => captureReactorRimFixture(boundaryKey, 'fixture-1e.png'),
     );
 
+    await gesture.moveTo(globalFor(const GridPosition(6, 5)));
+    await tester.pump();
+    expect(game!.placementPreview.allowed, isFalse);
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1e-invalid.png'),
+    );
     await gesture.up();
     await tester.pump();
+    expect(game!.stateNotifier.value.gold, 150);
+    expect(game!.stateNotifier.value.selectedTower, isNull);
     // Tear the mounted game down so its live loop ticker does not leak into
     // the tests that follow this fixture.
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
   });
 
-  testWidgets('capture scene 1a fixture', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  for (final viewSize in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('capture scene 1a fixture $viewSize', (tester) async {
+      tester.view.physicalSize = viewSize;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
 
-    // Scene 1a is the playable HUD *over the board* — the artboard's whole
-    // subject is chrome reading against a live mission. Captured from the
-    // real game page rather than a chrome-only host, which could only ever
-    // show the bands floating on a flat fill.
-    //
-    // State: build phase, stage just started, nothing selected. The artboard
-    // additionally shows a selected tower's radial actions, which this build
-    // has no equivalent for yet.
-    await loadRealFonts();
+      // Scene 1a is the playable HUD *over the board* — the artboard's whole
+      // subject is chrome reading against a live mission. Captured from the
+      // real game page rather than a chrome-only host, which could only ever
+      // show the bands floating on a flat fill.
+      //
+      // Capture both idle build controls and a selected tower with radial actions.
+      await loadRealFonts();
 
-    // Warm Flame's global image cache BEFORE the game exists so its onLoad
-    // resolves from cache instead of racing real engine decodes, which never
-    // complete under the fake-async test binding.
-    await tester.runAsync(() async {
-      for (final name in [
-        'reactor_rim_ui/boards/nebula.png',
-        'orion_path_tiles.png',
-        'orion_sprite_sheet.png',
-        'orion_tower_variety_sheet.png',
-        'orion_boss_sheet.png',
-      ]) {
-        await Flame.images.load(name);
+      // Warm Flame's global image cache BEFORE the game exists so its onLoad
+      // resolves from cache instead of racing real engine decodes, which never
+      // complete under the fake-async test binding.
+      await tester.runAsync(() async {
+        for (final name in [
+          'reactor_rim_ui/boards/nebula.png',
+          'orion_path_tiles.png',
+          'orion_sprite_sheet.png',
+          'orion_tower_variety_sheet.png',
+          'orion_boss_sheet.png',
+        ]) {
+          await Flame.images.load(name);
+        }
+      });
+
+      // A cold-cache test earlier in this process can leave a pending future
+      // in the sprite memo; clear it so this fixture resolves against the warm
+      // cache instead of waiting on a load that already failed to arrive.
+      OrionArtDescriptor.resetSpriteCache();
+
+      final suffix = viewSize.height < 700 ? '-compact' : '';
+      final boundaryKey = GlobalKey();
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: testGamePage(onGameCreated: (created) => game = created),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+      // Fixed pumps from here: the mounted game's live loop never settles, so
+      // pumpAndSettle would hang. The briefing is a route over the game page
+      // and leaves on a 220ms transition, so give it real frames -- two bare
+      // pumps capture the sheet still sitting on top of the scene.
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(game!.isMounted, isTrue);
+      addTearDown(Flame.images.clearCache);
+
+      // Guard the state, not merely the widgets: 'Start Wave' lives in the dock
+      // *underneath* the briefing, so asserting it alone would pass on a
+      // capture of the briefing sheet. The briefing being gone is the check.
+      expect(
+        find.text('Start Mission'),
+        findsNothing,
+        reason: 'the briefing route is still over the scene',
+      );
+      expect(find.bySubtype<GameWidget>(), findsOneWidget);
+      expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+      expect(find.byTooltip('Start Wave'), findsOneWidget);
+
+      // The rail's cards render an empty SizedBox until their sprite futures
+      // resolve, so capturing straight away photographs text-only cards. Give
+      // the futures real time, then require the art: an OrionAtlasSprite only
+      // becomes a SpriteWidget once it has a sprite.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('command-dock-persistent-rail')),
+          matching: find.byType(SpriteWidget),
+        ),
+        findsWidgets,
+        reason: 'the tower rail captured before its card art resolved',
+      );
+
+      final dockRect = tester.getRect(find.byType(MissionCommandDock));
+      final scannerRect = tester.getRect(find.byType(NextWaveScanner));
+      final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+      for (var row = 0; row < BoardLayout.rows; row++) {
+        for (var column = 0; column < BoardLayout.columns; column++) {
+          final center =
+              gameRect.topLeft +
+              game!.boardCellCenter(GridPosition(column, row));
+          expect(center.dy, lessThan(dockRect.top));
+          expect(scannerRect.contains(center), isFalse);
+        }
       }
+      // Every bottom-row cell remains reachable through the same canvas mapping.
+      const bottomCell = GridPosition(7, 11);
+      await tester.tapAt(gameRect.topLeft + game!.boardCellCenter(bottomCell));
+      await tester.pump();
+      expect(game!.snapshot.selectedCell, bottomCell);
+      game!.handleBoardTap(Offset.zero);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => captureReactorRimFixture(boundaryKey, 'fixture-1a$suffix.png'),
+      );
+      game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
+      game!.placeTower(TowerType.laser);
+      game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
+      await tester.pump();
+      await tester.pump();
+      expect(game!.stateNotifier.value.selectedTower, isNotNull);
+      expect(find.byTooltip('Inspect tower'), findsOneWidget);
+      expect(
+        game!.children.whereType<BoardComponent>().single.selectedRange,
+        game!.stateNotifier.value.selectedTowerStats!.range,
+      );
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundaryKey,
+          'fixture-1a-radial$suffix.png',
+        ),
+      );
+      await tester.tap(find.byTooltip('Inspect tower'));
+      await tester.pump();
+      expect(find.byType(TowerInspector), findsOneWidget);
+      final navigator = Navigator.of(
+        tester.element(find.byType(TowerInspector)),
+      );
+      expect(await navigator.maybePop(), isTrue);
+      await tester.pump();
+      expect(find.byType(TowerInspector), findsNothing);
+
+      // Tear the mounted game down so its ticker does not leak into the tests
+      // that follow.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 100));
     });
-
-    // A cold-cache test earlier in this process can leave a pending future
-    // in the sprite memo; clear it so this fixture resolves against the warm
-    // cache instead of waiting on a load that already failed to arrive.
-    OrionArtDescriptor.resetSpriteCache();
-
-    final boundaryKey = GlobalKey();
-    OrionDefenseGame? game;
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: boundaryKey,
-        child: testGamePage(onGameCreated: (created) => game = created),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await startStageFromBriefing(tester);
-    // Fixed pumps from here: the mounted game's live loop never settles, so
-    // pumpAndSettle would hang. The briefing is a route over the game page
-    // and leaves on a 220ms transition, so give it real frames -- two bare
-    // pumps capture the sheet still sitting on top of the scene.
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 400));
-    await tester.pump(const Duration(milliseconds: 400));
-    expect(game!.isMounted, isTrue);
-    addTearDown(Flame.images.clearCache);
-
-    // Guard the state, not merely the widgets: 'Start Wave' lives in the dock
-    // *underneath* the briefing, so asserting it alone would pass on a
-    // capture of the briefing sheet. The briefing being gone is the check.
-    expect(
-      find.text('Start Mission'),
-      findsNothing,
-      reason: 'the briefing route is still over the scene',
-    );
-    expect(find.bySubtype<GameWidget>(), findsOneWidget);
-    expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
-    expect(find.byTooltip('Start Wave'), findsOneWidget);
-
-    // The rail's cards render an empty SizedBox until their sprite futures
-    // resolve, so capturing straight away photographs text-only cards. Give
-    // the futures real time, then require the art: an OrionAtlasSprite only
-    // becomes a SpriteWidget once it has a sprite.
-    await tester.runAsync(
-      () => Future<void>.delayed(const Duration(milliseconds: 50)),
-    );
-    await tester.pump();
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('command-dock-persistent-rail')),
-        matching: find.byType(SpriteWidget),
-      ),
-      findsWidgets,
-      reason: 'the tower rail captured before its card art resolved',
-    );
-
-    await tester.runAsync(
-      () => captureReactorRimFixture(boundaryKey, 'fixture-1a.png'),
-    );
-
-    // Tear the mounted game down so its ticker does not leak into the tests
-    // that follow.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 100));
-  });
+  }
 
   testWidgets('boots into the Orion world map first', (tester) async {
     await tester.pumpWidget(testGamePage());
@@ -363,7 +459,7 @@ void main() {
     expect(find.text('No environmental modifiers'), findsOneWidget);
     expect(createdGame, isNull);
 
-    await tester.tap(findOrionTitle('Start Mission'));
+    await tester.tap(find.byTooltip('Start Mission'));
     await tester.pump();
     expect(createdGame?.stage.id, 'outpost-alpha');
   });
@@ -388,9 +484,9 @@ void main() {
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
-    expect(findOrionTitle('Replay Mission'), findsOneWidget);
+    expect(find.byTooltip('Replay Mission'), findsOneWidget);
     expect(find.text('Best: Silver • 14 base health'), findsOneWidget);
-    await tester.tap(find.text('Dismiss'));
+    await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
     expect(createdGame, isNull);
   });
@@ -417,7 +513,7 @@ void main() {
         find.text('Blueprint recovered: Relay Calibration'),
         findsOneWidget,
       );
-      expect(findOrionTitle('Replay Mission'), findsOneWidget);
+      expect(find.byTooltip('Replay Mission'), findsOneWidget);
       expect(find.byType(OrionAtlasSprite), findsWidgets);
     },
   );
@@ -434,6 +530,7 @@ void main() {
     await tester.pumpAndSettle();
 
     for (final stage in OrionCampaign.stages.skip(1)) {
+      await tester.ensureVisible(find.text(stage.mapLabel));
       await tester.tap(find.text(stage.mapLabel));
       await tester.pumpAndSettle();
       for (final modifier in stage.modifiers) {
@@ -461,9 +558,9 @@ void main() {
           findsOneWidget,
         );
       }
-      await tester.ensureVisible(find.text('Dismiss'));
+      await tester.ensureVisible(find.byTooltip('Dismiss'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Dismiss'));
+      await tester.tap(find.byTooltip('Dismiss'));
       await tester.pumpAndSettle();
     }
   });
@@ -479,12 +576,14 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Core'));
+    await tester.pump();
     await tester.tap(find.text('Core'));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(findOrionTitle('Replay Mission'));
+    await tester.ensureVisible(find.byTooltip('Replay Mission'));
     await tester.pump();
 
-    expect(findOrionTitle('Replay Mission'), findsOneWidget);
+    expect(find.byTooltip('Replay Mission'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -524,7 +623,7 @@ void main() {
         await tester.pump();
         expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
 
-        final action = findOrionTitle('Start Mission');
+        final action = find.byTooltip('Start Mission');
         await tester.ensureVisible(action);
         await tester.pump();
         final actionRect = tester.getRect(action);
@@ -555,9 +654,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Core'));
+    await tester.pump();
     await tester.tap(find.text('Core'));
     await tester.pumpAndSettle();
-    await tester.tap(findOrionTitle('Replay Mission'));
+    await tester.tap(find.byTooltip('Replay Mission'));
     await tester.pump();
 
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
@@ -675,18 +776,8 @@ void main() {
     await tester.pumpAndSettle();
 
     final gameRect = tester.getRect(find.bySubtype<GameWidget>());
-    final cellSize = (gameRect.width / BoardLayout.columns).clamp(
-      0.0,
-      gameRect.height / BoardLayout.rows,
-    );
-    final boardLeft =
-        gameRect.left + (gameRect.width - BoardLayout.columns * cellSize) / 2;
-    final boardTop =
-        gameRect.top + (gameRect.height - BoardLayout.rows * cellSize) / 2;
-    Offset globalFor(GridPosition cell) => Offset(
-      boardLeft + (cell.column + 0.5) * cellSize,
-      boardTop + (cell.row + 0.5) * cellSize,
-    );
+    Offset globalFor(GridPosition cell) =>
+        gameRect.topLeft + game!.boardCellCenter(cell);
 
     // Under the fake-async test binding the Flame surface never completes
     // onLoad (real image decode), so it never mounts and raw board taps are
@@ -772,22 +863,17 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(testGamePage());
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        testGamePage(onGameCreated: (value) => game = value),
+      );
       await tester.pumpAndSettle();
       await startStageFromBriefing(tester);
 
       final gameRect = tester.getRect(find.bySubtype<GameWidget>());
-      final cellSize = (gameRect.width / BoardLayout.columns).clamp(
-        0.0,
-        gameRect.height / BoardLayout.rows,
-      );
-      final boardHeight = BoardLayout.rows * cellSize;
-      final boardTop = gameRect.top + (gameRect.height - boardHeight) / 2;
       const topRightCell = GridPosition(7, 0);
-      final topRightCenter = Offset(
-        gameRect.left + (topRightCell.column + 0.5) * cellSize,
-        boardTop + (topRightCell.row + 0.5) * cellSize,
-      );
+      final topRightCenter =
+          gameRect.topLeft + game!.boardCellCenter(topRightCell);
       final scannerRect = tester.getRect(
         find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       );
@@ -795,7 +881,7 @@ void main() {
         find
             .descendant(
               of: find.byType(MissionCommandDock),
-              matching: find.byType(MissionSurface),
+              matching: find.byType(OrionSurface),
             )
             .first,
       );
@@ -815,74 +901,13 @@ void main() {
     },
   );
 
-  testWidgets(
-    'collapsed scanner stays openable over the board on short viewports',
-    (tester) async {
-      // Short viewport: the whole collapsed radar overlaps the board, so the
-      // tap arbiter would otherwise claim every touch and leave touch users
-      // no way to open the next-wave preview.
-      tester.view.physicalSize = const Size(430, 640);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-
-      OrionDefenseGame? game;
-      await tester.pumpWidget(
-        testGamePage(onGameCreated: (created) => game = created),
-      );
-      await tester.pumpAndSettle();
-      await startStageFromBriefing(tester);
-
-      final gameRect = tester.getRect(find.bySubtype<GameWidget>());
-      GridPosition? cellAtGlobal(Offset point) =>
-          game!.boardCellAt(point - gameRect.topLeft);
-
-      final scannerRect = tester.getRect(
-        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
-      );
-      final centerCell = cellAtGlobal(scannerRect.center);
-      expect(
-        centerCell,
-        isNotNull,
-        reason: 'Precondition: radar center overlaps a board cell.',
-      );
-
-      // The painted radar itself opens the preview…
-      await tester.tapAt(scannerRect.center);
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('next-wave-scanner-expanded')),
-        findsOneWidget,
-      );
-      expect(game!.snapshot.selectedCell, isNull);
-
-      // …and a second tap on the expanded panel closes it again.
-      await tester.tap(
-        find.byKey(const ValueKey('next-wave-scanner-expanded')),
-      );
-      await tester.pumpAndSettle();
-      expect(
-        find.byKey(const ValueKey('next-wave-scanner-collapsed')),
-        findsOneWidget,
-      );
-
-      // The surrounding band still forwards: tapping it selects the board
-      // cell underneath instead of opening the preview.
-      final fringePoint = Offset(scannerRect.center.dx, scannerRect.bottom - 2);
-      final fringeCell = cellAtGlobal(fringePoint);
-      expect(fringeCell, isNotNull);
-      await tester.tapAt(fringePoint);
-      await tester.pump();
-      expect(game!.snapshot.selectedCell, fringeCell);
-    },
-  );
-
-  testWidgets('board taps under the idle dock still reach the game', (
+  testWidgets('collapsed scanner stays above the board on short viewports', (
     tester,
   ) async {
-    // Short viewport: the single-row idle dock then covers row-9 path-cell
-    // centers with dead space (the row-10 path cell sits under the reactor,
-    // which is skipped as an absorbing control).
-    tester.view.physicalSize = const Size(430, 520);
+    // Short viewport: the whole collapsed radar overlaps the board, so the
+    // tap arbiter would otherwise claim every touch and leave touch users
+    // no way to open the next-wave preview.
+    tester.view.physicalSize = const Size(430, 640);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
@@ -892,147 +917,42 @@ void main() {
     );
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester);
-    await tester.tap(find.byTooltip('Start Wave'));
-    await tester.pump();
 
     final gameRect = tester.getRect(find.bySubtype<GameWidget>());
-    final cellSize = (gameRect.width / BoardLayout.columns).clamp(
-      0.0,
-      gameRect.height / BoardLayout.rows,
+    GridPosition? cellAtGlobal(Offset point) =>
+        game!.boardCellAt(point - gameRect.topLeft);
+
+    final scannerRect = tester.getRect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
     );
-    // The game centers the board inside the GameWidget on both axes; probe
-    // points must use the same origin (a wide-short viewport makes the
-    // horizontal centering offset a full column wide).
-    final boardLeft =
-        gameRect.left + (gameRect.width - BoardLayout.columns * cellSize) / 2;
-    final boardTop =
-        gameRect.top + (gameRect.height - BoardLayout.rows * cellSize) / 2;
-    Offset globalFor(GridPosition cell) => Offset(
-      boardLeft + (cell.column + 0.5) * cellSize,
-      boardTop + (cell.row + 0.5) * cellSize,
-    );
-
-    final dockFrameFinder = find
-        .descendant(
-          of: find.byType(MissionCommandDock),
-          matching: find.byType(MissionSurface),
-        )
-        .first;
-
-    // Points sitting on pacing/primary/World Map controls are skipped: those
-    // are consumed by design. The regression targets the dock's dead space
-    // over the board.
-    bool underControl(Offset point) {
-      return [
-        find.byType(IconButton),
-        find.byType(SegmentedButton<double>),
-        find.byType(FilterChip),
-      ].any((finder) {
-        for (var i = 0; i < tester.widgetList(finder).length; i++) {
-          if (tester.getRect(finder.at(i)).contains(point)) return true;
-        }
-        return false;
-      });
-    }
-
-    GridPosition? freePathCellUnderStrip({Iterable<Offset> avoid = const []}) {
-      final frame = tester.getRect(dockFrameFinder);
-      for (final cell in BoardLayout.pathCells.reversed) {
-        final point = globalFor(cell);
-        if (!frame.contains(point)) continue;
-        if (avoid.any((p) => (p - point).distance <= cellSize * 0.55)) {
-          continue;
-        }
-        if (!underControl(point)) return cell;
-      }
-      return null;
-    }
-
+    final centerCell = cellAtGlobal(scannerRect.center);
     expect(
-      freePathCellUnderStrip(),
-      isNotNull,
-      reason: 'Short viewport must put a path-cell center under the dock.',
+      centerCell,
+      isNull,
+      reason: 'The rendered board must clear the radar control.',
     );
 
-    // A live enemy under the frame: advance the game clock without pumping UI
-    // frames (widget-test frames do not tick Flame's own loop; direct updates
-    // are the established way to drive combat). Anchor and tap are taken from
-    // the same frozen render tree so a pending reflow cannot skew the
-    // hit-test between choosing and dispatching the point. This half runs
-    // before any selection so the dock is still in its compact layout.
-    game!.setSpeedMultiplier(3);
-    EnemyComponent? target;
-    Offset? aim;
-    outer:
-    for (var i = 0; i < 2400 && target == null; i++) {
-      game!.update(1 / 30);
-      final frame = tester.getRect(dockFrameFinder);
-      for (final cell in BoardLayout.pathCells.reversed) {
-        final point = globalFor(cell);
-        if (!frame.contains(point)) continue;
-        if (underControl(point)) continue;
-        for (final enemy in game!.descendants().whereType<EnemyComponent>()) {
-          if (!enemy.isAlive) continue;
-          if ((gameRect.topLeft + enemy.position.toOffset() - point).distance <=
-              cellSize * 0.4) {
-            target = enemy;
-            aim = point;
-            break outer;
-          }
-        }
-      }
-    }
-    expect(target, isNotNull, reason: 'phase=${game!.snapshot.phase}');
-    await tester.tapAt(aim!);
-    await tester.pump();
-    expect(game!.inspectedEnemyId, target!.enemyId);
+    // The painted radar itself opens the preview…
+    await tester.tapAt(scannerRect.center);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-expanded')),
+      findsOneWidget,
+    );
+    expect(game!.snapshot.selectedCell, isNull);
 
-    // An empty board point under the frame: the tap must forward and select.
-    // Resolve the inspected enemy so its inspector chrome settles first.
-    target.applyDamage(1000000);
-    await tester.pump();
-    // Prefer a path cell free of enemies; while the wave winds down the
-    // reflowing chrome may cover none, so fall back to any covered cell.
-    // Toasts and phase flips shift the dock between scan and tap (a point
-    // under the disabled wave reactor can land under the enabled Start Wave
-    // button), so tap-and-verify, rescanning until a forwarded tap actually
-    // selects the intended cell.
-    GridPosition? chosen;
-    for (var attempt = 0; attempt < 40 && chosen == null; attempt++) {
-      final occupied = [
-        for (final enemy in game!.descendants().whereType<EnemyComponent>())
-          if (enemy.isAlive) gameRect.topLeft + enemy.position.toOffset(),
-      ];
-      GridPosition? candidate = freePathCellUnderStrip(avoid: occupied);
-      if (candidate == null) {
-        final frame = tester.getRect(dockFrameFinder);
-        scan:
-        for (var row = BoardLayout.rows - 1; row >= 0; row--) {
-          for (var col = BoardLayout.columns - 1; col >= 0; col--) {
-            final cell = GridPosition(col, row);
-            final point = globalFor(cell);
-            if (!frame.contains(point)) continue;
-            if (underControl(point)) continue;
-            if (occupied.any((p) => (p - point).distance <= cellSize * 0.55)) {
-              continue;
-            }
-            candidate = cell;
-            break scan;
-          }
-        }
-      }
-      if (candidate == null) {
-        await tester.pump(const Duration(milliseconds: 50));
-        continue;
-      }
-      await tester.tapAt(globalFor(candidate));
-      await tester.pump();
-      if (game!.snapshot.selectedCell == candidate) {
-        chosen = candidate;
-      }
-    }
-    expect(chosen, isNotNull, reason: 'phase=${game!.snapshot.phase}');
-    expect(game!.snapshot.selectedCell, chosen);
+    // The explicit close action returns to the board.
+    await tester.tap(find.byTooltip('Collapse next-wave scanner'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+      findsOneWidget,
+    );
+
+    final boardPoint =
+        gameRect.topLeft + game!.boardCellCenter(const GridPosition(6, 0));
+    expect(scannerRect.contains(boardPoint), isFalse);
+    expect(cellAtGlobal(boardPoint), const GridPosition(6, 0));
   });
 
   testWidgets('selection replaces pacing with build or inspector controls', (
@@ -1073,9 +993,12 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byTooltip('Pause'), findsNothing);
-    expect(find.text('1x'), findsNothing);
-    expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
+    expect(find.byTooltip('Pause'), findsOneWidget);
+    expect(find.text('1x'), findsOneWidget);
+    expect(find.byTooltip('Inspect tower'), findsOneWidget);
+    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });
 
   testWidgets('mission screen exposes pause speed and auto-start controls', (
@@ -1236,10 +1159,10 @@ void main() {
       await tester.tapAt(scannerCenter);
       await tester.pump();
       expect(game!.snapshot.phase, GamePhase.lost);
-      expect(find.text('Mission Failed'), findsOneWidget);
+      expect(find.text('MISSION FAILED'), findsOneWidget);
       await tester.tapAt(tester.getCenter(find.bySubtype<GameWidget>()));
       await tester.pump();
-      expect(find.text('Mission Failed'), findsOneWidget);
+      expect(find.text('MISSION FAILED'), findsOneWidget);
       expect(find.text('ORION SECTOR'), findsNothing);
     },
   );
@@ -1262,7 +1185,7 @@ void main() {
       result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
     );
 
-    expect(find.text('Victory'), findsOneWidget);
+    expect(find.text('SECTOR SECURED'), findsOneWidget);
     expect(find.text('Silver medal • Base 14/20'), findsOneWidget);
     expect(find.textContaining('Environment:'), findsNothing);
   });
@@ -1304,7 +1227,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Mission Failed'), findsOneWidget);
+    expect(find.text('MISSION FAILED'), findsOneWidget);
     expect(find.textContaining('Environment:'), findsNothing);
   });
 
@@ -1318,13 +1241,15 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('Core'));
+    await tester.pump();
     await tester.tap(find.text('Core'));
     await tester.pumpAndSettle();
 
     expect(find.text('Singularity Core is locked.'), findsOneWidget);
     expect(find.byTooltip('Start Wave'), findsNothing);
-    expect(findOrionTitle('Start Mission'), findsNothing);
-    expect(findOrionTitle('Replay Mission'), findsNothing);
+    expect(find.byTooltip('Start Mission'), findsNothing);
+    expect(find.byTooltip('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
   });
 
@@ -1778,6 +1703,12 @@ void main() {
 
     await tester.tap(find.byTooltip('Tech Tree'));
     await tester.pumpAndSettle();
+    if (find.text('Purchase').evaluate().isEmpty) {
+      await tester.tap(
+        find.byKey(const ValueKey('tech-node-solar-capacitors')),
+      );
+      await tester.pump();
+    }
     await tester.tap(find.text('Purchase'));
     await _pumpUntil(tester, () => store.saveCompletions.length > 1);
     store.saveCompletions[1].complete();
@@ -1960,7 +1891,7 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Mission Failed'), findsOneWidget);
+    expect(find.text('MISSION FAILED'), findsOneWidget);
     expect(store.saveCalls, 0);
   });
 
@@ -1985,14 +1916,14 @@ void main() {
 
     // First loss → Retry.
     await publishLoss(tester, game!);
-    expect(find.text('Mission Failed'), findsOneWidget);
+    expect(find.text('MISSION FAILED'), findsOneWidget);
     await tester.tap(find.byTooltip('Retry'));
     await tester.pumpAndSettle();
     expect(game!.snapshot.phase, GamePhase.build);
 
     // Second loss → Retry. Previously crashed on `_missionStageId!`.
     await publishLoss(tester, game!);
-    expect(find.text('Mission Failed'), findsOneWidget);
+    expect(find.text('MISSION FAILED'), findsOneWidget);
     await tester.tap(find.byTooltip('Retry'));
     await tester.pumpAndSettle();
     expect(game!.snapshot.phase, GamePhase.build);
@@ -2173,6 +2104,12 @@ void main() {
 
     await tester.tap(find.byTooltip('Tech Tree'));
     await tester.pumpAndSettle();
+    if (find.text('Purchase').evaluate().isEmpty) {
+      await tester.tap(
+        find.byKey(const ValueKey('tech-node-solar-capacitors')),
+      );
+      await tester.pump();
+    }
     await tester.tap(find.text('Purchase'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
@@ -2184,8 +2121,8 @@ void main() {
 
     expect(find.text('ORION SECTOR'), findsOneWidget);
     expect(find.byTooltip('Start Wave'), findsNothing);
-    expect(findOrionTitle('Start Mission'), findsNothing);
-    expect(findOrionTitle('Replay Mission'), findsNothing);
+    expect(find.byTooltip('Start Mission'), findsNothing);
+    expect(find.byTooltip('Replay Mission'), findsNothing);
 
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
@@ -2216,6 +2153,12 @@ void main() {
 
       await tester.tap(find.byTooltip('Tech Tree'));
       await tester.pumpAndSettle();
+      if (find.text('Purchase').evaluate().isEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('tech-node-solar-capacitors')),
+        );
+        await tester.pump();
+      }
       await tester.tap(find.text('Purchase'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
@@ -2252,6 +2195,12 @@ void main() {
 
       await tester.tap(find.byTooltip('Tech Tree'));
       await tester.pumpAndSettle();
+      if (find.text('Purchase').evaluate().isEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('tech-node-solar-capacitors')),
+        );
+        await tester.pump();
+      }
       await tester.tap(find.text('Purchase'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
@@ -2327,6 +2276,12 @@ void main() {
 
       await tester.tap(find.byTooltip('Tech Tree'));
       await tester.pumpAndSettle();
+      if (find.text('Purchase').evaluate().isEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('tech-node-solar-capacitors')),
+        );
+        await tester.pump();
+      }
       await tester.tap(find.text('Purchase'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
@@ -2378,6 +2333,12 @@ void main() {
 
     await tester.tap(find.byTooltip('Tech Tree'));
     await tester.pumpAndSettle();
+    if (find.text('Purchase').evaluate().isEmpty) {
+      await tester.tap(
+        find.byKey(const ValueKey('tech-node-solar-capacitors')),
+      );
+      await tester.pump();
+    }
     await tester.tap(find.text('Purchase'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
@@ -2456,8 +2417,8 @@ void main() {
 
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
-    expect(findOrionTitle('Start Mission'), findsNothing);
-    expect(findOrionTitle('Replay Mission'), findsNothing);
+    expect(find.byTooltip('Start Mission'), findsNothing);
+    expect(find.byTooltip('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
 
     final resetButton = find.byTooltip('Reset Campaign');
@@ -2496,6 +2457,12 @@ void main() {
       await tester.tap(find.byTooltip('Tech Tree'));
       await tester.pumpAndSettle();
 
+      if (find.text('Purchase').evaluate().isEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('tech-node-solar-capacitors')),
+        );
+        await tester.pump();
+      }
       await tester.tap(find.text('Purchase'));
       await tester.pumpAndSettle();
 
@@ -2535,6 +2502,12 @@ void main() {
       await tester.pumpAndSettle();
 
       // First purchase attempt fails (save index 0).
+      if (find.text('Purchase').evaluate().isEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('tech-node-solar-capacitors')),
+        );
+        await tester.pump();
+      }
       await tester.tap(find.text('Purchase'));
       await tester.pumpAndSettle();
 
@@ -2543,6 +2516,12 @@ void main() {
       expect(find.text('Purchase'), findsOneWidget);
 
       // Second purchase attempt succeeds (save index 1).
+      if (find.text('Purchase').evaluate().isEmpty) {
+        await tester.tap(
+          find.byKey(const ValueKey('tech-node-solar-capacitors')),
+        );
+        await tester.pump();
+      }
       await tester.tap(find.text('Purchase'));
       await tester.pumpAndSettle();
 
@@ -2693,7 +2672,7 @@ void main() {
 
       // TechTreeView is now rendered (T12): its header appears and the
       // world-map header is replaced.
-      expect(findOrionTitle('Campaign Tech Tree'), findsOneWidget);
+      expect(findOrionTitle('R & d'), findsOneWidget);
       expect(find.text('ORION SECTOR'), findsNothing);
 
       // The back arrow returns the player to the world map.
@@ -2701,7 +2680,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('ORION SECTOR'), findsOneWidget);
-      expect(findOrionTitle('Campaign Tech Tree'), findsNothing);
+      expect(findOrionTitle('R & d'), findsNothing);
     },
   );
 
@@ -2768,10 +2747,14 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(find.text('Core'));
+    await tester.pump();
     await tester.tap(find.text('Core'));
     expect(selected, isEmpty);
     expect(locked, ['singularity-core']);
 
+    await tester.ensureVisible(find.text('Alpha'));
+    await tester.pump();
     await tester.tap(find.text('Alpha'));
     expect(selected, ['outpost-alpha']);
     expect(locked, ['singularity-core']);
@@ -2833,6 +2816,8 @@ void main() {
       );
 
       // Tapping a locked stage while busy must not fire either callback.
+      await tester.ensureVisible(find.text('Core'));
+      await tester.pump();
       await tester.tap(find.text('Core'));
       expect(selected, isEmpty);
       expect(locked, isEmpty);
@@ -2882,6 +2867,8 @@ void main() {
         autoStartEnabled: snapshot.autoStartEnabled,
         autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
       );
+      await tester.pump();
+      await tester.tap(find.byTooltip('Inspect tower'));
       await tester.pump();
 
       for (final mode in TowerTargetingMode.values) {
@@ -2934,6 +2921,8 @@ void main() {
       autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
     );
     await tester.pump();
+    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.pump();
 
     final firstChip = tester.widget<ChoiceChip>(
       find.ancestor(of: find.text('First'), matching: find.byType(ChoiceChip)),
@@ -2980,6 +2969,8 @@ void main() {
       autoStartEnabled: snapshot.autoStartEnabled,
       autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
     );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Inspect tower'));
     await tester.pump();
 
     // The game session has no real selected tower, so retargeting reports the
@@ -3034,6 +3025,8 @@ void main() {
       autoStartEnabled: snapshot.autoStartEnabled,
       autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
     );
+    await tester.pump();
+    await tester.tap(find.byTooltip('Inspect tower'));
     await tester.pump();
 
     // The narrow-width branch renders the targeting picker; the "Targeting"
@@ -3804,12 +3797,12 @@ void main() {
       await tester.tap(find.text('Alpha'));
       await tester.pump();
       expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
-      expect(findOrionTitle('Start Mission'), findsOneWidget);
+      expect(find.byTooltip('Start Mission'), findsOneWidget);
 
       // Dismiss without starting the mission.
-      await tester.tap(find.text('Dismiss'));
+      await tester.tap(find.byTooltip('Dismiss'));
       await tester.pumpAndSettle();
-      expect(findOrionTitle('Start Mission'), findsNothing);
+      expect(find.byTooltip('Start Mission'), findsNothing);
 
       // The Settings sheet is also visible immediately.
       await tester.tap(find.byTooltip('Settings'));
@@ -3891,6 +3884,9 @@ Future<void> publishVictory(
     acquiredRunModules: snapshot.acquiredRunModules,
   );
   game.onStageWon?.call(StageCompletion(stage: game.stage, result: result));
+  await tester.pump();
+  await tester.ensureVisible(find.text('MISSION DETAILS'));
+  await tester.tap(find.text('MISSION DETAILS'));
   await tester.pump();
 }
 

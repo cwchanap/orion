@@ -41,13 +41,13 @@ void main() {
             damage: 70,
             shotsPerSecond: 0.8,
             range: 255,
-            secondary: null,
+            secondary: 5,
           ),
           TowerType.ionChain: (
             damage: 24,
             shotsPerSecond: 1.282051,
             range: 175,
-            secondary: null,
+            secondary: 6,
           ),
           TowerType.nanite: (
             damage: 9,

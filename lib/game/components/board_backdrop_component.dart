@@ -32,7 +32,34 @@ class BoardBackdropComponent extends PositionComponent {
       return;
     }
 
-    canvas.drawImageRect(image, _coverSource(image), destination, Paint());
+    canvas.drawImageRect(
+      image,
+      _coverSource(image),
+      destination,
+      Paint()
+        ..colorFilter = const ColorFilter.matrix([
+          1.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1.25,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+        ]),
+    );
   }
 
   /// The centred crop of [image] that fills [size] without distorting it.

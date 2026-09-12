@@ -84,6 +84,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   double _previewRange = 0;
   double _cellSize = 0;
   Offset _boardOrigin = Offset.zero;
+  Rect? _boardViewport;
+  double _boardScale = 1;
+  Offset _boardTranslation = Offset.zero;
   double _spawnTimer = 0;
   int _spawnedCount = 0;
   int _activeGroupIndex = 0;
@@ -159,6 +162,48 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     super.onRemove();
   }
 
+  /// Fits presentation between the measured HUD and dock without changing
+  /// the simulation's cell size, paths, ranges, or movement speeds.
+  bool setBoardViewport(Rect viewport) {
+    if (viewport.isEmpty || viewport == _boardViewport) return false;
+    _boardViewport = viewport;
+    _updateBoardTransform();
+    return true;
+  }
+
+  void _updateBoardTransform() {
+    final viewport = _boardViewport;
+    if (viewport == null || _cellSize <= 0) return;
+    final width = BoardLayout.columns * _cellSize;
+    final height = BoardLayout.rows * _cellSize;
+    _boardScale = math.min(
+      1,
+      math.min(viewport.width / width, viewport.height / height),
+    );
+    _boardTranslation =
+        viewport.center -
+        (_boardOrigin + Offset(width / 2, height / 2)) * _boardScale;
+  }
+
+  Offset _canvasToBoard(Offset point) =>
+      (point - _boardTranslation) / _boardScale;
+
+  @override
+  void renderTree(Canvas canvas) {
+    // Keep the backdrop full-bleed. Every combat component stays in its
+    // original coordinate system and receives the same presentation transform.
+    for (final component in children.whereType<BoardBackdropComponent>()) {
+      component.renderTree(canvas);
+    }
+    canvas.save();
+    canvas.translate(_boardTranslation.dx, _boardTranslation.dy);
+    canvas.scale(_boardScale);
+    for (final component in children) {
+      if (component is! BoardBackdropComponent) component.renderTree(canvas);
+    }
+    canvas.restore();
+  }
+
   @override
   void onTapDown(TapDownEvent event) {
     handleBoardTap(event.canvasPosition.toOffset());
@@ -169,11 +214,15 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   /// enemies travel on them and must stay tappable through overlay chrome.
   GridPosition? boardCellAt(Offset canvasPosition) {
     return BoardLayout.cellAt(
-      canvasPosition,
+      _canvasToBoard(canvasPosition),
       cellSize: _cellSize,
       boardOrigin: _boardOrigin,
     );
   }
+
+  /// Canvas anchor for selection chrome; the board remains the geometry owner.
+  Offset boardCellCenter(GridPosition position) =>
+      _cellCenter(position).toOffset() * _boardScale + _boardTranslation;
 
   /// Routes a widget-layer tap to board handling when it lands on a board
   /// cell, returning whether the tap was consumed. Lets overlay chrome (e.g.
@@ -193,6 +242,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   /// chrome (e.g. the collapsed next-wave scanner) forward a tap that would
   /// otherwise be swallowed while it hovers over a board cell.
   void handleBoardTap(Offset canvasPosition) {
+    final boardPosition = _canvasToBoard(canvasPosition);
     if (_session.phase == GamePhase.won || _session.phase == GamePhase.lost) {
       return;
     }
@@ -201,7 +251,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     }
 
     if (_session.phase == GamePhase.wave) {
-      final enemy = _enemyAt(Vector2(canvasPosition.dx, canvasPosition.dy));
+      final enemy = _enemyAt(Vector2(boardPosition.dx, boardPosition.dy));
       if (enemy != null) {
         _setInspectedEnemy(enemy.enemyId);
         _publishSnapshot();
@@ -211,7 +261,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     }
 
     final tappedCell = BoardLayout.cellAt(
-      canvasPosition,
+      boardPosition,
       cellSize: _cellSize,
       boardOrigin: _boardOrigin,
     );
@@ -334,6 +384,15 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       return;
     }
     board.previewActive = _previewType != null;
+    board.previewBuildableCells = {
+      if (_previewType case final type?)
+        for (var row = 0; row < BoardLayout.rows; row++)
+          for (var column = 0; column < BoardLayout.columns; column++)
+            if (_session
+                .validatePlacement(GridPosition(column, row), type)
+                .isAllowed)
+              GridPosition(column, row),
+    };
     board.previewCandidate = _previewCell;
     board.previewAllowed = _previewAllowed;
     board.previewRange = _previewRange;
@@ -638,13 +697,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     final boardHeight = BoardLayout.rows * cellSize;
     final boardOrigin = Offset(
       (gameSize.x - boardWidth) / 2,
-      (gameSize.y - boardHeight) / 2,
+      ((gameSize.y - boardHeight - 176) / 2).clamp(0, double.infinity),
     );
 
     _cellSize = cellSize;
     _boardOrigin = boardOrigin;
-    // The skin covers the whole viewport; the grid stays centred at its own
-    // cellSize, so the board reads full-bleed without moving a single cell.
+    _updateBoardTransform();
+    // The skin fills the viewport; the grid sits above the command dock.
     _boardBackdrop?.removeFromParent();
     _boardBackdrop = BoardBackdropComponent(
       image: _boardImage,
@@ -653,15 +712,19 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     );
     add(_boardBackdrop!);
     _board?.removeFromParent();
-    _board = BoardComponent(
-      cellSize: _cellSize,
-      pathCells: stage.pathCells,
-      selectedCell: _selectedTower?.position ?? _selectedCell,
-      spriteSheet: _spriteSheet,
-      pathTiles: _pathTiles,
-      position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
-      priority: 0,
-    );
+    _board =
+        BoardComponent(
+            cellSize: _cellSize,
+            pathCells: stage.pathCells,
+            selectedCell: _selectedTower?.position ?? _selectedCell,
+            spriteSheet: _spriteSheet,
+            pathTiles: _pathTiles,
+            position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
+            priority: 0,
+          )
+          ..selectedRange = _selectedTower == null
+              ? 0
+              : _session.resolveTowerStats(_selectedTower!).range;
     add(_board!);
     _syncBoardPreview();
 
@@ -799,7 +862,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         continue;
       }
 
-      final touchRadius = math.max(enemy.radius * 1.8, 24);
+      final touchRadius = math.max(enemy.radius * 1.8, 24 / _boardScale);
       if (enemy.position.distanceTo(canvasPosition) <= touchRadius) {
         return enemy;
       }
@@ -1143,6 +1206,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _publishSnapshot({String? feedback}) {
+    _board?.selectedRange = _selectedTower == null
+        ? 0
+        : _session.resolveTowerStats(_selectedTower!).range;
     stateNotifier.value = _session.snapshot(
       selectedCell: _selectedCell,
       selectedTower: _selectedTower,
