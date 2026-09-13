@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/components/board_backdrop_component.dart';
 import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/components/drone_component.dart';
 import 'package:orion/game/components/enemy_component.dart';
@@ -692,6 +693,22 @@ void main() {
       game.update(0);
 
       expect(feedback.calls, [_RecordedFeedbackCall.waveCleared]);
+    });
+
+    test('active-wave resize still covers the viewport with the backdrop', () {
+      final game = OrionDefenseGame(stage: stageWithWaveCount(2));
+      game.onGameResize(Vector2(800, 1200));
+      final backdrop = game.children.whereType<BoardBackdropComponent>().single;
+      final frozenCellCenter = game.boardCellCenter(const GridPosition(0, 0));
+
+      game.startWave();
+      game.onGameResize(Vector2(400, 800));
+
+      // The board is not relaid out mid-wave, but the presentation-only
+      // backdrop must still cover the resized viewport.
+      expect(game.boardCellCenter(const GridPosition(0, 0)), frozenCellCenter);
+      expect(backdrop.size.x, 400);
+      expect(backdrop.size.y, 800);
     });
 
     test(

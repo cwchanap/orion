@@ -656,7 +656,7 @@ class _TowerBuildCard extends StatelessWidget {
                       // cost carries the affordability signal now, so the
                       // name does not need to.
                       style: OrionTypography.microLabel(
-                        size: 7.5,
+                        size: 8,
                         color: uiTheme.textMuted,
                       ),
                     ),
