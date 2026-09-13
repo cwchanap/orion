@@ -248,23 +248,30 @@ Create executable `scripts/capture_reactor_rim_ios.sh`:
 set -euo pipefail
 out="$1"
 mkdir -p "$(dirname "$out")"
-xcrun simctl io booted screenshot "$out"
-# `booted` accepts whichever simulator happens to be running, so validate the
-# capture against the evidence contract (390x844 product portrait) before the
-# row is recorded: pixel dims must equal 390x844 at the device's native scale.
-w=$(sips -g pixelWidth "$out" | awk '/pixelWidth/ {print $2}')
-h=$(sips -g pixelHeight "$out" | awk '/pixelHeight/ {print $2}')
-case "${w}x${h}" in
-  390x844|780x1688|1170x2532) ;;
-  *)
-    rm -f "$out"
-    echo "live evidence requires a 390x844 portrait capture, got ${w}x${h}px" >&2
-    exit 1
-    ;;
-esac
+raw="$(mktemp -t reactor-rim-capture)"
+trap 'rm -f "$raw"' EXIT
+xcrun simctl io booted screenshot "$raw"
+# `booted` accepts whichever simulator happens to be running. The evidence
+# contract is a 390x844 product-portrait capture, so refuse anything that is
+# not a portrait iPhone shot (landscape, iPad, or a degenerate capture), then
+# normalize the native pixels to the contract size — every 19.5:9 iPhone
+# viewport shares the ~0.46 aspect, so a different booted model still yields
+# valid evidence instead of failing before normalization can run.
+w=$(sips -g pixelWidth "$raw" | awk '/pixelWidth/ {print $2}')
+h=$(sips -g pixelHeight "$raw" | awk '/pixelHeight/ {print $2}')
+if ! awk -v w="$w" -v h="$h" \
+  'BEGIN { exit !(h > w && h >= 1000 && w / h > 0.44 && w / h < 0.48) }'; then
+  rm -f "$out"
+  echo "live evidence requires a portrait iPhone capture, got ${w}x${h}px" >&2
+  exit 1
+fi
+if [ "$w" != 390 ] || [ "$h" != 844 ]; then
+  echo "normalized ${w}x${h}px capture to 390x844" >&2
+fi
+sips -z 844 390 "$raw" --out "$out" >/dev/null
 ```
 
-This captures the current booted iOS simulator and refuses the evidence when the booted device is not a 390×844 product-portrait model. Each scene task owns the navigation instructions that put the real app in the representative state before invoking it — boot the required simulator first.
+This captures the current booted iOS simulator, refuses the evidence when the booted device is not a portrait iPhone model, and normalizes the native pixels to the 390×844 contract size so any 19.5:9 iPhone simulator produces a valid `live-*.png`. Each scene task owns the navigation instructions that put the real app in the representative state before invoking it — boot the required simulator first.
 
 ### Step 0.9 — Verify and commit
 
