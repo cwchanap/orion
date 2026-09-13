@@ -69,43 +69,46 @@ class _RunModuleCard extends StatelessWidget {
           'Affinity: ${definition.affinity.label}',
       onTap: onPressed,
       excludeSemantics: true,
-      child: OrionSurface(
+      child: OrionInnerSurface(
         tier: OrionSurfaceTier.t3,
         padding: EdgeInsets.zero,
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onPressed,
-            splashColor: uiTheme.systemCyan.withValues(alpha: 0.18),
-            highlightColor: uiTheme.systemCyan.withValues(alpha: 0.10),
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    definition.title,
-                    style: OrionTypography.microLabel(
-                      size: 11,
-                      color: uiTheme.textMuted,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onPressed,
+              splashColor: uiTheme.systemCyan.withValues(alpha: 0.18),
+              highlightColor: uiTheme.systemCyan.withValues(alpha: 0.10),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      definition.title,
+                      style: OrionTypography.microLabel(
+                        size: 11,
+                        color: uiTheme.textMuted,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    definition.effectText,
-                    style: OrionTypography.microLabel(
-                      size: 9,
-                      color: uiTheme.textMuted,
+                    const SizedBox(height: 4),
+                    Text(
+                      definition.effectText,
+                      style: OrionTypography.microLabel(
+                        size: 9,
+                        color: uiTheme.textMuted,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    definition.affinity.label,
-                    style: OrionTypography.microLabel(
-                      color: uiTheme.systemCyan,
+                    const SizedBox(height: 4),
+                    Text(
+                      definition.affinity.label,
+                      style: OrionTypography.microLabel(
+                        color: uiTheme.systemCyan,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),

@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'mission_command_hud.dart';
-import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
@@ -540,6 +539,10 @@ class _TowerBuildCard extends StatelessWidget {
       context,
     ).clamp(maxScaleFactor: 1.3);
     final scaleFactor = textScaler.scale(1);
+    final sprite = OrionAtlasSprite(
+      art: OrionArt.tower(type),
+      size: const Size(58, 58),
+    );
 
     final card = Semantics(
       button: true,
@@ -577,41 +580,39 @@ class _TowerBuildCard extends StatelessWidget {
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
-                            ColorFiltered(
-                              colorFilter: unlocked
-                                  ? const ColorFilter.mode(
-                                      Colors.transparent,
-                                      BlendMode.dst,
-                                    )
-                                  : const ColorFilter.matrix(<double>[
-                                      0.2126,
-                                      0.7152,
-                                      0.0722,
-                                      0,
-                                      0,
-                                      0.2126,
-                                      0.7152,
-                                      0.0722,
-                                      0,
-                                      0,
-                                      0.2126,
-                                      0.7152,
-                                      0.0722,
-                                      0,
-                                      0,
-                                      0,
-                                      0,
-                                      0,
-                                      1,
-                                      0,
-                                    ]),
-                              child: Opacity(
-                                opacity: affordable ? 1 : 0.48,
-                                child: OrionAtlasSprite(
-                                  art: OrionArt.tower(type),
-                                  size: const Size(58, 58),
-                                ),
-                              ),
+                            Opacity(
+                              opacity: affordable ? 1 : 0.48,
+                              // A ColorFiltered layer is only worth its cost
+                              // for the locked greyscale; unlocked cards pass
+                              // the sprite through untouched.
+                              child: unlocked
+                                  ? sprite
+                                  : ColorFiltered(
+                                      colorFilter:
+                                          const ColorFilter.matrix(<double>[
+                                            0.2126,
+                                            0.7152,
+                                            0.0722,
+                                            0,
+                                            0,
+                                            0.2126,
+                                            0.7152,
+                                            0.0722,
+                                            0,
+                                            0,
+                                            0.2126,
+                                            0.7152,
+                                            0.0722,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            1,
+                                            0,
+                                          ]),
+                                      child: sprite,
+                                    ),
                             ),
                             if (!unlocked)
                               Icon(
@@ -754,7 +755,8 @@ class _TowerBuildCard extends StatelessWidget {
     return SizedBox(
       width: baseWidth * scaleFactor,
       height: baseHeight * scaleFactor,
-      child: MissionSurface(
+      child: OrionInnerSurface(
+        tier: OrionSurfaceTier.t2,
         padding: const EdgeInsets.all(2),
         radius: 10,
         child: Center(

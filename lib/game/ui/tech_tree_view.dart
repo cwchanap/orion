@@ -87,7 +87,7 @@ class _TechTreeViewState extends State<TechTreeView> {
                       ),
                       Expanded(
                         child: OrionTitle(
-                          'R & d',
+                          'R & D',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           color: uiTheme.textPrimary,
@@ -293,7 +293,7 @@ class _BankBar extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'GOLD MEDALS EARN 3',
+                  'Unspent: $unspent · Earned: $earned · Spent: $spent',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textScaler: MediaQuery.textScalerOf(

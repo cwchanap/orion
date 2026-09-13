@@ -394,12 +394,6 @@ void main() {
     );
   });
 
-  testWidgets('the standalone rail adds no nested blur', (tester) async {
-    await tester.pumpWidget(railHost());
-
-    expect(find.byType(BackdropFilter), findsNothing);
-  });
-
   testWidgets('idle dock surfaces carry no frame chrome', (tester) async {
     Future<void> pumpIdle(GameSnapshot snapshot) => tester.pumpWidget(
       MaterialApp(

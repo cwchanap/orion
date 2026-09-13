@@ -603,7 +603,7 @@ void main() {
     addTearDown(tester.view.reset);
 
     // Representative scene 1g state: Solar Capacitors purchased (check badge
-    // + "Purchased" detail on the default-selected node), Hardened Core
+    // + "Purchased" detail once its node is selected below), Hardened Core
     // affordable (bright node + enabled Purchase), Cryo Coolant unaffordable
     // (dim node), over the approved R&D-bay backdrop. Real Roboto + Material
     // icons so the evidence shows true text metrics.
@@ -665,6 +665,13 @@ void main() {
       ]);
     });
     await tester.pumpAndSettle();
+
+    // Scene 1g's subject is the purchased detail; the resting tree keeps
+    // details closed, so select the purchased node before capturing.
+    await selectNode(tester, CampaignTechUpgrade.solarCapacitors);
+    await tester.pumpAndSettle();
+    expect(detailFinder(CampaignTechUpgrade.solarCapacitors), findsOneWidget);
+
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.
     await tester.runAsync(

@@ -182,7 +182,23 @@ void main() {
     addTearDown(tester.view.reset);
 
     await tester.pumpWidget(
-      chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+      chromeHost(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(),
+          // A pending draft gates canStartWave off, so the dock's primary
+          // action carries its longest label: 'START WAVE'.
+          pendingRunModuleOffer: RunModuleOffer(
+            offerId: 1,
+            draftNumber: 1,
+            draftTotal: 3,
+            moduleIds: const [
+              RunModuleId.heavyCaliber,
+              RunModuleId.cryoReservoir,
+              RunModuleId.overclockRelay,
+            ],
+          ),
+        ),
+      ),
     );
     await tester.pump();
 
@@ -192,7 +208,9 @@ void main() {
     // Map is an icon-scale chip now; its label lives in tooltip/semantics.)
     // The pill displays the label in caps, which is wider than the title
     // case it replaced -- so this fit check matters more, not less.
-    final paragraph = tester.renderObject<RenderParagraph>(find.text('WAVE 1'));
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.text('START WAVE'),
+    );
     expect(
       paragraph.didExceedMaxLines,
       isFalse,
@@ -630,23 +648,19 @@ void main() {
     // Idle with no panel expanded: World Map is present.
     expect(find.byTooltip('World Map'), findsOneWidget);
 
-    // Expand both top-band panels.
+    // Expanding the scanner keeps the dock's World Map action available.
     await tester.tap(find.byTooltip('Expand next-wave scanner'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Collapse next-wave scanner'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Modules 2'));
     await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('next-wave-scanner-expanded')),
-      findsNothing,
-    );
-    expect(
-      find.byKey(const ValueKey('acquired-modules-expanded')),
       findsOneWidget,
     );
     expect(find.byTooltip('World Map'), findsOneWidget);
 
+    await tester.tap(find.byTooltip('Collapse next-wave scanner'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Modules 2'));
+    await tester.pumpAndSettle();
     expect(
       find.byKey(const ValueKey('next-wave-scanner-expanded')),
       findsNothing,

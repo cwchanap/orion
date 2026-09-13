@@ -80,10 +80,15 @@ Future<void> startStageFromBriefing(
   await tester.pump();
 }
 
-void expectSemanticsLabel(WidgetTester tester, Pattern label, Matcher matcher) {
+void expectSemanticsLabel(
+  WidgetTester tester,
+  Pattern label,
+  Matcher matcher, {
+  String? reason,
+}) {
   final handle = tester.ensureSemantics();
   try {
-    expect(find.bySemanticsLabel(label), matcher);
+    expect(find.bySemanticsLabel(label), matcher, reason: reason);
   } finally {
     handle.dispose();
   }
@@ -338,7 +343,7 @@ void main() {
       // *underneath* the briefing, so asserting it alone would pass on a
       // capture of the briefing sheet. The briefing being gone is the check.
       expect(
-        find.text('Start Mission'),
+        find.byTooltip('Start Mission'),
         findsNothing,
         reason: 'the briefing route is still over the scene',
       );
@@ -455,7 +460,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
-    expect(find.bySemanticsLabel('Standard Conditions'), findsOneWidget);
+    expectSemanticsLabel(tester, 'Standard Conditions', findsOneWidget);
     expect(find.text('No environmental modifiers'), findsOneWidget);
     expect(createdGame, isNull);
 
@@ -538,8 +543,9 @@ void main() {
         // The lead modifier's name is the fact-row tile, which shows caps and
         // keeps real copy as its semantics label; later ones stay as
         // conditions rows. bySemanticsLabel matches both.
-        expect(
-          find.bySemanticsLabel(metadata.title),
+        expectSemanticsLabel(
+          tester,
+          metadata.title,
           findsOneWidget,
           reason:
               '${stage.id}: ${metadata.title} is not announced in the briefing',
@@ -2672,7 +2678,7 @@ void main() {
 
       // TechTreeView is now rendered (T12): its header appears and the
       // world-map header is replaced.
-      expect(findOrionTitle('R & d'), findsOneWidget);
+      expect(findOrionTitle('R & D'), findsOneWidget);
       expect(find.text('ORION SECTOR'), findsNothing);
 
       // The back arrow returns the player to the world map.
@@ -2680,7 +2686,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('ORION SECTOR'), findsOneWidget);
-      expect(findOrionTitle('R & d'), findsNothing);
+      expect(findOrionTitle('R & D'), findsNothing);
     },
   );
 

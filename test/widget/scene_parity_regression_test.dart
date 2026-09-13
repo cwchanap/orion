@@ -650,6 +650,9 @@ void main() {
       final errors = <FlutterErrorDetails>[];
       final prior = FlutterError.onError;
       FlutterError.onError = errors.add;
+      addTearDown(() {
+        FlutterError.onError = prior;
+      });
       await tester.pumpWidget(
         RepaintBoundary(
           key: boundary,

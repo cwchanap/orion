@@ -35,7 +35,7 @@ final class OrionArtDescriptor {
   final String semanticLabel;
   final IconData fallbackIcon;
 
-  /// Memoised so repeated builds share one decode — but only on success.
+  /// Memoised so repeated builds share one decode — with a bounded retry.
   ///
   /// A plain `late final` cached a *failed* load for the process lifetime, so
   /// one transient decode failure left that art permanently replaced by its
@@ -45,11 +45,25 @@ final class OrionArtDescriptor {
   /// panels while still passing (1f's capture wrote 481KB run alone and 38KB
   /// run inside its own file).
   ///
+  /// Failures therefore drop the memo so the next build retries — but only
+  /// up to [_maxAttempts]. Once exhausted, the failed future stays cached:
+  /// a permanently missing asset renders its fallback icon instead of paying
+  /// another `Flame.images.load` on every `OrionAtlasSprite` build.
+  ///
   /// The memo is static because this class is `@immutable`; descriptors are
   /// process-lifetime singletons held in [OrionArt]'s maps, so keying on the
   /// instance is equivalent to an instance field.
   static final Map<OrionArtDescriptor, Future<Sprite>> _pending =
       <OrionArtDescriptor, Future<Sprite>>{};
+
+  /// Consecutive load failures per descriptor; drives the retry cap.
+  static final Map<OrionArtDescriptor, int> _failures =
+      <OrionArtDescriptor, int>{};
+
+  /// How many failed load attempts a descriptor retries before its failed
+  /// future is kept. Bounds `Flame.images.load` calls for missing assets
+  /// while still recovering from a transient decode failure.
+  static const int _maxAttempts = 3;
 
   /// Forgets every memoised load.
   ///
@@ -61,7 +75,10 @@ final class OrionArtDescriptor {
   /// scene fixtures came to capture blank panels while passing: 1f's capture
   /// wrote 481KB run alone and 38KB run inside its own file.
   @visibleForTesting
-  static void resetSpriteCache() => _pending.clear();
+  static void resetSpriteCache() {
+    _pending.clear();
+    _failures.clear();
+  }
 
   Future<Sprite> get sprite {
     final pending = _pending[this];
@@ -70,16 +87,22 @@ final class OrionArtDescriptor {
     }
     final future = _loadSprite();
     _pending[this] = future;
-    // Drop the memo on failure so the next build retries rather than
-    // inheriting the error forever. The listener handles the error and
-    // returns normally: rethrowing here would leave *its* derived future
-    // unhandled, which the test binding reports as an uncaught error. The
-    // error still reaches the FutureBuilder through `future` itself.
+    // Below the cap, drop the memo on failure so the next build retries a
+    // transient load rather than inheriting the error forever; at the cap,
+    // keep it so builds reuse the failure instead of reloading every frame.
+    // The listener handles the error and returns normally: rethrowing here
+    // would leave *its* derived future unhandled, which the test binding
+    // reports as an uncaught error. The error still reaches the
+    // FutureBuilder through `future` itself.
     unawaited(
       future.then<void>(
-        (_) {},
+        (_) {
+          _failures.remove(this);
+        },
         onError: (Object _, StackTrace _) {
-          if (_pending[this] == future) {
+          final failures = (_failures[this] ?? 0) + 1;
+          _failures[this] = failures;
+          if (failures < _maxAttempts && _pending[this] == future) {
             _pending.remove(this);
           }
         },
@@ -207,8 +230,7 @@ abstract final class OrionArt {
     for (final stage in OrionCampaign.stages)
       stage.id: OrionArtDescriptor(
         fileName: 'reactor_rim_ui/crests/${stage.id}.png',
-        sourceRectFor: ({required imageWidth, required imageHeight}) =>
-            ui.Rect.fromLTWH(0, 0, imageWidth, imageHeight),
+        sourceRectFor: _fullRectFor,
         semanticLabel: '${stage.name} crest',
         fallbackIcon: Icons.shield_outlined,
       ),

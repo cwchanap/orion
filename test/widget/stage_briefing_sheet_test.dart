@@ -229,22 +229,27 @@ void main() {
     // caps and keeps the real copy as its semantics label; its effect sits
     // under the row. Both must still be reachable.
     await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
-    expect(find.bySemanticsLabel('Standard Conditions'), findsOneWidget);
-    expect(find.text('No environmental modifiers'), findsOneWidget);
+    final semanticsHandle = tester.ensureSemantics();
+    try {
+      expect(find.bySemanticsLabel('Standard Conditions'), findsOneWidget);
+      expect(find.text('No environmental modifiers'), findsOneWidget);
 
-    final modified = OrionCampaign.stages.firstWhere(
-      (stage) => stage.modifiers.isNotEmpty,
-    );
-    await _dismissBriefing(tester);
-    await _pumpBriefing(tester, stage: modified);
-    for (final modifier in modified.modifiers) {
-      final metadata = StageModifierMetadata.forModifier(modifier);
-      expect(
-        find.bySemanticsLabel(metadata.title),
-        findsOneWidget,
-        reason: '${metadata.title} is not announced anywhere in the briefing',
+      final modified = OrionCampaign.stages.firstWhere(
+        (stage) => stage.modifiers.isNotEmpty,
       );
-      expect(find.text(metadata.description), findsOneWidget);
+      await _dismissBriefing(tester);
+      await _pumpBriefing(tester, stage: modified);
+      for (final modifier in modified.modifiers) {
+        final metadata = StageModifierMetadata.forModifier(modifier);
+        expect(
+          find.bySemanticsLabel(metadata.title),
+          findsOneWidget,
+          reason: '${metadata.title} is not announced anywhere in the briefing',
+        );
+        expect(find.text(metadata.description), findsOneWidget);
+      }
+    } finally {
+      semanticsHandle.dispose();
     }
   });
 
