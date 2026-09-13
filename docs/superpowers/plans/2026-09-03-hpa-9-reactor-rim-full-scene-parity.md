@@ -249,9 +249,22 @@ set -euo pipefail
 out="$1"
 mkdir -p "$(dirname "$out")"
 xcrun simctl io booted screenshot "$out"
+# `booted` accepts whichever simulator happens to be running, so validate the
+# capture against the evidence contract (390x844 product portrait) before the
+# row is recorded: pixel dims must equal 390x844 at the device's native scale.
+w=$(sips -g pixelWidth "$out" | awk '/pixelWidth/ {print $2}')
+h=$(sips -g pixelHeight "$out" | awk '/pixelHeight/ {print $2}')
+case "${w}x${h}" in
+  390x844|780x1688|1170x2532) ;;
+  *)
+    rm -f "$out"
+    echo "live evidence requires a 390x844 portrait capture, got ${w}x${h}px" >&2
+    exit 1
+    ;;
+esac
 ```
 
-This captures the current booted iOS simulator. Each scene task owns the navigation instructions that put the real app in the representative state before invoking it.
+This captures the current booted iOS simulator and refuses the evidence when the booted device is not a 390×844 product-portrait model. Each scene task owns the navigation instructions that put the real app in the representative state before invoking it — boot the required simulator first.
 
 ### Step 0.9 — Verify and commit
 
@@ -827,10 +840,13 @@ Important: the Flame board is **not** a Flutter `DragTarget`. Do not use `wasAcc
 Use callbacks:
 
 ```text
-onDragStarted -> Begin(type)
-onDragUpdate  -> remember/update latest global pointer, emit Update
-onDragEnd     -> Commit(last global pointer) if one exists, otherwise Cancel
+onDragStarted -> Begin(type) — ignored while another card's drag is airborne
+onDragUpdate  -> remember/update latest global pointer, emit Update (same gate)
+onPointerUp   -> record the release coordinate (recognizers never see it)
+onDragEnd     -> Commit(release coordinate) if a pointer exists, otherwise Cancel
 ```
+
+`maxSimultaneousDrags: 1` caps only a single card's recognizer; a second finger on another card still starts a drag, so every handler is gated on the owning card's type. Commit uses the pointer-up coordinate — a release between `onDragUpdate` callbacks must not land the tower one event behind the release point.
 
 Ignore DragTarget acceptance; game validation decides the result.
 
@@ -1193,12 +1209,12 @@ The drag portion proves wiring only. Task-5 game tests remain correctness author
 
 ### Step 9.2 — Assemble the eight already-produced parity rows
 
-Verify each row points to:
+Verify each row points to its scene's three artifacts — `<scene>` is the Task 1–8 id (`1a`–`1h`):
 
 ```text
-artboards/1x.png
-fixture-1x.png
-live-1x.png
+artboards/<scene>.png
+fixture-<scene>.png
+live-<scene>.png
 ```
 
 Check classifications for internal consistency. Do not defer a visual fix into a new row note; if a mismatch is unexplained, return to that scene task and fix it.

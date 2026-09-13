@@ -208,6 +208,82 @@ void main() {
       expect(find.text('LIFTED'), findsNothing);
     });
 
+    testWidgets(
+      'commit lands at the release coordinate, not the last streamed update',
+      (tester) async {
+        final events = <TowerPlacementPreviewEvent>[];
+        await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+        final start = tester.getCenter(
+          find.byKey(const ValueKey('tower-card-laser')),
+        );
+        final gesture = await tester.startGesture(start, pointer: 7);
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+        await gesture.moveBy(const Offset(40, -30));
+        await tester.pump();
+
+        // A release between drag updates must still commit where the finger
+        // lifted, not where the last update happened to land. TestGesture.up
+        // has no location, so dispatch the up at a point no update visited.
+        final release = start + const Offset(40, -30) + const Offset(5, -5);
+        await gesture.updateWithCustomEvent(
+          PointerUpEvent(pointer: 7, position: release),
+        );
+        await tester.pump();
+
+        final commit = events.whereType<TowerPlacementPreviewCommit>().single;
+        expect(commit.globalPosition, release);
+      },
+    );
+
+    testWidgets(
+      'a second card dragging concurrently emits nothing and cannot steal '
+      'the airborne preview',
+      (tester) async {
+        final events = <TowerPlacementPreviewEvent>[];
+        await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
+
+        final startA = tester.getCenter(
+          find.byKey(const ValueKey('tower-card-laser')),
+        );
+        final gestureA = await tester.startGesture(startA);
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+        await gestureA.moveBy(const Offset(40, -30));
+        await tester.pump();
+        expect(events.whereType<TowerPlacementPreviewBegin>(), hasLength(1));
+
+        // maxSimultaneousDrags is per-card: a second finger on another card
+        // still starts a drag. Its events must never reach the preview.
+        final gestureB = await tester.startGesture(
+          tester.getCenter(find.byKey(const ValueKey('tower-card-railgun'))),
+          pointer: 2,
+        );
+        await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+        await gestureB.moveBy(const Offset(-60, -20));
+        await tester.pump();
+
+        // Both drags are genuinely airborne — B's recognizer fired — yet the
+        // rail emitted only A's Begin and A's single update.
+        expect(find.text('LIFTED'), findsNWidgets(2));
+        expect(events.whereType<TowerPlacementPreviewBegin>(), hasLength(1));
+        expect(events.whereType<TowerPlacementPreviewUpdate>(), hasLength(1));
+
+        // The source card's key is lifted away while dragging, so release
+        // expectations must come from the recorded start position.
+        final releaseA = startA + const Offset(40, -30);
+        await gestureB.up();
+        await gestureA.up();
+        await tester.pump();
+
+        // B's release produced no commit; A still commits at its own release.
+        final commits = events
+            .whereType<TowerPlacementPreviewCommit>()
+            .toList();
+        expect(commits, hasLength(1));
+        expect(commits.single.globalPosition, releaseA);
+      },
+    );
+
     testWidgets('locked card cannot begin a preview', (tester) async {
       final events = <TowerPlacementPreviewEvent>[];
       await tester.pumpWidget(

@@ -117,14 +117,19 @@ void main() {
     'no public parallel resultHeroAssetPath/string-table API is introduced',
     () {
       // Tripwire over all of lib/: stage art stays behind the typed
-      // OrionArtDescriptor registry, never a parallel path-string table.
+      // OrionArtDescriptor registry, never a parallel path-string table. The
+      // Map<String, String> check is scoped to files that mention art assets
+      // at all — an unrelated string map (headers, labels) is not an offender.
       final offenders = <String>[
         for (final entity in Directory('lib').listSync(recursive: true))
           if (entity is File && entity.path.endsWith('.dart'))
             if (entity.readAsStringSync().contains('resultHeroAssetPath') ||
-                RegExp(
-                  r'Map<String,\s*String>',
-                ).hasMatch(entity.readAsStringSync()))
+                (RegExp(
+                      r'Map<String,\s*String>',
+                    ).hasMatch(entity.readAsStringSync()) &&
+                    RegExp(
+                      r'\.png|assets/images|reactor_rim_ui',
+                    ).hasMatch(entity.readAsStringSync())))
               entity.path,
       ];
       expect(offenders, isEmpty);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
@@ -363,16 +365,17 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   TowerType? _activeDraggedType;
   Offset? _latestGlobalPointer;
 
-  /// Set when the OS cancels the drag pointer (see [_handleDragCanceled]);
-  /// LongPressDraggable then still reports a drag end, which must not commit.
-  bool _dragCancelledBySystem = false;
-
   void _emit(TowerPlacementPreviewEvent event) {
     widget.onPlacementPreviewEvent?.call(event);
   }
 
+  /// Each card owns its recognizer, so `maxSimultaneousDrags: 1` cannot stop
+  /// a second finger starting a drag on a different card. Every handler is
+  /// gated on [type] matching [_activeDraggedType]: a second card's drag
+  /// still animates its ghost but emits no events, so it can never overwrite
+  /// the airborne preview or commit the wrong tower.
   void _handleDragStarted(TowerType type) {
-    _dragCancelledBySystem = false;
+    if (_activeDraggedType != null) return;
     setState(() {
       _activeDraggedType = type;
       _latestGlobalPointer = null;
@@ -380,34 +383,50 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
     _emit(TowerPlacementPreviewBegin(type));
   }
 
-  void _handleDragUpdate(Offset globalPosition) {
+  void _handleDragUpdate(TowerType type, Offset globalPosition) {
+    if (_activeDraggedType != type) return;
     _latestGlobalPointer = globalPosition;
     _emit(TowerPlacementPreviewUpdate(globalPosition));
   }
 
-  void _handleDragEnded() {
-    if (_dragCancelledBySystem) {
-      _dragCancelledBySystem = false;
-      return;
-    }
-    setState(() => _activeDraggedType = null);
-    final pointer = _latestGlobalPointer;
-    _latestGlobalPointer = null;
-    if (pointer != null) {
-      _emit(TowerPlacementPreviewCommit(pointer));
-    } else {
-      _emit(TowerPlacementPreviewCancel());
-    }
+  /// The pointer router dispatches up events to recognizers before hit-test
+  /// listeners, so [LongPressDraggable.onDragEnd] cannot observe the release
+  /// coordinate — and `DraggableDetails.offset` is the anchored avatar
+  /// position, not the pointer. The release point lands here one beat after
+  /// drag end, ahead of the deferred settle. Only recorded once updates have
+  /// streamed: a release that never moved stays a cancel, never a commit at
+  /// the card's own position.
+  void _handlePointerUp(TowerType type, Offset position) {
+    if (_activeDraggedType != type || _latestGlobalPointer == null) return;
+    _latestGlobalPointer = position;
+  }
+
+  void _handleDragEnded(TowerType type) {
+    if (_activeDraggedType != type) return;
+    // Settle one microtask later so the paired onPointerUp — dispatched
+    // synchronously right after this callback — can supply the true release
+    // coordinate before the commit reads it.
+    scheduleMicrotask(() {
+      if (!mounted || _activeDraggedType != type) return;
+      setState(() => _activeDraggedType = null);
+      final pointer = _latestGlobalPointer;
+      _latestGlobalPointer = null;
+      if (pointer != null) {
+        _emit(TowerPlacementPreviewCommit(pointer));
+      } else {
+        _emit(TowerPlacementPreviewCancel());
+      }
+    });
   }
 
   /// Recognizer-level cancel (OS pointer interruption: incoming call,
   /// notification shade, app switcher, or rail unmount). This SDK has no
   /// onDragCancel callback and surfaces cancels as onDragEnd — the raw
-  /// pointer cancel preempts it here; the trailing drag end is ignored.
+  /// pointer cancel preempts it here, and the trailing drag end is ignored
+  /// by the [type] gate because the active type is already cleared.
   /// Never commits at the last pointer — always cancels the preview.
-  void _handleDragCanceled() {
-    if (_activeDraggedType == null) return;
-    _dragCancelledBySystem = true;
+  void _handleDragCanceled(TowerType type) {
+    if (_activeDraggedType != type) return;
     setState(() {
       _activeDraggedType = null;
       _latestGlobalPointer = null;
@@ -440,9 +459,10 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
                   unlocked: widget.unlockedTowerTypes.contains(type),
                   onPlaceTower: widget.onPlaceTower,
                   onDragStarted: () => _handleDragStarted(type),
-                  onDragUpdate: _handleDragUpdate,
-                  onDragEnded: _handleDragEnded,
-                  onDragCanceled: _handleDragCanceled,
+                  onDragUpdate: (position) => _handleDragUpdate(type, position),
+                  onDragEnded: () => _handleDragEnded(type),
+                  onDragCanceled: () => _handleDragCanceled(type),
+                  onPointerUp: (position) => _handlePointerUp(type, position),
                 );
               },
             ),
@@ -498,6 +518,7 @@ class _TowerBuildCard extends StatelessWidget {
     this.onDragUpdate,
     this.onDragEnded,
     this.onDragCanceled,
+    this.onPointerUp,
   });
 
   final TowerType type;
@@ -512,6 +533,10 @@ class _TowerBuildCard extends StatelessWidget {
   final ValueChanged<Offset>? onDragUpdate;
   final VoidCallback? onDragEnded;
   final VoidCallback? onDragCanceled;
+
+  /// Raw pointer-up on this card — carries the release coordinate, which
+  /// recognizer callbacks never see.
+  final ValueChanged<Offset>? onPointerUp;
 
   // Artboard 1a's rail card: 70x88, radius 16, a 58px sprite, then the cost,
   // then the name. Ours was 64x92 with a 42px sprite and the name above a
@@ -685,10 +710,12 @@ class _TowerBuildCard extends StatelessWidget {
     // treat a recognizer cancel as a cancel instead of a commit.
     return Listener(
       onPointerCancel: (_) => onDragCanceled?.call(),
+      onPointerUp: (event) => onPointerUp?.call(event.position),
       child: LongPressDraggable<TowerType>(
         data: type,
-        // The game holds exactly one transient preview; a second concurrent
-        // drag would overwrite its type and commit the wrong tower.
+        // Per-card cap only: it stops two drags on THIS card. A second finger
+        // on a different card still starts a drag — the rail gates those
+        // events on the active type so they can never reach the preview.
         maxSimultaneousDrags: 1,
         onDragStarted: onDragStarted,
         onDragUpdate: (details) => onDragUpdate?.call(details.globalPosition),

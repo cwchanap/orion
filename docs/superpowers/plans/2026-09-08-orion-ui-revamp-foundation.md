@@ -49,7 +49,6 @@ incrementally instead of in one commit.
 **Created:**
 - `assets/fonts/Oxanium[wght].ttf` — variable weight axis, used at wght 800
 - `assets/fonts/ChakraPetch-Bold.ttf` — micro-labels (w700)
-- `assets/fonts/ChakraPetch-Medium.ttf` — body copy on reference surfaces (w500)
 - `assets/fonts/OFL-Oxanium.txt`, `assets/fonts/OFL-ChakraPetch.txt` — licenses
 - `lib/game/ui/orion_typography.dart` — the three type roles + `OrionText`/`OrionReadout`
 - `lib/game/ui/orion_surface.dart` — `OrionSurfaceTier` enum + `OrionSurface`
@@ -603,6 +602,12 @@ void main() {
   });
 }
 ```
+
+These assertions describe the default contract. If the Task 15 raster
+measurement applies the opaque t1/t2 fallback, this test is updated in the same
+commit: `t3`/`t4` keep the single `BackdropFilter` and non-opaque assertions,
+`t1`/`t2` instead assert no `BackdropFilter` and fully opaque fills at the same
+colors.
 
 - [ ] **Step 2: Run to confirm failure**
 
@@ -1391,8 +1396,10 @@ in the PR description either way.
 
 If raster exceeds 16ms, apply the spec's fallback — keep blur on `t3`/`t4` only and
 make `t1`/`t2` opaque fills at the same colors — then re-measure and note the change
-in the PR. Do **not** abandon translucency wholesale, and do not tune blur sigmas to
-a fifth value; the tripwire in Task 14 will reject that.
+in the PR. Update the Task 5 surface tests in the same commit so they assert the
+selected contract (`t3`/`t4` blurred and non-opaque, `t1`/`t2` opaque with no
+`BackdropFilter`). Do **not** abandon translucency wholesale, and do not tune blur
+sigmas to a fifth value; the tripwire in Task 14 will reject that.
 
 - [ ] **Step 5: Commit only if the fallback was applied**
 
