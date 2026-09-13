@@ -63,6 +63,8 @@ class StageBriefingSheet extends StatelessWidget {
                   'assets/images/reactor_rim_ui/boards/nebula.png',
                   fit: BoxFit.cover,
                   excludeFromSemantics: true,
+                  errorBuilder: (context, error, stackTrace) =>
+                      const SizedBox.shrink(),
                 ),
               ),
             ),
