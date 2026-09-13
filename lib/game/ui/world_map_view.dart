@@ -241,6 +241,7 @@ class _WorldMapBackdrop extends StatelessWidget {
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
           excludeFromSemantics: true,
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
         // ponytail: square art, so any square child size cover-fits correctly;
         // recompute from the decoded image if the asset ever stops being 1:1.

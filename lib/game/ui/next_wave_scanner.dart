@@ -284,6 +284,8 @@ class WaveScannerScene extends StatelessWidget {
             'assets/images/reactor_rim_ui/backdrops/command-center.png',
             fit: BoxFit.cover,
             alignment: Alignment.topCenter,
+            errorBuilder: (context, error, stackTrace) =>
+                const SizedBox.shrink(),
           ),
           const DecoratedBox(
             decoration: BoxDecoration(
