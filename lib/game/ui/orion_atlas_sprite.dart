@@ -90,6 +90,11 @@ final class OrionArtDescriptor {
     // Below the cap, drop the memo on failure so the next build retries a
     // transient load rather than inheriting the error forever; at the cap,
     // keep it so builds reuse the failure instead of reloading every frame.
+    // Completions that arrive after the memo moved on — a load still in
+    // flight across resetSpriteCache(), or across a retry that replaced it —
+    // belong to a prior cache generation: they must not touch this
+    // generation's failure count, so both callbacks bail unless the memo
+    // still names this future.
     // The listener handles the error and returns normally: rethrowing here
     // would leave *its* derived future unhandled, which the test binding
     // reports as an uncaught error. The error still reaches the
@@ -97,12 +102,18 @@ final class OrionArtDescriptor {
     unawaited(
       future.then<void>(
         (_) {
+          if (_pending[this] != future) {
+            return;
+          }
           _failures.remove(this);
         },
         onError: (Object _, StackTrace _) {
+          if (_pending[this] != future) {
+            return;
+          }
           final failures = (_failures[this] ?? 0) + 1;
           _failures[this] = failures;
-          if (failures < _maxAttempts && _pending[this] == future) {
+          if (failures < _maxAttempts) {
             _pending.remove(this);
           }
         },

@@ -204,6 +204,7 @@ class _TechTreeBackdrop extends StatelessWidget {
           key: const ValueKey('tech-tree-backdrop-art'),
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
         const DecoratedBox(
           key: ValueKey('tech-tree-scrim'),
