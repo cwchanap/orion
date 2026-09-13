@@ -24,6 +24,7 @@ Widget chromeHost(
   TextScaler textScaler = TextScaler.noScaling,
   Color? backgroundColor,
   ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
+  ValueChanged<Rect>? onBoardViewportChanged,
 }) {
   return MaterialApp(
     // The product app hides this banner; a fixture host must too, or the
@@ -64,6 +65,7 @@ Widget chromeHost(
               onTargetingChanged: (_) {},
               onSell: () {},
               onPlacementPreviewEvent: onPlacementPreviewEvent,
+              onBoardViewportChanged: onBoardViewportChanged,
             ),
           ),
         ],
@@ -451,6 +453,37 @@ void main() {
     await tester.pump();
     expect(find.byType(NextWaveScanner), findsNothing);
   });
+
+  testWidgets(
+    'board viewport reserves below the acquired-module control without a scanner',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      Rect? viewport;
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            phase: GamePhase.wave,
+            acquiredRunModules: const [RunModuleId.heavyCaliber],
+          ),
+          onBoardViewportChanged: (rect) => viewport = rect,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      // The scanner is gone during a wave; the viewport must still clear the
+      // module control, not just the HUD.
+      expect(find.byType(NextWaveScanner), findsNothing);
+      final modulesBottom = tester
+          .getBottomLeft(find.byType(AcquiredRunModuleControl))
+          .dy;
+      expect(viewport, isNotNull);
+      expect(viewport!.top, greaterThanOrEqualTo(modulesBottom));
+    },
+  );
 
   testWidgets('empty chrome space passes taps through; controls absorb them', (
     tester,
