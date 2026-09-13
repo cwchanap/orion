@@ -33,7 +33,7 @@ The codebase deliberately separates **pure game logic** (deterministic, unit-tes
   - `combat_effects.dart` — `CombatEffects`: damage resolution (armor/shield/shred), regen, slow merging, chain/pierce target selection, and drone launch caps.
 - **`orion_defense_game.dart`** — `OrionDefenseGame extends FlameGame`. The orchestrator that wires logic to rendering. Owns the `GameSession`, runs the wave spawn loop in `update()`, handles taps (`TapCallbacks`), spawns/removes components, and bridges combat decisions to the pure `rules/` functions. Exposes a `ValueNotifier<GameSnapshot> stateNotifier` that the UI listens to.
 - **`components/`** — Flame `Component`s for everything on screen: `BoardComponent`, `EnemyComponent`, `TowerComponent`, `ProjectileComponent`, `DroneComponent`, `GravityFieldComponent`. These render and animate; combat math is delegated to `rules/`.
-- **`assets/`** — Sprite-sheet loaders that slice the PNGs in `assets/images/` into named `Sprite`s (`GameSpriteSheet`, `GameTowerVarietySheet`, `GamePathTiles`, `GameTerrain`). Each defines its grid dimensions and an enum of sprite names.
+- **`assets/`** — Sprite-sheet loaders that slice the PNGs in `assets/images/` into named `Sprite`s (`GameSpriteSheet`, `GameTowerVarietySheet`, `GamePathTiles`, `GameBoardSkin`). Each defines its grid dimensions and an enum of sprite names.
 - **`ui/orion_game_page.dart`** — Flutter widget layer. Hosts the `GameWidget`, and a `ValueListenableBuilder<GameSnapshot>` drives the HUD, bottom controls (tower picker, upgrade/specialize, start wave), and end-state panel. **The UI never reads game state directly — only via the snapshot.**
 
 ### Key patterns

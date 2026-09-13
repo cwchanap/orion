@@ -3,12 +3,70 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tech_tree_view.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
+  testWidgets('compact R&D details fit at 3x text', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await loadRealFonts();
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: MaterialApp(
+          theme: orionThemeData,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(3)),
+            child: child!,
+          ),
+          home: TechTreeView(
+            progress: CampaignProgress(),
+            techTree: CampaignTechTree(),
+            onPurchase: (_) {},
+            onBack: () {},
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.byKey(const ValueKey('tech-node-solar-capacitors')));
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+    await tester.runAsync(
+      () => warmSceneImages(tester.element(find.byType(TechTreeView)), [
+        'reactor_rim_ui/backdrops/tech-tree-rnd-bay.png',
+      ]),
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-1g-large-text.png'),
+    );
+    final action = find.byType(FilledButton).first;
+    await tester.ensureVisible(action);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(action).bottom,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const ValueKey('tech-bank-bar'))).top,
+      ),
+    );
+    expect(tester.takeException(), isNull);
+    await tester.runAsync(
+      () => captureReactorRimFixture(
+        boundaryKey,
+        'fixture-1g-large-text-action.png',
+      ),
+    );
+  });
   CampaignProgress progressWithRanks(List<int> ranks) {
     final results = <String, StageResult>{};
     for (var i = 0; i < ranks.length; i++) {
@@ -38,6 +96,7 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TechTreeView(
           progress: progress,
           techTree: techTree,
@@ -66,6 +125,7 @@ void main() {
     WidgetTester tester,
     CampaignTechUpgrade upgrade,
   ) async {
+    await tester.ensureVisible(nodeFinder(upgrade));
     await tester.tap(nodeFinder(upgrade));
     await tester.pump();
   }
@@ -121,18 +181,17 @@ void main() {
         onBack: () async {},
       );
       final first = CampaignTechUpgrade.values.first;
+      await selectNode(tester, first);
       expect(detailFinder(first), findsOneWidget);
       // The selected node's label shows on its node card and in the detail.
       expect(find.text(first.label), findsNWidgets(2));
       expect(find.text(first.description), findsOneWidget);
-      expect(find.text(first.effectLabel), findsNWidgets(2));
+      expect(find.text(first.effectLabel), findsOneWidget);
       expect(find.text('Cost: ${first.cost} pts'), findsOneWidget);
     },
   );
 
-  testWidgets('initial selected node is CampaignTechUpgrade.values.first', (
-    tester,
-  ) async {
+  testWidgets('resting tree leaves node details closed', (tester) async {
     await pumpTree(
       tester,
       progress: CampaignProgress(),
@@ -140,10 +199,7 @@ void main() {
       onPurchase: (_) {},
       onBack: () async {},
     );
-    expect(
-      selectedRingFinder(CampaignTechUpgrade.values.first),
-      findsOneWidget,
-    );
+    expect(selectedRingFinder(CampaignTechUpgrade.values.first), findsNothing);
     expect(selectedRingFinder(CampaignTechUpgrade.values[1]), findsNothing);
   });
 
@@ -316,40 +372,33 @@ void main() {
     },
   );
 
-  testWidgets(
-    'closing/recreating TechTreeView resets selection to first enum',
-    (tester) async {
-      await pumpTree(
-        tester,
-        progress: CampaignProgress(),
-        techTree: CampaignTechTree(),
-        onPurchase: (_) {},
-        onBack: () async {},
-      );
-      await selectNode(tester, CampaignTechUpgrade.cryoCoolant);
-      expect(
-        selectedRingFinder(CampaignTechUpgrade.cryoCoolant),
-        findsOneWidget,
-      );
+  testWidgets('closing/recreating TechTreeView clears detail selection', (
+    tester,
+  ) async {
+    await pumpTree(
+      tester,
+      progress: CampaignProgress(),
+      techTree: CampaignTechTree(),
+      onPurchase: (_) {},
+      onBack: () async {},
+    );
+    await selectNode(tester, CampaignTechUpgrade.cryoCoolant);
+    expect(selectedRingFinder(CampaignTechUpgrade.cryoCoolant), findsOneWidget);
 
-      // Close the view…
-      await tester.pumpWidget(const SizedBox.shrink());
-      // …and reopen it: the element tree is brand new, so selection resets.
-      await pumpTree(
-        tester,
-        progress: CampaignProgress(),
-        techTree: CampaignTechTree(),
-        onPurchase: (_) {},
-        onBack: () async {},
-      );
+    // Close the view…
+    await tester.pumpWidget(const SizedBox.shrink());
+    // …and reopen it: the element tree is brand new, so selection resets.
+    await pumpTree(
+      tester,
+      progress: CampaignProgress(),
+      techTree: CampaignTechTree(),
+      onPurchase: (_) {},
+      onBack: () async {},
+    );
 
-      expect(
-        selectedRingFinder(CampaignTechUpgrade.values.first),
-        findsOneWidget,
-      );
-      expect(selectedRingFinder(CampaignTechUpgrade.cryoCoolant), findsNothing);
-    },
-  );
+    expect(selectedRingFinder(CampaignTechUpgrade.values.first), findsNothing);
+    expect(selectedRingFinder(CampaignTechUpgrade.cryoCoolant), findsNothing);
+  });
 
   testWidgets('bank still shows real unspent/earned/spent', (tester) async {
     final progress = progressWithRanks(const [3, 3, 3, 3]); // 12 earned
@@ -364,9 +413,9 @@ void main() {
       onBack: () async {},
     );
     // Unspent: 9 · Earned: 12 · Spent: 3
-    expect(find.textContaining('Unspent: 9'), findsOneWidget);
-    expect(find.textContaining('Earned: 12'), findsOneWidget);
-    expect(find.textContaining('Spent: 3'), findsOneWidget);
+    expect(find.bySemanticsLabel('Unspent: 9'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('Earned: 12')), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('Spent: 3')), findsOneWidget);
   });
 
   testWidgets('purchased node cannot repurchase', (tester) async {
@@ -383,6 +432,7 @@ void main() {
     );
     // The default-selected node is purchased: the detail shows the
     // non-interactive "Purchased" state and no Purchase button exists.
+    await selectNode(tester, CampaignTechUpgrade.solarCapacitors);
     expect(find.text('Purchased'), findsOneWidget);
     expect(find.widgetWithText(FilledButton, 'Purchase'), findsNothing);
     await tester.tap(find.text('Purchased'));
@@ -467,22 +517,106 @@ void main() {
     expect(backInvoked, isTrue);
   });
 
+  testWidgets('_TechNode label color differs across purchased, affordable and '
+      'locked states', (tester) async {
+    // Regression coverage for a bug where the muted-label rule
+    // ("microLabel cannot be white") was satisfied by deleting the
+    // node's purchased/affordable/locked conditional and collapsing the
+    // label to a single flat color. Assert the actual resolved
+    // TextStyle.color per state so a future collapse back to one color
+    // fails here, the way world_map_command_deck_test.dart does for the
+    // map's stage-node labels.
+    final progress = progressWithRanks(const [3, 3, 1]); // 7 earned
+    final techTree = CampaignTechTree(
+      purchased: {CampaignTechUpgrade.solarCapacitors}, // spent 3, unspent 4
+    );
+    await pumpTree(
+      tester,
+      progress: progress,
+      techTree: techTree,
+      onPurchase: (_) {},
+      onBack: () async {},
+    );
+
+    Color nodeLabelColor(CampaignTechUpgrade upgrade) {
+      final text = tester.widget<Text>(
+        find.descendant(
+          of: nodeFinder(upgrade),
+          matching: find.text(upgrade.label),
+        ),
+      );
+      return text.style!.color!;
+    }
+
+    // Solar Capacitors: purchased -> naniteGreen.
+    final purchasedColor = nodeLabelColor(CampaignTechUpgrade.solarCapacitors);
+    // Hardened Core: costs 4, unspent is 4 -> affordable but unpurchased
+    // -> systemCyan.
+    final affordableColor = nodeLabelColor(CampaignTechUpgrade.hardenedCore);
+    // Cryo Coolant: costs 5, unspent is 4 -> locked/unaffordable ->
+    // textMuted.
+    final lockedColor = nodeLabelColor(CampaignTechUpgrade.cryoCoolant);
+
+    const uiTheme = OrionUiTheme.dark;
+    expect(purchasedColor, uiTheme.naniteGreen);
+    expect(affordableColor, uiTheme.systemCyan);
+    expect(lockedColor, uiTheme.textMuted);
+
+    expect(purchasedColor, isNot(equals(affordableColor)));
+    expect(affordableColor, isNot(equals(lockedColor)));
+    expect(purchasedColor, isNot(equals(lockedColor)));
+  });
+
+  testWidgets(
+    '_TechDetail heading resolves to systemViolet, never textPrimary',
+    (tester) async {
+      // Regression coverage for the same muted-label failure mode: the
+      // detail panel heading used to be textPrimary before the design-
+      // system migration and must now resolve to the panel's own
+      // systemViolet border accent, not collapse back to textPrimary.
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      final first = CampaignTechUpgrade.values.first;
+      await selectNode(tester, first);
+      final heading = tester.widget<Text>(
+        find.descendant(
+          of: detailFinder(first),
+          matching: find.text(first.label),
+        ),
+      );
+
+      const uiTheme = OrionUiTheme.dark;
+      await selectNode(tester, CampaignTechUpgrade.solarCapacitors);
+      expect(heading.style!.color, uiTheme.systemViolet);
+      expect(heading.style!.color, isNot(equals(uiTheme.textPrimary)));
+    },
+  );
+
   testWidgets('capture scene 1g fixture', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
     // Representative scene 1g state: Solar Capacitors purchased (check badge
-    // + "Purchased" detail on the default-selected node), Hardened Core
+    // + "Purchased" detail once its node is selected below), Hardened Core
     // affordable (bright node + enabled Purchase), Cryo Coolant unaffordable
     // (dim node), over the approved R&D-bay backdrop. Real Roboto + Material
     // icons so the evidence shows true text metrics.
     await loadRealFonts();
+    // The memo can hold a pending future from an earlier cold-cache test
+    // in this process; clear it so this fixture's warmed cache is used.
+    OrionArtDescriptor.resetSpriteCache();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same key the OrionArt descriptor uses) so the art renders.
     await tester.runAsync(() async {
       await Flame.images.load('reactor_rim_ui/backdrops/tech-tree-rnd-bay.png');
+      await Flame.images.load('orion_sprite_sheet.png');
     });
 
     final progress = progressWithRanks(const [3, 3, 1]); // 7 earned, 4 unspent
@@ -495,6 +629,10 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          // The product app hides this banner; a fixture host must too, or the
+          // parity evidence carries a stripe the shipped game never shows.
+          debugShowCheckedModeBanner: false,
+          theme: orionThemeData,
           home: TechTreeView(
             progress: progress,
             techTree: techTree,
@@ -516,14 +654,23 @@ void main() {
       purchasedBadgeFinder(CampaignTechUpgrade.solarCapacitors),
       findsOneWidget,
     );
-    expect(
-      selectedRingFinder(CampaignTechUpgrade.solarCapacitors),
-      findsOneWidget,
-    );
-    expect(find.text('Purchased'), findsOneWidget);
     for (final upgrade in CampaignTechUpgrade.values) {
       expect(nodeFinder(upgrade), findsOneWidget);
     }
+
+    await tester.runAsync(() async {
+      await Flame.images.load('orion_sprite_sheet.png');
+      await warmSceneImages(tester.element(find.byType(TechTreeView)), [
+        'reactor_rim_ui/backdrops/tech-tree-rnd-bay.png',
+      ]);
+    });
+    await tester.pumpAndSettle();
+
+    // Scene 1g's subject is the purchased detail; the resting tree keeps
+    // details closed, so select the purchased node before capturing.
+    await selectNode(tester, CampaignTechUpgrade.solarCapacitors);
+    await tester.pumpAndSettle();
+    expect(detailFinder(CampaignTechUpgrade.solarCapacitors), findsOneWidget);
 
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.

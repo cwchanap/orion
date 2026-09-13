@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
 import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
+import 'package:orion/game/ui/orion_surface.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 import '../support/command_deck_fixtures.dart';
@@ -93,7 +94,8 @@ void main() {
     );
 
     await tester.tap(find.byTooltip('Pause'));
-    await tester.tap(find.text('2x'));
+    // The speed button cycles: from the fixture's 1x, one tap selects 2x.
+    await tester.tap(find.byTooltip('Game speed'));
     await tester.tap(find.byTooltip('Auto-start waves'));
     expect((pauseTaps, speed, autoTaps), (1, 2.0, 1));
   });
@@ -123,6 +125,83 @@ void main() {
     expect(find.text('Auto 5s'), findsOneWidget);
   });
 
+  testWidgets('the phase pair is green while building, muted in a wave', (
+    tester,
+  ) async {
+    // Artboard 1a colours this pair by phase: BUILD is the state that invites
+    // action, so it is naniteGreen, not chrome grey.
+    Future<void> pumpPhase(GamePhase phase) => tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: MissionStatusHud(snapshot: commandDeckSnapshot(phase: phase)),
+      ),
+    );
+
+    await pumpPhase(GamePhase.build);
+    expect(
+      tester.widget<Text>(find.text('BUILD')).style!.color!.toARGB32(),
+      OrionUiTheme.dark.naniteGreen.toARGB32(),
+    );
+
+    await pumpPhase(GamePhase.wave);
+    expect(
+      tester.widget<Text>(find.text('WAVE ACTIVE')).style!.color!.toARGB32(),
+      OrionUiTheme.dark.textMuted.toARGB32(),
+    );
+  });
+
+  testWidgets('the three pacing chips share one shape', (tester) async {
+    // They used to be a circular IconButton, a stadium OutlinedButton and a
+    // rounded FilterChip, so the row read as three unrelated controls.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: MissionPacingControls(
+          snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+        ),
+      ),
+    );
+
+    final sizes = [
+      'Pause',
+      'Game speed',
+      'Auto-start waves',
+    ].map((tooltip) => tester.getSize(find.byTooltip(tooltip))).toList();
+    for (final size in sizes) {
+      expect(
+        size.height,
+        sizes.first.height,
+        reason: 'a pacing chip is a different height from its neighbours',
+      );
+      expect(
+        size.width,
+        sizes.first.width,
+        reason: 'a pacing chip is a different width from its neighbours',
+      );
+    }
+
+    // Size alone would pass for a circle and a square of the same box, so the
+    // corner radius is the half of "one shape" that size cannot see.
+    for (final tooltip in ['Pause', 'Game speed', 'Auto-start waves']) {
+      final shape =
+          tester
+                  .widget<Material>(
+                    find.descendant(
+                      of: find.byTooltip(tooltip),
+                      matching: find.byType(Material),
+                    ),
+                  )
+                  .shape
+              as RoundedRectangleBorder;
+
+      expect(shape.borderRadius, BorderRadius.circular(14));
+      expect(shape.side.width, 1);
+    }
+  });
+
   testWidgets('pacing controls preserve 48dp hit targets', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -135,24 +214,22 @@ void main() {
       ),
     );
 
+    // All three are one widget now, told apart by tooltip rather than by
+    // Material type.
     const minimumHitTarget = 48.0;
-    final pauseRect = tester.getRect(find.byType(IconButton));
-    expect(pauseRect.width, greaterThanOrEqualTo(minimumHitTarget));
-    expect(pauseRect.height, greaterThanOrEqualTo(minimumHitTarget));
-
-    for (final label in ['1x', '2x', '3x']) {
-      final segment = find.ancestor(
-        of: find.text(label),
-        matching: find.byType(TextButton),
+    for (final tooltip in ['Pause', 'Game speed', 'Auto-start waves']) {
+      final rect = tester.getRect(find.byTooltip(tooltip));
+      expect(
+        rect.width,
+        greaterThanOrEqualTo(minimumHitTarget),
+        reason: '$tooltip is narrower than a 48dp target',
       );
-      final segmentRect = tester.getRect(segment);
-      expect(segmentRect.width, greaterThanOrEqualTo(minimumHitTarget));
-      expect(segmentRect.height, greaterThanOrEqualTo(minimumHitTarget));
+      expect(
+        rect.height,
+        greaterThanOrEqualTo(minimumHitTarget),
+        reason: '$tooltip is shorter than a 48dp target',
+      );
     }
-
-    final autoRect = tester.getRect(find.byType(FilterChip));
-    expect(autoRect.width, greaterThanOrEqualTo(minimumHitTarget));
-    expect(autoRect.height, greaterThanOrEqualTo(minimumHitTarget));
   });
 
   testWidgets('status passes taps through while pacing consumes them', (
@@ -241,33 +318,34 @@ void main() {
     }
   });
 
-  testWidgets(
-    'status HUD renders three compact mission surfaces without command frames',
-    (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
-      );
+  testWidgets('status HUD is unboxed: three readouts, no surfaces', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
+    );
 
-      expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
-      expect(find.byKey(const ValueKey('mission-status-base')), findsOneWidget);
-      expect(
-        find.byKey(const ValueKey('mission-status-stage')),
-        findsOneWidget,
-      );
-      expect(
-        find.byKey(const ValueKey('mission-status-credits')),
-        findsOneWidget,
-      );
-      expect(find.byType(MissionSurface), findsNWidgets(3));
-      expect(
-        find.descendant(
-          of: find.byKey(const ValueKey('mission-status-hud')),
-          matching: find.byType(CommandFrame),
-        ),
-        findsNothing,
-      );
-    },
-  );
+    expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-status-base')), findsOneWidget);
+    expect(find.byKey(const ValueKey('mission-status-stage')), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('mission-status-credits')),
+      findsOneWidget,
+    );
+
+    // Artboard 1a floats these readouts on the live board rather than giving
+    // each its own pill. Their contrast comes from the type roles' shadow,
+    // which exists so it never depends on a surface fill.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('mission-status-hud')),
+        matching: find.byType(OrionSurface),
+      ),
+      findsNothing,
+      reason: 'the status band is unboxed; a pill per readout is the old look',
+    );
+    expect(find.byType(MissionSurface), findsNothing);
+  });
 
   testWidgets(
     'status anchors stay on screen for long stage names at 390x844 scale 1.3',
@@ -524,52 +602,41 @@ void main() {
     );
   }
 
-  testWidgets('status readouts grow a text step and cluster reads as status', (
+  testWidgets('status readouts are hero scale with room to breathe', (
     tester,
   ) async {
     await tester.pumpWidget(
       MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
     );
 
-    // Health and credits numbers are the primary readouts: one theme step
-    // above the stage chip's label text so they no longer read as small
-    // button labels.
-    for (final value in ['20/20', '150']) {
+    // The sheet puts readout's hero range at 22-40. These were sitting at
+    // 14-16 inside pills, which read as small button labels; unboxing frees
+    // the width to run them at hero scale. Base health renders through
+    // OrionReadout, so the whole value is its own Text node separate from
+    // its muted denominator.
+    for (final value in ['20', '150']) {
       final text = tester.widget<Text>(find.text(value));
       expect(
         text.style?.fontSize,
-        greaterThanOrEqualTo(15),
-        reason:
-            '"$value" stays at button-label size; status readouts need a '
-            'larger text step.',
+        greaterThanOrEqualTo(22),
+        reason: '"$value" is below the sheet\'s hero readout range',
       );
     }
 
-    // Status surfaces are grouped, not interactive: tight spacing and a
-    // whisper-quiet border rather than the button cyan.
-    final base = find.byKey(const ValueKey('mission-status-base'));
-    final stage = find.byKey(const ValueKey('mission-status-stage'));
-    final baseRect = tester.getRect(base);
-    final stageRect = tester.getRect(stage);
+    // Without pills, the gap between groups is what separates them, so it
+    // has to be generous rather than the old chip-to-chip tightness.
+    final baseRect = tester.getRect(
+      find.byKey(const ValueKey('mission-status-base')),
+    );
+    final stageRect = tester.getRect(
+      find.byKey(const ValueKey('mission-status-stage')),
+    );
     expect(
       stageRect.left - baseRect.right,
-      lessThanOrEqualTo(5),
+      greaterThanOrEqualTo(10),
       reason:
-          'Status surfaces are ${stageRect.left - baseRect.right}px '
-          'apart; the loose spacing reads as separate buttons.',
+          'Unboxed readouts ${stageRect.left - baseRect.right}px apart read '
+          'as one run-together string.',
     );
-    for (final chip in [base, stage]) {
-      final box = tester.widget<DecoratedBox>(
-        find.descendant(of: chip, matching: find.byType(DecoratedBox)).first,
-      );
-      final side = ((box.decoration as BoxDecoration).border as Border).top;
-      expect(
-        side.color.a / 255,
-        lessThan(0.25),
-        reason:
-            'Status chip border opacity ${side.color.a / 255} is as strong '
-            'as an interactive control.',
-      );
-    }
   });
 }

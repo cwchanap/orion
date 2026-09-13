@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'orion_ui_theme.dart';
+import 'orion_surface.dart';
 
-/// Rounded, translucent mission chrome primitive.
+/// Rounded mission chrome primitive.
 ///
 /// Pure presentation: no gestures, animation, painter, or semantics of its
-/// own. All colors come from [OrionUiTheme].
+/// own.
+@Deprecated(
+  'Use OrionSurface with an explicit tier. This adapter exists so the 15 '
+  'pre-Revamp call sites convert incrementally; delete it in PR D.',
+)
 class MissionSurface extends StatelessWidget {
   const MissionSurface({
     super.key,
@@ -21,40 +25,20 @@ class MissionSurface extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final double radius;
   final bool emphasized;
+
+  /// Ignored. The tier now owns all chrome; kept only so existing call
+  /// sites still compile while they convert to [OrionSurface] directly.
   final Color? backgroundColor;
+
+  /// Ignored. The tier now owns all chrome; kept only so existing call
+  /// sites still compile while they convert to [OrionSurface] directly.
   final Color? borderColor;
 
   @override
-  Widget build(BuildContext context) {
-    final theme = OrionUiTheme.of(context);
-    final sideColor =
-        borderColor ??
-        (emphasized
-            ? theme.systemCyanStrong
-            : theme.systemCyan.withValues(alpha: 0.25));
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: backgroundColor ?? theme.hullBlack.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(radius),
-        border: Border.fromBorderSide(
-          BorderSide(color: sideColor, width: emphasized ? 2 : 1),
-        ),
-        boxShadow: emphasized
-            ? [
-                BoxShadow(
-                  color: theme.systemCyanStrong.withValues(alpha: 0.25),
-                  blurRadius: 12,
-                ),
-              ]
-            : null,
-      ),
-      child: Padding(
-        padding: padding,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(radius),
-          child: child,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => OrionSurface(
+    tier: emphasized ? OrionSurfaceTier.t3 : OrionSurfaceTier.t2,
+    padding: padding,
+    radius: radius,
+    child: child,
+  );
 }

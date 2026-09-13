@@ -25,6 +25,21 @@ Future<void> loadRealFonts({bool withMaterialIcons = true}) async {
   }
   await loader.load();
 
+  for (final family in const {
+    'Oxanium': ['Oxanium[wght].ttf'],
+    'ChakraPetch': ['ChakraPetch-Bold.ttf'],
+  }.entries) {
+    final familyLoader = FontLoader(family.key);
+    for (final fileName in family.value) {
+      final file = File('assets/fonts/$fileName');
+      if (!file.existsSync()) fail('Missing project font: ${file.path}');
+      familyLoader.addFont(
+        Future.value(ByteData.view(file.readAsBytesSync().buffer)),
+      );
+    }
+    await familyLoader.load();
+  }
+
   if (!withMaterialIcons) return;
   final iconFile = File(
     '$root/bin/cache/artifacts/material_fonts/MaterialIcons-Regular.otf',

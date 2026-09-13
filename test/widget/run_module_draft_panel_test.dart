@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/orion_finders.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 
 void main() {
@@ -39,7 +41,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Salvage Module 2 of 3'), findsOneWidget);
+    expect(findOrionTitle('Salvage Module 2 of 3'), findsOneWidget);
     for (final id in offer.moduleIds) {
       final definition = runModuleDefinition(id);
       expect(find.text(definition.title), findsOneWidget);
@@ -50,7 +52,7 @@ void main() {
       find.byKey(const ValueKey('run-module-draft-frame')),
       findsOneWidget,
     );
-    expect(find.byType(CommandFrame), findsWidgets);
+    expect(find.byType(OrionSurface), findsWidgets);
 
     final semanticsHandle = tester.ensureSemantics();
     try {
@@ -89,7 +91,7 @@ void main() {
     final definition = runModuleDefinition(RunModuleId.heavyCaliber);
     expect(find.textContaining(definition.title), findsOneWidget);
     expect(find.textContaining(definition.effectText), findsOneWidget);
-    expect(find.byType(CommandFrame), findsWidgets);
+    expect(find.byType(OrionSurface), findsWidgets);
     expect(find.byType(InkResponse), findsNothing);
     expect(find.byType(Tooltip), findsNothing);
   });

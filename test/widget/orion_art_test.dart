@@ -130,4 +130,24 @@ void main() {
       expect(offenders, isEmpty);
     },
   );
+
+  test('every campaign stage has a crest descriptor', () {
+    for (final stage in OrionCampaign.stages) {
+      final crest = OrionArt.crestFor(stage);
+      expect(
+        crest.fileName,
+        'reactor_rim_ui/crests/${stage.id}.png',
+        reason: stage.id,
+      );
+      expect(crest.semanticLabel, '${stage.name} crest', reason: stage.id);
+    }
+  });
+
+  test('commandCenter scene art is registered', () {
+    expect(OrionSceneArt.values, contains(OrionSceneArt.commandCenter));
+    expect(
+      OrionArt.scene(OrionSceneArt.commandCenter).fileName,
+      'reactor_rim_ui/backdrops/command-center.png',
+    );
+  });
 }

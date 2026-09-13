@@ -4,11 +4,10 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_surface.dart';
-import 'package:orion/game/ui/orion_ui_theme.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 
 import '../support/command_deck_fixtures.dart';
 import '../support/real_fonts.dart';
@@ -370,37 +369,36 @@ void main() {
     },
   );
 
-  testWidgets('rail and tower cards use MissionSurface, not CommandFrame', (
+  testWidgets('the rail reuses its dock blur and its tiles are flat', (
     tester,
   ) async {
     await tester.pumpWidget(railHost());
 
-    expect(find.byType(CommandFrame), findsNothing);
-    // The rail shell surfaces the whole strip...
-    expect(
-      find.ancestor(
-        of: find.byKey(const ValueKey('tower-card-laser')),
-        matching: find.byType(MissionSurface),
-      ),
-      findsOneWidget,
-    );
-    // ...and each card is itself surfaced.
+    expect(find.byType(BackdropFilter), findsNothing);
+    // Each tile still carries tier chrome, but flat: blurring a child of a
+    // blurred container is the anti-pattern OrionSurface names, and eight
+    // blurred tiles are what pushed this scene past its 5-9 budget.
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('tower-card-laser')),
-        matching: find.byType(MissionSurface),
+        matching: find.byType(OrionInnerSurface),
       ),
       findsOneWidget,
     );
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('tower-card-laser')),
+        matching: find.byType(OrionSurface),
+      ),
+      findsNothing,
+    );
   });
 
-  testWidgets('idle dock is a single MissionSurface with no frame chrome', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
+  testWidgets('idle dock surfaces carry no frame chrome', (tester) async {
+    Future<void> pumpIdle(GameSnapshot snapshot) => tester.pumpWidget(
       MaterialApp(
         home: MissionCommandDock(
-          snapshot: commandDeckSnapshot(),
+          snapshot: snapshot,
           onTogglePause: () {},
           onSpeedSelected: (_) {},
           onToggleAutoStart: () {},
@@ -414,16 +412,70 @@ void main() {
       ),
     );
 
-    final surface = find.descendant(
-      of: find.byKey(const ValueKey('command-dock-idle')),
-      matching: find.byType(MissionSurface),
+    Finder surfaces() => find.descendant(
+      of: find.byType(MissionCommandDock),
+      matching: find.byType(OrionSurface),
     );
-    expect(surface, findsOneWidget);
-    // The reactor button carries its own internal octagon frames; no legacy
-    // CommandFrame chrome may wrap the idle surface itself.
+
+    // Artboard 1a's dock is two rows during build -- pacing controls, then
+    // the tower rail -- so two surfaces, not one.
+    await pumpIdle(commandDeckSnapshot());
+    expect(surfaces(), findsOneWidget);
+    final shelf = tester.widget<OrionSurface>(surfaces());
+    expect(shelf.tier, OrionSurfaceTier.t4);
+    expect(shelf.topBorderOnly, isTrue);
+    expect(shelf.radius, 0);
+    expect(find.byType(BackdropFilter), findsOneWidget);
     expect(
-      find.ancestor(of: surface, matching: find.byType(CommandFrame)),
+      find.byKey(const ValueKey('command-dock-persistent-rail')),
+      findsOneWidget,
+    );
+
+    // Once the wave is running there is nothing to build, and the dock
+    // collapses back to the single control row.
+    await pumpIdle(commandDeckSnapshot(phase: GamePhase.wave));
+    expect(surfaces(), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('command-dock-persistent-rail')),
       findsNothing,
+    );
+
+    // The invariant this test exists for: the reactor button carries its own
+    // internal octagon frames, so no OrionSurface chrome may wrap a dock
+    // surface in either state.
+    for (final element in surfaces().evaluate()) {
+      expect(
+        find.ancestor(
+          of: find.byWidget(element.widget),
+          matching: find.byType(OrionSurface),
+        ),
+        findsNothing,
+      );
+    }
+  });
+
+  testWidgets('rail cards put the cost above the name', (tester) async {
+    // The artboard's card template is icon, cost, name -- the cost is the
+    // decision, so it outranks the name. Ours had the name above a
+    // bolt-prefixed cost.
+    await tester.pumpWidget(railHost());
+
+    final card = find.byKey(const ValueKey('tower-card-laser'));
+    final cost = find.descendant(
+      of: card,
+      matching: find.text(
+        '${GameBalance.towerStats(TowerType.laser, level: 1).cost}',
+      ),
+    );
+    final name = find.descendant(
+      of: card,
+      matching: find.text(TowerType.laser.label.toUpperCase()),
+    );
+
+    expect(
+      tester.getCenter(cost).dy,
+      lessThan(tester.getCenter(name).dy),
+      reason: 'the cost does not sit above the name',
     );
   });
 
@@ -440,7 +492,7 @@ void main() {
     final fifth = tester.getRect(
       find.byKey(ValueKey('tower-card-${TowerType.values[4].name}')),
     );
-    expect(first.width, 64);
+    expect(first.width, 70); // artboard 1a's rail card
     expect(fifth.left, lessThan(375));
     expect(find.byType(Scrollable), findsWidgets);
   });
@@ -464,7 +516,7 @@ void main() {
     final first = tester.getRect(
       find.byKey(const ValueKey('tower-card-laser')),
     );
-    expect(first.width, closeTo(64 * 1.3, 0.01));
+    expect(first.width, closeTo(70 * 1.3, 0.01));
     expect(find.byType(TowerBuildRail), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -571,15 +623,15 @@ void main() {
 
     expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
     expect(find.byTooltip('Pause'), findsOneWidget);
+    // One speed button showing the current speed, not three segments.
+    expect(find.byTooltip('Game speed'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
-    expect(find.text('2x'), findsOneWidget);
-    expect(find.text('3x'), findsOneWidget);
     expect(find.byTooltip('Auto-start waves'), findsOneWidget);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
     // World Map left the dock contract; the chrome layer owns it now.
     expect(find.text('World Map'), findsNothing);
 
-    await tester.tap(find.text('2x'));
+    await tester.tap(find.byTooltip('Game speed'));
     await tester.tap(find.byTooltip('Auto-start waves'));
     await tester.tap(find.byTooltip('Start Wave'));
     // Pause is gated off during a plain build phase (no countdown, not
@@ -645,8 +697,8 @@ void main() {
       ),
     );
 
-    expect(find.text('Start Wave'), findsNothing);
-    expect(find.text('Start Now'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsNothing);
+    expect(find.byTooltip('Start Now'), findsOneWidget);
     final handle = tester.ensureSemantics();
     try {
       expect(
@@ -874,7 +926,7 @@ void main() {
     );
 
     expect(tester.takeException(), isNull);
-    expect(find.text('Start Wave'), findsOneWidget);
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
     expect(find.byTooltip('World Map'), findsOneWidget);
   });
 
@@ -924,7 +976,7 @@ void main() {
         ),
       ),
     );
-    expect(find.byKey(const ValueKey('command-dock-tower')), findsOneWidget);
+    expect(find.byKey(const ValueKey('command-dock-idle')), findsOneWidget);
 
     await tester.pumpWidget(
       dock(commandDeckSnapshot(selectedCell: const GridPosition(1, 1))),
@@ -990,46 +1042,9 @@ void main() {
       );
       await tester.pump();
 
-      final surface = find
-          .descendant(
-            of: find.byType(IdleCommandBar),
-            matching: find.byType(MissionSurface),
-          )
-          .first;
-      final dockRect = tester.getRect(surface);
-
-      // The idle dock no longer towers over the board: content row plus a
-      // reduced vertical inset.
-      expect(
-        dockRect.height,
-        lessThanOrEqualTo(80),
-        reason:
-            'Idle dock shell is ${dockRect.height}px tall; it must be a '
-            'compact strip.',
-      );
-      final surfaceWidget = tester.widget<MissionSurface>(surface);
-      final padding = surfaceWidget.padding.resolve(TextDirection.ltr);
-      expect(
-        padding.top,
-        lessThanOrEqualTo(7),
-        reason:
-            'Idle dock vertical padding ${padding.top} keeps the '
-            'shell too tall.',
-      );
-
-      // The perimeter is a soft grouping edge, not a strong cyan frame.
-      final shellBox = tester.widget<DecoratedBox>(
-        find.descendant(of: surface, matching: find.byType(DecoratedBox)).first,
-      );
-      final side =
-          ((shellBox.decoration as BoxDecoration).border as Border).top;
-      expect(
-        side.color.a / 255,
-        lessThan(0.2),
-        reason:
-            'Idle dock border opacity ${side.color.a / 255} is as strong '
-            'as the primary action; soften the grouping surface.',
-      );
+      final dockRect = tester.getRect(find.byType(IdleCommandBar));
+      expect(dockRect.height, lessThanOrEqualTo(80));
+      expect(find.byType(MissionSurface), findsNothing);
 
       // Start Wave is the dominant, wide, filled action: 48-56dp tall,
       // clearly wider than a quarter of the dock, filled cyan with dark
@@ -1052,21 +1067,21 @@ void main() {
             'Start Wave width ${startRect.width} must dominate the dock '
             'action row.',
       );
-      final fill = tester.widget<Material>(
+      final fill = tester.widget<DecoratedBox>(
         find
             .descendant(
               of: find.byTooltip('Start Wave'),
-              matching: find.byType(Material),
+              matching: find.byType(DecoratedBox),
             )
             .first,
       );
-      expect(
-        fill.color,
-        OrionUiTheme.dark.systemCyan,
-        reason:
-            'Start Wave must be a filled cyan action, not an outlined '
-            'frame.',
-      );
+      final gradient =
+          (fill.decoration as BoxDecoration).gradient! as LinearGradient;
+      expect(gradient.colors, const [
+        Color(0xFF7FF0FF),
+        Color(0xFF13B8E6),
+        Color(0xFF0A7EA3),
+      ]);
     },
   );
 }

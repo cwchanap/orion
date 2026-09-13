@@ -20,7 +20,8 @@ void main() {
 
     expect(rects.values, hasLength(5));
     for (final rect in rects.values) {
-      expect(rect.size, const Size(56, 80));
+      expect(rect.width, closeTo(72, 0.001));
+      expect(rect.height, closeTo(94, 0.001));
       expect(rect.left, greaterThanOrEqualTo(0));
       expect(rect.top, greaterThanOrEqualTo(0));
       expect(rect.right, lessThanOrEqualTo(size.width));
@@ -108,26 +109,33 @@ void main() {
   });
 
   test(
-    'nodeRect floors the horizontal step at nodeSize.width and overflows when '
-    'the viewport is too narrow, while the vertical step still clamps to zero',
+    'compact viewports retain a scrollable, non-overlapping portrait map',
     () {
-      const tinySize = Size(50, 100);
       final layout = SectorMapLayout.fromStages(
         stages: OrionCampaign.stages,
-        size: tinySize,
+        size: const Size(280, 568),
       );
-      final rect = layout.nodeRect(OrionCampaign.stages.last);
-      // Vertical span is constrained, so yStep clamps to zero and the row
-      // collapses to plotTop.
-      expect(rect.top, SectorMapLayout.plotTop);
-      expect(rect.size, const Size(56, 80));
-      // Horizontal step floors at nodeSize.width so neighbors never overlap;
-      // the last stage sits at column 4, so its left is hPad + 4 * nodeWidth.
-      expect(
-        rect.left,
-        SectorMapLayout.horizontalPadding + 4 * SectorMapLayout.nodeSize.width,
-      );
-      expect(layout.plotContentWidth, greaterThan(tinySize.width));
+      final rects = OrionCampaign.stages.map(layout.nodeRect).toList();
+      expect(layout.plotContentWidth, 360);
+      expect(layout.plotContentHeight, 740);
+      for (var i = 0; i < rects.length; i++) {
+        for (var j = i + 1; j < rects.length; j++) {
+          expect(rects[i].overlaps(rects[j]), isFalse);
+        }
+      }
     },
   );
+
+  test('the main route climbs from Alpha to Singularity as in scene 1f', () {
+    final layout = SectorMapLayout.fromStages(
+      stages: OrionCampaign.stages,
+      size: const Size(393, 852),
+    );
+    final main = OrionCampaign.mainStages.map(layout.nodeRect).toList();
+    for (var i = 1; i < main.length; i++) {
+      expect(main[i].top, lessThan(main[i - 1].top));
+    }
+    expect(main[2].center.dx, lessThan(main[1].center.dx));
+    expect(main[3].center.dx, greaterThan(main[2].center.dx));
+  });
 }

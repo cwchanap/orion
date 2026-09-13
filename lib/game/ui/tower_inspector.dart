@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import '../util/format.dart';
-import 'mission_surface.dart';
+import 'orion_surface.dart';
+import 'hold_to_salvage.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'tower_stat_scale.dart';
 
@@ -18,6 +20,7 @@ class TowerInspector extends StatelessWidget {
     required this.onTargetingChanged,
     required this.onSell,
     required this.sellRefund,
+    this.onClose,
   });
 
   final GameSnapshot snapshot;
@@ -26,33 +29,66 @@ class TowerInspector extends StatelessWidget {
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
   final VoidCallback onSell;
   final int sellRefund;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
     final tower = snapshot.selectedTower;
     if (tower == null) return const SizedBox.shrink();
 
-    final maxHeight = math.min(210.0, MediaQuery.sizeOf(context).height * 0.31);
-    return Align(
-      alignment: Alignment.topCenter,
-      child: MissionSurface(
-        child: SizedBox(
-          key: const ValueKey('tower-inspector'),
-          width: double.infinity,
-          height: maxHeight,
-          child: Material(
-            color: Colors.transparent,
-            child: SingleChildScrollView(
-              key: const ValueKey('tower-inspector-scroll'),
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: _InspectorBody(
-                snapshot: snapshot,
-                tower: tower,
-                onUpgrade: onUpgrade,
-                onSpecialize: onSpecialize,
-                onTargetingChanged: onTargetingChanged,
-                onSell: onSell,
-                sellRefund: sellRefund,
+    final maxHeight = math.min(600.0, MediaQuery.sizeOf(context).height * .72);
+    return FocusScope(
+      autofocus: true,
+      child: Align(
+        alignment: Alignment.bottomCenter,
+        child: OrionSurface(
+          tier: OrionSurfaceTier.t3,
+          radius: 26,
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+          child: SizedBox(
+            key: const ValueKey('tower-inspector'),
+            width: double.infinity,
+            height: maxHeight,
+            child: Material(
+              color: Colors.transparent,
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      const SizedBox(width: 48),
+                      const Spacer(),
+                      Container(
+                        width: 44,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: OrionUiTheme.of(context).frameSteel,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        autofocus: true,
+                        tooltip: 'Close tower inspector',
+                        onPressed: onClose,
+                        icon: const Icon(Icons.close, size: 18),
+                      ),
+                    ],
+                  ),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      key: const ValueKey('tower-inspector-scroll'),
+                      child: _InspectorBody(
+                        snapshot: snapshot,
+                        tower: tower,
+                        onUpgrade: onUpgrade,
+                        onSpecialize: onSpecialize,
+                        onTargetingChanged: onTargetingChanged,
+                        onSell: onSell,
+                        sellRefund: sellRefund,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -97,8 +133,8 @@ class _InspectorBody extends StatelessWidget {
           children: [
             Container(
               key: const ValueKey('tower-inspector-hero'),
-              width: 72,
-              height: 72,
+              width: 96,
+              height: 96,
               padding: const EdgeInsets.all(6),
               decoration: BoxDecoration(
                 color: uiTheme.panelRaised,
@@ -109,7 +145,7 @@ class _InspectorBody extends StatelessWidget {
               ),
               child: OrionAtlasSprite(
                 art: OrionArt.tower(tower.type),
-                size: const Size(58, 58),
+                size: const Size(78, 78),
               ),
             ),
             const SizedBox(width: 8),
@@ -118,110 +154,99 @@ class _InspectorBody extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    '${tower.type.label} Tower',
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: uiTheme.textPrimary,
-                      fontWeight: FontWeight.w900,
-                    ),
+                  OrionTitle(
+                    tower.type.label,
+                    size: 22,
+                    color: uiTheme.textPrimary,
                   ),
                   const SizedBox(height: 2),
-                  Text(
+                  OrionText.micro(
                     tower.specialization == null
                         ? 'Level ${tower.level}'
                         : 'Level ${tower.level} • '
                               '${tower.specialization!.label}',
-                    style: Theme.of(
-                      context,
-                    ).textTheme.labelMedium?.copyWith(color: uiTheme.textMuted),
+                    color: uiTheme.textMuted,
+                    size: 9,
                   ),
                 ],
               ),
             ),
           ],
         ),
-        const SizedBox(height: 3),
+        const SizedBox(height: 12),
         _TargetingActions(
           tower: tower,
           canMutate: canMutate,
           onTargetingChanged: onTargetingChanged,
         ),
-        const SizedBox(height: 3),
-        Wrap(
-          spacing: 6,
-          runSpacing: 4,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            _ProgressionActions(
-              snapshot: snapshot,
-              tower: tower,
-              stats: stats,
-              canMutate: canMutate,
-              onUpgrade: onUpgrade,
-              onSpecialize: onSpecialize,
-            ),
-            Semantics(
-              key: const ValueKey('tower-sell-semantics'),
-              button: true,
-              enabled: canMutate,
-              label: 'Sell $sellRefund',
-              onTap: canMutate ? onSell : null,
-              excludeSemantics: true,
-              child: OutlinedButton.icon(
-                key: const ValueKey('tower-sell'),
-                onPressed: canMutate ? onSell : null,
-                icon: const Icon(Icons.sell_outlined, size: 17),
-                label: Text('Sell $sellRefund'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: uiTheme.dangerRed,
-                  side: BorderSide(
-                    color: uiTheme.dangerRed.withValues(alpha: 0.7),
-                  ),
+        if (stats != null) ...[
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _StatRow(
+                  key: const ValueKey('tower-stat-damage'),
+                  label: 'Damage',
+                  value: number(stats.damage),
+                  fill: scale.damageFill(stats),
+                  accent: uiTheme.dangerRed,
                 ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 3),
-        const Divider(height: 1),
-        if (stats != null) ...[
-          const SizedBox(height: 7),
-          _StatRow(
-            key: const ValueKey('tower-stat-damage'),
-            label: 'Damage',
-            value: number(stats.damage),
-            fill: scale.damageFill(stats),
-            accent: uiTheme.dangerRed,
+              Expanded(
+                child: _StatRow(
+                  key: const ValueKey('tower-stat-fire'),
+                  label: 'Fire',
+                  value: '${cadence(stats.fireInterval)}s',
+                  fill: scale.fireFill(stats),
+                  accent: uiTheme.creditGold,
+                ),
+              ),
+              Expanded(
+                child: _StatRow(
+                  key: const ValueKey('tower-stat-range'),
+                  label: 'Range',
+                  value: number(stats.range),
+                  fill: scale.rangeFill(stats),
+                  accent: uiTheme.systemCyan,
+                ),
+              ),
+              if (scale.secondaryMetric case final metric?)
+                Expanded(
+                  child: _StatRow(
+                    key: const ValueKey('tower-stat-secondary'),
+                    label: _secondaryLabel(metric),
+                    value: _secondaryValue(metric, stats),
+                    fill: scale.secondaryFill(stats) ?? 0,
+                    accent: uiTheme.systemViolet,
+                  ),
+                ),
+            ],
           ),
-          _StatRow(
-            key: const ValueKey('tower-stat-fire'),
-            label: 'Fire',
-            value: '${cadence(stats.fireInterval)}s',
-            fill: scale.fireFill(stats),
-            accent: uiTheme.warningOrange,
-          ),
-          _StatRow(
-            key: const ValueKey('tower-stat-range'),
-            label: 'Range',
-            value: number(stats.range),
-            fill: scale.rangeFill(stats),
-            accent: uiTheme.systemCyan,
-          ),
-          if (scale.secondaryMetric case final metric?)
-            _StatRow(
-              key: const ValueKey('tower-stat-secondary'),
-              label: _secondaryLabel(metric),
-              value: _secondaryValue(metric, stats),
-              fill: scale.secondaryFill(stats) ?? 0,
-              accent: uiTheme.systemViolet,
-            ),
         ],
+        const SizedBox(height: 20),
+        _ProgressionActions(
+          snapshot: snapshot,
+          tower: tower,
+          stats: stats,
+          canMutate: canMutate,
+          onUpgrade: onUpgrade,
+          onSpecialize: onSpecialize,
+        ),
+        const SizedBox(height: 16),
+        HoldToSalvage(
+          key: ValueKey('salvage-${tower.id}'),
+          refund: sellRefund,
+          onSell: canMutate ? onSell : null,
+        ),
       ],
     );
   }
 
   static String _secondaryLabel(TowerSecondaryMetric metric) =>
       switch (metric) {
+        TowerSecondaryMetric.chainCount => 'Chain',
+        TowerSecondaryMetric.pierceCount => 'Pierce',
         TowerSecondaryMetric.slowDuration => 'Slow',
         TowerSecondaryMetric.splashRadius => 'Splash',
         TowerSecondaryMetric.corrosionDamagePerSecond => 'Corrosion',
@@ -232,6 +257,8 @@ class _InspectorBody extends StatelessWidget {
     final value = number(metric.valueOf(stats));
     return switch (metric) {
       TowerSecondaryMetric.slowDuration => '${value}s',
+      TowerSecondaryMetric.chainCount ||
+      TowerSecondaryMetric.pierceCount ||
       TowerSecondaryMetric.splashRadius => value,
       TowerSecondaryMetric.corrosionDamagePerSecond => '$value/s',
       TowerSecondaryMetric.droneDamage => value,
@@ -261,47 +288,47 @@ class _StatRow extends StatelessWidget {
       readOnly: true,
       container: true,
       excludeSemantics: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Row(
-          children: [
-            SizedBox(
-              width: 76,
-              child: Text(
-                label,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: uiTheme.textMuted,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-            Expanded(
-              child: ExcludeSemantics(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(
+      child: Column(
+        children: [
+          SizedBox.square(
+            dimension: 58,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned.fill(
+                  child: CircularProgressIndicator(
                     value: fill,
-                    minHeight: 8,
-                    backgroundColor: uiTheme.frameSteel.withValues(alpha: 0.35),
-                    valueColor: AlwaysStoppedAnimation<Color>(accent),
+                    strokeWidth: 7,
+                    backgroundColor: uiTheme.frameSteel.withValues(alpha: .5),
+                    color: accent,
                   ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 7),
-            SizedBox(
-              width: 54,
-              child: Text(
-                value,
-                textAlign: TextAlign.end,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w800,
+                Padding(
+                  padding: const EdgeInsets.all(6),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      value,
+                      style: OrionTypography.readout(
+                        size: 16,
+                        color: uiTheme.textPrimary,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            label.toUpperCase(),
+            textAlign: TextAlign.center,
+            style: OrionTypography.microLabel(
+              size: 8,
+              color: uiTheme.textMuted,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -365,12 +392,10 @@ class _ProgressionActions extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
+        OrionText.micro(
           'SPECIALIZE - LV ${tower.level + 1}',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: uiTheme.textMuted,
-            fontWeight: FontWeight.w800,
-          ),
+          color: uiTheme.textMuted,
+          size: 11,
         ),
         const SizedBox(height: 6),
         Row(
@@ -427,7 +452,7 @@ class _SpecializationCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: enabled ? () => onSpecialize(specialization) : null,
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
           decoration: BoxDecoration(
             color: uiTheme.panelRaised.withValues(alpha: 0.9),
             borderRadius: BorderRadius.circular(12),
@@ -441,8 +466,8 @@ class _SpecializationCard extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               OrionAtlasSprite(
-                art: OrionArt.tower(towerType),
-                size: const Size(44, 44),
+                art: OrionArt.specialization(specialization),
+                size: const Size(62, 62),
               ),
               const SizedBox(height: 6),
               Text(
@@ -450,18 +475,18 @@ class _SpecializationCard extends StatelessWidget {
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: uiTheme.textPrimary,
-                  fontWeight: FontWeight.w800,
+                style: OrionTypography.microLabel(
+                  size: 11,
+                  color: uiTheme.systemViolet,
                 ),
               ),
               const SizedBox(height: 2),
               if (cost != null)
                 Text(
                   '$cost',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  style: OrionTypography.readout(
+                    size: 16,
                     color: uiTheme.creditGold,
-                    fontWeight: FontWeight.w900,
                   ),
                 ),
             ],
@@ -490,13 +515,7 @@ class _TargetingActions extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'Targeting',
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(
-            color: uiTheme.textMuted,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        OrionText.micro('Targeting', color: uiTheme.textMuted, size: 11),
         const SizedBox(height: 4),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,

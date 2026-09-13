@@ -3,13 +3,14 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import 'mission_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 class CommandToast extends StatefulWidget {
   const CommandToast({
     super.key,
     required this.feedback,
-    this.visibleDuration = const Duration(milliseconds: 2400),
+    this.visibleDuration = orionHullPulseDuration,
   });
 
   final String? feedback;
@@ -174,7 +175,6 @@ class _CommandToastMessageState extends State<_CommandToastMessage> {
       key: const ValueKey('command-toast'),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       radius: 12,
-      borderColor: widget.toneColor,
       emphasized: true,
       child: _renderText
           ? Semantics(
@@ -187,10 +187,7 @@ class _CommandToastMessageState extends State<_CommandToastMessage> {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 textScaler: widget.textScaler,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: widget.toneColor,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: OrionTypography.microLabel(color: widget.toneColor),
               ),
             )
           : const SizedBox.shrink(),

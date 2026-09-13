@@ -6,11 +6,13 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/stage_briefing_sheet.dart';
 
+import '../support/orion_finders.dart';
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
@@ -79,7 +81,7 @@ Future<_PopRecorder> _pumpBriefing(
 }
 
 void _expectActionWithinViewport(WidgetTester tester, Size viewport) {
-  final action = find.text('Start Mission');
+  final action = find.byTooltip('Start Mission');
   expect(action, findsOneWidget);
   tester.ensureVisible(action);
   final rect = tester.getRect(action);
@@ -93,7 +95,7 @@ void _expectActionWithinViewport(WidgetTester tester, Size viewport) {
 /// the tree with a clean Navigator (identical widget shape would otherwise
 /// update in place and keep the old modal route open).
 Future<void> _dismissBriefing(WidgetTester tester) async {
-  await tester.tap(find.text('Dismiss'));
+  await tester.tap(find.byTooltip('Dismiss'));
   await tester.pumpAndSettle();
 }
 
@@ -107,7 +109,14 @@ void main() {
     expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
 
     // The hero consumes the briefingWide descriptor for the stage.
-    final hero = find.byType(OrionAtlasSprite);
+    final hero = find.byWidgetPredicate(
+      (widget) =>
+          widget is OrionAtlasSprite &&
+          identical(
+            widget.art,
+            OrionArt.stage(stage, crop: OrionStageArtCrop.briefingWide),
+          ),
+    );
     expect(hero, findsOneWidget);
     final sprite = tester.widget<OrionAtlasSprite>(hero);
     expect(
@@ -122,14 +131,16 @@ void main() {
     final sheetRect = tester.getRect(
       find.byKey(const ValueKey('stage-briefing')),
     );
-    final heroRect = tester.getRect(hero);
+    final heroRect = tester.getRect(
+      find.ancestor(of: hero, matching: find.byType(ClipRect)).first,
+    );
     expect(heroRect.left, sheetRect.left);
     expect(heroRect.top, sheetRect.top);
     expect(heroRect.width, sheetRect.width);
 
     // No framed inset around the image.
     expect(
-      find.ancestor(of: hero, matching: find.byType(CommandFrame)),
+      find.ancestor(of: hero, matching: find.byType(OrionSurface)),
       findsNothing,
     );
     expect(tester.takeException(), isNull);
@@ -139,7 +150,7 @@ void main() {
     tester,
   ) async {
     await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
-    expect(find.text(OrionCampaign.stageOne.name), findsOneWidget);
+    expect(findOrionTitle(OrionCampaign.stageOne.name), findsOneWidget);
     expect(find.text('PRIMARY'), findsOneWidget);
 
     final optional = OrionCampaign.stages.firstWhere(
@@ -147,7 +158,7 @@ void main() {
     );
     await _dismissBriefing(tester);
     await _pumpBriefing(tester, stage: optional);
-    expect(find.text(optional.name), findsOneWidget);
+    expect(findOrionTitle(optional.name), findsOneWidget);
     expect(find.text('OPTIONAL'), findsOneWidget);
   });
 
@@ -214,19 +225,31 @@ void main() {
   testWidgets('conditions use real stage modifier titles or standard copy', (
     tester,
   ) async {
+    // The lead modifier's name now sits in the fact-row tile, which shows
+    // caps and keeps the real copy as its semantics label; its effect sits
+    // under the row. Both must still be reachable.
     await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
-    expect(find.text('Standard Conditions'), findsOneWidget);
-    expect(find.text('No environmental modifiers'), findsOneWidget);
+    final semanticsHandle = tester.ensureSemantics();
+    try {
+      expect(find.bySemanticsLabel('Standard Conditions'), findsOneWidget);
+      expect(find.text('No environmental modifiers'), findsOneWidget);
 
-    final modified = OrionCampaign.stages.firstWhere(
-      (stage) => stage.modifiers.isNotEmpty,
-    );
-    await _dismissBriefing(tester);
-    await _pumpBriefing(tester, stage: modified);
-    for (final modifier in modified.modifiers) {
-      final metadata = StageModifierMetadata.forModifier(modifier);
-      expect(find.text(metadata.title), findsOneWidget);
-      expect(find.text(metadata.description), findsOneWidget);
+      final modified = OrionCampaign.stages.firstWhere(
+        (stage) => stage.modifiers.isNotEmpty,
+      );
+      await _dismissBriefing(tester);
+      await _pumpBriefing(tester, stage: modified);
+      for (final modifier in modified.modifiers) {
+        final metadata = StageModifierMetadata.forModifier(modifier);
+        expect(
+          find.bySemanticsLabel(metadata.title),
+          findsOneWidget,
+          reason: '${metadata.title} is not announced anywhere in the briefing',
+        );
+        expect(find.text(metadata.description), findsOneWidget);
+      }
+    } finally {
+      semanticsHandle.dispose();
     }
   });
 
@@ -277,10 +300,10 @@ void main() {
   ) async {
     final recorder = await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
 
-    expect(find.text('Start Mission'), findsOneWidget);
-    expect(find.text('Replay Mission'), findsNothing);
+    expect(find.byTooltip('Start Mission'), findsOneWidget);
+    expect(find.byTooltip('Replay Mission'), findsNothing);
 
-    await tester.tap(find.text('Start Mission'));
+    await tester.tap(find.byTooltip('Start Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -292,10 +315,10 @@ void main() {
       result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
     );
 
-    expect(find.text('Replay Mission'), findsOneWidget);
-    expect(find.text('Start Mission'), findsNothing);
+    expect(find.byTooltip('Replay Mission'), findsOneWidget);
+    expect(find.byTooltip('Start Mission'), findsNothing);
 
-    await tester.tap(find.text('Replay Mission'));
+    await tester.tap(find.byTooltip('Replay Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
   });
@@ -303,7 +326,7 @@ void main() {
   testWidgets('dismiss path never pops true', (tester) async {
     final recorder = await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
 
-    await tester.tap(find.text('Dismiss'));
+    await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isNot(true));
   });
@@ -321,7 +344,7 @@ void main() {
         _expectActionWithinViewport(tester, viewport);
         expect(tester.takeException(), isNull);
 
-        await tester.tap(find.text('Dismiss'));
+        await tester.tap(find.byTooltip('Dismiss'));
         await tester.pumpAndSettle();
       }
     },
@@ -346,10 +369,60 @@ void main() {
       disableAnimations: true,
     );
 
-    expect(find.text('Start Mission'), findsOneWidget);
-    await tester.tap(find.text('Start Mission'));
+    expect(find.byTooltip('Start Mission'), findsOneWidget);
+    await tester.tap(find.byTooltip('Start Mission'));
     await tester.pumpAndSettle();
     expect(recorder.popped, isTrue);
+  });
+
+  group('artboard 1b fact row', () {
+    testWidgets('is four tiles: waves, hull, start, and the modifier', (
+      tester,
+    ) async {
+      await _pumpBriefing(tester, stage: OrionCampaign.stages.first);
+
+      final row = find.byKey(const ValueKey('briefing-facts'));
+      expect(row, findsOneWidget);
+      for (final label in ['WAVES', 'HULL', 'START', 'MODIFIER']) {
+        expect(
+          find.descendant(of: row, matching: find.text(label)),
+          findsOneWidget,
+          reason: 'the fact row is missing its $label tile',
+        );
+      }
+      expect(find.byKey(const ValueKey('briefing-modifier')), findsOneWidget);
+    });
+
+    testWidgets('renders the START figure in credit gold', (tester) async {
+      // The tile took a `color` and never read it, so START arrived as
+      // creditGold and rendered white with the rest. Assert the figure, not
+      // the argument.
+      await _pumpBriefing(tester, stage: OrionCampaign.stages.first);
+
+      final figure = tester.widget<Text>(
+        find.text('${GameBalance.startingGold}'),
+      );
+
+      expect(
+        figure.style!.color!.toARGB32(),
+        OrionUiTheme.dark.creditGold.toARGB32(),
+      );
+    });
+
+    testWidgets('fits four tiles at product width and 2x text scale', (
+      tester,
+    ) async {
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stages.first,
+        textScaler: const TextScaler.linear(2),
+      );
+
+      final row = tester.getRect(find.byKey(const ValueKey('briefing-facts')));
+      expect(row.left, greaterThanOrEqualTo(0));
+      expect(row.right, lessThanOrEqualTo(_productViewport.width));
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('capture scene 1b fixture', (tester) async {
@@ -361,19 +434,28 @@ void main() {
     // committed result), real fonts so the evidence shows true text metrics
     // rather than Ahem blocks.
     await loadRealFonts();
+    // The memo can hold a pending future from an earlier cold-cache test
+    // in this process; clear it so this fixture's warmed cache is used.
+    OrionArtDescriptor.resetSpriteCache();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same key the OrionArt descriptors use) so the hero art renders.
-    await tester.runAsync(
-      () => Flame.images.load(
+    await tester.runAsync(() async {
+      await Flame.images.load(
         'reactor_rim_ui/stages/${OrionCampaign.stageOne.id}.png',
-      ),
-    );
+      );
+      await Flame.images.load('orion_sprite_sheet.png');
+      await Flame.images.load('orion_tower_variety_sheet.png');
+    });
     final boundaryKey = GlobalKey();
     await tester.pumpWidget(
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          // The product app hides this banner; a fixture host must too, or the
+          // parity evidence carries a stripe the shipped game never shows.
+          debugShowCheckedModeBanner: false,
+          theme: orionThemeData,
           home: Scaffold(
             backgroundColor: const Color(0xFF05080D),
             body: StageBriefingSheet(
@@ -387,6 +469,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/images/reactor_rim_ui/boards/nebula.png'),
+        tester.element(find.byType(StageBriefingSheet)),
+      ),
+    );
+    await tester.pump();
 
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.

@@ -3,11 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
-import 'package:orion/game/ui/orion_ui_theme.dart';
+import 'package:orion/game/ui/orion_surface.dart';
+import '../support/orion_finders.dart';
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
@@ -39,10 +40,10 @@ void main() {
         matching: find.byType(IconButton),
       ),
     );
-    final mapButton = tester.widget<IconButton>(
+    final mapButton = tester.widget<TextButton>(
       find.descendant(
         of: find.byTooltip('World Map'),
-        matching: find.byType(IconButton),
+        matching: find.byType(TextButton),
       ),
     );
     expect(replayButton.onPressed, isNull);
@@ -111,7 +112,7 @@ void main() {
       onReturnToMap: () => returned = true,
     );
 
-    expect(find.text('Mission Failed'), findsOneWidget);
+    expect(find.text('MISSION FAILED'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('World Map'), findsOneWidget);
 
@@ -135,6 +136,7 @@ void main() {
     );
 
     final definition = runModuleDefinition(RunModuleId.heavyCaliber);
+    await _openDetails(tester);
     expect(find.textContaining(definition.title), findsOneWidget);
     expect(find.textContaining(definition.effectText), findsOneWidget);
   });
@@ -146,6 +148,7 @@ void main() {
     // leaves the Salvage Modules section blank.
     await _pumpPanel(tester, _victoryContent(MissionSaveState.saved));
 
+    await _openDetails(tester);
     expect(find.text('No Salvage Modules acquired'), findsOneWidget);
   });
 
@@ -165,6 +168,7 @@ void main() {
       ),
     );
 
+    await _openDetails(tester);
     expect(find.text('Blueprint fragment'), findsOneWidget);
     expect(find.text('Unlocks a new blueprint after saving.'), findsOneWidget);
   });
@@ -197,10 +201,10 @@ void main() {
           matching: find.byType(IconButton),
         ),
       );
-      final mapButton = tester.widget<IconButton>(
+      final mapButton = tester.widget<TextButton>(
         find.descendant(
           of: find.byTooltip('World Map'),
-          matching: find.byType(IconButton),
+          matching: find.byType(TextButton),
         ),
       );
       expect(replayButton.onPressed, isNull);
@@ -250,7 +254,7 @@ void main() {
     final mapRect = tester.getRect(
       find.descendant(
         of: find.byTooltip('World Map'),
-        matching: find.byType(IconButton),
+        matching: find.byType(TextButton),
       ),
     );
     expect(replayRect.top, greaterThanOrEqualTo(0));
@@ -283,6 +287,7 @@ void main() {
     );
 
     // Debrief-hall backdrop + readability scrim, art cover-fit under the scrim.
+    await _openDetails(tester);
     expect(
       find.byKey(const ValueKey('mission-report-backdrop')),
       findsOneWidget,
@@ -291,9 +296,8 @@ void main() {
       of: find.byKey(const ValueKey('mission-report-backdrop')),
       matching: find.byWidgetPredicate(
         (widget) =>
-            widget is OrionAtlasSprite &&
-            widget.art.fileName ==
-                'reactor_rim_ui/backdrops/mission-report-debrief.png',
+            widget is Image &&
+            widget.key == const ValueKey('mission-report-backdrop-art'),
       ),
     );
     expect(backdropArt, findsOneWidget);
@@ -322,22 +326,15 @@ void main() {
     expect(_resultArt('reactor_rim_ui/results/victory.png'), findsOneWidget);
     expect(_resultArt('reactor_rim_ui/results/defeat.png'), findsNothing);
 
-    // Medal glyph/color derives from the real StageResult.medal: gold rank 3.
-    expect(find.byIcon(Icons.workspace_premium), findsNWidgets(3));
-    final glyph = tester.widget<Icon>(
-      find.byIcon(Icons.workspace_premium).first,
-    );
-    expect(glyph.color, OrionUiTheme.dark.creditGold);
-
-    // Stage identity, real base-health result, comparison copy, save state.
-    expect(find.text('Victory'), findsOneWidget);
-    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('SECTOR SECURED'), findsOneWidget);
+    expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('Gold medal • Base 20/20'), findsOneWidget);
     expect(find.text('New first-clear result'), findsOneWidget);
     expect(find.text('Saved.'), findsOneWidget);
 
     // Module content/count and reward as subordinate sections.
-    expect(find.text('Salvage Modules · 1'), findsOneWidget);
+    expect(find.textContaining('Heavy Caliber'), findsOneWidget);
     expect(
       find.textContaining(runModuleDefinition(RunModuleId.heavyCaliber).title),
       findsOneWidget,
@@ -363,6 +360,7 @@ void main() {
       onReturnToMap: () => returned = true,
     );
 
+    await _openDetails(tester);
     expect(
       find.byKey(const ValueKey('mission-report-result-art')),
       findsOneWidget,
@@ -370,8 +368,8 @@ void main() {
     expect(_resultArt('reactor_rim_ui/results/defeat.png'), findsOneWidget);
     expect(_resultArt('reactor_rim_ui/results/victory.png'), findsNothing);
     expect(find.byIcon(Icons.workspace_premium), findsNothing);
-    expect(find.text('Mission Failed'), findsOneWidget);
-    expect(find.text('Outpost Alpha'), findsOneWidget);
+    expect(find.text('MISSION FAILED'), findsOneWidget);
+    expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('Reached Wave 5/8'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('World Map'), findsOneWidget);
@@ -409,6 +407,9 @@ void main() {
     // + reward, Replay/World Map actions. Real Roboto + Material icons so the
     // evidence shows true text metrics.
     await loadRealFonts();
+    // The memo can hold a pending future from an earlier cold-cache test
+    // in this process; clear it so this fixture's warmed cache is used.
+    OrionArtDescriptor.resetSpriteCache();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same keys the OrionArt descriptors use) so the art renders.
@@ -417,6 +418,7 @@ void main() {
         'reactor_rim_ui/backdrops/mission-report-debrief.png',
       );
       await Flame.images.load('reactor_rim_ui/results/victory.png');
+      await Flame.images.load('orion_tower_variety_sheet.png');
     });
 
     final boundaryKey = GlobalKey();
@@ -424,6 +426,10 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          // The product app hides this banner; a fixture host must too, or the
+          // parity evidence carries a stripe the shipped game never shows.
+          debugShowCheckedModeBanner: false,
+          theme: orionThemeData,
           home: Scaffold(
             body: MissionReportPanel(
               content: _victoryContent(
@@ -460,26 +466,71 @@ void main() {
       findsOneWidget,
     );
     expect(_resultArt('reactor_rim_ui/results/victory.png'), findsOneWidget);
-    expect(find.text('Victory'), findsOneWidget);
-    expect(find.text('Outpost Alpha'), findsOneWidget);
-    expect(find.text('Gold medal • Base 20/20'), findsOneWidget);
+    expect(find.text('SECTOR SECURED'), findsOneWidget);
+    expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('New first-clear result'), findsOneWidget);
     expect(find.text('Saved.'), findsOneWidget);
-    expect(find.text('Salvage Modules · 2'), findsOneWidget);
-    expect(find.text('Blueprint fragment'), findsOneWidget);
     expect(find.text('Replay Mission'), findsOneWidget);
     expect(find.text('World Map'), findsOneWidget);
 
+    await tester.runAsync(
+      () => warmSceneImages(tester.element(find.byType(MissionReportPanel)), [
+        'reactor_rim_ui/backdrops/mission-report-debrief.png',
+        'reactor_rim_ui/results/victory.png',
+      ]),
+    );
+    await tester.pump();
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.
     await tester.runAsync(
       () => captureReactorRimFixture(boundaryKey, 'fixture-1h.png'),
     );
+    for (final variant in {
+      'loss': _lossContent(),
+      'saving': _victoryContent(MissionSaveState.saving),
+      'failed': _victoryContent(MissionSaveState.failed),
+    }.entries) {
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: orionThemeData,
+            home: Scaffold(
+              body: MissionReportPanel(
+                content: variant.value,
+                onReplay: () {},
+                onReturnToMap: () {},
+                onRetrySave: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.runAsync(
+        () => warmSceneImages(tester.element(find.byType(MissionReportPanel)), [
+          'reactor_rim_ui/backdrops/mission-report-debrief.png',
+          'reactor_rim_ui/results/defeat.png',
+          'reactor_rim_ui/results/victory.png',
+        ]),
+      );
+      await tester.pump(const Duration(seconds: 1));
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundaryKey,
+          'fixture-1h-${variant.key}.png',
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    }
   });
 }
 
 Finder _resultArt(String fileName) => find.byWidgetPredicate(
-  (widget) => widget is OrionAtlasSprite && widget.art.fileName == fileName,
+  (widget) =>
+      widget is Image &&
+      widget.image is AssetImage &&
+      (widget.image as AssetImage).assetName == 'assets/images/$fileName',
 );
 
 Future<void> _pumpPanel(
@@ -510,7 +561,7 @@ Future<void> _pumpPanel(
     ),
   );
 
-  expect(find.byType(CommandFrame), findsWidgets);
+  expect(find.byType(OrionSurface), findsWidgets);
 }
 
 GameSnapshot _syntheticSnapshot({
@@ -549,6 +600,7 @@ MissionReportContent _victoryContent(
 
 MissionReportContent _victoryContentNullSaveState() {
   return MissionReportContent(
+    snapshot: _syntheticSnapshot(),
     stageId: 'outpost-alpha',
     stageName: 'Outpost Alpha',
     didWin: true,
@@ -571,4 +623,11 @@ MissionReportContent _lossContent() {
       waveNumber: 5,
     ),
   );
+}
+
+Future<void> _openDetails(WidgetTester tester) async {
+  final details = find.text('MISSION DETAILS');
+  await tester.ensureVisible(details);
+  await tester.tap(details);
+  await tester.pumpAndSettle();
 }

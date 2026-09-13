@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/orion_finders.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
@@ -20,7 +22,7 @@ void main() {
     );
 
     expect(game!.snapshot.phase, GamePhase.build);
-    expect(find.text('Sell 35'), findsOneWidget);
+    expect(find.text('+35'), findsOneWidget);
   });
 
   testWidgets('Sell button is enabled during build phase', (tester) async {
@@ -33,10 +35,10 @@ void main() {
       ),
     );
 
-    final sellButton = tester.widget<OutlinedButton>(
-      find.byKey(const ValueKey('tower-sell')),
+    final sellButton = tester.widget<Semantics>(
+      find.byKey(const ValueKey('tower-sell-semantics')),
     );
-    expect(sellButton.onPressed, isNotNull);
+    expect(sellButton.properties.enabled, isTrue);
   });
 
   testWidgets('Sell button is disabled during an active wave', (tester) async {
@@ -50,10 +52,10 @@ void main() {
       phase: GamePhase.wave,
     );
 
-    final sellButton = tester.widget<OutlinedButton>(
-      find.byKey(const ValueKey('tower-sell')),
+    final sellButton = tester.widget<Semantics>(
+      find.byKey(const ValueKey('tower-sell-semantics')),
     );
-    expect(sellButton.onPressed, isNull);
+    expect(sellButton.properties.enabled, isFalse);
   });
 
   testWidgets('tapping Sell invokes game.sellSelectedTower', (tester) async {
@@ -67,7 +69,12 @@ void main() {
     );
 
     await tester.ensureVisible(find.byKey(const ValueKey('tower-sell')));
-    await tester.tap(find.byKey(const ValueKey('tower-sell')));
+    final hold = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('tower-sell'))),
+    );
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump(const Duration(milliseconds: 900));
+    await hold.up();
     await tester.pump();
 
     // The faked snapshot has a selectedTower but the real session has none, so
@@ -91,7 +98,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Sell 35'), findsOneWidget);
+    expect(find.text('+35'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -112,7 +119,7 @@ void main() {
         ),
       );
 
-      expect(find.text('Sell 84'), findsOneWidget);
+      expect(find.text('+84'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -309,7 +316,7 @@ void main() {
       pendingRunModuleOffer: offer,
     );
 
-    expect(find.text('Salvage Module 1 of 3'), findsOneWidget);
+    expect(findOrionTitle('Salvage Module 1 of 3'), findsOneWidget);
     for (final id in offer.moduleIds) {
       expect(find.text(runModuleDefinition(id).title), findsOneWidget);
     }
@@ -341,8 +348,8 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   await tester.pumpAndSettle();
   await tester.tap(find.text('Alpha'));
   await tester.pumpAndSettle();
-  expect(find.text('Start Mission'), findsOneWidget);
-  await tester.tap(find.text('Start Mission'));
+  expect(find.byTooltip('Start Mission'), findsOneWidget);
+  await tester.tap(find.byTooltip('Start Mission'));
   await tester.pump();
 
   final snapshot = game!.stateNotifier.value;
@@ -372,5 +379,9 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   );
   await tester.pump();
 
+  if (pendingRunModuleOffer == null) {
+    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.pump();
+  }
   return game;
 }

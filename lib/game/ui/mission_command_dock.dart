@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'mission_command_hud.dart';
-import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_surface.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
-import 'tower_inspector.dart';
 
 /// Closed scene-1e placement-preview event family. The dock emits, Chrome
 /// forwards, and the page maps onto [OrionDefenseGame]'s preview methods.
@@ -51,8 +51,10 @@ class MissionCommandDock extends StatelessWidget {
     required this.onTargetingChanged,
     required this.onSell,
     this.onPlacementPreviewEvent,
+    this.worldMapAction,
   });
 
+  final Widget? worldMapAction;
   final GameSnapshot snapshot;
   final VoidCallback onTogglePause;
   final ValueChanged<double> onSpeedSelected;
@@ -69,17 +71,7 @@ class MissionCommandDock extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget content;
     final Key contentKey;
-    if (snapshot.selectedTower != null) {
-      contentKey = const ValueKey('command-dock-tower');
-      content = TowerInspector(
-        snapshot: snapshot,
-        onUpgrade: onUpgrade,
-        onSpecialize: onSpecialize,
-        onTargetingChanged: onTargetingChanged,
-        onSell: onSell,
-        sellRefund: GameBalance.refundValue(snapshot.selectedTower!),
-      );
-    } else if (snapshot.selectedCell != null) {
+    if (snapshot.selectedCell != null && snapshot.selectedTower == null) {
       contentKey = const ValueKey('command-dock-build');
       content = TowerBuildRail(
         phase: snapshot.phase,
@@ -90,32 +82,61 @@ class MissionCommandDock extends StatelessWidget {
       );
     } else {
       contentKey = const ValueKey('command-dock-idle');
-      content = IdleCommandBar(
+      final idleBar = IdleCommandBar(
+        worldMapAction: worldMapAction,
         snapshot: snapshot,
         onTogglePause: onTogglePause,
         onSpeedSelected: onSpeedSelected,
         onToggleAutoStart: onToggleAutoStart,
         onStartWave: onStartWave,
       );
+      // Artboard 1a's dock is two rows during build: the pacing controls
+      // beside the primary action, and the tower rail beneath them. The rail
+      // was reachable only after selecting a cell, so the artboard's own
+      // scene could not be produced -- and a rail you have to summon cannot
+      // be dragged from, which is how 1e says a tower is placed.
+      content = snapshot.phase == GamePhase.build && !snapshot.isEnded
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                idleBar,
+                const SizedBox(height: 8),
+                TowerBuildRail(
+                  key: const ValueKey('command-dock-persistent-rail'),
+                  phase: snapshot.phase,
+                  gold: snapshot.gold,
+                  unlockedTowerTypes: snapshot.unlockedTowerTypes,
+                  onPlaceTower: onPlaceTower,
+                  onPlacementPreviewEvent: onPlacementPreviewEvent,
+                ),
+              ],
+            )
+          : idleBar;
     }
 
-    // Every dock state surfaces itself: idle, build rail, and inspector
-    // each own a rounded MissionSurface — no outer frame chrome.
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AnimatedSwitcher(
-          key: const ValueKey('mission-command-dock-transition'),
-          duration: orionMotionDuration(
-            context,
-            const Duration(milliseconds: 180),
+    // One full-width shelf groups every dock state.
+    return OrionSurface(
+      tier: OrionSurfaceTier.t4,
+      radius: 0,
+      topBorderOnly: true,
+      padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AnimatedSwitcher(
+            key: const ValueKey('mission-command-dock-transition'),
+            duration: orionMotionDuration(
+              context,
+              const Duration(milliseconds: 180),
+            ),
+            layoutBuilder: (currentChild, previousChildren) =>
+                currentChild ?? const SizedBox.shrink(),
+            child: KeyedSubtree(key: contentKey, child: content),
           ),
-          layoutBuilder: (currentChild, previousChildren) =>
-              currentChild ?? const SizedBox.shrink(),
-          child: KeyedSubtree(key: contentKey, child: content),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -128,8 +149,10 @@ class IdleCommandBar extends StatelessWidget {
     required this.onSpeedSelected,
     required this.onToggleAutoStart,
     required this.onStartWave,
+    this.worldMapAction,
   });
 
+  final Widget? worldMapAction;
   final GameSnapshot snapshot;
   final VoidCallback onTogglePause;
   final ValueChanged<double> onSpeedSelected;
@@ -138,20 +161,14 @@ class IdleCommandBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uiTheme = OrionUiTheme.of(context);
     final countdown = snapshot.autoStartCountdownRemaining;
     final reactorLabel = _reactorLabel(snapshot, countdown);
     final reactorTooltip = snapshot.phase == GamePhase.wave
         ? 'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}'
         : reactorLabel;
 
-    return MissionSurface(
-      // The shell is a low grouping surface for the idle row, not a strong
-      // cyan frame: reduced vertical padding and a quiet border let the dark
-      // translucent fill group the controls.
-      padding: const EdgeInsets.all(6),
-      backgroundColor: uiTheme.hullBlack.withValues(alpha: 0.92),
-      borderColor: uiTheme.systemCyan.withValues(alpha: 0.10),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
       child: Row(
         children: [
           // Pacing flexes and wraps on narrow viewports; the fixed-size
@@ -164,6 +181,10 @@ class IdleCommandBar extends StatelessWidget {
               onToggleAutoStart: onToggleAutoStart,
             ),
           ),
+          if (worldMapAction != null) ...[
+            const SizedBox(width: 8),
+            worldMapAction!,
+          ],
           const SizedBox(width: 8),
           AnimatedSwitcher(
             key: const ValueKey('idle-command-reactor-transition'),
@@ -176,7 +197,9 @@ class IdleCommandBar extends StatelessWidget {
             child: _PrimaryActionPill(
               key: ValueKey(reactorLabel),
               tooltip: reactorTooltip,
-              label: reactorLabel,
+              label: snapshot.canStartWave && countdown == null
+                  ? 'Wave ${snapshot.waveNumber}'
+                  : reactorLabel,
               icon: snapshot.phase == GamePhase.wave
                   ? Icons.radar
                   : Icons.play_arrow_rounded,
@@ -215,8 +238,8 @@ class _PrimaryActionPill extends StatelessWidget {
   final IconData icon;
   final VoidCallback? onPressed;
 
-  static const double _width = 98;
-  static const double _height = 52;
+  static const double _width = 116;
+  static const double _height = 48;
 
   @override
   Widget build(BuildContext context) {
@@ -241,6 +264,18 @@ class _PrimaryActionPill extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               borderRadius: radius,
+              gradient: enabled
+                  ? const LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Color(0xFF7FF0FF),
+                        Color(0xFF13B8E6),
+                        Color(0xFF0A7EA3),
+                      ],
+                      stops: [0, 0.6, 1],
+                    )
+                  : null,
               // The strongest glow in the idle dock is reserved for this
               // one action; pacing and the shell carry none.
               boxShadow: enabled
@@ -254,7 +289,7 @@ class _PrimaryActionPill extends StatelessWidget {
             ),
             child: Material(
               color: enabled
-                  ? uiTheme.systemCyan
+                  ? Colors.transparent
                   : uiTheme.hullBlack.withValues(alpha: 0.55),
               shape: RoundedRectangleBorder(
                 borderRadius: radius,
@@ -274,17 +309,19 @@ class _PrimaryActionPill extends StatelessWidget {
                       const SizedBox(width: 2),
                       Flexible(
                         child: Text(
-                          label,
+                          // Caps to match the artboard's pill; the pill
+                          // already excludes its own semantics in favour of
+                          // `tooltip`, so the real copy is untouched.
+                          label.toUpperCase(),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           textScaler: MediaQuery.textScalerOf(
                             context,
                           ).clamp(maxScaleFactor: 1.15),
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: foreground,
-                                fontWeight: FontWeight.w800,
-                              ),
+                          style: OrionTypography.microLabel(
+                            color: foreground,
+                            size: 10,
+                          ).copyWith(shadows: const []),
                         ),
                       ),
                     ],
@@ -383,17 +420,17 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
     final textScaler = MediaQuery.textScalerOf(
       context,
     ).clamp(maxScaleFactor: 1.3);
-    return MissionSurface(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+    return Padding(
+      padding: EdgeInsets.zero,
       child: SizedBox(
         height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
         child: Stack(
           children: [
             ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
               scrollDirection: Axis.horizontal,
               itemCount: TowerType.values.length,
-              separatorBuilder: (_, index) => const SizedBox(width: 6),
+              separatorBuilder: (_, index) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final type = TowerType.values[index];
                 return _TowerBuildCard(
@@ -435,10 +472,8 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
                       child: Text(
                         'DROP TO BUILD',
                         textScaler: textScaler,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        style: OrionTypography.microLabel(
                           color: OrionUiTheme.of(context).systemCyan,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1,
                         ),
                       ),
                     ),
@@ -478,8 +513,12 @@ class _TowerBuildCard extends StatelessWidget {
   final VoidCallback? onDragEnded;
   final VoidCallback? onDragCanceled;
 
-  static const double baseWidth = 64;
-  static const double baseHeight = 92;
+  // Artboard 1a's rail card: 70x88, radius 16, a 58px sprite, then the cost,
+  // then the name. Ours was 64x92 with a 42px sprite and the name above a
+  // bolt-prefixed cost -- the sprite is what the player picks from, so it
+  // gets the room, and the cost is the decision, so it outranks the name.
+  static const double baseWidth = 70;
+  static const double baseHeight = 96;
 
   @override
   Widget build(BuildContext context) {
@@ -500,6 +539,10 @@ class _TowerBuildCard extends StatelessWidget {
       context,
     ).clamp(maxScaleFactor: 1.3);
     final scaleFactor = textScaler.scale(1);
+    final sprite = OrionAtlasSprite(
+      art: OrionArt.tower(type),
+      size: const Size(58, 58),
+    );
 
     final card = Semantics(
       button: true,
@@ -511,12 +554,13 @@ class _TowerBuildCard extends StatelessWidget {
         key: ValueKey('tower-card-${type.name}'),
         width: baseWidth * scaleFactor,
         height: baseHeight * scaleFactor,
-        child: MissionSurface(
-          padding: const EdgeInsets.all(2),
-          radius: 10,
-          backgroundColor: uiTheme.panelBlue,
-          borderColor: accent,
-          emphasized: canAttempt && affordable,
+        // Flat: the rail around these tiles is already one blurred row, and
+        // blurring each tile inside it is the anti-pattern OrionSurface names.
+        child: OrionInnerSurface(
+          tier: OrionSurfaceTier.t2,
+          // Keep room for the sprite above the cost and name.
+          padding: EdgeInsets.zero,
+          radius: 16,
           child: Material(
             color: Colors.transparent,
             child: InkResponse(
@@ -526,96 +570,95 @@ class _TowerBuildCard extends StatelessWidget {
               splashColor: accent.withValues(alpha: 0.18),
               highlightColor: accent.withValues(alpha: 0.10),
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.only(left: 2, right: 2, bottom: 6),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        ColorFiltered(
-                          colorFilter: unlocked
-                              ? const ColorFilter.mode(
-                                  Colors.transparent,
-                                  BlendMode.dst,
-                                )
-                              : const ColorFilter.matrix(<double>[
-                                  0.2126,
-                                  0.7152,
-                                  0.0722,
-                                  0,
-                                  0,
-                                  0.2126,
-                                  0.7152,
-                                  0.0722,
-                                  0,
-                                  0,
-                                  0.2126,
-                                  0.7152,
-                                  0.0722,
-                                  0,
-                                  0,
-                                  0,
-                                  0,
-                                  0,
-                                  1,
-                                  0,
-                                ]),
-                          child: Opacity(
-                            opacity: affordable ? 1 : 0.48,
-                            child: OrionAtlasSprite(
-                              art: OrionArt.tower(type),
-                              size: const Size(42, 42),
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            Opacity(
+                              opacity: affordable ? 1 : 0.48,
+                              // A ColorFiltered layer is only worth its cost
+                              // for the locked greyscale; unlocked cards pass
+                              // the sprite through untouched.
+                              child: unlocked
+                                  ? sprite
+                                  : ColorFiltered(
+                                      colorFilter:
+                                          const ColorFilter.matrix(<double>[
+                                            0.2126,
+                                            0.7152,
+                                            0.0722,
+                                            0,
+                                            0,
+                                            0.2126,
+                                            0.7152,
+                                            0.0722,
+                                            0,
+                                            0,
+                                            0.2126,
+                                            0.7152,
+                                            0.0722,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            0,
+                                            1,
+                                            0,
+                                          ]),
+                                      child: sprite,
+                                    ),
                             ),
-                          ),
+                            if (!unlocked)
+                              Icon(
+                                Icons.lock_outline,
+                                size: 17,
+                                color: uiTheme.textMuted,
+                              ),
+                          ],
                         ),
-                        if (!unlocked)
-                          Icon(
-                            Icons.lock_outline,
-                            size: 17,
-                            color: uiTheme.textMuted,
-                          ),
-                      ],
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    // Cost above name, per the artboard's card template
+                    // (icon, cost, name). An unaffordable cost goes red
+                    // rather than muted: the artboard says *why* the card is
+                    // dimmed instead of only that it is.
+                    Text(
+                      '${stats.cost}',
+                      maxLines: 1,
+                      textScaler: textScaler,
+                      style: OrionTypography.readout(
+                        size: 14,
+                        color: !unlocked
+                            ? uiTheme.textMuted
+                            : affordable
+                            ? uiTheme.creditGold
+                            : uiTheme.dangerRed,
+                      ),
                     ),
                     const SizedBox(height: 1),
                     Text(
-                      type.label,
+                      // The artboard sets every micro label in caps; the
+                      // card's Semantics carries the real copy, so the
+                      // display string is free to shout.
+                      type.label.toUpperCase(),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       textAlign: TextAlign.center,
                       textScaler: textScaler,
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: unlocked
-                            ? uiTheme.textPrimary
-                            : uiTheme.textMuted,
-                        fontWeight: FontWeight.w700,
+                      // Muted in every state, as the artboard sets it: the
+                      // cost carries the affordability signal now, so the
+                      // name does not need to.
+                      style: OrionTypography.microLabel(
+                        size: 7.5,
+                        color: uiTheme.textMuted,
                       ),
-                    ),
-                    const SizedBox(height: 1),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.bolt,
-                          size: 11,
-                          color: affordable && unlocked
-                              ? uiTheme.creditGold
-                              : uiTheme.textMuted,
-                        ),
-                        const SizedBox(width: 1),
-                        Text(
-                          '${stats.cost}',
-                          maxLines: 1,
-                          textScaler: textScaler,
-                          style: Theme.of(context).textTheme.labelSmall
-                              ?.copyWith(
-                                color: affordable && unlocked
-                                    ? uiTheme.creditGold
-                                    : uiTheme.textMuted,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -679,7 +722,7 @@ class _TowerBuildCard extends StatelessWidget {
           ),
           child: OrionAtlasSprite(
             art: OrionArt.tower(type),
-            size: const Size(48, 48),
+            size: const Size(64, 64),
           ),
         ),
         const SizedBox(height: 4),
@@ -696,9 +739,9 @@ class _TowerBuildCard extends StatelessWidget {
             affordable
                 ? '−${stats.cost} → ${gold - stats.cost}'
                 : 'need ${stats.cost - gold} more',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            style: OrionTypography.readout(
+              size: 13,
               color: affordable ? uiTheme.creditGold : uiTheme.dangerRed,
-              fontWeight: FontWeight.w800,
             ),
           ),
         ),
@@ -712,19 +755,14 @@ class _TowerBuildCard extends StatelessWidget {
     return SizedBox(
       width: baseWidth * scaleFactor,
       height: baseHeight * scaleFactor,
-      child: MissionSurface(
+      child: OrionInnerSurface(
+        tier: OrionSurfaceTier.t2,
         padding: const EdgeInsets.all(2),
         radius: 10,
-        backgroundColor: uiTheme.panelBlue,
-        borderColor: uiTheme.frameSteel,
         child: Center(
           child: Text(
             'LIFTED',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: uiTheme.textMuted,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-            ),
+            style: OrionTypography.microLabel(color: uiTheme.textMuted),
           ),
         ),
       ),

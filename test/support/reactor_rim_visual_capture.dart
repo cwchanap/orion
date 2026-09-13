@@ -46,3 +46,9 @@ Future<void> captureReactorRimFixture(
     byteData.buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
   );
 }
+
+Future<void> warmSceneImages(BuildContext context, List<String> paths) async {
+  for (final path in paths) {
+    await precacheImage(AssetImage('assets/images/$path'), context);
+  }
+}

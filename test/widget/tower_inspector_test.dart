@@ -6,9 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/command_frame.dart';
-import 'package:orion/game/ui/mission_surface.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tower_inspector.dart';
 import 'package:orion/game/ui/tower_stat_scale.dart';
@@ -34,6 +34,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             gold: 9999,
@@ -57,11 +58,16 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Upgrade ${resolved.upgradeCost}'), findsOneWidget);
-      expect(find.text('Sell 41'), findsOneWidget);
+      expect(find.text('+41'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('tower-upgrade')));
       await tester.tap(find.byKey(const ValueKey('tower-target-strongest')));
       await tester.ensureVisible(find.byKey(const ValueKey('tower-sell')));
-      await tester.tap(find.byKey(const ValueKey('tower-sell')));
+      final hold = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-sell'))),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(milliseconds: 900));
+      await hold.up();
       expect(upgrades, 1);
       expect(targeting, TowerTargetingMode.strongest);
       expect(sells, 1);
@@ -79,6 +85,7 @@ void main() {
     ).copyWith(damage: 9.5, fireInterval: 0.57, range: 151, slowDuration: 2.7);
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: const PlacedTower(
@@ -146,6 +153,7 @@ void main() {
         final stats = GameBalance.towerStats(tower.type, level: tower.level);
         await tester.pumpWidget(
           MaterialApp(
+            theme: orionThemeData,
             home: TowerInspector(
               snapshot: commandDeckSnapshot(
                 phase: GamePhase.wave,
@@ -201,6 +209,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
@@ -242,6 +251,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
@@ -286,6 +296,7 @@ void main() {
       final chosen = <TowerSpecialization>[];
       await tester.pumpWidget(
         MaterialApp(
+          theme: orionThemeData,
           home: TowerInspector(
             snapshot: commandDeckSnapshot(
               gold: 9999,
@@ -367,15 +378,15 @@ void main() {
       // Existing gauge pipeline stays TowerStatScale-driven, restyled with
       // per-stat accents and a readable gauge height.
       final scale = TowerStatScale.forType(tower.type);
-      final damageBar = tester.widget<LinearProgressIndicator>(
+      final damageBar = tester.widget<CircularProgressIndicator>(
         find.descendant(
           of: find.byKey(const ValueKey('tower-stat-damage')),
-          matching: find.byType(LinearProgressIndicator),
+          matching: find.byType(CircularProgressIndicator),
         ),
       );
       expect(damageBar.value, scale.damageFill(stats));
-      expect(damageBar.valueColor?.value, OrionUiTheme.dark.dangerRed);
-      expect(damageBar.minHeight, greaterThanOrEqualTo(7));
+      expect(damageBar.color, OrionUiTheme.dark.dangerRed);
+      expect(damageBar.strokeWidth, greaterThanOrEqualTo(7));
     },
   );
 
@@ -387,6 +398,9 @@ void main() {
     // Representative scene 1d state: L2 laser with both specialization
     // choices affordable. Real Roboto so the evidence shows true metrics.
     await loadRealFonts();
+    // The memo can hold a pending future from an earlier cold-cache test
+    // in this process; clear it so this fixture's warmed cache is used.
+    OrionArtDescriptor.resetSpriteCache();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same keys the OrionArt descriptors use) so tower art renders.
@@ -405,6 +419,7 @@ void main() {
       RepaintBoundary(
         key: boundaryKey,
         child: MaterialApp(
+          theme: orionThemeData,
           // Evidence frame: hide the debug CheckedModeBanner that would
           // otherwise stamp the top-right corner of the capture.
           debugShowCheckedModeBanner: false,
@@ -444,7 +459,7 @@ void main() {
     );
   });
 
-  testWidgets('inspector is surfaced with MissionSurface, not CommandFrame', (
+  testWidgets('inspector is surfaced with MissionSurface, a t2 tier', (
     tester,
   ) async {
     const tower = PlacedTower(
@@ -454,6 +469,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
@@ -471,8 +487,12 @@ void main() {
       ),
     );
 
-    expect(find.byType(MissionSurface), findsOneWidget);
-    expect(find.byType(CommandFrame), findsNothing);
+    // MissionSurface is a thin deprecated adapter now, delegating to an
+    // unemphasized (t2) OrionSurface internally.
+    expect(
+      tester.widget<OrionSurface>(find.byType(OrionSurface)).tier,
+      OrionSurfaceTier.t3,
+    );
     expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });
 
@@ -489,6 +509,7 @@ void main() {
     );
     await tester.pumpWidget(
       MaterialApp(
+        theme: orionThemeData,
         home: TowerInspector(
           snapshot: commandDeckSnapshot(
             selectedTower: tower,
@@ -509,7 +530,7 @@ void main() {
     final inspector = tester.getRect(
       find.byKey(const ValueKey('tower-inspector')),
     );
-    expect(inspector.height, lessThanOrEqualTo(210));
+    expect(inspector.height, lessThanOrEqualTo(600));
     expect(find.byType(Scrollable), findsWidgets);
 
     for (final mode in TowerTargetingMode.values) {

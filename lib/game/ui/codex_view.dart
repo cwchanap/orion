@@ -4,6 +4,8 @@ import '../campaign/campaign_progress.dart';
 import '../codex/codex_data.dart';
 import '../models/game_models.dart';
 import '../util/format.dart';
+import 'orion_typography.dart';
+import 'orion_ui_theme.dart';
 import 'tower_icons.dart';
 
 class CodexView extends StatefulWidget {
@@ -42,7 +44,7 @@ class _CodexViewState extends State<CodexView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
+    final uiTheme = OrionUiTheme.of(context);
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -58,7 +60,7 @@ class _CodexViewState extends State<CodexView> {
                     icon: const Icon(Icons.arrow_back),
                   ),
                   const SizedBox(width: 8),
-                  Text('Codex', style: theme.textTheme.headlineSmall),
+                  OrionTitle('Codex', color: uiTheme.textPrimary),
                 ],
               ),
             ),
@@ -77,26 +79,27 @@ class _CodexViewState extends State<CodexView> {
               ),
             ),
             const SizedBox(height: 8),
-            Expanded(child: _body(theme)),
+            Expanded(child: _body()),
           ],
         ),
       ),
     );
   }
 
-  Widget _body(ThemeData theme) {
+  Widget _body() {
+    final uiTheme = OrionUiTheme.of(context);
     final controller = _scrollControllers[_section];
     return switch (_section) {
       0 => ListView(
         controller: controller,
-        children: [for (final t in CodexData.towers) _towerCard(theme, t)],
+        children: [for (final t in CodexData.towers) _towerCard(t)],
       ),
       1 => ListView(
         controller: controller,
         children: [
-          for (final tr in CodexData.traits) _line(theme, tr.label, tr.effect),
+          for (final tr in CodexData.traits) _line(tr.label, tr.effect),
           const Divider(),
-          for (final e in CodexData.enemies) _enemyCard(theme, e),
+          for (final e in CodexData.enemies) _enemyCard(e),
         ],
       ),
       2 => ListView(
@@ -109,14 +112,28 @@ class _CodexViewState extends State<CodexView> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(ef.title, style: theme.textTheme.titleMedium),
+                    Text(
+                      ef.title,
+                      style: OrionTypography.microLabel(
+                        size: 11,
+                        color: uiTheme.textMuted,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(ef.description, style: theme.textTheme.bodyMedium),
+                    Text(
+                      ef.description,
+                      style: OrionTypography.microLabel(
+                        size: 9,
+                        color: uiTheme.textMuted,
+                      ),
+                    ),
                     if (ef.relatedSpecializations.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
                         'Used by: ${ef.relatedSpecializations.map((s) => s.label).join(', ')}',
-                        style: theme.textTheme.labelSmall,
+                        style: OrionTypography.microLabel(
+                          color: uiTheme.textMuted,
+                        ),
                       ),
                     ],
                   ],
@@ -128,14 +145,14 @@ class _CodexViewState extends State<CodexView> {
       _ => ListView(
         controller: controller,
         children: [
-          for (final s in CodexData.stagesFor(widget.progress))
-            _stageCard(theme, s),
+          for (final s in CodexData.stagesFor(widget.progress)) _stageCard(s),
         ],
       ),
     };
   }
 
-  Widget _towerCard(ThemeData theme, CodexTowerEntry t) {
+  Widget _towerCard(CodexTowerEntry t) {
+    final uiTheme = OrionUiTheme.of(context);
     final lines = <(String, String)>[
       ('Range', number(t.baseStats.range)),
       ('Cost', '${t.baseStats.cost}'),
@@ -158,33 +175,48 @@ class _CodexViewState extends State<CodexView> {
                 Icon(towerIcon(t.type)),
                 const SizedBox(width: 8),
                 Flexible(
-                  child: Text(t.label, style: theme.textTheme.titleMedium),
+                  child: Text(
+                    t.label,
+                    style: OrionTypography.microLabel(
+                      size: 11,
+                      color: uiTheme.textMuted,
+                    ),
+                  ),
                 ),
                 const Spacer(),
                 Flexible(
                   child: Text(
                     'Available from wave ${t.unlockWave}',
-                    style: theme.textTheme.labelSmall,
+                    style: OrionTypography.microLabel(color: uiTheme.textMuted),
                     textAlign: TextAlign.end,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            for (final (k, v) in lines) _line(theme, k, v),
+            for (final (k, v) in lines) _line(k, v),
             const SizedBox(height: 8),
             for (final spec in t.specializations) ...[
               Text(
                 '${spec.label} (${t.specializationCost}g)',
-                style: theme.textTheme.titleSmall,
+                style: OrionTypography.microLabel(
+                  size: 11,
+                  color: uiTheme.textMuted,
+                ),
               ),
-              Text(spec.description, style: theme.textTheme.bodyMedium),
+              Text(
+                spec.description,
+                style: OrionTypography.microLabel(
+                  size: 9,
+                  color: uiTheme.textMuted,
+                ),
+              ),
               for (final (k, v) in _specializationCoreLines(
                 spec.specializedStats,
               ))
-                _line(theme, k, v),
+                _line(k, v),
               for (final (k, v) in _specialtyLines(spec.specializedStats))
-                _line(theme, k, v),
+                _line(k, v),
               const SizedBox(height: 6),
             ],
           ],
@@ -261,7 +293,8 @@ class _CodexViewState extends State<CodexView> {
     return out;
   }
 
-  Widget _enemyCard(ThemeData theme, CodexEnemyEntry e) {
+  Widget _enemyCard(CodexEnemyEntry e) {
+    final uiTheme = OrionUiTheme.of(context);
     final lines = <(String, String)>[
       ('Health', number(e.stats.health)),
       ('Speed', number(e.stats.speed)),
@@ -279,28 +312,39 @@ class _CodexViewState extends State<CodexView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(e.label, style: theme.textTheme.titleMedium),
+            Text(
+              e.label,
+              style: OrionTypography.microLabel(
+                size: 11,
+                color: uiTheme.textMuted,
+              ),
+            ),
             if (e.traits.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(top: 4),
                 child: Wrap(
                   spacing: 6,
-                  children: [
-                    for (final tr in e.traits) _badge(theme, tr.label),
-                  ],
+                  children: [for (final tr in e.traits) _badge(tr.label)],
                 ),
               ),
             const SizedBox(height: 4),
-            Text(e.roleDescription, style: theme.textTheme.bodyMedium),
+            Text(
+              e.roleDescription,
+              style: OrionTypography.microLabel(
+                size: 9,
+                color: uiTheme.textMuted,
+              ),
+            ),
             const SizedBox(height: 6),
-            for (final (k, v) in lines) _line(theme, k, v),
+            for (final (k, v) in lines) _line(k, v),
           ],
         ),
       ),
     );
   }
 
-  Widget _stageCard(ThemeData theme, CodexStageEntry s) {
+  Widget _stageCard(CodexStageEntry s) {
+    final uiTheme = OrionUiTheme.of(context);
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -312,22 +356,31 @@ class _CodexViewState extends State<CodexView> {
                 Flexible(
                   child: Text(
                     '${s.stage.name} (${s.stage.mapLabel})',
-                    style: theme.textTheme.titleMedium,
+                    style: OrionTypography.microLabel(
+                      size: 11,
+                      color: uiTheme.textMuted,
+                    ),
                   ),
                 ),
                 const Spacer(),
-                _badge(theme, _statusLabel(s.status)),
+                _badge(_statusLabel(s.status)),
               ],
             ),
             const SizedBox(height: 4),
             Text(
               '${s.stage.isMainPath ? "Main" : "Side"} • ${s.waveCount} waves',
-              style: theme.textTheme.labelSmall,
+              style: OrionTypography.microLabel(color: uiTheme.textMuted),
             ),
             const SizedBox(height: 4),
-            Text(s.stage.description, style: theme.textTheme.bodyMedium),
+            Text(
+              s.stage.description,
+              style: OrionTypography.microLabel(
+                size: 9,
+                color: uiTheme.textMuted,
+              ),
+            ),
             const SizedBox(height: 6),
-            for (final m in s.modifiers) _line(theme, m.title, m.description),
+            for (final m in s.modifiers) _line(m.title, m.description),
             // stageRewardLabel already prefixes uncleared rewards with
             // "Reward: " (and returns the bare amount when cleared), so render
             // it as a standalone label rather than a keyed row to avoid a
@@ -335,7 +388,13 @@ class _CodexViewState extends State<CodexView> {
             if (s.rewardLabel != null)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 1),
-                child: Text(s.rewardLabel!, style: theme.textTheme.bodyMedium),
+                child: Text(
+                  s.rewardLabel!,
+                  style: OrionTypography.microLabel(
+                    size: 9,
+                    color: uiTheme.textMuted,
+                  ),
+                ),
               ),
           ],
         ),
@@ -349,7 +408,8 @@ class _CodexViewState extends State<CodexView> {
     StageProgressStatus.locked => 'Locked',
   };
 
-  Widget _line(ThemeData theme, String key, String value) {
+  Widget _line(String key, String value) {
+    final uiTheme = OrionUiTheme.of(context);
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Row(
@@ -357,22 +417,44 @@ class _CodexViewState extends State<CodexView> {
         children: [
           SizedBox(
             width: 120,
-            child: Text(key, style: theme.textTheme.bodyMedium),
+            child: Text(
+              key,
+              style: OrionTypography.microLabel(
+                size: 9,
+                color: uiTheme.textMuted,
+              ),
+            ),
           ),
-          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
+          Expanded(
+            child: Text(
+              value,
+              style: OrionTypography.microLabel(
+                size: 9,
+                color: uiTheme.textMuted,
+              ),
+            ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _badge(ThemeData theme, String text) {
+  Widget _badge(String text) {
+    final uiTheme = OrionUiTheme.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
-        color: theme.colorScheme.secondaryContainer,
+        // panelRaised fills, frameSteel outlines: the pairing every other
+        // filled chip in the UI uses (see next_wave_scanner.dart). frameSteel
+        // is a border accent everywhere else, never a fill.
+        color: uiTheme.panelRaised,
         borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: uiTheme.frameSteel),
       ),
-      child: Text(text, style: theme.textTheme.labelSmall),
+      child: Text(
+        text,
+        style: OrionTypography.microLabel(color: uiTheme.textMuted),
+      ),
     );
   }
 }

@@ -6,8 +6,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
-import 'package:orion/game/ui/command_frame.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
+import 'package:orion/game/ui/campaign_presentation.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_surface.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 
 import '../support/reactor_rim_visual_capture.dart';
@@ -36,6 +39,10 @@ Widget buildMap({
   bool isSavingFeedback = false,
 }) {
   return MaterialApp(
+    // The product app hides this banner; a fixture host must too, or the
+    // parity evidence carries a stripe the shipped game never shows.
+    debugShowCheckedModeBanner: false,
+    theme: orionThemeData,
     home: Scaffold(
       body: WorldMapView(
         stages: stages ?? OrionCampaign.stages,
@@ -58,6 +65,42 @@ Widget buildMap({
 
 void main() {
   testWidgets(
+    'enlarged map title and feedback stay clear of utility controls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      final host =
+          buildMap(
+                progress: CampaignProgress(),
+                feedback: 'Singularity Core is locked.',
+              )
+              as MaterialApp;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: host.theme,
+          home: host.home,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3)),
+            child: child!,
+          ),
+        ),
+      );
+      await tester.pump();
+      final titleRect = tester.getRect(find.text('ORION SECTOR'));
+      final codexRect = tester.getRect(find.byTooltip('Codex'));
+      final feedbackRect = tester.getRect(
+        find.text('Singularity Core is locked.'),
+      );
+      expect(titleRect.overlaps(codexRect), isFalse);
+      expect(feedbackRect.overlaps(codexRect), isFalse);
+    },
+  );
+
+  testWidgets(
     'compact map exposes seven art-led stage targets without overlap',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(375, 812));
@@ -76,8 +119,11 @@ void main() {
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder), const Size(56, 80));
+        expect(tester.getSize(finder).width, closeTo(72, 0.001));
+        expect(tester.getSize(finder).height, closeTo(94, 0.001));
         rects.add(tester.getRect(finder));
+        await tester.ensureVisible(finder);
+        await tester.pump();
         await tester.tap(finder);
       }
       for (var left = 0; left < rects.length; left += 1) {
@@ -159,7 +205,15 @@ void main() {
     final backdropLayerIndex = outerKeys.indexOf(
       const ValueKey('world-map-backdrop'),
     );
-    final plotLayerIndex = outerKeys.indexOf(const ValueKey('world-map-plot'));
+    final plotLayer = tester.widget<Positioned>(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('world-map-plot-viewport')),
+            matching: find.byType(Positioned),
+          )
+          .first,
+    );
+    final plotLayerIndex = outerStack.children.indexOf(plotLayer);
     expect(backdropLayerIndex, greaterThanOrEqualTo(0));
     expect(plotLayerIndex, greaterThan(backdropLayerIndex));
   });
@@ -174,12 +228,12 @@ void main() {
       );
       expect(
         sprite.art.fileName,
-        'reactor_rim_ui/stages/${stage.id}.png',
+        'reactor_rim_ui/crests/${stage.id}.png',
         reason: stage.id,
       );
       final source = sprite.art.sourceRectFor(
-        imageWidth: 1600,
-        imageHeight: 900,
+        imageWidth: 160,
+        imageHeight: 160,
       );
       expect(source.width, source.height, reason: stage.id);
       expect(sprite.size!.width, sprite.size!.height, reason: stage.id);
@@ -275,6 +329,56 @@ void main() {
     );
   });
 
+  testWidgets(
+    'stage map label color distinguishes locked, unlocked and cleared '
+    'states',
+    (tester) async {
+      // Regression coverage for a bug where the map label's color was
+      // flattened to an unconditional uiTheme.textMuted, making every node
+      // (locked, available, and cleared) read identically. Assert on the
+      // actual resolved TextStyle.color for each state rather than on
+      // widget presence, so a future collapse back to one color fails here.
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(
+            bestResultsByStageId: const {
+              'outpost-alpha': StageResult(
+                medal: StageMedal.gold,
+                bestBaseHealth: 20,
+              ),
+            },
+          ),
+        ),
+      );
+
+      Color labelColor(String stageId, String label) {
+        final text = tester.widget<Text>(
+          find.descendant(
+            of: find.byKey(ValueKey('sector-stage-$stageId')),
+            matching: find.text(label),
+          ),
+        );
+        return text.style!.color!;
+      }
+
+      // Outpost Alpha: cleared with a gold medal -> medal color.
+      final clearedColor = labelColor('outpost-alpha', 'Alpha');
+      // Nebula Relay: unlocked by Outpost Alpha's clear -> systemCyan.
+      final unlockedColor = labelColor('nebula-relay', 'Relay');
+      // Singularity Core: still locked -> textMuted.
+      final lockedColor = labelColor('singularity-core', 'Core');
+
+      const uiTheme = OrionUiTheme.dark;
+      expect(lockedColor, uiTheme.textMuted);
+      expect(unlockedColor, uiTheme.systemCyan);
+      expect(clearedColor, medalColor(uiTheme, StageMedal.gold));
+
+      expect(lockedColor, isNot(equals(unlockedColor)));
+      expect(unlockedColor, isNot(equals(clearedColor)));
+      expect(lockedColor, isNot(equals(clearedColor)));
+    },
+  );
+
   testWidgets('every stage node keeps a >=48dp semantic tap target', (
     tester,
   ) async {
@@ -349,9 +453,13 @@ void main() {
     expect(
       find.descendant(
         of: find.byType(WorldMapView),
-        matching: find.byType(CommandFrame),
+        matching: find.byType(OrionSurface),
       ),
-      findsNothing,
+      findsOneWidget,
+    );
+    expect(
+      tester.widget<OrionSurface>(find.byType(OrionSurface)).tier,
+      OrionSurfaceTier.t3,
     );
   });
 
@@ -581,6 +689,10 @@ void main() {
         ),
       );
 
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      await tester.pump();
       await tester.tap(
         find.byKey(const ValueKey('sector-stage-outpost-alpha')),
       );
@@ -663,6 +775,10 @@ void main() {
       // tracked separately.
       await tester.pumpWidget(
         MaterialApp(
+          // The product app hides this banner; a fixture host must too, or the
+          // parity evidence carries a stripe the shipped game never shows.
+          debugShowCheckedModeBanner: false,
+          theme: orionThemeData,
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(
               context,
@@ -710,7 +826,8 @@ void main() {
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder), const Size(56, 80));
+        expect(tester.getSize(finder).width, closeTo(72, 0.001));
+        expect(tester.getSize(finder).height, closeTo(94, 0.001));
         rects.add(tester.getRect(finder));
       }
 
@@ -724,7 +841,10 @@ void main() {
 
       // Tapping each stage still selects it.
       for (final stage in OrionCampaign.stages) {
-        await tester.tap(find.byKey(ValueKey('sector-stage-${stage.id}')));
+        final node = find.byKey(ValueKey('sector-stage-${stage.id}'));
+        await tester.ensureVisible(node);
+        await tester.pump();
+        await tester.tap(node);
       }
       expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
     },
@@ -748,13 +868,12 @@ void main() {
         ),
       );
 
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.byType(SingleChildScrollView), findsNWidgets(2));
 
       // The plot actually scrolls horizontally: dragging the route layer
       // moves the scroll offset away from zero.
-      final scrollFinder = find.descendant(
-        of: find.byType(SingleChildScrollView),
-        matching: find.byType(Scrollable),
+      final scrollFinder = find.byWidgetPredicate(
+        (w) => w is Scrollable && w.axisDirection == AxisDirection.right,
       );
       final scrollable = tester.state<ScrollableState>(scrollFinder);
       expect(scrollable.position.pixels, 0);
@@ -771,6 +890,10 @@ void main() {
       expect(scrollable.position.pixels, greaterThan(0));
 
       // The first stage remains tappable after scrolling and still selects.
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      await tester.pump();
       await tester.tap(
         find.byKey(const ValueKey('sector-stage-outpost-alpha')),
       );
@@ -788,6 +911,9 @@ void main() {
     // the rest locked (lock icons), over the approved world-map backdrop.
     // Real Roboto + Material icons so the evidence shows true text metrics.
     await loadRealFonts();
+    // The memo can hold a pending future from an earlier cold-cache test
+    // in this process; clear it so this fixture's warmed cache is used.
+    OrionArtDescriptor.resetSpriteCache();
     // Image decode is real async engine work that cannot complete under the
     // test FakeAsync zone; pre-warm the Flame cache (keyed by file name, the
     // same keys the OrionArt descriptors use) so the art renders.
@@ -795,6 +921,7 @@ void main() {
       await Flame.images.load('reactor_rim_ui/backdrops/world-map.png');
       for (final stage in OrionCampaign.stages) {
         await Flame.images.load('reactor_rim_ui/stages/${stage.id}.png');
+        await Flame.images.load('reactor_rim_ui/crests/${stage.id}.png');
       }
     });
 
@@ -815,6 +942,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => precacheImage(
+        const AssetImage('assets/images/reactor_rim_ui/backdrops/map-room.png'),
+        tester.element(find.byType(WorldMapView)),
+      ),
+    );
+    await tester.pump();
 
     expect(find.byKey(const ValueKey('world-map-backdrop')), findsOneWidget);
     expect(

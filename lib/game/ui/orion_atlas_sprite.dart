@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
 import 'package:flame/components.dart';
@@ -18,11 +19,11 @@ typedef OrionSourceRectResolver =
 
 enum OrionStageArtCrop { briefingWide, mapSquare }
 
-enum OrionSceneArt { worldMap, techTree, missionReport }
+enum OrionSceneArt { worldMap, techTree, missionReport, commandCenter }
 
 @immutable
 final class OrionArtDescriptor {
-  OrionArtDescriptor({
+  const OrionArtDescriptor({
     required this.fileName,
     required this.sourceRectFor,
     required this.semanticLabel,
@@ -34,7 +35,81 @@ final class OrionArtDescriptor {
   final String semanticLabel;
   final IconData fallbackIcon;
 
-  late final Future<Sprite> sprite = _loadSprite();
+  /// Memoised so repeated builds share one decode — with a bounded retry.
+  ///
+  /// A plain `late final` cached a *failed* load for the process lifetime, so
+  /// one transient decode failure left that art permanently replaced by its
+  /// fallback icon with no retry. It also made rendering order-dependent: the
+  /// first widget to touch a descriptor with a cold cache poisoned it for
+  /// everything after, which is how scene fixtures came to capture empty
+  /// panels while still passing (1f's capture wrote 481KB run alone and 38KB
+  /// run inside its own file).
+  ///
+  /// Failures therefore drop the memo so the next build retries — but only
+  /// up to [_maxAttempts]. Once exhausted, the failed future stays cached:
+  /// a permanently missing asset renders its fallback icon instead of paying
+  /// another `Flame.images.load` on every `OrionAtlasSprite` build.
+  ///
+  /// The memo is static because this class is `@immutable`; descriptors are
+  /// process-lifetime singletons held in [OrionArt]'s maps, so keying on the
+  /// instance is equivalent to an instance field.
+  static final Map<OrionArtDescriptor, Future<Sprite>> _pending =
+      <OrionArtDescriptor, Future<Sprite>>{};
+
+  /// Consecutive load failures per descriptor; drives the retry cap.
+  static final Map<OrionArtDescriptor, int> _failures =
+      <OrionArtDescriptor, int>{};
+
+  /// How many failed load attempts a descriptor retries before its failed
+  /// future is kept. Bounds `Flame.images.load` calls for missing assets
+  /// while still recovering from a transient decode failure.
+  static const int _maxAttempts = 3;
+
+  /// Forgets every memoised load.
+  ///
+  /// Needed by tests, not by the app. Under the test binding a decode started
+  /// with a cold cache can never complete — `FakeAsync` does not run the real
+  /// engine work — and that permanently-pending future is what gets memoised.
+  /// Any later test in the same process then inherits it and renders the empty
+  /// branch no matter how carefully it warms the cache first. That is how the
+  /// scene fixtures came to capture blank panels while passing: 1f's capture
+  /// wrote 481KB run alone and 38KB run inside its own file.
+  @visibleForTesting
+  static void resetSpriteCache() {
+    _pending.clear();
+    _failures.clear();
+  }
+
+  Future<Sprite> get sprite {
+    final pending = _pending[this];
+    if (pending != null) {
+      return pending;
+    }
+    final future = _loadSprite();
+    _pending[this] = future;
+    // Below the cap, drop the memo on failure so the next build retries a
+    // transient load rather than inheriting the error forever; at the cap,
+    // keep it so builds reuse the failure instead of reloading every frame.
+    // The listener handles the error and returns normally: rethrowing here
+    // would leave *its* derived future unhandled, which the test binding
+    // reports as an uncaught error. The error still reaches the
+    // FutureBuilder through `future` itself.
+    unawaited(
+      future.then<void>(
+        (_) {
+          _failures.remove(this);
+        },
+        onError: (Object _, StackTrace _) {
+          final failures = (_failures[this] ?? 0) + 1;
+          _failures[this] = failures;
+          if (failures < _maxAttempts && _pending[this] == future) {
+            _pending.remove(this);
+          }
+        },
+      ),
+    );
+    return future;
+  }
 
   Future<Sprite> _loadSprite() async {
     final image = await Flame.images.load(fileName);
@@ -143,7 +218,23 @@ abstract final class OrionArt {
           semanticLabel: 'Mission debrief backdrop',
           fallbackIcon: Icons.description,
         ),
+        OrionSceneArt.commandCenter: OrionArtDescriptor(
+          fileName: 'reactor_rim_ui/backdrops/command-center.png',
+          sourceRectFor: _fullRectFor,
+          semanticLabel: 'Command center backdrop',
+          fallbackIcon: Icons.dashboard,
+        ),
       });
+
+  static final Map<String, OrionArtDescriptor> _crests = Map.unmodifiable({
+    for (final stage in OrionCampaign.stages)
+      stage.id: OrionArtDescriptor(
+        fileName: 'reactor_rim_ui/crests/${stage.id}.png',
+        sourceRectFor: _fullRectFor,
+        semanticLabel: '${stage.name} crest',
+        fallbackIcon: Icons.shield_outlined,
+      ),
+  });
 
   static final OrionArtDescriptor _victoryArt = OrionArtDescriptor(
     fileName: 'reactor_rim_ui/results/victory.png',
@@ -158,6 +249,23 @@ abstract final class OrionArt {
     semanticLabel: 'Defeat banner art',
     fallbackIcon: Icons.flag,
   );
+
+  static final _specializations = {
+    for (final type in TowerType.values)
+      for (final (index, specialization) in GameBalance.specializationsFor(
+        type,
+      ).indexed)
+        specialization: _varietyDescriptor(
+          index == 0
+              ? GameTowerVarietySprite.clusterBurst
+              : GameTowerVarietySprite.prismSplit,
+          semanticLabel: '${specialization.label} effect',
+          fallbackIcon: Icons.auto_awesome,
+        ),
+  };
+  static OrionArtDescriptor specialization(
+    TowerSpecialization specialization,
+  ) => _specializations[specialization]!;
 
   static OrionArtDescriptor tower(TowerType type) => _towers[type]!;
 
@@ -185,6 +293,9 @@ abstract final class OrionArt {
   }
 
   static OrionArtDescriptor scene(OrionSceneArt scene) => _scenes[scene]!;
+
+  static OrionArtDescriptor crestFor(StageDefinition stage) =>
+      _crests[stage.id]!;
 
   static ui.Rect _stageRectFor(
     OrionStageArtCrop crop, {

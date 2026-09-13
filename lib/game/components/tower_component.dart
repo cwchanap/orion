@@ -79,11 +79,14 @@ class TowerComponent extends CircleComponent {
       sprite.render(
         canvas,
         position: Vector2(radius, radius),
-        size: Vector2.all(radius * 2.4),
+        // Art can overhang the socket; targeting and placement keep their original geometry.
+        size: Vector2.all(radius * 4.2),
         anchor: Anchor.center,
       );
     }
-    canvas.drawCircle(Offset(radius, radius), radius - 1, _strokePaint);
+    if (sprite == null) {
+      canvas.drawCircle(Offset(radius, radius), radius - 1, _strokePaint);
+    }
   }
 
   Sprite? _towerSprite() {

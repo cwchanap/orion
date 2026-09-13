@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/orion_finders.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/ui/feedback_settings_sheet.dart';
 
@@ -26,7 +28,7 @@ void main() {
 
   testWidgets('renders all labels', (tester) async {
     await pumpSheet(tester);
-    expect(find.text('Feedback'), findsOneWidget);
+    expect(findOrionTitle('Feedback'), findsOneWidget);
     expect(find.text('Sound Effects'), findsOneWidget);
     expect(find.text('Haptics'), findsOneWidget);
     expect(find.text('Reduced Motion'), findsOneWidget);
