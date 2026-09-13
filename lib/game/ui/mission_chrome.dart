@@ -81,7 +81,14 @@ class _MissionChromeState extends State<MissionChrome> {
   double? _measuredTextScale;
   double _topReserve = 0;
   double _bottomReserve = 0;
+  double _modulesReserve = 0;
   Rect? _lastViewport;
+
+  void _scheduleViewportMeasure() {
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _measureBoardViewport(),
+    );
+  }
 
   void _measureBoardViewport() {
     if (!mounted) return;
@@ -103,10 +110,10 @@ class _MissionChromeState extends State<MissionChrome> {
     final modules =
         _modulesKey.currentContext?.findRenderObject() as RenderBox?;
     // The scanner is build-phase only, while the acquired-module control
-    // renders in any phase and can expand taller — reserve below the lowest
-    // top-band control so the board viewport never starts under chrome.
+    // renders in any phase — reserve below the lowest top-band control so
+    // the board viewport never starts under chrome.
     var top = 8.0;
-    for (final band in [hud, scanner, modules]) {
+    for (final band in [hud, scanner]) {
       if (band == null) continue;
       final edge =
           box
@@ -115,20 +122,33 @@ class _MissionChromeState extends State<MissionChrome> {
           8;
       if (edge > top) top = edge;
     }
+    if (top > _topReserve) _topReserve = top;
+    // The modules panel expands in place on its own setState (which reaches
+    // here through onExpandedChanged), so its edge is a transient reserve
+    // that tracks the control's current height and releases on collapse —
+    // folding it into the monotonic baseline would keep the board compressed
+    // after the panel closes.
+    _modulesReserve = modules == null
+        ? 0
+        : box
+                  .globalToLocal(
+                    modules.localToGlobal(Offset(0, modules.size.height)),
+                  )
+                  .dy +
+              8;
+    final topEdge = _topReserve > _modulesReserve
+        ? _topReserve
+        : _modulesReserve;
     final bottom =
         box.size.height -
         box.globalToLocal(dock.localToGlobal(Offset.zero)).dy +
         8;
-    if (top > _topReserve) _topReserve = top;
     if (bottom > _bottomReserve) _bottomReserve = bottom;
     final viewport = Rect.fromLTRB(
       8,
-      _topReserve,
+      topEdge,
       box.size.width - 8,
-      (box.size.height - _bottomReserve).clamp(
-        _topReserve + 1,
-        double.infinity,
-      ),
+      (box.size.height - _bottomReserve).clamp(topEdge + 1, double.infinity),
     );
     if (viewport == _lastViewport) return;
     setState(() => _lastViewport = viewport);
@@ -137,9 +157,7 @@ class _MissionChromeState extends State<MissionChrome> {
 
   @override
   Widget build(BuildContext context) {
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _measureBoardViewport(),
-    );
+    _scheduleViewportMeasure();
     final isIdle =
         widget.snapshot.selectedCell == null &&
         widget.snapshot.selectedTower == null;
@@ -174,6 +192,10 @@ class _MissionChromeState extends State<MissionChrome> {
                           collapseRequested:
                               widget.snapshot.selectedCell != null ||
                               widget.snapshot.selectedTower != null,
+                          // The panel toggles on its own setState, which does
+                          // not rebuild this chrome — re-measure after the
+                          // frame so the transient reserve follows it.
+                          onExpandedChanged: (_) => _scheduleViewportMeasure(),
                         ),
                       ),
                     ],

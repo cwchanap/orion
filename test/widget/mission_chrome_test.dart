@@ -485,6 +485,60 @@ void main() {
     },
   );
 
+  testWidgets(
+    'board viewport tracks module expansion and recovers on collapse',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      Rect? viewport;
+      Widget host() => chromeHost(
+        commandDeckSnapshot(
+          phase: GamePhase.wave,
+          acquiredRunModules: const [RunModuleId.heavyCaliber],
+        ),
+        onBoardViewportChanged: (rect) => viewport = rect,
+      );
+      await tester.pumpWidget(host());
+      await tester.pump();
+      await tester.pump();
+
+      final collapsedTop = viewport!.top;
+      final collapsedBottom = tester
+          .getBottomLeft(find.byType(AcquiredRunModuleControl))
+          .dy;
+      expect(collapsedTop, greaterThanOrEqualTo(collapsedBottom));
+
+      // Expanding toggles inside the control's own setState — MissionChrome
+      // does not rebuild, but the viewport must still re-measure so the
+      // board never starts under the expanded panel.
+      await tester.tap(
+        find.byKey(const ValueKey('acquired-modules-collapsed')),
+      );
+      await tester.pump();
+      await tester.pump();
+      final expandedBottom = tester
+          .getBottomLeft(find.byType(AcquiredRunModuleControl))
+          .dy;
+      expect(viewport!.top, greaterThanOrEqualTo(expandedBottom));
+      expect(viewport!.top, greaterThan(collapsedTop));
+
+      // An unrelated snapshot rebuild while expanded must not bake the
+      // expanded height into the baseline reserve…
+      await tester.pumpWidget(host());
+      await tester.pump();
+      await tester.pump();
+      expect(viewport!.top, greaterThanOrEqualTo(expandedBottom));
+
+      // …so collapsing releases it again.
+      await tester.tap(find.byKey(const ValueKey('acquired-modules-expanded')));
+      await tester.pump();
+      await tester.pump();
+      expect(viewport!.top, collapsedTop);
+    },
+  );
+
   testWidgets('empty chrome space passes taps through; controls absorb them', (
     tester,
   ) async {
