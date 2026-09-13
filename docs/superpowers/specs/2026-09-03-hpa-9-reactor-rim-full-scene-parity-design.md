@@ -546,10 +546,10 @@ For **each Task 1–8**, before committing that scene:
 5. classify every visible difference;
 6. only then commit the scene task.
 
-Evidence directory:
+Evidence directory (gitignored scratch — captures are attached to the PR body, not committed):
 
 ```text
-docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/
+tmp/evidence/2026-09-03-hpa-9/
 fixture-1a.png ... fixture-1h.png
 live-1a.png    ... live-1h.png
 ```
@@ -570,7 +570,7 @@ scripts/capture_reactor_rim_ios.sh
 Each scene test provides one explicit capture case. Example command shape:
 
 ```bash
-ORION_CAPTURE_DIR=docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9 \
+ORION_CAPTURE_DIR=tmp/evidence/2026-09-03-hpa-9 \
   flutter test test/widget/<scene>_test.dart \
   --plain-name 'capture scene 1x fixture'
 ```
@@ -579,7 +579,7 @@ The live helper is intentionally thin:
 
 ```bash
 ./scripts/capture_reactor_rim_ios.sh \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1x.png
+  tmp/evidence/2026-09-03-hpa-9/live-1x.png
 ```
 
 It wraps the established booted-iOS-simulator screenshot mechanism; the task lists the real app navigation needed to reach the target state before capture.
