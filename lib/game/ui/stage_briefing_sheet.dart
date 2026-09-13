@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
@@ -272,7 +274,11 @@ class StageBriefingSheet extends StatelessWidget {
                     14,
                     12,
                     14,
-                    24 + MediaQuery.viewInsetsOf(context).bottom,
+                    24 +
+                        math.max(
+                          MediaQuery.viewPaddingOf(context).bottom,
+                          MediaQuery.viewInsetsOf(context).bottom,
+                        ),
                   ),
                   child: _BriefingLaunchAction(
                     label: actionLabel,

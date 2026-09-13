@@ -276,11 +276,12 @@ class BoardComponent extends PositionComponent {
   /// [source] cut into [dash]-long segments separated by [gap].
   ///
   /// A non-positive [dash] would advance the walk by nothing and never
-  /// terminate, so a degenerate board (zero [cellSize], before the first
-  /// resize) yields the undashed line rather than a hang.
+  /// terminate, and a negative [gap] can cancel the advance entirely, so
+  /// degenerate input (a zero [cellSize] board before the first resize)
+  /// yields the undashed line rather than a hang.
   @visibleForTesting
   static Path dashed(Path source, {required double dash, required double gap}) {
-    if (dash <= 0) {
+    if (dash <= 0 || gap < 0) {
       return source;
     }
     final result = Path();

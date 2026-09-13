@@ -8,6 +8,7 @@ import 'mission_command_dock.dart';
 import 'mission_command_hud.dart';
 import 'mission_surface.dart';
 import 'next_wave_scanner.dart';
+import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'orion_surface.dart';
 import 'hold_to_salvage.dart';
@@ -388,11 +389,7 @@ class TowerRadialActions extends StatelessWidget {
         stats != null &&
         snapshot.gold >= stats.upgradeCost;
     final t = OrionUiTheme.of(context);
-    final labelStyle = TextStyle(
-      fontFamily: 'Oxanium',
-      fontSize: 11,
-      color: t.creditGold,
-    );
+    final labelStyle = OrionTypography.readout(size: 11, color: t.creditGold);
     return IntrinsicWidth(
       child: ConstrainedBox(
         constraints: const BoxConstraints(minWidth: 196),
@@ -443,6 +440,7 @@ class TowerRadialActions extends StatelessWidget {
                   ),
                 ),
                 GestureDetector(
+                  behavior: HitTestBehavior.opaque,
                   onLongPress: onInspect,
                   child: const SizedBox.square(dimension: 60),
                 ),

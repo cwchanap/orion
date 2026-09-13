@@ -5,9 +5,14 @@ import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_typography.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
+/// `File.path` uses the platform separator; every comparison below is
+/// written against forward slashes, so normalise first or they silently
+/// pass/fail off POSIX.
+String _posixPath(File file) => file.path.replaceAll('\\', '/');
+
 Iterable<File> _libDartFiles() sync* {
   for (final e in Directory('lib').listSync(recursive: true)) {
-    if (e is File && e.path.endsWith('.dart')) yield e;
+    if (e is File && _posixPath(e).endsWith('.dart')) yield e;
   }
 }
 
@@ -15,7 +20,8 @@ void main() {
   test('ImageFilter.blur is centralised in OrionSurface', () {
     final filesWithBlur = <String>{
       for (final file in _libDartFiles())
-        if (file.readAsStringSync().contains('ImageFilter.blur')) file.path,
+        if (file.readAsStringSync().contains('ImageFilter.blur'))
+          _posixPath(file),
     };
     expect(
       filesWithBlur,
@@ -42,7 +48,7 @@ void main() {
       for (final file in _libDartFiles())
         if (file.readAsStringSync().contains('commandFramePath') ||
             file.readAsStringSync().contains('CommandFrame'))
-          file.path,
+          _posixPath(file),
     ];
     expect(
       offenders,
@@ -54,9 +60,9 @@ void main() {
   test('game UI does not read Material TextTheme', () {
     final offenders = [
       for (final file in _libDartFiles())
-        if (file.path.contains('/ui/') &&
+        if (_posixPath(file).contains('/ui/') &&
             file.readAsStringSync().contains('textTheme'))
-          file.path,
+          _posixPath(file),
     ];
     expect(
       offenders,
@@ -72,9 +78,9 @@ void main() {
     // widget that owns it.
     final offenders = [
       for (final file in _libDartFiles())
-        if (!file.path.endsWith('orion_typography.dart') &&
+        if (!_posixPath(file).endsWith('orion_typography.dart') &&
             file.readAsStringSync().contains('OrionTypography.title'))
-          file.path,
+          _posixPath(file),
     ];
     expect(
       offenders,
@@ -85,15 +91,19 @@ void main() {
 
   test('OrionTitle is handed real copy, never a shouted literal', () {
     // Passing an already-uppercased string would double-apply the rule and
-    // leave assistive tech spelling out the shout.
+    // leave assistive tech spelling out the shout. An acronym has no
+    // mixed-case form — 'R & D' *is* the real copy — so the check only
+    // fires on a shouted run of two or more letters.
     final offenders = <String>[];
     final call = RegExp(r"OrionTitle\(\s*'([^']*)'");
+    final shouted = RegExp(r'[A-Z]{2,}');
     for (final file in _libDartFiles()) {
       for (final match in call.allMatches(file.readAsStringSync())) {
         final literal = match.group(1)!;
         if (literal.toUpperCase() == literal &&
-            literal.toLowerCase() != literal) {
-          offenders.add('${file.path}: $literal');
+            literal.toLowerCase() != literal &&
+            shouted.hasMatch(literal)) {
+          offenders.add('${_posixPath(file)}: $literal');
         }
       }
     }
