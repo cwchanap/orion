@@ -14,7 +14,7 @@
 
 - One HPA-9 implementation PR. Keep scene-local commits.
 - Task 5 is a **hard review stop** inside that PR; do not create a second PR unless the product owner explicitly changes delivery strategy.
-- Reuse PR #28's source artboards at `docs/superpowers/specs/assets/evidence/2026-09-01-hpa-14/artboards/1a.png` through `1h.png`.
+- Reuse PR #28's source artboards (`artboards/1a.png` through `1h.png` in that PR's history); do not re-commit them.
 - Do not add the standalone HTML to the repository.
 - Reuse `OrionUiTheme`; no second token system or global theme rewrite.
 - No external font dependency.
@@ -36,10 +36,10 @@
 
 Evidence is produced **with each scene task**, not deferred to the end.
 
-Target directory:
+Target directory (gitignored — attach captures to the PR body; do not commit them):
 
 ```text
-docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/
+tmp/evidence/2026-09-03-hpa-9/
 ```
 
 Required outputs:
@@ -348,7 +348,7 @@ git diff --check
 Fixture:
 
 ```bash
-ORION_CAPTURE_DIR=docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9 \
+ORION_CAPTURE_DIR=tmp/evidence/2026-09-03-hpa-9 \
   flutter test test/widget/mission_chrome_test.dart \
   --plain-name 'capture scene 1a fixture'
 ```
@@ -365,7 +365,7 @@ Capture:
 
 ```bash
 ./scripts/capture_reactor_rim_ios.sh \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1a.png
+  tmp/evidence/2026-09-03-hpa-9/live-1a.png
 ```
 
 Write the 1a PR parity row now.
@@ -375,9 +375,7 @@ Write the 1a PR parity row now.
 ```bash
 git add lib/game/ui/mission_chrome.dart lib/game/ui/mission_command_hud.dart \
   lib/game/ui/mission_command_dock.dart test/widget/mission_chrome_test.dart \
-  test/widget/mission_command_hud_test.dart test/widget/mission_command_dock_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1a.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1a.png
+  test/widget/mission_command_hud_test.dart test/widget/mission_command_dock_test.dart
 git commit -m "feat: finish Reactor Rim playable HUD parity"
 ```
 
@@ -495,7 +493,7 @@ git diff --check
 Fixture:
 
 ```bash
-ORION_CAPTURE_DIR=docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9 \
+ORION_CAPTURE_DIR=tmp/evidence/2026-09-03-hpa-9 \
   flutter test test/widget/stage_briefing_sheet_test.dart \
   --plain-name 'capture scene 1b fixture'
 ```
@@ -508,7 +506,7 @@ World Map -> tap an available stage -> briefing remains open
 
 ```bash
 ./scripts/capture_reactor_rim_ios.sh \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1b.png
+  tmp/evidence/2026-09-03-hpa-9/live-1b.png
 ```
 
 Write the 1b row, including:
@@ -522,9 +520,7 @@ TOWER CAP                         -> Mock-only removed
 
 ```bash
 git add lib/game/ui/stage_briefing_sheet.dart lib/game/ui/orion_game_page.dart \
-  test/widget/stage_briefing_sheet_test.dart test/widget_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1b.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1b.png
+  test/widget/stage_briefing_sheet_test.dart test/widget_test.dart
 git commit -m "feat: redesign Reactor Rim stage briefing"
 ```
 
@@ -575,7 +571,7 @@ git diff --check
 ### Step 3.5 — Capture 1c + row
 
 ```bash
-ORION_CAPTURE_DIR=docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9 \
+ORION_CAPTURE_DIR=tmp/evidence/2026-09-03-hpa-9 \
   flutter test test/widget/next_wave_scanner_test.dart \
   --plain-name 'capture scene 1c fixture'
 ```
@@ -589,9 +585,7 @@ Outpost Alpha build phase -> expand next-wave scanner on a representative multi-
 Capture `live-1c.png`, write row, then commit:
 
 ```bash
-git add lib/game/ui/next_wave_scanner.dart test/widget/next_wave_scanner_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1c.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1c.png
+git add lib/game/ui/next_wave_scanner.dart test/widget/next_wave_scanner_test.dart
 git commit -m "feat: finish Reactor Rim wave scanner parity"
 ```
 
@@ -656,9 +650,7 @@ Fixture command targets a deterministic L2 specialization state. Live state reac
 Write `fixture-1d.png`, `live-1d.png`, parity row, then commit:
 
 ```bash
-git add lib/game/ui/tower_inspector.dart test/widget/tower_inspector_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1d.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1d.png
+git add lib/game/ui/tower_inspector.dart test/widget/tower_inspector_test.dart
 git commit -m "feat: finish Reactor Rim tower inspector parity"
 ```
 
@@ -921,9 +913,7 @@ The live drag is visual/smoke evidence only; the game tests above are correctnes
 git add lib/game/orion_defense_game.dart lib/game/components/board_component.dart \
   lib/game/ui/orion_game_page.dart lib/game/ui/mission_chrome.dart lib/game/ui/mission_command_dock.dart \
   test/game/orion_defense_game_test.dart test/widget/mission_command_dock_test.dart \
-  test/widget/mission_chrome_test.dart test/widget_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1e.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1e.png
+  test/widget/mission_chrome_test.dart test/widget_test.dart
 git commit -m "feat: add Reactor Rim drag placement preview"
 ```
 
@@ -1004,9 +994,7 @@ persistent selected-stage bar -> Intentional deviation; Stage Briefing is the si
 Capture and commit:
 
 ```bash
-git add lib/game/ui/world_map_view.dart test/widget/world_map_command_deck_test.dart test/widget_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1f.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1f.png
+git add lib/game/ui/world_map_view.dart test/widget/world_map_command_deck_test.dart test/widget_test.dart
 git commit -m "feat: redesign Reactor Rim world map"
 ```
 
@@ -1078,9 +1066,7 @@ Representative state includes purchased + affordable + unaffordable nodes with o
 Capture `fixture-1g.png`, `live-1g.png`, write row, then commit:
 
 ```bash
-git add lib/game/ui/tech_tree_view.dart test/widget/tech_tree_view_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1g.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1g.png
+git add lib/game/ui/tech_tree_view.dart test/widget/tech_tree_view_test.dart
 git commit -m "feat: redesign Reactor Rim tech tree"
 ```
 
@@ -1165,9 +1151,7 @@ Representative capture is saved victory. Automated tests continue to cover loss/
 Capture `fixture-1h.png`, `live-1h.png`, write row, then commit:
 
 ```bash
-git add lib/game/ui/mission_report_panel.dart test/widget/mission_report_panel_test.dart test/widget_test.dart \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/fixture-1h.png \
-  docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9/live-1h.png
+git add lib/game/ui/mission_report_panel.dart test/widget/mission_report_panel_test.dart test/widget_test.dart
 git commit -m "feat: redesign Reactor Rim mission report"
 ```
 
@@ -1283,7 +1267,7 @@ Suggested checks:
 ```bash
 test -z "$(git ls-files --others --exclude-standard assets/images)"
 ! git diff --name-only origin/main...HEAD | grep -E '^assets/images/(board_|stage_|scene_|result_|world_map_backdrop)'
-find docs/superpowers/specs/assets/evidence/2026-09-03-hpa-9 -maxdepth 1 -type f -name '*.png' | sort
+find tmp/evidence/2026-09-03-hpa-9 -maxdepth 1 -type f -name '*.png' | sort
 ```
 
 The second check intentionally permits only the normalized `reactor_rim_ui/` paths in the HPA-9 diff.
