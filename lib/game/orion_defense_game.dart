@@ -149,6 +149,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   @override
   void onGameResize(Vector2 size) {
     super.onGameResize(size);
+    // The backdrop is presentation-only, so it still tracks the viewport
+    // while combat geometry stays frozen below.
+    _boardBackdrop?.size = size.clone();
     // Enemy paths are immutable after spawn, so keep active-wave coordinates stable.
     if (_session.phase == GamePhase.wave) {
       return;
