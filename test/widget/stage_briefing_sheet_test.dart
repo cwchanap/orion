@@ -80,10 +80,16 @@ Future<_PopRecorder> _pumpBriefing(
   return recorder;
 }
 
-void _expectActionWithinViewport(WidgetTester tester, Size viewport) {
+Future<void> _expectActionWithinViewport(
+  WidgetTester tester,
+  Size viewport,
+) async {
   final action = find.byTooltip('Start Mission');
   expect(action, findsOneWidget);
-  tester.ensureVisible(action);
+  // ensureVisible performs a zero-duration jump whose geometry only lands on
+  // the next frame; measuring without the pump reads the pre-scroll rect.
+  await tester.ensureVisible(action);
+  await tester.pumpAndSettle();
   final rect = tester.getRect(action);
   expect(rect.left, greaterThanOrEqualTo(0));
   expect(rect.top, greaterThanOrEqualTo(0));
@@ -341,7 +347,7 @@ void main() {
           viewport: viewport,
         );
         expect(recorder.popped, isNull);
-        _expectActionWithinViewport(tester, viewport);
+        await _expectActionWithinViewport(tester, viewport);
         expect(tester.takeException(), isNull);
 
         await tester.tap(find.byTooltip('Dismiss'));
@@ -358,7 +364,7 @@ void main() {
       stage: OrionCampaign.stageOne,
       textScaler: const TextScaler.linear(3.0),
     );
-    _expectActionWithinViewport(tester, _productViewport);
+    await _expectActionWithinViewport(tester, _productViewport);
     expect(tester.takeException(), isNull);
   });
 

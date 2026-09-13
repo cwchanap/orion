@@ -46,7 +46,7 @@ pieces:
 ## Typography
 
 Two OFL faces, vendored to `assets/fonts/` and declared in `pubspec.yaml`:
-`Oxanium-ExtraBold.ttf`, `ChakraPetch-Bold.ttf`, `ChakraPetch-Medium.ttf`.
+`Oxanium[wght].ttf` (variable axis, used at wght 800), `ChakraPetch-Bold.ttf`.
 
 No `google_fonts` dependency: a runtime fetch would break widget tests and
 offline builds, and the existing `loadRealFonts` test helper already assumes

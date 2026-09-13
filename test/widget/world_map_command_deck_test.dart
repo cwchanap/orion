@@ -944,7 +944,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.runAsync(
       () => precacheImage(
-        const AssetImage('assets/images/reactor_rim_ui/backdrops/map-room.png'),
+        const AssetImage(
+          'assets/images/reactor_rim_ui/backdrops/world-map.png',
+        ),
         tester.element(find.byType(WorldMapView)),
       ),
     );
