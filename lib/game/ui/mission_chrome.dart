@@ -76,6 +76,7 @@ class _MissionChromeState extends State<MissionChrome> {
   final _hudKey = GlobalKey();
   final _dockKey = GlobalKey();
   final _scannerKey = GlobalKey();
+  final _modulesKey = GlobalKey();
   Size? _measuredSize;
   double? _measuredTextScale;
   double _topReserve = 0;
@@ -99,14 +100,21 @@ class _MissionChromeState extends State<MissionChrome> {
     // the dock shorter. Text scaling and viewport changes still get measured.
     final scanner =
         _scannerKey.currentContext?.findRenderObject() as RenderBox?;
-    final topBand = scanner ?? hud;
-    final top =
-        box
-            .globalToLocal(
-              topBand.localToGlobal(Offset(0, topBand.size.height)),
-            )
-            .dy +
-        8;
+    final modules =
+        _modulesKey.currentContext?.findRenderObject() as RenderBox?;
+    // The scanner is build-phase only, while the acquired-module control
+    // renders in any phase and can expand taller — reserve below the lowest
+    // top-band control so the board viewport never starts under chrome.
+    var top = 8.0;
+    for (final band in [hud, scanner, modules]) {
+      if (band == null) continue;
+      final edge =
+          box
+              .globalToLocal(band.localToGlobal(Offset(0, band.size.height)))
+              .dy +
+          8;
+      if (edge > top) top = edge;
+    }
     final bottom =
         box.size.height -
         box.globalToLocal(dock.localToGlobal(Offset.zero)).dy +
@@ -161,6 +169,7 @@ class _MissionChromeState extends State<MissionChrome> {
                       const SizedBox(width: 6),
                       Flexible(
                         child: AcquiredRunModuleControl(
+                          key: _modulesKey,
                           moduleIds: widget.snapshot.acquiredRunModules,
                           collapseRequested:
                               widget.snapshot.selectedCell != null ||
@@ -404,15 +413,23 @@ class TowerRadialActions extends StatelessWidget {
                 constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
                 tooltip: tower.canUpgrade
                     ? 'Upgrade ${stats?.upgradeCost ?? ''}'
-                    : 'Specialize tower',
+                    : tower.canSpecialize
+                    ? 'Specialize tower'
+                    : 'Max level',
                 onPressed: tower.canUpgrade
                     ? (canUpgrade ? onUpgrade : null)
-                    : onInspect,
+                    : tower.canSpecialize
+                    ? onInspect
+                    : null,
                 icon: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      tower.canUpgrade ? Icons.upgrade : Icons.auto_awesome,
+                      tower.canUpgrade
+                          ? Icons.upgrade
+                          : tower.canSpecialize
+                          ? Icons.auto_awesome
+                          : Icons.check,
                       color: t.systemCyan,
                       size: 22,
                     ),

@@ -434,6 +434,60 @@ void main() {
     }
   });
 
+  testWidgets(
+    'radial top action is a Max level badge, not Specialize, at level 3',
+    (tester) async {
+      await loadRealFonts();
+      for (final level in [2, 3]) {
+        var inspected = 0;
+        final tower = PlacedTower(
+          id: 1,
+          type: TowerType.laser,
+          position: const GridPosition(4, 5),
+          level: level,
+          specialization: level == 3
+              ? GameBalance.specializationsFor(TowerType.laser).first
+              : null,
+        );
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: orionThemeData,
+            home: Scaffold(
+              body: Center(
+                child: TowerRadialActions(
+                  snapshot: commandDeckSnapshot(
+                    selectedTower: tower,
+                    selectedTowerStats: GameBalance.towerStats(
+                      TowerType.laser,
+                      level: level,
+                      specialization: tower.specialization,
+                    ),
+                  ),
+                  onUpgrade: () {},
+                  onInspect: () => inspected++,
+                  onSell: () {},
+                  onTargetingChanged: (_) {},
+                ),
+              ),
+            ),
+          ),
+        );
+        if (level == 2) {
+          expect(find.byTooltip('Specialize tower'), findsOneWidget);
+          await tester.tap(find.byTooltip('Specialize tower'));
+          expect(inspected, 1);
+        } else {
+          // A max-level tower cannot specialize; the action must not
+          // advertise it. The badge is inert — inspect stays dedicated below.
+          expect(find.byTooltip('Specialize tower'), findsNothing);
+          expect(find.byTooltip('Max level'), findsOneWidget);
+          await tester.tap(find.byTooltip('Max level'));
+          expect(inspected, 0);
+        }
+      }
+    },
+  );
+
   for (final kind in [PointerDeviceKind.touch, PointerDeviceKind.mouse]) {
     for (final action in ['gap tap', 'selected tower long press']) {
       testWidgets('mounted radial preserves $action with ${kind.name}', (
