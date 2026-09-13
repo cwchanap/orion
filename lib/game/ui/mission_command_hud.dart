@@ -466,10 +466,7 @@ class _PacingChip extends StatelessWidget {
                             child: Text(
                               label,
                               maxLines: 1,
-                              style: OrionTypography.microLabel(
-                                size: 7.5,
-                                color: tint,
-                              ),
+                              style: OrionTypography.microLabel(color: tint),
                             ),
                           ),
                       ],

@@ -140,6 +140,7 @@ class _ReportBackdrop extends StatelessWidget {
           key: const ValueKey('mission-report-backdrop-art'),
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
+          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
         const DecoratedBox(
           key: ValueKey('mission-report-scrim'),
@@ -312,6 +313,16 @@ class _ReportBody extends StatelessWidget {
             height: 120,
             fit: BoxFit.cover,
             alignment: Alignment.center,
+            errorBuilder: (context, error, stackTrace) => SizedBox(
+              height: 120,
+              child: Center(
+                child: Icon(
+                  OrionArt.result(result).fallbackIcon,
+                  color: uiTheme.systemCyan.withValues(alpha: 0.6),
+                  size: 32,
+                ),
+              ),
+            ),
           ),
         ),
         const SizedBox(height: 14),

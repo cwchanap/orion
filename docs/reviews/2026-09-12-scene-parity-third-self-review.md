@@ -43,6 +43,8 @@ Review checks and their confirmed output are archived under `tmp/self-review-3/`
 
 ## Previous review status
 
-The second review's three findings remain open: radial upgrade text clipping, stale inspector state after Retry, and the missing bottom targeting control from scene 1a. See [the second self-review](2026-09-12-scene-parity-second-self-review.md). The first review's four fixes remain in the working tree; this pass did not modify them.
+_Historical — this section records the state when the review ran. All six findings across the second and third reviews were subsequently resolved; see [the verified fixes](2026-09-12-scene-parity-review-fixes.md)._
 
-The gallery covers all eight reference scenes, but visual parity is not complete. There are now six open findings across the second and third reviews. Changes remain uncommitted.
+At review time the second review's three findings were still open: radial upgrade text clipping, stale inspector state after Retry, and the missing bottom targeting control from scene 1a. See [the second self-review](2026-09-12-scene-parity-second-self-review.md). The first review's four fixes were in the working tree; this pass did not modify them.
+
+The gallery covers all eight reference scenes, but visual parity was not complete at that point: six open findings across the second and third reviews, with the changes uncommitted.

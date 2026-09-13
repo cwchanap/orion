@@ -35,10 +35,10 @@ void main() {
       ),
     );
 
-    final sellButton = tester.widget<GestureDetector>(
-      find.byKey(const ValueKey('tower-sell')),
+    final sellButton = tester.widget<Semantics>(
+      find.byKey(const ValueKey('tower-sell-semantics')),
     );
-    expect(sellButton.onTapDown, isNotNull);
+    expect(sellButton.properties.enabled, isTrue);
   });
 
   testWidgets('Sell button is disabled during an active wave', (tester) async {
@@ -52,10 +52,10 @@ void main() {
       phase: GamePhase.wave,
     );
 
-    final sellButton = tester.widget<GestureDetector>(
-      find.byKey(const ValueKey('tower-sell')),
+    final sellButton = tester.widget<Semantics>(
+      find.byKey(const ValueKey('tower-sell-semantics')),
     );
-    expect(sellButton.onTapDown, isNull);
+    expect(sellButton.properties.enabled, isFalse);
   });
 
   testWidgets('tapping Sell invokes game.sellSelectedTower', (tester) async {
