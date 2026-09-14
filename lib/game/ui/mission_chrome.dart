@@ -207,7 +207,6 @@ class _MissionChromeState extends State<MissionChrome> {
                       NextWaveScanner(
                         key: _scannerKey,
                         preview: widget.snapshot.nextWavePreview!,
-                        stageId: widget.snapshot.stageId,
                         onStartWave: widget.onStartWave,
                         modifierTitles: widget.snapshot.stageModifiers.isEmpty
                             ? [StageModifierMetadata.standardConditions.title]
