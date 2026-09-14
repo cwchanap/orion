@@ -1404,7 +1404,7 @@ sigmas to a fifth value; the tripwire in Task 14 will reject that.
 - [ ] **Step 5: Commit only if the fallback was applied**
 
 ```bash
-git add -u lib/game/ui/orion_surface.dart
+git add -u lib/game/ui/orion_surface.dart test/widget/orion_surface_test.dart
 git commit -m "perf: restrict blur to t3/t4 after on-device measurement
 
 Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
