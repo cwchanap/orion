@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
-import '../campaign/orion_campaign.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
@@ -255,19 +254,7 @@ class WaveScannerScene extends StatelessWidget {
       1,
       (n, g) => g.enemyCount > n ? g.enemyCount : n,
     );
-    final stage = OrionCampaign.stages
-        .where((s) => s.id == stageId)
-        .firstOrNull;
-    final forecast = stage == null || stage.waves.isEmpty
-        ? preview
-        : GameBalance.wavePreview(
-            wave: stage.waves.last,
-            waveNumber: stage.waves.length,
-            waveTotal: stage.waves.length,
-            unlockedTowerTypes: const [],
-            effectiveClearBonus: 0,
-          );
-    final bosses = forecast.groups.where(
+    final bosses = preview.groups.where(
       (g) => GameBalance.bosses.any((b) => b.name == g.label),
     );
     final traits = {
@@ -471,7 +458,7 @@ class WaveScannerScene extends StatelessWidget {
                                           CrossAxisAlignment.start,
                                       children: [
                                         OrionText.micro(
-                                          'WAVE ${forecast.waveNumber} · BOSS',
+                                          'WAVE ${preview.waveNumber} · BOSS',
                                           color: t.systemViolet,
                                           size: 9,
                                         ),
