@@ -379,6 +379,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.bySemanticsLabel('Swarm Queen'), findsOneWidget);
+    // The boss card renders because the previewed wave itself is inbound.
+    expect(find.text('WAVE 1 · BOSS'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('preview-group-0')),
@@ -394,6 +396,23 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'an earlier preview with a stage id does not leak the final-wave boss',
+    (tester) async {
+      // outpost-alpha's finale boss is Relay Breaker; the boss card must stay
+      // scoped to what the previewed wave actually brings.
+      await tester.pumpWidget(
+        scannerHost(representativePreview(), stageId: 'outpost-alpha'),
+      );
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel('12 Armored Drones'), findsOneWidget);
+      expect(find.textContaining('BOSS'), findsNothing);
+      expect(find.bySemanticsLabel('Relay Breaker'), findsNothing);
+    },
+  );
 
   testWidgets('mapped trait badges render their atlas descriptors', (
     tester,
