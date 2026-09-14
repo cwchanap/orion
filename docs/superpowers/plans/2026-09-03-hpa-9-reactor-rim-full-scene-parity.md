@@ -255,12 +255,25 @@ mkdir -p "$(dirname "$out")"
 # same PNG size while Flutter laid the scene out at a different viewport.
 # Resolve the booted device's type profile and read its declared screen
 # geometry: logical points = mainScreen{Width,Height} / mainScreenScale.
-dtype=$(
-  xcrun simctl list devices booted -j |
-    sed -n 's/.*"deviceTypeIdentifier" : "\([^"]*\)".*/\1/p' |
-    head -1
+# UDID is captured alongside the type so the screenshot below hits the same
+# simulator — with several devices booted, `io booted` can pick a different
+# one than `list devices booted` enumerates first. Field order inside each
+# device object is not stable, so pair whichever field appears first with its
+# successor instead of assuming a layout.
+pair=$(
+  xcrun simctl list devices booted -j | awk '
+    match($0, /"udid" : "[^"]+"/) {
+      u = substr($0, RSTART + 10, RLENGTH - 11)
+    }
+    match($0, /"deviceTypeIdentifier" : "[^"]+"/) {
+      d = substr($0, RSTART + 26, RLENGTH - 27)
+    }
+    u != "" && d != "" { print u, d; exit }
+  '
 )
-if [ -z "$dtype" ]; then
+udid=${pair%% *}
+dtype=${pair#* }
+if [ -z "$udid" ] || [ -z "$dtype" ]; then
   rm -f "$out"
   echo "no booted iOS simulator to capture" >&2
   exit 1
@@ -295,7 +308,7 @@ fi
 
 raw="$(mktemp -t reactor-rim-capture)"
 trap 'rm -f "$raw"' EXIT
-xcrun simctl io booted screenshot "$raw"
+xcrun simctl io "$udid" screenshot "$raw"
 # The capture must be the device's native portrait panel — a rotated or
 # degenerate shot is refused — then native pixels normalize to the contract
 # size (every 390x844-point iPhone shoots 1170x2532 @3x).
