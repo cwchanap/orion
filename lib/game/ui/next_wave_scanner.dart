@@ -17,9 +17,7 @@ class NextWaveScanner extends StatefulWidget {
     this.onCollapsedTapIntercept,
     this.onExpandedChanged,
     this.onStartWave,
-    this.stageId,
   });
-  final String? stageId;
   final WavePreview preview;
   final List<String> modifierTitles;
   final bool collapseRequested;
@@ -99,7 +97,6 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
                   autofocus: true,
                   child: WaveScannerScene(
                     preview: widget.preview,
-                    stageId: widget.stageId,
                     modifierTitles: widget.modifierTitles,
                     onClose: _toggle,
                     onStartWave: widget.onStartWave == null
@@ -239,9 +236,7 @@ class WaveScannerScene extends StatelessWidget {
     required this.modifierTitles,
     required this.onClose,
     this.onStartWave,
-    this.stageId,
   });
-  final String? stageId;
   final WavePreview preview;
   final List<String> modifierTitles;
   final VoidCallback onClose;

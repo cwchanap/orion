@@ -18,7 +18,6 @@ Widget scannerHost(
   WavePreview preview, {
   bool disableAnimations = false,
   bool collapseRequested = false,
-  String? stageId,
   List<String> modifierTitles = const ['Standard Conditions'],
 }) {
   return MaterialApp(
@@ -38,7 +37,6 @@ Widget scannerHost(
         alignment: Alignment.topRight,
         child: NextWaveScanner(
           preview: preview,
-          stageId: stageId,
           modifierTitles: modifierTitles,
           collapseRequested: collapseRequested,
           onStartWave: () {},
@@ -397,22 +395,19 @@ void main() {
     );
   });
 
-  testWidgets(
-    'an earlier preview with a stage id does not leak the final-wave boss',
-    (tester) async {
-      // outpost-alpha's finale boss is Relay Breaker; the boss card must stay
-      // scoped to what the previewed wave actually brings.
-      await tester.pumpWidget(
-        scannerHost(representativePreview(), stageId: 'outpost-alpha'),
-      );
-      await tester.tap(find.byTooltip('Expand next-wave scanner'));
-      await tester.pumpAndSettle();
+  testWidgets('an earlier preview does not leak the final-wave boss', (
+    tester,
+  ) async {
+    // The boss card must stay scoped to what the previewed wave actually
+    // brings — Relay Breaker belongs to the stage finale, not wave 4.
+    await tester.pumpWidget(scannerHost(representativePreview()));
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
 
-      expect(find.bySemanticsLabel('12 Armored Drones'), findsOneWidget);
-      expect(find.textContaining('BOSS'), findsNothing);
-      expect(find.bySemanticsLabel('Relay Breaker'), findsNothing);
-    },
-  );
+    expect(find.bySemanticsLabel('12 Armored Drones'), findsOneWidget);
+    expect(find.textContaining('BOSS'), findsNothing);
+    expect(find.bySemanticsLabel('Relay Breaker'), findsNothing);
+  });
 
   testWidgets('mapped trait badges render their atlas descriptors', (
     tester,
@@ -625,7 +620,6 @@ void main() {
         key: boundaryKey,
         child: scannerHost(
           representativePreview(),
-          stageId: 'outpost-alpha',
           modifierTitles: const ['Ion Storm'],
         ),
       ),

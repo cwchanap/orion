@@ -231,7 +231,6 @@ void main() {
             content = WaveScannerScene(
               preview: commandDeckPreview(),
               modifierTitles: const ['Standard Conditions'],
-              stageId: 'outpost-alpha',
               onClose: () {},
               onStartWave: () {},
             );
