@@ -1111,6 +1111,18 @@ void main() {
         378,
       );
     });
+
+    test('cluster rocket burst radius stays within its splash radius', () {
+      final stats = GameBalance.towerStats(
+        TowerType.rocket,
+        level: 3,
+        specialization: TowerSpecialization.clusterRocket,
+      );
+
+      // Guards the assumption that the normal splash visual covers the full
+      // area affected by cluster bursts, so no second burst VFX path is needed.
+      expect(stats.clusterBurstRadius, lessThanOrEqualTo(stats.splashRadius));
+    });
   });
 
   group('Campaign tech-tree constants', () {
