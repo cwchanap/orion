@@ -4,45 +4,48 @@
 
 ## Outcome
 
-Make the existing combat rules visibly legible without changing combat outcomes.
+Make Orion's existing combat rules visually legible without changing combat outcomes.
 
-A player watching the board should be able to distinguish:
+A player watching the live board should be able to distinguish:
 
-- Rocket splash from a normal projectile hit.
-- Ion Chain from a single-target hit, including the order of actual chained targets.
-- Railgun pierce from a normal projectile, including the enemies actually pierced.
+- Rocket splash from a normal projectile hit, including which enemies were caught in the splash.
+- Ion Chain from a single-target hit, including the actual resolved chain order.
+- Railgun pierce from a normal projectile, including the actual resolved pierced targets.
 - Slow/corrosion state from ordinary enemy presentation.
 - Enemy destruction from an enemy leaking into the core.
 
-This is presentation polish only. Damage, targeting, wave timing, enemy lifecycle, tower stats, rewards, and balance remain authoritative in their current owners.
+This is presentation polish only. Damage, targeting, enemy lifecycle, rewards, wave timing, tower stats, and balance remain authoritative in their current owners.
 
-## Current implementation seams
+## Existing seams to extend
 
-The current code already has the right gameplay ownership:
+The codebase already has the right ownership:
 
-- **lib/game/components/projectile_component.dart** resolves projectile impact.
-  - Ion Chain calls CombatEffects.selectChainTargets and applies damage to those selected enemies.
-  - Railgun calls CombatEffects.selectPierceTargets and applies damage to those selected enemies.
-  - Rocket splash resolves its impact point, tests the current enemy set against splashRadius, and applies damage in that same loop.
-  - Cluster Rocket's current clusterBurstRadius (42) is inside its splashRadius (72), so its extra bursts can reuse the normal splash visual instead of creating another VFX path.
-- **lib/game/components/enemy_component.dart** owns the render shell around EnemyLogic and dispatches exactly one kill or reached-base callback.
-- **lib/game/orion_defense_game.dart** owns the active component collection and the two distinct resolution callbacks:
-  - _handleEnemyKilled
-  - _handleEnemyReachedBase
-- **lib/game/components/enemy_overlay.dart** and **lib/game/rules/enemy_overlay_state.dart** already own enemy status/overlay presentation and layout.
-- Enemy slow/corrosion already exist as authoritative EnemyLogic state and already appear in EnemyOverlayState.
+- **lib/game/components/projectile_component.dart**
+  - resolves normal/splash/chain/pierce projectile hits;
+  - calls CombatEffects.selectChainTargets and CombatEffects.selectPierceTargets;
+  - already owns the projectile paint/color.
+- **lib/game/components/enemy_component.dart**
+  - wraps EnemyLogic;
+  - dispatches exactly one onKilled or onReachedBase callback;
+  - renders the enemy sprite and then delegates status/health presentation to EnemyOverlayRenderer.
+- **lib/game/orion_defense_game.dart**
+  - owns the active Flame component collection;
+  - owns the central _handleEnemyKilled / _handleEnemyReachedBase callbacks;
+  - owns _clearCombatComponents.
+- **lib/game/components/enemy_overlay.dart** + **lib/game/rules/enemy_overlay_state.dart**
+  - already own enemy overlay painting and pure overlay geometry.
+- **test/game/enemy_component_test.dart**
+  - already renders components/overlays into a PictureRecorder without pixel assertions.
+- **test/game/game_balance_test.dart**
+  - already pins tuning invariants.
 
-The implementation attaches feedback to these existing resolution points. It does not move combat selection into a new subsystem and does not ask presentation code to select targets again.
+Keep those seams. Do not move combat logic into rendering and do not introduce a new event/VFX architecture.
 
-## Design decisions
+## 1. One transient CombatFeedbackComponent
 
-### 1. One focused transient drawing component
+Create **lib/game/components/combat_feedback_component.dart**.
 
-Add **lib/game/components/combat_feedback_component.dart**.
-
-CombatFeedbackComponent is a short-lived Flame component that only draws primitive geometry and removes itself after a small fixed lifetime.
-
-It supports five presentation kinds:
+It is a presentation-only Flame Component with exactly five kinds:
 
 1. splash
 2. chain
@@ -50,246 +53,326 @@ It supports five presentation kinds:
 4. enemyDestroyed
 5. coreImpact
 
-Use named constructors rather than a generic effect registry. Each constructor accepts only already-resolved world-space geometry needed to draw the cue.
+Use five named constructors, not a registry or sealed hierarchy.
 
-Representative inputs:
+Follow the repository callback convention with:
 
-- splash: impact center, splash radius, resolved hit positions, projectile color
-- chain: resolved target positions in chain order, projectile color
-- pierce: firing origin, resolved hit positions in pierce order, projectile color
-- enemyDestroyed: enemy center and approximate enemy radius
-- coreImpact: enemy/core impact center and approximate enemy radius
+`typedef CombatFeedbackCallback = void Function(CombatFeedbackComponent feedback);`
 
-The component must not accept EnemyComponent collections, targeting callbacks, damage callbacks, GameSession, or GameFeedback. It cannot affect gameplay.
+ProjectileComponent receives an optional CombatFeedbackCallback.
 
-Do not extend GameFeedback for per-hit VFX. That interface remains the existing audio/haptic feedback boundary.
+### Total geometry fields
 
-### 2. Stationary geometry plus opacity decay
+Keep the component's internal data bag total rather than nullable.
 
-Feedback appears immediately at the resolved geometry and fades out.
+A simple shape is sufficient:
 
-Do not add camera shake, hit-stop, travelling secondary particles, oscillation, or an animation state machine.
+- `Vector2 origin` — splash center, first chain point, railgun firing origin, or resolution center;
+- `List<Vector2> positions = const []` conceptually — cloned resolved target positions, empty for death/core cues;
+- `double radius = 0`;
+- color/paint;
+- kind;
+- elapsed/lifetime.
 
-CombatFeedbackComponent uses the dt it already receives from Flame. There is no speed-specific VFX state: at 3x the transient naturally consumes its lifetime faster in wall-clock time with the rest of the game.
+Dart/Vector2 construction details can vary, but do not create nullable fields that force `!` assertions in render branches.
 
-This is also the reduced-motion-friendly shape for this ticket. Do not add a new accessibility setting or persistence path.
+The component must not own:
 
-### 3. ProjectileComponent emits feedback from the same resolution pass
+- EnemyComponent references;
+- enemy providers;
+- target selectors;
+- damage callbacks;
+- GameSession;
+- GameFeedback.
 
-ProjectileComponent remains the authority for projectile-side hit resolution.
+## 2. Stationary geometry + opacity decay
 
-Add one narrow optional callback:
-
-- onCombatFeedback(CombatFeedbackComponent feedback)
-
-OrionDefenseGame wires that callback to add(feedback). Feedback is parented on the game, never on the projectile or enemy that is about to remove itself.
-
-Use ProjectileComponent's existing paint.color as the feedback color. Do not add a second TowerType-to-color table.
-
-Each resolver builds feedback from the enemies it is already resolving.
-
-#### Rocket splash
-
-At impact:
-
-1. Clone the impact position once.
-2. Because _resolveHit already requires a live target, clone the primary target position immediately before the existing primary applyDamage call.
-3. Keep the current secondary loop and its existing alive/distance checks.
-4. Inside the existing distanceTo(impactPosition) <= stats.splashRadius branch, clone the secondary enemy position immediately before applyDamage.
-5. Do not inspect health before/after damage and do not widen EnemyComponent.applyDamage just to prove a VFX hit.
-6. Emit exactly one splash feedback component using the same impact center, stats.splashRadius, recorded resolved positions, and paint.color.
-7. Cluster bursts reuse this same splash component. Do not emit one component per burst.
-
-The feedback component never rechecks enemy distances. The splash ring is the primary readable cue; resolved positions are retained so ownership/tests stay tied to the actual damage loop rather than a second selector.
-
-#### Ion Chain
-
-After CombatEffects.selectChainTargets returns:
-
-1. Map the selected candidates back to live EnemyComponents exactly as today.
-2. For each enemy that passes the current live check, clone its position immediately before applying that jump's damage.
-3. Apply the existing falloff/shield behavior.
-4. Emit one chain feedback component using only the recorded ordered positions.
-
-The drawn segments therefore mirror the same ordered chain used for damage.
-
-#### Railgun pierce
-
-After CombatEffects.selectPierceTargets returns:
-
-1. Map selected candidates back to enemies exactly as today.
-2. For each live resolved enemy, clone its position immediately before applying damage.
-3. Apply the existing armor multiplier behavior.
-4. Emit one pierce feedback component from the projectile origin through the recorded ordered positions.
-
-The feedback component does not call selectPierceTargets.
-
-Prism split, drones, gravity-field ticks, and nanite hit flashes are out of scope. Do not widen this ticket by adding feedback to adjacent combat branches.
-
-### 4. Kill and leak cues use the existing game callbacks, with defeat ordering pinned
-
-Enemy destruction and core impact must survive their respective resolution paths without delaying gameplay.
-
-#### Enemy destruction
-
-At the start of _handleEnemyKilled, while enemy.position and enemy.radius are still available, add enemyDestroyed feedback.
-
-Then continue the existing reward/removal/snapshot path unchanged.
-
-#### Core impact
-
-_handleEnemyReachedBase already clears combat components when the leak changes the phase from wave to lost. Therefore the core-impact cue must not be added before that clear.
-
-Instead:
-
-1. Clone enemy.position and enemy.radius at the start of _handleEnemyReachedBase.
-2. Run the existing handler logic unchanged, including inspection cleanup, active-enemy removal, base damage, loss detection, defeat feedback, combat cleanup, spawn reset, pacing reset, layout, and snapshot publication.
-3. Add CombatFeedbackComponent.coreImpact from the cloned geometry after the possible defeat cleanup.
-
-This makes both non-losing and losing leaks visible. On defeat, the existing cleanup removes earlier transient combat feedback, then the current leak cue is added. A later restart still removes that leftover cue through the normal combat cleanup path.
-
-The two visual shapes must be clearly different even without color:
-
-- enemyDestroyed: compact radial burst / short rays
-- coreImpact: heavier ring + cross/diamond impact mark
-
-Boss defeat uses the same normal destruction cue scaled from the enemy radius; existing boss audio/haptics remain unchanged.
-
-### 5. Slow and corrosion stay inside the existing enemy overlay renderer/layout
-
-Do not create onset/expiry events, second timers, or a second status presentation object.
-
-EnemyComponent already renders the sprite and then calls EnemyOverlayRenderer. Keep that ownership:
-
-1. EnemyComponent renders the enemy sprite.
-2. EnemyOverlayRenderer draws a thin status ring treatment derived from the existing EnemyOverlayState badges.
-3. EnemyOverlayRenderer then draws its existing health/shield bars, badges, and boss name over the ring treatment.
-
-Use the existing EnemyOverlayBadge.slowed and EnemyOverlayBadge.corroded values; do not duplicate booleans in another model.
-
-Add the small ring geometry to EnemyOverlayLayout so it remains unit-testable without raster/golden tests. For example, expose nullable slowed/corroded ring radii/geometry from EnemyOverlayLayout.compute.
-
-Suggested treatment:
-
-- slowed: thin cool outer ring
-- corroded: thin green inner/offset ring
-
-The rings disappear automatically when the authoritative status badge disappears.
-
-## Layering and visual priority
-
-One priority cannot both sit under enemy overlays and make chain/pierce body hits readable, so the five named constructors pin their own simple priorities. This is not a new z-layer system.
-
-Current useful ordering is approximately:
-
-- board: priority 0
-- towers: priority 10
-- enemies + their overlay: priority 20
-- gravity fields: priority 25
-- projectiles: priority 30
-
-Use:
-
-- splash: priority 15 — area ring/flash reads around enemy sprites; do not rely on on-body splash accents for readability
-- enemyDestroyed: priority 15 — the enemy is removed before the next render
-- coreImpact: priority 15 — the leaking enemy is removed before the next render
-- chain: priority 25 — thin segments/compact center accents remain readable on live targets
-- pierce: priority 25 — thin firing line/compact center accents remain readable on live targets
-
-Chain/pierce strokes must stay thin and centered on the body so they do not compete with the health/status overlay above the enemy.
-
-Do not reuse GravityFieldComponent. It has a similar lifetime/removal pattern but owns real damage behavior.
-
-## No new assets
-
-Use Canvas primitives and current projectile colors only.
+Each effect appears immediately at already-resolved geometry and fades out.
 
 Do not add:
 
-- generated images
-- sprite sheets
-- new SFX
-- new haptics
-- package dependencies
+- travelling particles;
+- camera shake;
+- hit-stop;
+- oscillation;
+- a timeline/animation state machine;
+- speed-specific VFX state.
 
-## Testing strategy
+CombatFeedbackComponent uses the dt Flame already supplies. Orion's game speed changes the child dt through HasTimeScale, so the same effect naturally has a shorter wall-clock lifetime at 3x.
 
-Automated tests protect ownership, geometry, lifecycle, and unchanged combat numbers, not rendered pixels.
+This is also the reduced-motion-friendly path for this ticket; do not add a new setting or persistence field.
 
-### CombatFeedbackComponent
+## 3. Layering is split only by whether the target is still on screen
 
-Add **test/game/combat_feedback_component_test.dart** and verify:
+One priority cannot make both post-removal bursts and on-body multi-target feedback readable.
 
-- constructor inputs are cloned;
-- kind/geometry are retained for inspection;
-- named constructors choose the pinned priority for their kind;
-- the component expires/removes itself after its lifetime;
-- it exposes no gameplay callback or mutation path.
+Do not build a z-layer abstraction. Pin the named constructors:
 
-### Projectile resolution
+- **enemyDestroyed / coreImpact: priority 15**
+  - their enemy is removed before the next render, so the cue is not hidden by the body.
+- **splash / chain / pierce: priority 26**
+  - these cues need to be readable on live targets;
+  - priority 26 stays above the existing priority-25 GravityFieldComponent without relying on equal-priority insertion order;
+  - strokes/accents stay thin and brief so they do not dominate health/status information.
 
-Add a dedicated **test/game/projectile_component_test.dart**.
+Current approximate stack:
 
-Test ProjectileComponent directly through its optional feedback callback. Do not route these geometry tests through OrionDefenseGame.
+- board: 0
+- towers: 10
+- enemy body + overlay: 20
+- gravity fields: 25
+- multi-target combat feedback: 26
+- projectiles: 30
 
-Cover representative splash, chain, and pierce resolution:
+## 4. Projectile feedback comes from the same damage loops
 
-- existing health/damage outcomes remain unchanged;
-- feedback geometry comes from the same enemies/positions used by the existing damage loop;
-- splash uses the existing impact center/radius and records positions before applyDamage;
-- chain ordering in feedback matches resolved damage order;
-- pierce geometry includes the existing firing origin and resolved hit order;
-- cluster burst emits one normal splash feedback component.
+ProjectileComponent remains the projectile hit authority.
 
-Do not independently reproduce target selection in the assertion and do not add a test-only production API.
+Use its existing `paint.color`; do not duplicate the TowerType -> color table.
 
-### Kill vs leak
+### Rocket splash
 
-Keep game-level coverage in **test/game/orion_defense_game_test.dart**:
+In the existing splash branch:
 
-- killing an enemy creates enemyDestroyed feedback and preserves reward behavior;
-- a non-losing leak creates coreImpact and preserves base damage;
-- the existing two-enemy defeat fixture leaves a coreImpact child after defeat cleanup;
+1. clone the impact center once;
+2. clone the primary target position immediately before its existing `applyDamage` call;
+3. preserve the existing secondary identity/alive/distance checks;
+4. inside the existing `distanceTo(impactPosition) <= stats.splashRadius` branch, clone the secondary position immediately before its `applyDamage` call;
+5. emit one splash component with:
+   - impact center;
+   - stats.splashRadius;
+   - the resolved positions;
+   - paint.color.
+
+Do not inspect health before/after damage and do not widen EnemyComponent.applyDamage's void API just for VFX.
+
+### Splash visuals must consume the positions
+
+Resolved splash positions are not test-only data.
+
+The splash renderer draws:
+
+- the brief splash-area ring/flash;
+- one restrained resolved-hit accent at each recorded position.
+
+This is what lets the player distinguish "the explosion caught one enemy" from "the explosion caught the cluster."
+
+Keep the accents small/low-opacity enough that bars and status badges remain the higher-signal information.
+
+### Cluster Rocket
+
+Do not create a second cluster-burst visual path.
+
+The current Cluster Rocket tuning has clusterBurstRadius <= splashRadius, so the normal splash visual covers the full affected area. Pin that relation in **game_balance_test.dart** instead of adding a special "one callback only" component assertion.
+
+Run-module stat resolution changes splashRadius but not clusterBurstRadius; do not copy that relationship into the component.
+
+### Ion Chain
+
+After CombatEffects.selectChainTargets returns:
+
+1. map the selected candidates back to the same live enemies as today;
+2. clone each enemy position immediately before applying that jump's damage;
+3. apply the existing falloff/shield behavior;
+4. emit one chain component using the recorded positions in exactly that order.
+
+The renderer draws thin segments through those points plus compact hit accents.
+
+### Railgun pierce
+
+After CombatEffects.selectPierceTargets returns:
+
+1. map selected candidates back to live enemies as today;
+2. clone each position immediately before damage;
+3. apply the existing armor multiplier behavior;
+4. emit one pierce component from the existing projectile origin through those points.
+
+The renderer draws a thin firing line plus compact hit accents.
+
+### Explicit non-goals for adjacent hit branches
+
+Do not add new hit VFX to:
+
+- Prism split;
+- drones;
+- gravity-field ticks;
+- nanite/corrosion onset.
+
+Kill feedback still catches kills from those sources centrally through _handleEnemyKilled.
+
+## 5. Kill and leak feedback use the existing central callbacks
+
+### Enemy destruction
+
+At the start of _handleEnemyKilled, add enemyDestroyed using the still-live enemy position/radius.
+
+Then run the existing reward/boss/snapshot behavior unchanged.
+
+This automatically covers kills caused by projectiles, drones, gravity fields, and corrosion without touching each damage source.
+
+### Core impact
+
+Add coreImpact at the start of _handleEnemyReachedBase, alongside the kill cue's simple ownership model.
+
+Then keep the current handler unchanged.
+
+For a **non-losing leak**, the board remains live and the coreImpact cue is visible.
+
+For the **losing leak**, the existing loss path calls _clearCombatComponents and the Flutter layer immediately covers the board with the full-screen MissionReportPanel. Let the loss cleanup remove the transient cue. Do not preserve an invisible VFX underneath an opaque debrief.
+
+If product direction later requires showing the final losing hit, that is a separate UI transition task (for example delaying/reworking the debrief presentation), not an ordering special case in this VFX ticket.
+
+### Cleanup
+
+Extend _clearCombatComponents to sweep CombatFeedbackComponent children together with projectiles/drones/fields.
+
+Restart therefore clears leftover feedback naturally.
+
+## 6. Slow/corrosion rings stay in EnemyOverlayRenderer/Layout
+
+Do not paint a second status dialect directly in EnemyComponent and do not add status timers/events.
+
+EnemyComponent already renders:
+
+1. enemy sprite;
+2. EnemyOverlayRenderer.
+
+Keep that split.
+
+EnemyOverlayRenderer draws status rings before its bars/badges/name, using the existing state badges:
+
+- EnemyOverlayBadge.slowed -> thin cool ring;
+- EnemyOverlayBadge.corroded -> thin green ring.
+
+EnemyOverlayLayout owns any ring radius/offset geometry so it remains pure and unit-testable without raster assertions.
+
+The current overlay ordering already places corroded/slowed first before the normal two-badge cap. Preserve the existing test that expects `[corroded, slowed]` when other traits are present; it already pins the invariant the ring feature relies on. Do not add a duplicate ordering test.
+
+## 7. No new assets or feedback catalog
+
+Use Canvas primitives and current colors only.
+
+Do not:
+
+- generate image assets;
+- add sprite sheets;
+- add packages;
+- add per-hit SFX/haptics;
+- extend GameFeedback;
+- reuse GravityFieldComponent as a VFX container (it applies real damage).
+
+## 8. Testing strategy
+
+Automated tests cover ownership, geometry, render execution, lifecycle, and unchanged combat outcomes. No pixel/golden coupling.
+
+### CombatFeedbackComponent tests
+
+Create **test/game/combat_feedback_component_test.dart**.
+
+Test:
+
+- inputs are cloned;
+- fields are total and named constructors expose the expected kind/geometry;
+- priorities are:
+  - 15 for death/core;
+  - 26 for splash/chain/pierce;
+- expiry removes the component when mounted in a minimal FlameGame;
+- no gameplay callback exists.
+
+Also execute render for all five kinds using a PictureRecorder:
+
+- once at full opacity;
+- once near expiry;
+- assert only `returnsNormally`.
+
+This follows the existing EnemyOverlayRenderer/EnemyComponent recorder-test pattern and keeps the patch above the repository's 90% coverage gate without introducing image comparisons.
+
+### ProjectileComponent tests
+
+Create **test/game/projectile_component_test.dart**.
+
+No FlameGame host is required for the projectile-resolution tests.
+
+Construct EnemyComponents directly, as existing EnemyComponent tests do. Because ProjectileComponent.update currently rejects an unmounted target, explicitly mark the standalone target/candidates mounted in the test setup (using the same test-only internal-member convention already used elsewhere) before calling `projectile.update(dt)`.
+
+Then capture the optional CombatFeedbackCallback and assert:
+
+- splash damage and emitted center/radius/positions agree;
+- splash positions are actually rendered as hit accents by the CombatFeedbackComponent render coverage above;
+- chain damage order agrees with emitted ordered points;
+- pierce damage agrees with firing origin + emitted ordered points;
+- existing health/damage outcomes remain unchanged.
+
+No GameWidget, FlameGame host, or processLifecycleEvents are required for these direct projectile tests.
+
+Do not independently call CombatEffects selectors in the expected-value logic.
+
+### Game lifecycle tests
+
+Keep game-level tests in **test/game/orion_defense_game_test.dart**.
+
+Test:
+
+- kill emits enemyDestroyed and preserves rewards;
+- a **non-losing** leak emits coreImpact and preserves base damage;
 - kill and leak kinds are distinct;
-- restart removes outstanding transient feedback.
+- restart/_clearCombatComponents remove outstanding feedback;
+- existing loss behavior stays unchanged.
 
-When testing Flame child add/remove behavior, follow the existing test convention: mount the game with setMounted() where required and call processLifecycleEvents() before asserting queued children.
+Do **not** add a defeat-survival VFX assertion: MissionReportPanel intentionally covers the board immediately on loss.
 
-### Statuses
+Where existing game tests exercise queued child lifecycle, keep using their established `setMounted()` + `processLifecycleEvents()` pattern.
 
-Do not add raster/golden tests.
+### Status/layout tests
 
-Extend the existing EnemyOverlayState/EnemyOverlayLayout-focused coverage to assert that slowed/corroded state produces the expected ring geometry and that the normal bar/badge/name layout remains valid. The renderer consumes that layout; no second status object is introduced.
+Extend the existing EnemyOverlay tests in **test/game/enemy_component_test.dart**:
 
-## Manual product validation
+- slowed/corroded states produce the expected ring geometry in EnemyOverlayLayout;
+- both can coexist;
+- resolved/no-status state has no ring geometry;
+- existing `[corroded, slowed]` badge assertion continues to pin ordering under the two-badge cap;
+- explicitly render the new ring path through _renderOverlayToCanvas and assert `returnsNormally`.
 
-Check these scenarios on a phone-sized surface:
+No goldens.
 
-1. ordinary early-stage wave at 1x;
+### Balance invariant test
+
+Extend **test/game/game_balance_test.dart** with one tuning invariant:
+
+- Cluster Rocket `clusterBurstRadius <= splashRadius`.
+
+That guards the actual assumption that lets cluster bursts reuse the one splash visual.
+
+## Manual validation
+
+On a phone-sized surface:
+
+1. ordinary early wave at 1x;
 2. dense multi-target wave at 1x and 3x;
-3. boss/final wave with health/status overlays visible;
-4. a losing leak so the final coreImpact is visible after defeat cleanup.
+3. boss/final wave with overlays visible;
+4. a non-losing leak.
 
 Confirm:
 
-- splash radius reads as area damage;
-- chain order is understandable;
-- railgun reads as a pierce line rather than splash;
-- slow/corrosion remain visible without hiding trait/health information;
-- enemy death and both non-losing/losing core impacts cannot be confused;
-- 3x does not become persistent visual clutter.
+- splash area and per-hit accents communicate multi-hit coverage;
+- chain order reads clearly;
+- railgun reads as a pierce line;
+- slow/corrosion rings remain secondary to health/status information;
+- enemyDestroyed and a live-board coreImpact are visually distinct;
+- 3x does not become persistent clutter.
+
+The final losing leak is not a manual VFX gate because the debrief intentionally replaces the board immediately.
 
 ## Non-goals
 
 - Damage numbers.
-- New combat math or target selection.
-- Generic combat-event bus.
-- Generic VFX engine or pooling framework.
-- Replay/event history.
-- Extending GameFeedback with hit cues.
-- New audio or haptics.
-- New image assets.
-- New accessibility setting or persistence.
-- Screen shake or mandatory hit-stop.
-- New status timers or transition history.
-- Prism split, drone, gravity-field, or nanite-hit VFX expansion.
+- Generic combat-event/VFX architecture.
+- Pooling/replay/telemetry.
+- New target selection or damage rules.
+- GameFeedback expansion.
+- New image/audio/haptic assets.
+- New accessibility persistence.
+- Screen shake/hit-stop.
+- Status transition history/timers.
+- Final-loss debrief timing changes.
+- Prism/drone/gravity/nanite hit-VFX expansion.
