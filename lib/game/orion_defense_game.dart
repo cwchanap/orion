@@ -16,6 +16,7 @@ import 'campaign/orion_campaign.dart';
 import 'campaign/stage_definition.dart';
 import 'components/board_backdrop_component.dart';
 import 'components/board_component.dart';
+import 'components/combat_feedback_component.dart';
 import 'components/drone_component.dart';
 import 'components/enemy_component.dart';
 import 'components/gravity_field_component.dart';
@@ -796,6 +797,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         enemiesProvider: () => _activeEnemyComponents.values,
         spriteSheet: _spriteSheet,
         towerVarietySheet: _towerVarietySheet,
+        onCombatFeedback: (feedback) => add(feedback),
         priority: 30,
       ),
     );
@@ -1053,6 +1055,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _handleEnemyKilled(EnemyComponent enemy) {
+    add(
+      CombatFeedbackComponent.enemyDestroyed(
+        origin: enemy.position,
+        radius: enemy.radius,
+      ),
+    );
     if (_inspectedEnemyId == enemy.enemyId) {
       _setInspectedEnemy(null);
     }
@@ -1070,6 +1078,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _handleEnemyReachedBase(EnemyComponent enemy) {
+    add(
+      CombatFeedbackComponent.coreImpact(
+        origin: enemy.position,
+        radius: enemy.radius,
+      ),
+    );
     if (_inspectedEnemyId == enemy.enemyId) {
       _setInspectedEnemy(null);
     }
@@ -1157,6 +1171,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     }
     for (final field in children.whereType<GravityFieldComponent>().toList()) {
       field.removeFromParent();
+    }
+    for (final feedback
+        in children.whereType<CombatFeedbackComponent>().toList()) {
+      feedback.removeFromParent();
     }
     if (removeTowers) {
       for (final tower in _towerComponents.values.toList()) {

@@ -7,6 +7,7 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/components/board_backdrop_component.dart';
+import 'package:orion/game/components/combat_feedback_component.dart';
 import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/components/drone_component.dart';
 import 'package:orion/game/components/enemy_component.dart';
@@ -3006,6 +3007,78 @@ void main() {
         ).range;
         expect(game.placementPreview.range, closeTo(baseRange * 1.15, 0.001));
         expect(game.placementPreview.range, greaterThan(baseRange));
+      });
+    });
+
+    group('combat feedback cues', () {
+      test('kill emits one enemyDestroyed cue and preserves the reward', () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        final goldBefore = game.snapshot.gold;
+
+        enemy.applyDamage(9999);
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.gold, goldBefore + enemy.stats.goldReward);
+        final cues = game.children
+            .whereType<CombatFeedbackComponent>()
+            .toList();
+        expect(cues, hasLength(1));
+        expect(cues.single.kind, CombatFeedbackKind.enemyDestroyed);
+      });
+
+      test('non-losing leak emits one coreImpact cue and damages the base', () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        final baseHealthBefore = game.snapshot.baseHealth;
+
+        game.update(11);
+        game.processLifecycleEvents();
+
+        expect(
+          game.snapshot.baseHealth,
+          baseHealthBefore - enemy.stats.baseDamage,
+        );
+        expect(game.snapshot.phase, isNot(GamePhase.lost));
+        final cues = game.children
+            .whereType<CombatFeedbackComponent>()
+            .toList();
+        expect(cues, hasLength(1));
+        expect(cues.single.kind, CombatFeedbackKind.coreImpact);
+      });
+
+      test('restart removes outstanding combat feedback cues', () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        game.children.whereType<EnemyComponent>().single.applyDamage(9999);
+        game.processLifecycleEvents();
+        expect(
+          game.children.whereType<CombatFeedbackComponent>(),
+          isNotEmpty,
+          reason: 'kill cue must exist before restart sweeps it',
+        );
+
+        game.restart();
+        game.processLifecycleEvents();
+
+        expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
       });
     });
   });
