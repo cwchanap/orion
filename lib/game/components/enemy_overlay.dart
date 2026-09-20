@@ -15,6 +15,14 @@ class EnemyOverlayRenderer {
     ..color = const Color(0xCCFFFFFF)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
+  final Paint _slowRingPaint = Paint()
+    ..color = _fallbackColor(EnemyOverlayBadge.slowed).withValues(alpha: 0.85)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5;
+  final Paint _corrodedRingPaint = Paint()
+    ..color = _fallbackColor(EnemyOverlayBadge.corroded).withValues(alpha: 0.85)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5;
 
   static final Map<EnemyOverlayBadge, Paint> _fallbackPaints = {
     for (final badge in EnemyOverlayBadge.values)
@@ -34,6 +42,8 @@ class EnemyOverlayRenderer {
 
     final layout = EnemyOverlayLayout.compute(state, radius);
     final centerX = radius;
+
+    _renderStatusRings(canvas, layout: layout, centerX: centerX);
 
     final badgesY = layout.badgesY;
     if (badgesY != null && state.badges.isNotEmpty) {
@@ -91,6 +101,20 @@ class EnemyOverlayRenderer {
         canvas,
         Offset(radius - tp.width / 2, layout.originY - tp.height - 2),
       );
+    }
+  }
+
+  void _renderStatusRings(
+    Canvas canvas, {
+    required EnemyOverlayLayout layout,
+    required double centerX,
+  }) {
+    final center = Offset(centerX, centerX);
+    if (layout.corrodedRingRadius > 0) {
+      canvas.drawCircle(center, layout.corrodedRingRadius, _corrodedRingPaint);
+    }
+    if (layout.slowedRingRadius > 0) {
+      canvas.drawCircle(center, layout.slowedRingRadius, _slowRingPaint);
     }
   }
 

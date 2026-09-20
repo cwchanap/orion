@@ -221,6 +221,8 @@ class EnemyOverlayState {
 class EnemyOverlayLayout {
   const EnemyOverlayLayout._({
     required this.originY,
+    required this.slowedRingRadius,
+    required this.corrodedRingRadius,
     required this.badgesY,
     required this.badgeSize,
     required this.badgeGap,
@@ -251,9 +253,20 @@ class EnemyOverlayLayout {
   static const double _expandedBarWidthFactor = 2.8;
   static const double _normalOriginFactor = 0.72;
   static const double _expandedOriginFactor = 0.92;
+  static const double _corrodedRingRadiusFactor = 1.15;
+  static const double _slowedRingRadiusFactor = 1.3;
 
   /// Top of the overlay region, measured relative to the enemy center.
   final double originY;
+
+  /// Radius of the thin corrosion status ring around the enemy body, or `0`
+  /// when the corroded badge is absent.
+  final double corrodedRingRadius;
+
+  /// Radius of the thin slow status ring around the enemy body, or `0` when
+  /// the slowed badge is absent. Deliberately larger than the corrosion ring
+  /// so both remain visible when they coexist.
+  final double slowedRingRadius;
 
   /// Top of the badge row, or `null` when no badges are drawn.
   final double? badgesY;
@@ -280,6 +293,8 @@ class EnemyOverlayLayout {
     if (!state.shouldRender) {
       return const EnemyOverlayLayout._(
         originY: 0,
+        slowedRingRadius: 0,
+        corrodedRingRadius: 0,
         badgesY: null,
         badgeSize: 0,
         badgeGap: 0,
@@ -298,6 +313,12 @@ class EnemyOverlayLayout {
     final isExpanded = state.isExpanded;
     final originY =
         -radius * (isExpanded ? _expandedOriginFactor : _normalOriginFactor);
+    final corrodedRingRadius = state.badges.contains(EnemyOverlayBadge.corroded)
+        ? radius * _corrodedRingRadiusFactor
+        : 0.0;
+    final slowedRingRadius = state.badges.contains(EnemyOverlayBadge.slowed)
+        ? radius * _slowedRingRadiusFactor
+        : 0.0;
     var cursor = originY;
     double? firstTop;
     double lastBottom = originY;
@@ -361,6 +382,8 @@ class EnemyOverlayLayout {
 
     return EnemyOverlayLayout._(
       originY: originY,
+      slowedRingRadius: slowedRingRadius,
+      corrodedRingRadius: corrodedRingRadius,
       badgesY: badgesY,
       badgeSize: badgeSize,
       badgeGap: badgeGap,
