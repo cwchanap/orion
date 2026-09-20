@@ -235,10 +235,11 @@ class CombatFeedbackComponent extends Component {
       ..isAntiAlias = true;
     final center = _origin.toOffset();
     const burstSegments = 6;
+    final inner = _radius * 0.5;
+    // Stationary geometry: only opacity decays, per the spec.
+    final outer = _radius * 1.15;
     for (var segment = 0; segment < burstSegments; segment++) {
       final angle = segment * (2 * math.pi / burstSegments);
-      final inner = _radius * 0.5;
-      final outer = _radius * (1.0 + 0.15 * (1 - alpha));
       canvas.drawLine(
         Offset(
           center.dx + inner * math.cos(angle),
