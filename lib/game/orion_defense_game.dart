@@ -116,6 +116,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
   int? _inspectedEnemyId;
   final Map<int, int> _activeDronesByTower = {};
+  // Feedback cues are added during combat callbacks where add() only enqueues
+  // the mount; they are not in `children` until the next lifecycle pass.
+  // Tracking ownership lets _clearCombatComponents cancel pending cues that a
+  // children sweep would miss (e.g. the losing leak's coreImpact).
+  final Set<CombatFeedbackComponent> _combatFeedbackComponents = {};
 
   GameSnapshot get snapshot => stateNotifier.value;
 
@@ -797,7 +802,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         enemiesProvider: () => _activeEnemyComponents.values,
         spriteSheet: _spriteSheet,
         towerVarietySheet: _towerVarietySheet,
-        onCombatFeedback: (feedback) => add(feedback),
+        onCombatFeedback: _addCombatFeedback,
         priority: 30,
       ),
     );
@@ -1054,8 +1059,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     add(enemy);
   }
 
+  void _addCombatFeedback(CombatFeedbackComponent feedback) {
+    _combatFeedbackComponents.add(feedback);
+    add(feedback);
+  }
+
   void _handleEnemyKilled(EnemyComponent enemy) {
-    add(
+    _addCombatFeedback(
       CombatFeedbackComponent.enemyDestroyed(
         origin: enemy.position,
         radius: enemy.radius,
@@ -1078,7 +1088,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _handleEnemyReachedBase(EnemyComponent enemy) {
-    add(
+    _addCombatFeedback(
       CombatFeedbackComponent.coreImpact(
         origin: enemy.position,
         radius: enemy.radius,
@@ -1172,10 +1182,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     for (final field in children.whereType<GravityFieldComponent>().toList()) {
       field.removeFromParent();
     }
-    for (final feedback
-        in children.whereType<CombatFeedbackComponent>().toList()) {
+    // removeFromParent cancels a still-queued add, so the tracked set catches
+    // cues a children sweep cannot see yet.
+    for (final feedback in _combatFeedbackComponents.toList()) {
       feedback.removeFromParent();
     }
+    _combatFeedbackComponents.clear();
     if (removeTowers) {
       for (final tower in _towerComponents.values.toList()) {
         tower.removeFromParent();

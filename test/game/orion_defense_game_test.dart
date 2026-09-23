@@ -3059,6 +3059,27 @@ void main() {
         expect(cues.single.kind, CombatFeedbackKind.coreImpact);
       });
 
+      test('losing leak does not leave a queued coreImpact cue behind', () {
+        final game = OrionDefenseGame(stage: _lethalSingleEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<EnemyComponent>(), hasLength(1));
+
+        // The lethal leak queues the coreImpact cue and runs defeat cleanup in
+        // the same frame. The cue is not in `children` until the next
+        // lifecycle pass, so cleanup must cancel the pending add rather than
+        // only sweeping attached components.
+        game.update(1);
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.phase, GamePhase.lost);
+        expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
+      });
+
       test('restart removes outstanding combat feedback cues', () {
         final game = OrionDefenseGame(stage: _oneEnemyStage());
         game.onGameResize(Vector2(800, 1200));
