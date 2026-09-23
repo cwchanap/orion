@@ -33,8 +33,9 @@
 ### Create
 
 - lib/game/components/combat_feedback_component.dart
-- test/game/combat_feedback_component_test.dart
-- test/game/projectile_component_test.dart
+- test/components/combat_feedback_component_test.dart
+- test/components/projectile_component_test.dart
+- test/components/enemy_overlay_test.dart
 
 ### Modify
 
@@ -55,7 +56,7 @@ Do not add another architecture/model layer.
 **Files**
 
 - Create: lib/game/components/combat_feedback_component.dart
-- Create: test/game/combat_feedback_component_test.dart
+- Create: test/components/combat_feedback_component_test.dart
 
 ### Production shape
 
@@ -147,8 +148,8 @@ The render-execution tests are required because repository Codecov enforces 90% 
 
 Run:
 
-- dart format lib/game/components/combat_feedback_component.dart test/game/combat_feedback_component_test.dart
-- flutter test test/game/combat_feedback_component_test.dart
+- dart format lib/game/components/combat_feedback_component.dart test/components/combat_feedback_component_test.dart
+- flutter test test/components/combat_feedback_component_test.dart
 - flutter analyze
 
 ---
@@ -158,7 +159,7 @@ Run:
 **Files**
 
 - Modify: lib/game/components/projectile_component.dart
-- Create: test/game/projectile_component_test.dart
+- Create: test/components/projectile_component_test.dart
 - Modify: test/game/game_balance_test.dart
 
 ### Production callback
@@ -236,7 +237,7 @@ Emit one pierce component using:
 
 ### Dedicated direct tests
 
-Use **test/game/projectile_component_test.dart**.
+Use **test/components/projectile_component_test.dart**.
 
 No FlameGame host is needed for these projectile-resolution tests.
 
@@ -265,8 +266,8 @@ Test:
 
 Run:
 
-- dart format lib/game/components/projectile_component.dart test/game/projectile_component_test.dart test/game/game_balance_test.dart
-- flutter test test/game/projectile_component_test.dart
+- dart format lib/game/components/projectile_component.dart test/components/projectile_component_test.dart test/game/game_balance_test.dart
+- flutter test test/components/projectile_component_test.dart
 - flutter test test/game/game_balance_test.dart
 - flutter analyze
 
@@ -283,7 +284,7 @@ Run:
 
 When constructing ProjectileComponent in _launchProjectile:
 
-- `onCombatFeedback: (feedback) => add(feedback)`
+- `onCombatFeedback: _addCombatFeedback`
 
 No notifier, queue, stream, bus, or GameFeedback change.
 
@@ -291,7 +292,7 @@ No notifier, queue, stream, bus, or GameFeedback change.
 
 At the start of _handleEnemyKilled:
 
-- add CombatFeedbackComponent.enemyDestroyed using current enemy.position/radius.
+- emit CombatFeedbackComponent.enemyDestroyed via _addCombatFeedback using current enemy.position/radius.
 
 Then keep existing logic unchanged:
 
@@ -307,14 +308,14 @@ This one central seam automatically covers kills from projectile/drone/gravity/c
 
 At the start of _handleEnemyReachedBase:
 
-- add CombatFeedbackComponent.coreImpact using current enemy.position/radius.
+- emit CombatFeedbackComponent.coreImpact via _addCombatFeedback using current enemy.position/radius.
 
 Then keep current handler unchanged.
 
 Expected behavior:
 
 - non-losing leak: cue survives and is visible on the live board;
-- losing leak: current _clearCombatComponents removes the cue before the full-screen MissionReportPanel appears.
+- losing leak: _clearCombatComponents cancels the still-queued cue before the full-screen MissionReportPanel appears.
 
 Do not clone geometry and re-add the effect after defeat cleanup.
 
@@ -322,7 +323,7 @@ If final losing-hit readability is wanted later, scope a separate UI transition 
 
 ### Cleanup
 
-Extend _clearCombatComponents to remove CombatFeedbackComponent children together with:
+All feedback additions route through _addCombatFeedback, which tracks each cue in a `_combatFeedbackComponents` set. _clearCombatComponents calls removeFromParent on every tracked cue — for a cue whose add is still queued, removeFromParent cancels the pending add, so defeat cleanup cannot be outrun by the mount queue — then clears the set, together with removing:
 
 - projectiles;
 - drones;
@@ -338,6 +339,7 @@ In orion_defense_game_test.dart:
 - non-losing reach-base emits coreImpact and preserves base-health damage;
 - kill/core kinds are distinct;
 - restart removes outstanding CombatFeedbackComponent children;
+- losing leak leaves no queued coreImpact behind after defeat cleanup;
 - existing loss fixture still reaches lost and clears combat components;
 - **do not** assert losing defeat retains coreImpact.
 
@@ -365,6 +367,7 @@ Run:
 - Modify: lib/game/components/enemy_overlay.dart
 - Modify: lib/game/rules/enemy_overlay_state.dart
 - Modify: test/game/enemy_component_test.dart
+- Create: test/components/enemy_overlay_test.dart
 
 ### Layout
 
@@ -415,7 +418,7 @@ Extend enemy_component_test.dart:
 - no status ring geometry for a resolved/no-status overlay;
 - current bar/badge layout invariants remain green.
 
-Add explicit render execution through the existing `_renderOverlayToCanvas` helper for a state containing both statuses and assert `returnsNormally`.
+Add explicit render execution for a state containing both statuses and assert `returnsNormally`. This renderer test lives in **test/components/enemy_overlay_test.dart** — recorder-based render coverage sits outside the pure-logic `test/game/` suite — while the layout assertions stay in enemy_component_test.dart.
 
 No golden tests.
 
@@ -423,8 +426,8 @@ No golden tests.
 
 Run:
 
-- dart format lib/game/components/enemy_overlay.dart lib/game/rules/enemy_overlay_state.dart test/game/enemy_component_test.dart
-- flutter test test/game/enemy_component_test.dart
+- dart format lib/game/components/enemy_overlay.dart lib/game/rules/enemy_overlay_state.dart test/game/enemy_component_test.dart test/components/enemy_overlay_test.dart
+- flutter test test/game/enemy_component_test.dart test/components/enemy_overlay_test.dart
 - flutter analyze
 
 ---
