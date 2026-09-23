@@ -830,28 +830,6 @@ void main() {
         },
       );
 
-      test('render draws status rings for slowed and corroded states', () {
-        final state = EnemyOverlayState(
-          shouldRender: true,
-          isExpanded: false,
-          healthRatio: 0.5,
-          shieldRatio: 0.25,
-          showHealthBar: true,
-          showShieldBar: true,
-          badges: [EnemyOverlayBadge.corroded, EnemyOverlayBadge.slowed],
-        );
-        final renderer = EnemyOverlayRenderer();
-
-        expect(
-          () => _renderOverlayToCanvas(
-            renderer: renderer,
-            state: state,
-            radius: 20,
-          ),
-          returnsNormally,
-        );
-      });
-
       test(
         'render fallback shapes for all badge types without sheet',
         () async {

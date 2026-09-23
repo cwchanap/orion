@@ -204,7 +204,7 @@ Kill feedback still catches kills from those sources centrally through _handleEn
 
 ### Enemy destruction
 
-At the start of _handleEnemyKilled, add enemyDestroyed using the still-live enemy position/radius.
+At the start of _handleEnemyKilled, emit enemyDestroyed through the game's feedback-add seam using the still-live enemy position/radius.
 
 Then run the existing reward/boss/snapshot behavior unchanged.
 
@@ -212,19 +212,19 @@ This automatically covers kills caused by projectiles, drones, gravity fields, a
 
 ### Core impact
 
-Add coreImpact at the start of _handleEnemyReachedBase, alongside the kill cue's simple ownership model.
+Emit coreImpact at the start of _handleEnemyReachedBase through the same feedback-add seam as the kill cue.
 
 Then keep the current handler unchanged.
 
 For a **non-losing leak**, the board remains live and the coreImpact cue is visible.
 
-For the **losing leak**, the existing loss path calls _clearCombatComponents and the Flutter layer immediately covers the board with the full-screen MissionReportPanel. Let the loss cleanup remove the transient cue. Do not preserve an invisible VFX underneath an opaque debrief.
+For the **losing leak**, the existing loss path calls _clearCombatComponents and the Flutter layer immediately covers the board with the full-screen MissionReportPanel. Because the cue's add is still queued at that point, defeat cleanup must cancel the pending mount, not just sweep mounted children. Do not preserve an invisible VFX underneath an opaque debrief.
 
 If product direction later requires showing the final losing hit, that is a separate UI transition task (for example delaying/reworking the debrief presentation), not an ordering special case in this VFX ticket.
 
 ### Cleanup
 
-Extend _clearCombatComponents to sweep CombatFeedbackComponent children together with projectiles/drones/fields.
+Every feedback cue is added through _addCombatFeedback, which records it in a game-owned set before mounting. _clearCombatComponents removes each tracked cue via removeFromParent — which also cancels a still-queued add — alongside projectiles/drones/fields, then clears the set.
 
 Restart therefore clears leftover feedback naturally.
 
@@ -267,7 +267,7 @@ Automated tests cover ownership, geometry, render execution, lifecycle, and unch
 
 ### CombatFeedbackComponent tests
 
-Create **test/game/combat_feedback_component_test.dart**.
+Create **test/components/combat_feedback_component_test.dart**.
 
 Test:
 
@@ -289,7 +289,7 @@ This follows the existing EnemyOverlayRenderer/EnemyComponent recorder-test patt
 
 ### ProjectileComponent tests
 
-Create **test/game/projectile_component_test.dart**.
+Create **test/components/projectile_component_test.dart**.
 
 No FlameGame host is required for the projectile-resolution tests.
 
@@ -317,7 +317,8 @@ Test:
 - a **non-losing** leak emits coreImpact and preserves base damage;
 - kill and leak kinds are distinct;
 - restart/_clearCombatComponents remove outstanding feedback;
-- existing loss behavior stays unchanged.
+- a **losing** leak leaves no queued coreImpact behind: feedback adds are tracked so defeat cleanup cancels cues that have not mounted yet;
+- existing loss behavior stays unchanged otherwise.
 
 Do **not** add a defeat-survival VFX assertion: MissionReportPanel intentionally covers the board immediately on loss.
 
@@ -330,8 +331,9 @@ Extend the existing EnemyOverlay tests in **test/game/enemy_component_test.dart*
 - slowed/corroded states produce the expected ring geometry in EnemyOverlayLayout;
 - both can coexist;
 - resolved/no-status state has no ring geometry;
-- existing `[corroded, slowed]` badge assertion continues to pin ordering under the two-badge cap;
-- explicitly render the new ring path through _renderOverlayToCanvas and assert `returnsNormally`.
+- existing `[corroded, slowed]` badge assertion continues to pin ordering under the two-badge cap.
+
+Add the recorder-based render execution for the new ring path in **test/components/enemy_overlay_test.dart** — Flame/render coverage lives outside the pure-logic `test/game/` suite — and assert `returnsNormally`.
 
 No goldens.
 
