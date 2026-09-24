@@ -115,8 +115,8 @@ Use Canvas primitives:
   - thin lines through ordered positions;
   - compact hit accents.
 - pierce:
-  - thin line from origin through ordered positions;
-  - compact hit accents.
+  - thin line along the origin -> primary-target firing ray;
+  - compact hit accents at resolved positions.
 - enemyDestroyed:
   - compact radial burst.
 - coreImpact:
@@ -233,6 +233,7 @@ For each selected live enemy:
 Emit one pierce component using:
 
 - origin = _origin;
+- beamTarget = target.position (the primary target point, recorded separately because selectPierceTargets sorts corridor hits by projection, so the first resolved point can sit off the firing ray);
 - positions = ordered resolved points.
 
 ### Dedicated direct tests

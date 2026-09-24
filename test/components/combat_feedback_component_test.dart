@@ -42,15 +42,17 @@ void main() {
         expect(feedback.positions, [Vector2(1, 2), Vector2(3, 4)]);
       });
 
-      test('pierce retains origin and ordered positions', () {
+      test('pierce retains origin, beam target, and ordered positions', () {
         final feedback = CombatFeedbackComponent.pierce(
           origin: Vector2(0, 0),
+          beamTarget: Vector2(60, 0),
           positions: [Vector2(30, 0), Vector2(60, 0)],
           color: const Color(0xFFE8F1FF),
         );
 
         expect(feedback.kind, CombatFeedbackKind.pierce);
         expect(feedback.origin, Vector2(0, 0));
+        expect(feedback.beamTarget, Vector2(60, 0));
         expect(feedback.positions, [Vector2(30, 0), Vector2(60, 0)]);
       });
 
@@ -126,6 +128,7 @@ void main() {
         expect(
           CombatFeedbackComponent.pierce(
             origin: Vector2.zero(),
+            beamTarget: Vector2.zero(),
             positions: [Vector2.zero()],
             color: const Color(0xFFFFFFFF),
           ).priority,
@@ -170,6 +173,7 @@ void main() {
         ),
         CombatFeedbackComponent.pierce(
           origin: Vector2(0, 0),
+          beamTarget: Vector2(60, 0),
           positions: [Vector2(30, 0), Vector2(60, 0)],
           color: const Color(0xFFE8F1FF),
         ),
@@ -195,9 +199,10 @@ void main() {
 
       test('pierce beam stays on the firing ray when hits sit off-axis', () {
         // selectPierceTargets accepts enemies within pierceWidth of the firing
-        // line, so resolved centers can be off the origin -> first-hit ray.
+        // line, so resolved centers can be off the origin -> primary ray.
         final feedback = CombatFeedbackComponent.pierce(
           origin: Vector2.zero(),
+          beamTarget: Vector2(30, 0),
           positions: [Vector2(30, 0), Vector2(60, 20)],
           color: const Color(0xFFE8F1FF),
         );
@@ -224,11 +229,39 @@ void main() {
         expect(accents, [const Offset(30, 0), const Offset(60, 20)]);
       });
 
+      test('pierce beam follows the primary-target ray when a closer hit sits '
+          'off-axis', () {
+        // selectPierceTargets sorts corridor hits by projection, so an
+        // off-axis enemy nearer than the primary target resolves first.
+        final feedback = CombatFeedbackComponent.pierce(
+          origin: Vector2.zero(),
+          beamTarget: Vector2(60, 0),
+          positions: [Vector2(30, 20), Vector2(60, 0)],
+          color: const Color(0xFFE8F1FF),
+        );
+        final canvas = TestRecordingCanvas();
+
+        feedback.render(canvas);
+
+        final beams = canvas.invocations
+            .where((call) => call.invocation.memberName == #drawLine)
+            .toList();
+        expect(beams, hasLength(1));
+        final beam = beams.single.invocation.positionalArguments;
+        expect(beam[0], Offset.zero);
+        final beamEnd = beam[1] as Offset;
+        // The beam tracks the +x primary-target ray rather than rotating
+        // toward the nearer off-axis hit.
+        expect(beamEnd.dy, 0);
+        expect(beamEnd.dx, greaterThan(60));
+      });
+
       test(
-        'pierce draws only accents when the first hit sits on the origin',
+        'pierce draws only accents when the beam target sits on the origin',
         () {
           final feedback = CombatFeedbackComponent.pierce(
             origin: Vector2(10, 10),
+            beamTarget: Vector2(10, 10),
             positions: [Vector2(10, 10)],
             color: const Color(0xFFE8F1FF),
           );
