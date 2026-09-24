@@ -114,6 +114,7 @@ class CombatFeedbackComponent extends Component {
   static const double _pierceLifetime = 0.35;
   static const double _destroyedLifetime = 0.5;
   static const double _coreImpactLifetime = 0.6;
+  static const double _pierceBeamOvershoot = 8;
 
   final CombatFeedbackKind kind;
   final Vector2 _origin;
@@ -213,11 +214,23 @@ class CombatFeedbackComponent extends Component {
       ..strokeCap = StrokeCap.round
       ..color = _color.withValues(alpha: alpha)
       ..isAntiAlias = true;
-    final path = Path()..moveTo(_origin.x, _origin.y);
-    for (final position in _positions) {
-      path.lineTo(position.x, position.y);
+    // Pierce selects targets within pierceWidth of the firing line, so
+    // resolved centers can sit off-axis. Chaining those centers would kink
+    // the beam, so draw one straight segment along the origin -> first-hit
+    // ray, carried just past the farthest hit's projection.
+    final direction = _positions.first - _origin;
+    if (direction.length2 > 0) {
+      direction.normalize();
+      var reach = 0.0;
+      for (final position in _positions) {
+        reach = math.max(reach, direction.dot(position - _origin));
+      }
+      canvas.drawLine(
+        _origin.toOffset(),
+        (_origin + direction * (reach + _pierceBeamOvershoot)).toOffset(),
+        paint,
+      );
     }
-    canvas.drawPath(path, paint);
     final accentPaint = Paint()
       ..color = _color.withValues(alpha: alpha * 0.35)
       ..isAntiAlias = true;
