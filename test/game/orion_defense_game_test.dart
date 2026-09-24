@@ -3080,6 +3080,32 @@ void main() {
         expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
       });
 
+      test('new cues prune expired entries from feedback tracking', () {
+        final game = OrionDefenseGame(stage: _twoEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemies = game.children.whereType<EnemyComponent>().toList();
+        expect(enemies, hasLength(2));
+
+        enemies.first.applyDamage(9999);
+        game.processLifecycleEvents();
+        expect(game.trackedFeedbackCueCount, 1);
+
+        // Let the first cue expire, then emit another: the dead entry must be
+        // pruned instead of lingering until combat teardown.
+        game.update(1);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
+
+        enemies.last.applyDamage(9999);
+        game.processLifecycleEvents();
+        expect(game.trackedFeedbackCueCount, 1);
+      });
+
       test('restart removes outstanding combat feedback cues', () {
         final game = OrionDefenseGame(stage: _oneEnemyStage());
         game.onGameResize(Vector2(800, 1200));
@@ -3384,6 +3410,39 @@ StageDefinition _oneEnemyStage() {
         groups: [
           WaveGroup(
             enemyCount: 1,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 1,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _twoEnemyStage() {
+  return StageDefinition(
+    id: 'two-enemy-stage',
+    name: 'Two Enemy Stage',
+    mapLabel: 'Two',
+    description: 'Stage with two simultaneous enemies for feedback tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 2,
+            // spawnInterval=0 so both enemies are alive in the same tick.
+            spawnInterval: 0,
             enemyStats: EnemyStats(
               health: 100,
               speed: 10,

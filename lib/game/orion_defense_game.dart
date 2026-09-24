@@ -134,6 +134,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     range: _previewRange,
   );
 
+  /// Pending/live combat feedback cues currently tracked for teardown.
+  @visibleForTesting
+  int get trackedFeedbackCueCount => _combatFeedbackComponents.length;
+
   bool get isPaused => _isPaused;
   double get speedMultiplier => _speedMultiplier;
   bool get autoStartEnabled => _autoStartEnabled;
@@ -1060,6 +1064,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _addCombatFeedback(CombatFeedbackComponent feedback) {
+    // Expired cues self-remove; pruning keeps the set to pending/live cues
+    // instead of retaining everything emitted since the last teardown.
+    _combatFeedbackComponents.removeWhere(
+      (cue) => cue.isRemoved || cue.isRemoving,
+    );
     _combatFeedbackComponents.add(feedback);
     add(feedback);
   }
