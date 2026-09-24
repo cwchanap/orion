@@ -45,11 +45,13 @@ class CombatFeedbackComponent extends Component {
 
   CombatFeedbackComponent.pierce({
     required Vector2 origin,
+    required Vector2 beamTarget,
     required List<Vector2> positions,
     required Color color,
   }) : this._(
          kind: CombatFeedbackKind.pierce,
          origin: origin,
+         beamTarget: beamTarget,
          radius: 0,
          positions: positions,
          color: color,
@@ -85,12 +87,14 @@ class CombatFeedbackComponent extends Component {
   CombatFeedbackComponent._({
     required this.kind,
     required Vector2 origin,
+    Vector2? beamTarget,
     required double radius,
     required List<Vector2> positions,
     required Color color,
     required double lifetime,
   }) // ignore: prefer_initializing_formals
   : _origin = origin.clone(),
+       _beamTarget = (beamTarget ?? origin).clone(),
        // ignore: prefer_initializing_formals
        _radius = radius,
        _positions = List.unmodifiable(positions.map((p) => p.clone())),
@@ -118,6 +122,7 @@ class CombatFeedbackComponent extends Component {
 
   final CombatFeedbackKind kind;
   final Vector2 _origin;
+  final Vector2 _beamTarget;
   final double _radius;
   final List<Vector2> _positions;
   final Color _color;
@@ -130,6 +135,9 @@ class CombatFeedbackComponent extends Component {
 
   /// Cloned resolved target positions; empty for death/core cues.
   List<Vector2> get positions => _positions;
+
+  /// Primary-target point the pierce beam fires toward; origin when unused.
+  Vector2 get beamTarget => _beamTarget;
 
   /// Splash area or enemy radius; 0 when unused.
   double get radius => _radius;
@@ -214,11 +222,11 @@ class CombatFeedbackComponent extends Component {
       ..strokeCap = StrokeCap.round
       ..color = _color.withValues(alpha: alpha)
       ..isAntiAlias = true;
-    // Pierce selects targets within pierceWidth of the firing line, so
-    // resolved centers can sit off-axis. Chaining those centers would kink
-    // the beam, so draw one straight segment along the origin -> first-hit
-    // ray, carried just past the farthest hit's projection.
-    final direction = _positions.first - _origin;
+    // Pierce selects targets within pierceWidth of the firing line and sorts
+    // them by projection, so the nearest resolved center can sit off-axis.
+    // The beam follows the recorded origin -> primary-target ray; accents
+    // stay at the actual resolved positions.
+    final direction = _beamTarget - _origin;
     if (direction.length2 > 0) {
       direction.normalize();
       var reach = 0.0;

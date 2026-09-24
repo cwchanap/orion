@@ -185,9 +185,9 @@ After CombatEffects.selectPierceTargets returns:
 1. map selected candidates back to live enemies as today;
 2. clone each position immediately before damage;
 3. apply the existing armor multiplier behavior;
-4. emit one pierce component from the existing projectile origin through those points.
+4. emit one pierce component recording the projectile origin, the primary-target point, and those resolved positions.
 
-The renderer draws a thin firing line plus compact hit accents.
+The renderer draws a thin firing line along the origin-to-primary-target ray — corridor hits are sorted by projection and can sit off-axis — plus compact hit accents at the resolved positions.
 
 ### Explicit non-goals for adjacent hit branches
 

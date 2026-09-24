@@ -186,6 +186,7 @@ void main() {
         final cue = feedbacks.single;
         expect(cue.kind, CombatFeedbackKind.pierce);
         expect(cue.origin, Vector2(0, 100));
+        expect(cue.beamTarget, Vector2(100, 100));
         expect(cue.positions, [Vector2(100, 100), Vector2(150, 105)]);
       },
     );

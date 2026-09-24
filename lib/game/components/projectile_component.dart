@@ -243,6 +243,7 @@ class ProjectileComponent extends CircleComponent {
       onCombatFeedback?.call(
         CombatFeedbackComponent.pierce(
           origin: _origin,
+          beamTarget: target.position,
           positions: resolvedPositions,
           color: paint.color,
         ),
