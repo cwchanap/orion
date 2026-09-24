@@ -192,6 +192,64 @@ void main() {
           expect(() => _renderToCanvas(feedback), returnsNormally);
         }
       });
+
+      test('pierce beam stays on the firing ray when hits sit off-axis', () {
+        // selectPierceTargets accepts enemies within pierceWidth of the firing
+        // line, so resolved centers can be off the origin -> first-hit ray.
+        final feedback = CombatFeedbackComponent.pierce(
+          origin: Vector2.zero(),
+          positions: [Vector2(30, 0), Vector2(60, 20)],
+          color: const Color(0xFFE8F1FF),
+        );
+        final canvas = TestRecordingCanvas();
+
+        feedback.render(canvas);
+
+        final beams = canvas.invocations
+            .where((call) => call.invocation.memberName == #drawLine)
+            .toList();
+        expect(beams, hasLength(1));
+        final beam = beams.single.invocation.positionalArguments;
+        expect(beam[0], Offset.zero);
+        final beamEnd = beam[1] as Offset;
+        // Collinear with the +x firing ray instead of bending toward the
+        // off-axis hit, and carried past the farthest hit's projection.
+        expect(beamEnd.dy, 0);
+        expect(beamEnd.dx, greaterThan(60));
+
+        final accents = canvas.invocations
+            .where((call) => call.invocation.memberName == #drawCircle)
+            .map((call) => call.invocation.positionalArguments[0] as Offset)
+            .toList();
+        expect(accents, [const Offset(30, 0), const Offset(60, 20)]);
+      });
+
+      test(
+        'pierce draws only accents when the first hit sits on the origin',
+        () {
+          final feedback = CombatFeedbackComponent.pierce(
+            origin: Vector2(10, 10),
+            positions: [Vector2(10, 10)],
+            color: const Color(0xFFE8F1FF),
+          );
+          final canvas = TestRecordingCanvas();
+
+          feedback.render(canvas);
+
+          expect(
+            canvas.invocations.where(
+              (call) => call.invocation.memberName == #drawLine,
+            ),
+            isEmpty,
+          );
+          expect(
+            canvas.invocations.where(
+              (call) => call.invocation.memberName == #drawCircle,
+            ),
+            hasLength(1),
+          );
+        },
+      );
     });
   });
 }
