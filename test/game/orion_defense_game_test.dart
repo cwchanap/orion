@@ -1,4 +1,4 @@
-import 'dart:ui' show Rect;
+import 'dart:ui' show Canvas, PictureRecorder, Rect;
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/gestures.dart';
@@ -7,6 +7,7 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/components/board_backdrop_component.dart';
+import 'package:orion/game/components/combat_feedback_component.dart';
 import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/components/drone_component.dart';
 import 'package:orion/game/components/enemy_component.dart';
@@ -3008,6 +3009,130 @@ void main() {
         expect(game.placementPreview.range, greaterThan(baseRange));
       });
     });
+
+    group('combat feedback cues', () {
+      test('kill emits one enemyDestroyed cue and preserves the reward', () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        final goldBefore = game.snapshot.gold;
+
+        enemy.applyDamage(9999);
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.gold, goldBefore + enemy.stats.goldReward);
+        final cues = game.children
+            .whereType<CombatFeedbackComponent>()
+            .toList();
+        expect(cues, hasLength(1));
+        expect(cues.single.kind, CombatFeedbackKind.enemyDestroyed);
+      });
+
+      test('non-losing leak emits one coreImpact cue and damages the base', () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        final baseHealthBefore = game.snapshot.baseHealth;
+
+        game.update(11);
+        game.processLifecycleEvents();
+
+        expect(
+          game.snapshot.baseHealth,
+          baseHealthBefore - enemy.stats.baseDamage,
+        );
+        expect(game.snapshot.phase, isNot(GamePhase.lost));
+        final cues = game.children
+            .whereType<CombatFeedbackComponent>()
+            .toList();
+        expect(cues, hasLength(1));
+        expect(cues.single.kind, CombatFeedbackKind.coreImpact);
+      });
+
+      test('losing leak does not leave a queued coreImpact cue behind', () {
+        final game = OrionDefenseGame(stage: _lethalSingleEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<EnemyComponent>(), hasLength(1));
+
+        // The lethal leak queues the coreImpact cue and runs defeat cleanup in
+        // the same frame. The cue is not in `children` until the next
+        // lifecycle pass, so cleanup must cancel the pending add rather than
+        // only sweeping attached components.
+        game.update(1);
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.phase, GamePhase.lost);
+        // The cue was emitted on the losing path before cleanup swept it;
+        // without this the empty-children check below would pass vacuously.
+        expect(game.emittedFeedbackCueCount, 1);
+        expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
+      });
+
+      test('new cues prune expired entries from feedback tracking', () {
+        final game = OrionDefenseGame(stage: _twoEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemies = game.children.whereType<EnemyComponent>().toList();
+        expect(enemies, hasLength(2));
+
+        enemies.first.applyDamage(9999);
+        game.processLifecycleEvents();
+        expect(game.trackedFeedbackCueCount, 1);
+
+        // Let the first cue expire, then emit another: the dead entry must be
+        // pruned instead of lingering until combat teardown. Cues hold their
+        // clock at zero until first drawn, so render once before aging it.
+        _renderCues(game);
+        game.update(1);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
+
+        enemies.last.applyDamage(9999);
+        game.processLifecycleEvents();
+        expect(game.trackedFeedbackCueCount, 1);
+      });
+
+      test('restart removes outstanding combat feedback cues', () {
+        final game = OrionDefenseGame(stage: _oneEnemyStage());
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        game.children.whereType<EnemyComponent>().single.applyDamage(9999);
+        game.processLifecycleEvents();
+        expect(
+          game.children.whereType<CombatFeedbackComponent>(),
+          isNotEmpty,
+          reason: 'kill cue must exist before restart sweeps it',
+        );
+
+        game.restart();
+        game.processLifecycleEvents();
+
+        expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
+      });
+    });
   });
 }
 
@@ -3309,6 +3434,39 @@ StageDefinition _oneEnemyStage() {
   );
 }
 
+StageDefinition _twoEnemyStage() {
+  return StageDefinition(
+    id: 'two-enemy-stage',
+    name: 'Two Enemy Stage',
+    mapLabel: 'Two',
+    description: 'Stage with two simultaneous enemies for feedback tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: const [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 2,
+            // spawnInterval=0 so both enemies are alive in the same tick.
+            spawnInterval: 0,
+            enemyStats: EnemyStats(
+              health: 100,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 1,
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
 StageDefinition _twoEnemyDefeatStage() {
   return StageDefinition(
     id: 'two-enemy-defeat-stage',
@@ -3528,6 +3686,15 @@ StageDefinition _lethalGravityFieldStage() {
     mapColumn: 0,
     mapRow: 0,
   );
+}
+
+void _renderCues(OrionDefenseGame game) {
+  final recorder = PictureRecorder();
+  final canvas = Canvas(recorder);
+  for (final cue in game.children.whereType<CombatFeedbackComponent>()) {
+    cue.render(canvas);
+  }
+  recorder.endRecording().dispose();
 }
 
 void _tapCell(OrionDefenseGame game, GridPosition position) {

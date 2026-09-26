@@ -3,18 +3,27 @@ import 'package:flutter/painting.dart';
 
 import '../assets/game_tower_variety_sheet.dart';
 import '../rules/enemy_overlay_state.dart';
+import 'combat_colors.dart';
 
 class EnemyOverlayRenderer {
   EnemyOverlayRenderer();
 
   final Paint _barBackgroundPaint = Paint()..color = const Color(0xCC101624);
-  final Paint _healthPaint = Paint()..color = const Color(0xFFE35D6A);
-  final Paint _shieldPaint = Paint()..color = const Color(0xFF6EC6FF);
+  final Paint _healthPaint = Paint()..color = CombatColors.enemyBody;
+  final Paint _shieldPaint = Paint()..color = CombatColors.shield;
   final Paint _badgeBackgroundPaint = Paint()..color = const Color(0xD9141B2B);
   final Paint _badgeStrokePaint = Paint()
     ..color = const Color(0xCCFFFFFF)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
+  final Paint _slowRingPaint = Paint()
+    ..color = _fallbackColor(EnemyOverlayBadge.slowed).withValues(alpha: 0.85)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5;
+  final Paint _corrodedRingPaint = Paint()
+    ..color = _fallbackColor(EnemyOverlayBadge.corroded).withValues(alpha: 0.85)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.5;
 
   static final Map<EnemyOverlayBadge, Paint> _fallbackPaints = {
     for (final badge in EnemyOverlayBadge.values)
@@ -34,6 +43,8 @@ class EnemyOverlayRenderer {
 
     final layout = EnemyOverlayLayout.compute(state, radius);
     final centerX = radius;
+
+    _renderStatusRings(canvas, layout: layout, centerX: centerX);
 
     final badgesY = layout.badgesY;
     if (badgesY != null && state.badges.isNotEmpty) {
@@ -91,6 +102,20 @@ class EnemyOverlayRenderer {
         canvas,
         Offset(radius - tp.width / 2, layout.originY - tp.height - 2),
       );
+    }
+  }
+
+  void _renderStatusRings(
+    Canvas canvas, {
+    required EnemyOverlayLayout layout,
+    required double centerX,
+  }) {
+    final center = Offset(centerX, centerX);
+    if (layout.corrodedRingRadius > 0) {
+      canvas.drawCircle(center, layout.corrodedRingRadius, _corrodedRingPaint);
+    }
+    if (layout.slowedRingRadius > 0) {
+      canvas.drawCircle(center, layout.slowedRingRadius, _slowRingPaint);
     }
   }
 
@@ -243,7 +268,7 @@ class EnemyOverlayRenderer {
     return switch (badge) {
       EnemyOverlayBadge.corroded => const Color(0xFF67D46E),
       EnemyOverlayBadge.slowed => const Color(0xFF78D8FF),
-      EnemyOverlayBadge.shielded => const Color(0xFF6EC6FF),
+      EnemyOverlayBadge.shielded => CombatColors.shield,
       EnemyOverlayBadge.armored => const Color(0xFFC9D6E8),
       EnemyOverlayBadge.regen => const Color(0xFF67D46E),
       EnemyOverlayBadge.heavy => const Color(0xFFFFB84D),

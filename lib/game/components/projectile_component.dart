@@ -8,6 +8,7 @@ import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/combat_effects.dart';
 import '../rules/tower_targeting.dart';
+import 'combat_feedback_component.dart';
 import 'enemy_component.dart';
 
 typedef EnemiesProvider = Iterable<EnemyComponent> Function();
@@ -20,6 +21,7 @@ class ProjectileComponent extends CircleComponent {
     required this.enemiesProvider,
     this.spriteSheet,
     this.towerVarietySheet,
+    this.onCombatFeedback,
     double radius = 5,
     super.priority,
   }) : _origin = startPosition.clone(),
@@ -35,6 +37,7 @@ class ProjectileComponent extends CircleComponent {
   final EnemiesProvider enemiesProvider;
   final GameSpriteSheet? spriteSheet;
   final GameTowerVarietySheet? towerVarietySheet;
+  final CombatFeedbackCallback? onCombatFeedback;
   final Vector2 _origin;
 
   @override
@@ -121,6 +124,7 @@ class ProjectileComponent extends CircleComponent {
     if (stats.splashRadius > 0) {
       final impactPosition = target.position.clone();
       final splashCandidates = List<EnemyComponent>.from(enemiesProvider());
+      final resolvedPositions = <Vector2>[target.position.clone()];
 
       target.applyDamage(stats.damage);
       _applySlowIfNeeded(target);
@@ -130,10 +134,20 @@ class ProjectileComponent extends CircleComponent {
           continue;
         }
         if (enemy.position.distanceTo(impactPosition) <= stats.splashRadius) {
+          resolvedPositions.add(enemy.position.clone());
           enemy.applyDamage(stats.damage);
           _applySlowIfNeeded(enemy);
         }
       }
+
+      onCombatFeedback?.call(
+        CombatFeedbackComponent.splash(
+          origin: impactPosition,
+          radius: stats.splashRadius,
+          positions: resolvedPositions,
+          color: paint.color,
+        ),
+      );
 
       if (stats.clusterBurstCount > 0) {
         _resolveClusterBursts(impactPosition);
@@ -168,12 +182,14 @@ class ProjectileComponent extends CircleComponent {
     );
     final enemyById = {for (final enemy in enemies) enemy.enemyId: enemy};
 
+    final resolvedPositions = <Vector2>[];
     for (final (index, candidate) in chain.indexed) {
       final enemy = enemyById[candidate.id];
       if (enemy == null || !enemy.isAlive) {
         continue;
       }
 
+      resolvedPositions.add(enemy.position.clone());
       enemy.applyDamage(
         CombatEffects.damageForChainJump(
           baseDamage: stats.damage,
@@ -181,6 +197,15 @@ class ProjectileComponent extends CircleComponent {
           jumpIndex: index,
         ),
         shieldDamageMultiplier: stats.shieldDamageMultiplier,
+      );
+    }
+
+    if (resolvedPositions.isNotEmpty) {
+      onCombatFeedback?.call(
+        CombatFeedbackComponent.chain(
+          positions: resolvedPositions,
+          color: paint.color,
+        ),
       );
     }
   }
@@ -200,10 +225,28 @@ class ProjectileComponent extends CircleComponent {
     );
     final enemyById = {for (final enemy in enemies) enemy.enemyId: enemy};
 
+    final resolvedPositions = <Vector2>[];
     for (final candidate in pierced) {
-      enemyById[candidate.id]?.applyDamage(
+      final enemy = enemyById[candidate.id];
+      if (enemy == null || !enemy.isAlive) {
+        continue;
+      }
+
+      resolvedPositions.add(enemy.position.clone());
+      enemy.applyDamage(
         stats.damage,
         armorDamageMultiplier: stats.armorDamageMultiplier,
+      );
+    }
+
+    if (resolvedPositions.isNotEmpty) {
+      onCombatFeedback?.call(
+        CombatFeedbackComponent.pierce(
+          origin: _origin,
+          beamTarget: target.position,
+          positions: resolvedPositions,
+          color: paint.color,
+        ),
       );
     }
   }
@@ -238,7 +281,9 @@ class ProjectileComponent extends CircleComponent {
 
   void _resolveClusterBursts(Vector2 impactPosition) {
     for (var burst = 0; burst < stats.clusterBurstCount; burst += 1) {
-      for (final enemy in enemiesProvider()) {
+      // Snapshot per pass: a kill here removes the enemy from the owner's
+      // live enemy map, which would otherwise trip concurrent modification.
+      for (final enemy in enemiesProvider().toList()) {
         if (!enemy.isAlive) {
           continue;
         }

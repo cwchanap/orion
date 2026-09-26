@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/tower_stats_resolver.dart';
 
 void main() {
   group('GameBalance', () {
@@ -1110,6 +1111,37 @@ void main() {
         ),
         378,
       );
+    });
+
+    test('cluster rocket burst radius stays within its splash radius', () {
+      const tower = PlacedTower(
+        id: 1,
+        type: TowerType.rocket,
+        position: GridPosition(0, 0),
+        level: 3,
+        specialization: TowerSpecialization.clusterRocket,
+      );
+
+      // Guards the assumption that the normal splash visual covers the full
+      // area affected by cluster bursts, so no second burst VFX path is
+      // needed. The guarantee must hold on session-resolved stats, not just
+      // base tuning: run modules scale splashRadius at resolve time while
+      // clusterBurstRadius is never adjusted.
+      final moduleSets = <Iterable<RunModuleId>>[
+        const <RunModuleId>[],
+        for (final module in runModuleCatalog) [module.id],
+        runModuleCatalog.map((module) => module.id),
+      ];
+      for (final modules in moduleSets) {
+        final resolved = TowerStatsResolver.resolve(tower, runModules: modules);
+        expect(
+          resolved.clusterBurstRadius,
+          lessThanOrEqualTo(resolved.splashRadius),
+          reason:
+              'fails with run modules: '
+              '${modules.map((m) => m.name).join(', ')}',
+        );
+      }
     });
   });
 

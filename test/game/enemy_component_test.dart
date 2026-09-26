@@ -405,6 +405,8 @@ void main() {
         final badges = [EnemyOverlayBadge.armored];
         final state = EnemyOverlayState(
           shouldRender: true,
+          isSlowed: false,
+          isCorroded: false,
           isExpanded: true,
           healthRatio: 1,
           shieldRatio: 0,
@@ -679,6 +681,8 @@ void main() {
       test('overlay layout height scales linearly with enemy radius', () {
         final state = EnemyOverlayState(
           shouldRender: true,
+          isSlowed: false,
+          isCorroded: false,
           isExpanded: false,
           healthRatio: 0.5,
           shieldRatio: 0.25,
@@ -698,6 +702,8 @@ void main() {
       test('overlay layout reports zero height when not rendering', () {
         final state = EnemyOverlayState(
           shouldRender: false,
+          isSlowed: false,
+          isCorroded: false,
           isExpanded: false,
           healthRatio: 0.5,
           shieldRatio: 0.25,
@@ -714,9 +720,110 @@ void main() {
         expect(layout.shieldBarY, isNull);
       });
 
+      test('layout derives status ring geometry from status flags', () {
+        EnemyOverlayState stateWith({
+          bool isSlowed = false,
+          bool isCorroded = false,
+          List<EnemyOverlayBadge> badges = const [],
+        }) => EnemyOverlayState(
+          shouldRender: true,
+          isExpanded: false,
+          isSlowed: isSlowed,
+          isCorroded: isCorroded,
+          healthRatio: 0.5,
+          shieldRatio: 0,
+          showHealthBar: true,
+          showShieldBar: false,
+          badges: badges,
+        );
+
+        final slowed = EnemyOverlayLayout.compute(
+          stateWith(isSlowed: true, badges: [EnemyOverlayBadge.slowed]),
+          20,
+        );
+        expect(slowed.slowedRingRadius, greaterThan(0));
+        expect(slowed.corrodedRingRadius, 0);
+
+        final corroded = EnemyOverlayLayout.compute(
+          stateWith(isCorroded: true, badges: [EnemyOverlayBadge.corroded]),
+          20,
+        );
+        expect(corroded.corrodedRingRadius, greaterThan(0));
+        expect(corroded.slowedRingRadius, 0);
+
+        final both = EnemyOverlayLayout.compute(
+          stateWith(
+            isSlowed: true,
+            isCorroded: true,
+            badges: [EnemyOverlayBadge.corroded, EnemyOverlayBadge.slowed],
+          ),
+          20,
+        );
+        expect(both.slowedRingRadius, greaterThan(0));
+        expect(both.corrodedRingRadius, greaterThan(0));
+        expect(
+          both.slowedRingRadius,
+          isNot(both.corrodedRingRadius),
+          reason: 'coexisting rings must not coincide',
+        );
+
+        // Rings come from the status flags, not the badge list: a truncated
+        // or empty badge row must never hide a live status ring.
+        final noBadges = EnemyOverlayLayout.compute(
+          stateWith(isSlowed: true, isCorroded: true),
+          20,
+        );
+        expect(noBadges.slowedRingRadius, greaterThan(0));
+        expect(noBadges.corrodedRingRadius, greaterThan(0));
+
+        final none = EnemyOverlayLayout.compute(stateWith(), 20);
+        expect(none.slowedRingRadius, 0);
+        expect(none.corrodedRingRadius, 0);
+      });
+
+      test('status rings clear the sprite half-extent', () {
+        // EnemyComponent draws the sprite at 2.4 x radius, so a ring must sit
+        // beyond 1.2 x radius to read as around the enemy, not painted on it.
+        final state = EnemyOverlayState(
+          shouldRender: true,
+          isExpanded: false,
+          isSlowed: true,
+          isCorroded: true,
+          healthRatio: 0.5,
+          shieldRatio: 0,
+          showHealthBar: true,
+          showShieldBar: false,
+          badges: const [],
+        );
+        final layout = EnemyOverlayLayout.compute(state, 20);
+        expect(layout.corrodedRingRadius, greaterThan(1.2 * 20));
+        expect(layout.slowedRingRadius, greaterThan(layout.corrodedRingRadius));
+      });
+
+      test('resolved overlay exposes no status ring geometry', () {
+        final state = EnemyOverlayState(
+          shouldRender: false,
+          isSlowed: false,
+          isCorroded: false,
+          isExpanded: false,
+          healthRatio: 0,
+          shieldRatio: 0,
+          showHealthBar: false,
+          showShieldBar: false,
+          badges: [EnemyOverlayBadge.corroded, EnemyOverlayBadge.slowed],
+        );
+
+        final layout = EnemyOverlayLayout.compute(state, 20);
+
+        expect(layout.slowedRingRadius, 0);
+        expect(layout.corrodedRingRadius, 0);
+      });
+
       test('overlay layout omits skipped elements', () {
         final state = EnemyOverlayState(
           shouldRender: true,
+          isSlowed: false,
+          isCorroded: false,
           isExpanded: true,
           healthRatio: 0.5,
           shieldRatio: 0,
@@ -741,6 +848,8 @@ void main() {
           );
           final state = EnemyOverlayState(
             shouldRender: true,
+            isSlowed: false,
+            isCorroded: false,
             isExpanded: true,
             healthRatio: 0.5,
             shieldRatio: 0.25,
@@ -776,6 +885,8 @@ void main() {
           for (final badge in EnemyOverlayBadge.values) {
             final state = EnemyOverlayState(
               shouldRender: true,
+              isSlowed: false,
+              isCorroded: false,
               isExpanded: true,
               healthRatio: 0.5,
               shieldRatio: 0.25,

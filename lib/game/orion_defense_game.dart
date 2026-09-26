@@ -16,6 +16,7 @@ import 'campaign/orion_campaign.dart';
 import 'campaign/stage_definition.dart';
 import 'components/board_backdrop_component.dart';
 import 'components/board_component.dart';
+import 'components/combat_feedback_component.dart';
 import 'components/drone_component.dart';
 import 'components/enemy_component.dart';
 import 'components/gravity_field_component.dart';
@@ -115,6 +116,14 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
   int? _inspectedEnemyId;
   final Map<int, int> _activeDronesByTower = {};
+  // Feedback cues and combat entities (projectiles, drones, gravity fields)
+  // are added during combat callbacks where add() only enqueues the mount;
+  // they are not in `children` until the next lifecycle pass. Tracking them
+  // lets _clearCombatComponents cancel pending adds that a children sweep
+  // would miss (e.g. the losing leak's coreImpact or a same-frame field).
+  final Set<CombatFeedbackComponent> _combatFeedbackComponents = {};
+  final Set<Component> _combatEntityComponents = {};
+  int _emittedFeedbackCues = 0;
 
   GameSnapshot get snapshot => stateNotifier.value;
 
@@ -127,6 +136,16 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     allowed: _previewAllowed,
     range: _previewRange,
   );
+
+  /// Pending/live combat feedback cues currently tracked for teardown.
+  @visibleForTesting
+  int get trackedFeedbackCueCount => _combatFeedbackComponents.length;
+
+  /// Total feedback cues emitted since this game instance was created.
+  /// Survives defeat teardown — and `restart()`, which does not reset it —
+  /// so tests can confirm a cue existed before cleanup swept it.
+  @visibleForTesting
+  int get emittedFeedbackCueCount => _emittedFeedbackCues;
 
   bool get isPaused => _isPaused;
   double get speedMultiplier => _speedMultiplier;
@@ -771,7 +790,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   void _launchProjectile(TowerComponent tower, EnemyComponent target) {
     if (tower.stats.fieldRadius > 0 && tower.stats.fieldDuration > 0) {
-      add(
+      _trackCombatEntity(
         GravityFieldComponent(
           ownerTowerId: tower.placedTower.id,
           stats: tower.stats,
@@ -788,7 +807,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       return;
     }
 
-    add(
+    _trackCombatEntity(
       ProjectileComponent(
         stats: tower.stats,
         target: target,
@@ -796,9 +815,23 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         enemiesProvider: () => _activeEnemyComponents.values,
         spriteSheet: _spriteSheet,
         towerVarietySheet: _towerVarietySheet,
+        onCombatFeedback: _addCombatFeedback,
         priority: 30,
       ),
     );
+  }
+
+  /// Adds a transient combat entity (projectile, drone, gravity field),
+  /// tracking it so _clearCombatComponents can cancel a still-queued mount.
+  void _trackCombatEntity(Component entity) {
+    // Expired entities self-remove; pruning keeps the set to pending/live
+    // entities instead of retaining everything launched since the last
+    // teardown.
+    _combatEntityComponents.removeWhere(
+      (entity) => entity.isRemoved || entity.isRemoving,
+    );
+    _combatEntityComponents.add(entity);
+    add(entity);
   }
 
   void _launchDrones(TowerComponent tower) {
@@ -816,7 +849,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
     _activeDronesByTower[tower.placedTower.id] = active + allowed;
     for (var index = 0; index < allowed; index += 1) {
-      add(
+      _trackCombatEntity(
         DroneComponent(
           ownerTowerId: tower.placedTower.id,
           stats: tower.stats,
@@ -1052,7 +1085,24 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     add(enemy);
   }
 
+  void _addCombatFeedback(CombatFeedbackComponent feedback) {
+    _emittedFeedbackCues += 1;
+    // Expired cues self-remove; pruning keeps the set to pending/live cues
+    // instead of retaining everything emitted since the last teardown.
+    _combatFeedbackComponents.removeWhere(
+      (cue) => cue.isRemoved || cue.isRemoving,
+    );
+    _combatFeedbackComponents.add(feedback);
+    add(feedback);
+  }
+
   void _handleEnemyKilled(EnemyComponent enemy) {
+    _addCombatFeedback(
+      CombatFeedbackComponent.enemyDestroyed(
+        origin: enemy.position,
+        radius: enemy.radius,
+      ),
+    );
     if (_inspectedEnemyId == enemy.enemyId) {
       _setInspectedEnemy(null);
     }
@@ -1070,6 +1120,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   void _handleEnemyReachedBase(EnemyComponent enemy) {
+    _addCombatFeedback(
+      CombatFeedbackComponent.coreImpact(
+        origin: enemy.position,
+        radius: enemy.radius,
+      ),
+    );
     if (_inspectedEnemyId == enemy.enemyId) {
       _setInspectedEnemy(null);
     }
@@ -1148,16 +1204,16 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     for (final enemy in _activeEnemyComponents.values.toList()) {
       enemy.removeFromParent();
     }
-    for (final projectile
-        in children.whereType<ProjectileComponent>().toList()) {
-      projectile.removeFromParent();
+    // removeFromParent cancels a still-queued add, so the tracked sets catch
+    // entities and cues a children sweep cannot see yet.
+    for (final entity in _combatEntityComponents.toList()) {
+      entity.removeFromParent();
     }
-    for (final drone in children.whereType<DroneComponent>().toList()) {
-      drone.removeFromParent();
+    _combatEntityComponents.clear();
+    for (final feedback in _combatFeedbackComponents.toList()) {
+      feedback.removeFromParent();
     }
-    for (final field in children.whereType<GravityFieldComponent>().toList()) {
-      field.removeFromParent();
-    }
+    _combatFeedbackComponents.clear();
     if (removeTowers) {
       for (final tower in _towerComponents.values.toList()) {
         tower.removeFromParent();
