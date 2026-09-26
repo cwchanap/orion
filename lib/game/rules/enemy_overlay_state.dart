@@ -92,6 +92,8 @@ class EnemyOverlayState {
   factory EnemyOverlayState({
     required bool shouldRender,
     required bool isExpanded,
+    required bool isSlowed,
+    required bool isCorroded,
     required double healthRatio,
     required double shieldRatio,
     required bool showHealthBar,
@@ -101,6 +103,8 @@ class EnemyOverlayState {
     return EnemyOverlayState._(
       shouldRender: shouldRender,
       isExpanded: isExpanded,
+      isSlowed: isSlowed,
+      isCorroded: isCorroded,
       healthRatio: healthRatio,
       shieldRatio: shieldRatio,
       showHealthBar: showHealthBar,
@@ -112,6 +116,8 @@ class EnemyOverlayState {
   const EnemyOverlayState._({
     required this.shouldRender,
     required this.isExpanded,
+    required this.isSlowed,
+    required this.isCorroded,
     required this.healthRatio,
     required this.shieldRatio,
     required this.showHealthBar,
@@ -124,6 +130,13 @@ class EnemyOverlayState {
 
   final bool shouldRender;
   final bool isExpanded;
+
+  /// Slow/corrode status straight from the underlying data, independent of
+  /// badge ordering or the badge cap, so status rings can never be truncated
+  /// away by unrelated badge churn.
+  final bool isSlowed;
+  final bool isCorroded;
+
   final double healthRatio;
   final double shieldRatio;
   final bool showHealthBar;
@@ -135,6 +148,8 @@ class EnemyOverlayState {
       return const EnemyOverlayState._(
         shouldRender: false,
         isExpanded: false,
+        isSlowed: false,
+        isCorroded: false,
         healthRatio: 0,
         shieldRatio: 0,
         showHealthBar: false,
@@ -172,6 +187,8 @@ class EnemyOverlayState {
     return EnemyOverlayState._(
       shouldRender: shouldRender,
       isExpanded: data.isInspected,
+      isSlowed: data.isSlowed,
+      isCorroded: data.isCorroded,
       healthRatio: healthRatio,
       shieldRatio: shieldRatio,
       showHealthBar:
@@ -253,18 +270,22 @@ class EnemyOverlayLayout {
   static const double _expandedBarWidthFactor = 2.8;
   static const double _normalOriginFactor = 0.72;
   static const double _expandedOriginFactor = 0.92;
-  static const double _corrodedRingRadiusFactor = 1.15;
-  static const double _slowedRingRadiusFactor = 1.3;
+  // EnemyComponent draws its sprite at 2.4 x radius (half-extent 1.2), so the
+  // corrosion ring must exceed that to sit around the sprite instead of on
+  // it; the slow ring is deliberately larger so both stay visible together.
+  static const double _corrodedRingRadiusFactor = 1.25;
+  static const double _slowedRingRadiusFactor = 1.45;
 
   /// Top of the overlay region, measured relative to the enemy center.
   final double originY;
 
   /// Radius of the thin corrosion status ring around the enemy body, or `0`
-  /// when the corroded badge is absent.
+  /// when the enemy is not corroded. Derived from the status flag rather
+  /// than the badge list, so the ring survives badge-row truncation.
   final double corrodedRingRadius;
 
   /// Radius of the thin slow status ring around the enemy body, or `0` when
-  /// the slowed badge is absent. Deliberately larger than the corrosion ring
+  /// the enemy is not slowed. Deliberately larger than the corrosion ring
   /// so both remain visible when they coexist.
   final double slowedRingRadius;
 
@@ -313,10 +334,10 @@ class EnemyOverlayLayout {
     final isExpanded = state.isExpanded;
     final originY =
         -radius * (isExpanded ? _expandedOriginFactor : _normalOriginFactor);
-    final corrodedRingRadius = state.badges.contains(EnemyOverlayBadge.corroded)
+    final corrodedRingRadius = state.isCorroded
         ? radius * _corrodedRingRadiusFactor
         : 0.0;
-    final slowedRingRadius = state.badges.contains(EnemyOverlayBadge.slowed)
+    final slowedRingRadius = state.isSlowed
         ? radius * _slowedRingRadiusFactor
         : 0.0;
     var cursor = originY;

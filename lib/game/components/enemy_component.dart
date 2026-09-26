@@ -9,6 +9,7 @@ import '../models/game_models.dart';
 import '../rules/enemy_logic.dart';
 import '../rules/enemy_overlay_state.dart';
 import '../rules/tower_targeting.dart';
+import 'combat_colors.dart';
 import 'enemy_overlay.dart';
 
 typedef EnemyKilledCallback = void Function(EnemyComponent enemy);
@@ -31,7 +32,7 @@ class EnemyComponent extends CircleComponent {
          radius: radius,
          anchor: Anchor.center,
          position: Vector2(logic.position.dx, logic.position.dy),
-         paint: Paint()..color = const Color(0xFFE35D6A),
+         paint: Paint()..color = CombatColors.enemyBody,
        );
 
   final int enemyId;

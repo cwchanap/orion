@@ -281,7 +281,9 @@ class ProjectileComponent extends CircleComponent {
 
   void _resolveClusterBursts(Vector2 impactPosition) {
     for (var burst = 0; burst < stats.clusterBurstCount; burst += 1) {
-      for (final enemy in enemiesProvider()) {
+      // Snapshot per pass: a kill here removes the enemy from the owner's
+      // live enemy map, which would otherwise trip concurrent modification.
+      for (final enemy in enemiesProvider().toList()) {
         if (!enemy.isAlive) {
           continue;
         }

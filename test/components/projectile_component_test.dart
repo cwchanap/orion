@@ -18,6 +18,9 @@ void main() {
     double chainFalloff = 1,
     int pierceCount = 0,
     double pierceWidth = 0,
+    int clusterBurstCount = 0,
+    double clusterBurstDamageMultiplier = 0,
+    double clusterBurstRadius = 0,
   }) {
     return TowerStats(
       type: type,
@@ -42,6 +45,9 @@ void main() {
       chainFalloff: chainFalloff,
       pierceCount: pierceCount,
       pierceWidth: pierceWidth,
+      clusterBurstCount: clusterBurstCount,
+      clusterBurstDamageMultiplier: clusterBurstDamageMultiplier,
+      clusterBurstRadius: clusterBurstRadius,
     );
   }
 
@@ -49,6 +55,7 @@ void main() {
     required int id,
     required Offset position,
     double health = 100,
+    EnemyKilledCallback onKilled = _noopKilled,
   }) {
     final stats = EnemyStats(
       health: health,
@@ -64,7 +71,7 @@ void main() {
         stats: stats,
         waypoints: [position, position + const Offset(1000, 0)],
       ),
-      onKilled: (_) {},
+      onKilled: onKilled,
       onReachedBase: (_) {},
     );
     // ProjectileComponent.update rejects an unmounted target; standalone
@@ -207,5 +214,46 @@ void main() {
       expect(target.health, closeTo(90, 0.001));
       expect(feedbacks, isEmpty);
     });
+
+    test('cluster bursts survive kills shrinking the live enemy set', () {
+      // Mirrors OrionDefenseGame: the provider hands out the live enemy
+      // map view and kills remove entries from that map mid-resolution.
+      // Enemy 2 survives the splash hit but dies to the burst tick, so the
+      // map mutates while the burst loop is still iterating it.
+      final enemies = <int, EnemyComponent>{};
+      EnemyComponent register(int id, Offset position, double health) {
+        final enemy = makeEnemy(
+          id: id,
+          position: position,
+          health: health,
+          onKilled: (_) => enemies.remove(id),
+        );
+        enemies[id] = enemy;
+        return enemy;
+      }
+
+      final target = register(1, const Offset(100, 100), 100);
+      register(2, const Offset(110, 100), 25);
+      final projectile = ProjectileComponent(
+        stats: makeStats(
+          damage: 20,
+          splashRadius: 40,
+          clusterBurstCount: 2,
+          clusterBurstDamageMultiplier: 1,
+          clusterBurstRadius: 40,
+        ),
+        target: target,
+        startPosition: Vector2(0, 100),
+        enemiesProvider: () => enemies.values,
+        onCombatFeedback: (_) {},
+      );
+
+      projectile.update(2);
+
+      expect(enemies.keys, [1]);
+      expect(enemies[1]!.health, closeTo(40, 0.001));
+    });
   });
 }
+
+void _noopKilled(EnemyComponent enemy) {}
