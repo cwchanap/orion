@@ -10,6 +10,8 @@ void main() {
       final state = EnemyOverlayState(
         shouldRender: true,
         isExpanded: false,
+        isSlowed: true,
+        isCorroded: true,
         healthRatio: 0.5,
         shieldRatio: 0.25,
         showHealthBar: true,

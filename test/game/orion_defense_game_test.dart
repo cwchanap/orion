@@ -1,4 +1,4 @@
-import 'dart:ui' show Rect;
+import 'dart:ui' show Canvas, PictureRecorder, Rect;
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flutter/gestures.dart';
@@ -3077,6 +3077,9 @@ void main() {
         game.processLifecycleEvents();
 
         expect(game.snapshot.phase, GamePhase.lost);
+        // The cue was emitted on the losing path before cleanup swept it;
+        // without this the empty-children check below would pass vacuously.
+        expect(game.emittedFeedbackCueCount, 1);
         expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
       });
 
@@ -3096,7 +3099,9 @@ void main() {
         expect(game.trackedFeedbackCueCount, 1);
 
         // Let the first cue expire, then emit another: the dead entry must be
-        // pruned instead of lingering until combat teardown.
+        // pruned instead of lingering until combat teardown. Cues hold their
+        // clock at zero until first drawn, so render once before aging it.
+        _renderCues(game);
         game.update(1);
         game.processLifecycleEvents();
         expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
@@ -3681,6 +3686,15 @@ StageDefinition _lethalGravityFieldStage() {
     mapColumn: 0,
     mapRow: 0,
   );
+}
+
+void _renderCues(OrionDefenseGame game) {
+  final recorder = PictureRecorder();
+  final canvas = Canvas(recorder);
+  for (final cue in game.children.whereType<CombatFeedbackComponent>()) {
+    cue.render(canvas);
+  }
+  recorder.endRecording().dispose();
 }
 
 void _tapCell(OrionDefenseGame game, GridPosition position) {

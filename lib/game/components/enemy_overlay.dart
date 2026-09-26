@@ -3,13 +3,14 @@ import 'package:flutter/painting.dart';
 
 import '../assets/game_tower_variety_sheet.dart';
 import '../rules/enemy_overlay_state.dart';
+import 'combat_colors.dart';
 
 class EnemyOverlayRenderer {
   EnemyOverlayRenderer();
 
   final Paint _barBackgroundPaint = Paint()..color = const Color(0xCC101624);
-  final Paint _healthPaint = Paint()..color = const Color(0xFFE35D6A);
-  final Paint _shieldPaint = Paint()..color = const Color(0xFF6EC6FF);
+  final Paint _healthPaint = Paint()..color = CombatColors.enemyBody;
+  final Paint _shieldPaint = Paint()..color = CombatColors.shield;
   final Paint _badgeBackgroundPaint = Paint()..color = const Color(0xD9141B2B);
   final Paint _badgeStrokePaint = Paint()
     ..color = const Color(0xCCFFFFFF)
@@ -267,7 +268,7 @@ class EnemyOverlayRenderer {
     return switch (badge) {
       EnemyOverlayBadge.corroded => const Color(0xFF67D46E),
       EnemyOverlayBadge.slowed => const Color(0xFF78D8FF),
-      EnemyOverlayBadge.shielded => const Color(0xFF6EC6FF),
+      EnemyOverlayBadge.shielded => CombatColors.shield,
       EnemyOverlayBadge.armored => const Color(0xFFC9D6E8),
       EnemyOverlayBadge.regen => const Color(0xFF67D46E),
       EnemyOverlayBadge.heavy => const Color(0xFFFFB84D),

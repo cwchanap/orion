@@ -88,6 +88,23 @@ void main() {
         expect(destroyed.positions, isEmpty);
         expect(chain.radius, 0);
       });
+
+      test('geometry getters return defensive copies', () {
+        final feedback = CombatFeedbackComponent.pierce(
+          origin: Vector2(0, 0),
+          beamTarget: Vector2(60, 0),
+          positions: [Vector2(30, 0)],
+          color: const Color(0xFFE8F1FF),
+        );
+
+        feedback.origin.setValues(999, 999);
+        feedback.beamTarget.setValues(999, 999);
+        feedback.positions.first.setValues(999, 999);
+
+        expect(feedback.origin, Vector2.zero());
+        expect(feedback.beamTarget, Vector2(60, 0));
+        expect(feedback.positions, [Vector2(30, 0)]);
+      });
     });
 
     group('priority', () {
@@ -151,12 +168,41 @@ void main() {
         game.processLifecycleEvents();
         expect(feedback.isRemoved, isFalse);
 
+        _renderToCanvas(feedback);
         game.update(feedback.lifetime + 0.01);
         game.processLifecycleEvents();
 
         expect(feedback.isRemoved, isTrue);
         expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
       });
+
+      test(
+        'never-drawn cue survives an oversized frame until it renders once',
+        () {
+          // A cue queued in frame N receives its first update before its
+          // first render; a long frame must not expire it before it is ever
+          // drawn.
+          final game = FlameGame();
+          game.onGameResize(Vector2(100, 100));
+          // ignore: invalid_use_of_internal_member
+          game.setMounted();
+          final feedback = CombatFeedbackComponent.coreImpact(
+            origin: Vector2.zero(),
+            radius: 11,
+          );
+          game.add(feedback);
+          game.processLifecycleEvents();
+
+          game.update(feedback.lifetime + 5);
+          game.processLifecycleEvents();
+
+          expect(feedback.isRemoved, isFalse);
+          _renderToCanvas(feedback);
+          game.update(feedback.lifetime + 0.01);
+          game.processLifecycleEvents();
+          expect(feedback.isRemoved, isTrue);
+        },
+      );
     });
 
     group('render', () {
@@ -190,11 +236,51 @@ void main() {
         }
       });
 
-      test('every kind renders near expiry without throwing', () {
+      test('every kind still draws near expiry', () {
         for (final feedback in feedbacks()) {
+          // update holds elapsed at 0 until the first render, so prime the
+          // cue with a full-opacity frame before advancing time.
+          _renderToCanvas(feedback);
           feedback.update(feedback.lifetime * 0.95);
-          expect(() => _renderToCanvas(feedback), returnsNormally);
+          final canvas = TestRecordingCanvas();
+          feedback.render(canvas);
+          expect(feedback.isRemoved, isFalse);
+          expect(canvas.invocations, isNotEmpty);
         }
+      });
+
+      test('splash and chain draw an accent at every resolved position', () {
+        final splash = CombatFeedbackComponent.splash(
+          origin: Vector2(50, 50),
+          radius: 48,
+          positions: [Vector2(60, 55), Vector2(70, 60)],
+          color: const Color(0xFFFFB84D),
+        );
+        final splashCanvas = TestRecordingCanvas();
+        splash.render(splashCanvas);
+        // Splash area circle first, then one accent per resolved position.
+        expect(
+          splashCanvas.invocations
+              .where((call) => call.invocation.memberName == #drawCircle)
+              .map((call) => call.invocation.positionalArguments[0] as Offset)
+              .toList(),
+          [const Offset(50, 50), const Offset(60, 55), const Offset(70, 60)],
+        );
+
+        final chain = CombatFeedbackComponent.chain(
+          positions: [Vector2(10, 10), Vector2(40, 30), Vector2(70, 60)],
+          color: const Color(0xFFD7B2FF),
+        );
+        final chainCanvas = TestRecordingCanvas();
+        chain.render(chainCanvas);
+        // The chain polyline is a drawPath; its circles are accents only.
+        expect(
+          chainCanvas.invocations
+              .where((call) => call.invocation.memberName == #drawCircle)
+              .map((call) => call.invocation.positionalArguments[0] as Offset)
+              .toList(),
+          [const Offset(10, 10), const Offset(40, 30), const Offset(70, 60)],
+        );
       });
 
       test('pierce beam stays on the firing ray when hits sit off-axis', () {

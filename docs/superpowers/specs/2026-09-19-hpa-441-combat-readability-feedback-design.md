@@ -239,14 +239,12 @@ EnemyComponent already renders:
 
 Keep that split.
 
-EnemyOverlayRenderer draws status rings before its bars/badges/name, using the existing state badges:
+EnemyOverlayRenderer draws status rings before its bars/badges/name, using the existing state flags:
 
-- EnemyOverlayBadge.slowed -> thin cool ring;
-- EnemyOverlayBadge.corroded -> thin green ring.
+- `EnemyOverlayState.isSlowed` -> thin cool ring;
+- `EnemyOverlayState.isCorroded` -> thin green ring.
 
-EnemyOverlayLayout owns any ring radius/offset geometry so it remains pure and unit-testable without raster assertions.
-
-The current overlay ordering already places corroded/slowed first before the normal two-badge cap. Preserve the existing test that expects `[corroded, slowed]` when other traits are present; it already pins the invariant the ring feature relies on. Do not add a duplicate ordering test.
+Rings are derived from the status flags rather than the badge list, so they survive badge-row truncation under the two-badge cap. EnemyOverlayLayout owns the ring radius/offset geometry so it remains pure and unit-testable without raster assertions. The current overlay ordering still places corroded/slowed badges first; preserve the existing test that expects `[corroded, slowed]` when other traits are present. Do not add a duplicate ordering test.
 
 ## 7. No new assets or feedback catalog
 
