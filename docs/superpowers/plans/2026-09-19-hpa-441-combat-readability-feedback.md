@@ -387,7 +387,8 @@ EnemyComponent already renders the sprite and then calls EnemyOverlayRenderer. D
 EnemyOverlayRenderer.render:
 
 1. compute layout;
-2. draw status rings from existing `state.badges`:
+2. draw status rings from the state's `isSlowed` / `isCorroded` flags
+   (not `state.badges`, so the two-badge cap can never truncate a ring):
    - corroded;
    - slowed;
 3. draw existing badges;
@@ -413,8 +414,8 @@ That already pins the critical ordering invariant. Keep it; do not add a duplica
 
 Extend enemy_component_test.dart:
 
-- layout exposes slowed-ring geometry when slowed badge present;
-- layout exposes corroded-ring geometry when corroded badge present;
+- layout exposes slowed-ring geometry when the slowed flag is set;
+- layout exposes corroded-ring geometry when the corroded flag is set;
 - both coexist;
 - no status ring geometry for a resolved/no-status overlay;
 - current bar/badge layout invariants remain green.
@@ -509,7 +510,7 @@ If 3x readability is poor, adjust only local duration/opacity/stroke width. Do n
 - Kill cue comes from _handleEnemyKilled.
 - Non-losing leak cue comes from _handleEnemyReachedBase; losing leak is allowed to be cleared by the debrief transition.
 - Slow/corrosion rings use EnemyOverlayState + EnemyOverlayRenderer/Layout.
-- Existing badge-order test remains the invariant for status-ring eligibility.
+- Status-ring eligibility is driven by `isSlowed` / `isCorroded`, independent of the badge list; the existing badge-order test remains the badge-row invariant.
 - Recorder tests execute every new render branch without pixel coupling.
 - Direct projectile tests require no FlameGame host; standalone target mounting is explicit.
 - Combat cleanup removes transient feedback.
