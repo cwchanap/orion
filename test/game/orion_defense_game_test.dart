@@ -3021,6 +3021,8 @@ void main() {
         game.processLifecycleEvents();
         final enemy = game.children.whereType<EnemyComponent>().single;
         final goldBefore = game.snapshot.gold;
+        final killOrigin = enemy.position.clone();
+        final killRadius = enemy.radius;
 
         enemy.applyDamage(9999);
         game.processLifecycleEvents();
@@ -3031,6 +3033,10 @@ void main() {
             .toList();
         expect(cues, hasLength(1));
         expect(cues.single.kind, CombatFeedbackKind.enemyDestroyed);
+        // The burst must sit on the killed enemy, not board origin/zero radius.
+        expect(cues.single.origin, killOrigin);
+        expect(cues.single.radius, killRadius);
+        expect(killRadius, greaterThan(0));
       });
 
       test('non-losing leak emits one coreImpact cue and damages the base', () {
@@ -3057,6 +3063,10 @@ void main() {
             .toList();
         expect(cues, hasLength(1));
         expect(cues.single.kind, CombatFeedbackKind.coreImpact);
+        // The mark must sit on the leaked enemy's last position (the enemy
+        // stops ticking once removed, so its position is frozen at the leak).
+        expect(cues.single.origin, enemy.position);
+        expect(cues.single.radius, enemy.radius);
       });
 
       test('losing leak does not leave a queued coreImpact cue behind', () {
@@ -3081,6 +3091,9 @@ void main() {
         // without this the empty-children check below would pass vacuously.
         expect(game.emittedFeedbackCueCount, 1);
         expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
+        // Clearing the tracking set is what drops the still-queued add —
+        // Flame does not mark it isRemoved until it mounts.
+        expect(game.trackedFeedbackCueCount, 0);
       });
 
       test('new cues prune expired entries from feedback tracking', () {

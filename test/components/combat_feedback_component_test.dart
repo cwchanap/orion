@@ -43,12 +43,14 @@ void main() {
       });
 
       test('pierce retains origin, beam target, and ordered positions', () {
+        final beamTarget = Vector2(60, 0);
         final feedback = CombatFeedbackComponent.pierce(
           origin: Vector2(0, 0),
-          beamTarget: Vector2(60, 0),
+          beamTarget: beamTarget,
           positions: [Vector2(30, 0), Vector2(60, 0)],
           color: const Color(0xFFE8F1FF),
         );
+        beamTarget.setValues(999, 999);
 
         expect(feedback.kind, CombatFeedbackKind.pierce);
         expect(feedback.origin, Vector2(0, 0));
@@ -280,6 +282,58 @@ void main() {
               .map((call) => call.invocation.positionalArguments[0] as Offset)
               .toList(),
           [const Offset(10, 10), const Offset(40, 30), const Offset(70, 60)],
+        );
+        // The chain polyline itself is drawn as a single path through the
+        // resolved sequence — not only the accent circles.
+        expect(
+          chainCanvas.invocations.where(
+            (call) => call.invocation.memberName == #drawPath,
+          ),
+          hasLength(1),
+        );
+      });
+
+      test('destruction burst and core mark draw different geometry', () {
+        final destroyed = CombatFeedbackComponent.enemyDestroyed(
+          origin: Vector2(10, 10),
+          radius: 20,
+        );
+        final core = CombatFeedbackComponent.coreImpact(
+          origin: Vector2(10, 10),
+          radius: 20,
+        );
+        final destroyedCanvas = TestRecordingCanvas();
+        final coreCanvas = TestRecordingCanvas();
+        destroyed.render(destroyedCanvas);
+        core.render(coreCanvas);
+
+        Path singleDrawnPath(TestRecordingCanvas canvas) =>
+            canvas.invocations
+                    .singleWhere(
+                      (call) => call.invocation.memberName == #drawPath,
+                    )
+                    .invocation
+                    .positionalArguments[0]
+                as Path;
+
+        final burst = singleDrawnPath(destroyedCanvas);
+        final mark = singleDrawnPath(coreCanvas);
+        // Six open burst segments vs one closed four-point diamond; the
+        // core mark also adds an accent ring circle the burst lacks.
+        expect(burst.computeMetrics().length, 6);
+        expect(mark.computeMetrics().length, 1);
+        expect(burst.getBounds(), isNot(mark.getBounds()));
+        expect(
+          coreCanvas.invocations.where(
+            (call) => call.invocation.memberName == #drawCircle,
+          ),
+          hasLength(1),
+        );
+        expect(
+          destroyedCanvas.invocations.where(
+            (call) => call.invocation.memberName == #drawCircle,
+          ),
+          isEmpty,
         );
       });
 

@@ -50,6 +50,8 @@ void main() {
         final state = enemy.overlayState;
 
         expect(state.shouldRender, isTrue);
+        expect(state.isSlowed, isTrue);
+        expect(state.isCorroded, isTrue);
         expect(state.healthRatio, 1);
         expect(state.shieldRatio, 0.25);
         expect(state.showHealthBar, isTrue);
@@ -58,6 +60,15 @@ void main() {
           EnemyOverlayBadge.corroded,
           EnemyOverlayBadge.slowed,
         ]);
+
+        // overlayState is built through EnemyOverlayState.fromData, so the
+        // flag + ring assertions below lock the whole production chain:
+        // applySlow/applyCorrosion -> data -> fromData -> layout radii.
+        final layout = EnemyOverlayLayout.compute(state, enemy.radius);
+        expect(layout.slowedRingRadius, greaterThan(0));
+        expect(layout.corrodedRingRadius, greaterThan(0));
+        expect(layout.corrodedRingRadius, greaterThan(1.2 * enemy.radius));
+        expect(layout.slowedRingRadius, greaterThan(1.2 * enemy.radius));
       },
     );
 
