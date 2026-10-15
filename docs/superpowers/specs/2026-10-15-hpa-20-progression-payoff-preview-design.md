@@ -73,7 +73,7 @@ Mechanics that aren't one of the four metrics (prism split, armor/shield damage 
 
 For `tower.canUpgrade`, `_ProgressionActions` renders a column:
 
-1. `OrionText.micro('UPGRADE - LV 2')` header (mirrors the existing `SPECIALIZE - LV 3` header).
+1. `OrionText.micro('UPGRADE - LV ${tower.level + 1}')` header, matching the existing `'SPECIALIZE - LV ${tower.level + 1}'` convention in the same widget.
 2. The comparison rows (key `tower-upgrade-preview`), each a single line `Label  current → candidate` in `OrionTypography.readout` at the inspector's existing small sizes.
 3. The existing `tower-upgrade` button, unchanged in cost text, enabled state, and callback.
 

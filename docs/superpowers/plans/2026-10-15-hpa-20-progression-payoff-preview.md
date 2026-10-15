@@ -104,7 +104,7 @@ Commit: `HPA-20: count current Salvage Module beneficiaries`
    - `selectedTowerUpgradeStats == null` → no preview widget, button unchanged (covers existing null-stats test).
 2. Implement a private `_PreviewRow` record/class `(String label, String from, String to)` and a private top-level `List<_PreviewRow> _previewRows(TowerStats current, TowerStats candidate, TowerSecondaryMetric? secondary)` that reuses `number`, `cadence`, `_InspectorBody._secondaryLabel`, and `_InspectorBody._secondaryValue` and drops rows whose formatted strings match. Promote those two static helpers to file-private top-level functions if that is cleaner; do not duplicate them.
 3. Add a private `_StatPreview` widget rendering the rows (single `Semantics(container: true, excludeSemantics: true, label: ...)`, "to" in the label, "→" in the visible text, seconds spelled out for Fire/Slow in the label).
-4. In `_ProgressionActions`, for `canUpgrade`, render the `UPGRADE - LV 2` header, `_StatPreview` (key `tower-upgrade-preview`) when both stats are present, then the unchanged button.
+4. In `_ProgressionActions`, for `canUpgrade`, render the `'UPGRADE - LV ${tower.level + 1}'` header (same interpolation as the adjacent `SPECIALIZE` header), `_StatPreview` (key `tower-upgrade-preview`) when both stats are present, then the unchanged button.
 5. Run `flutter test test/widget/tower_inspector_test.dart`.
 
 Commit: `HPA-20: show upgrade preview in the tower inspector`
