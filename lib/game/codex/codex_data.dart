@@ -123,7 +123,7 @@ class CodexData {
               level: 3,
               specialization: spec,
             ),
-            description: _specializationDescription(spec),
+            description: spec.role,
           ),
       ],
     );
@@ -276,43 +276,6 @@ class CodexData {
         ))
           spec,
     ];
-  }
-
-  static String _specializationDescription(TowerSpecialization spec) {
-    return switch (spec) {
-      TowerSpecialization.pulseLaser =>
-        'Maximized fire rate for concentrated single-target damage.',
-      TowerSpecialization.prismLaser =>
-        'Each shot splits to one nearby target at reduced damage.',
-      TowerSpecialization.siegeRocket =>
-        'Heaviest single hit with the largest splash radius.',
-      TowerSpecialization.clusterRocket =>
-        'Detonates into clustered sub-explosions across the impact area.',
-      TowerSpecialization.deepFreeze =>
-        'The strongest, longest slow; locks enemies down at the cost of raw damage.',
-      TowerSpecialization.frostbite =>
-        'Balanced slow that deals bonus damage to already-slowed enemies.',
-      TowerSpecialization.lanceRailgun =>
-        'Maximum pierce — punches through the most targets in a line.',
-      TowerSpecialization.magneticRailgun =>
-        'Trades pierce for bonus damage versus armored enemies.',
-      TowerSpecialization.stormRelay =>
-        'The longest chain lightning, jumping to the most targets.',
-      TowerSpecialization.overloadRelay =>
-        'Trades chain count for bonus damage versus shielded enemies.',
-      TowerSpecialization.dissolverNanites =>
-        'Peak corrosion and armor shred to strip the heaviest plating.',
-      TowerSpecialization.replicatorNanites =>
-        'Balanced corrosion stream with sustained damage and lighter shred.',
-      TowerSpecialization.singularityWell =>
-        'The largest, longest-lasting field — also slows enemies caught inside.',
-      TowerSpecialization.crushWell =>
-        'A tighter, concentrated field for a focused kill zone.',
-      TowerSpecialization.interceptorBay =>
-        'More, faster-firing drones for broad interception.',
-      TowerSpecialization.hunterBay =>
-        'Fewer, harder-hitting drones that persist longer.',
-    };
   }
 
   static String _enemyRole(EnemyArchetype archetype) {
