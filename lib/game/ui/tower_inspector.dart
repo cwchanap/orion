@@ -268,11 +268,12 @@ String _secondaryMetricValue(TowerSecondaryMetric metric, TowerStats stats) {
 typedef _PreviewRow = ({String label, String from, String to});
 
 /// Tower-specific mechanics that an upgrade can change but that the four
-/// inspector metrics don't show. Projectile speed and the specialization-only
-/// damage multipliers are left out: the former is cosmetic at this scale and
-/// the latter are explained by each specialization's role sentence.
+/// inspector metrics don't show. Shot speed is included because a slower shot
+/// can miss a target that dies or leaves first. The specialization-only damage
+/// multipliers are left out: each specialization's role sentence explains them.
 final List<({String label, String Function(TowerStats stats) format})>
 _mechanicMetrics = [
+  (label: 'Shot speed', format: (s) => number(s.projectileSpeed)),
   (label: 'Splash', format: (s) => number(s.splashRadius)),
   (label: 'Slow', format: (s) => '${number(s.slowDuration)}s'),
   (label: 'Slow power', format: (s) => percent(1 - s.slowMultiplier)),
