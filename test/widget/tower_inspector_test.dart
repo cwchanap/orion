@@ -619,6 +619,10 @@ void main() {
         findsOneWidget,
       );
       expect(inPreview('tower-upgrade-preview', '145 → 160'), findsOneWidget);
+      expect(
+        inPreview('tower-upgrade-preview', 'SHOT SPEED 420 → 460'),
+        findsOneWidget,
+      );
       expect(find.text('Upgrade ${current.upgradeCost}'), findsOneWidget);
 
       final semantics = tester.ensureSemantics();
@@ -626,7 +630,8 @@ void main() {
         expect(
           find.bySemanticsLabel(
             'Upgrade preview. Damage 12 to 18. '
-            'Fire 0.42 seconds to 0.34 seconds. Range 145 to 160',
+            'Fire 0.42 seconds to 0.34 seconds. Range 145 to 160. '
+            'Shot speed 420 to 460',
           ),
           findsOneWidget,
         );
