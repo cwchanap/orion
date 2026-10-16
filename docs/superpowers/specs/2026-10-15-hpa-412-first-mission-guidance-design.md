@@ -30,6 +30,7 @@ The current UI already exposes nearly everything this guide needs:
 - `OrionGamePage._showStageBriefing` → `_startStage` is the real mission launch seam.
 - `OrionGamePage` already owns page-level persistence injection and the Settings sheet.
 - `OrionDefenseGame.stateNotifier` publishes the `GameSnapshot` the page/chrome already renders from; UI does not need to read `GameSession` directly.
+- `GameSession.towers` already exposes an immutable list of placed towers inside the rules layer, but `GameSnapshot` does not currently project it. HPA-412 needs one neutral read-side `placedTowers` projection so UI can observe placement/upgrade facts without breaking the snapshot-only UI boundary.
 - `OrionDefenseGame.boardCellCenter` maps a grid cell to the live transformed board coordinate, so the first callout can point at a real board cell without duplicating board geometry.
 - `TowerBuildRail` already identifies cards with `tower-card-<type>` and supports both tap and drag placement.
 - `IdleCommandBar` owns the Wave action.
@@ -43,7 +44,7 @@ The current UI already exposes nearly everything this guide needs:
 
 ### A. Page-local, snapshot-derived guide — chosen
 
-Keep one completion flag in a tiny store. While Outpost Alpha is active and that flag is false, derive the currently useful callout from the live `GameSnapshot`. The page owns the overlay and a handful of target anchors.
+Keep one completion flag in a tiny store. While Outpost Alpha is active and that flag is false, derive the currently useful callout from the live `GameSnapshot`. Add only the missing neutral `placedTowers` read projection; the page owns the overlay and a handful of target anchors.
 
 This matches Orion's existing state flow, naturally treats tap and drag placement the same once a tower exists, and avoids persisting transient tutorial state.
 
@@ -51,9 +52,9 @@ This matches Orion's existing state flow, naturally treats tap and drag placemen
 
 A registry/controller with named steps, target registration, transitions, and persistence could be reused by HPA-413, but HPA-412 has only six fixed milestones and HPA-413 may not share the same timing/target model. Building a framework now adds abstraction before the second use case is known.
 
-### C. Tutorial state in `GameSession` / `GameSnapshot` — rejected
+### C. Tutorial state in `GameSession` / campaign save — rejected
 
-That would make pure game rules own presentation onboarding, add tutorial fields to snapshots/saves, and create a second reason to mutate session state. The ticket is intentionally UI-layer guidance and needs no gameplay authority.
+That would make pure game rules own presentation onboarding, add tutorial-specific fields to gameplay state/saves, and create a second reason to mutate session state. The one `placedTowers` snapshot field in the chosen approach is different: it is a read-only projection of existing authoritative tower state, not tutorial progress.
 
 ## 1. Completion is one preference, outside campaign progress
 
@@ -83,7 +84,27 @@ This preference is deliberately independent of `CampaignProgressStore`:
 
 A tutorial-store write failure keeps the requested state in memory for the current process and does not add a new blocking error surface. This flag is non-critical UX state; campaign persistence behavior stays untouched.
 
-## 2. Progression is derived from the current snapshot, not a state machine
+## 2. Add one neutral tower projection, then derive progression from snapshots
+
+### Snapshot projection
+
+Add one optional field to `GameSnapshot`:
+
+```dart
+List<PlacedTower> placedTowers = const []
+```
+
+Store it as `List.unmodifiable`. `GameSession.snapshot()` populates it from its existing `_towersByPosition.values`/`towers` authority.
+
+Why this is the right seam:
+
+- Orion's UI contract says widgets read game state through `GameSnapshot`, not `GameSession`.
+- Placement and early-upgrade completion cannot be determined from `selectedTower` alone because placement clears selection and drag placement may never set `selectedCell`.
+- A neutral immutable placed-tower projection is simpler and more reusable than tutorial-only booleans such as `hasPlacedTower` / `hasUpgradedTower`.
+- Default `const []` keeps existing `GameSnapshot(...)` fixtures source-compatible.
+- This is read-side only; it does not change placement/upgrade mutation, save state, balance, or simulation.
+
+### Guide resolver
 
 Add a small closed enum and pure resolver in `lib/game/onboarding/first_mission_guide.dart`:
 
@@ -106,8 +127,8 @@ The resolver uses the following precedence:
 |---|---|
 | First `pendingRunModuleOffer` is visible | `salvageModule` |
 | Build phase after the first module is acquired (Wave 3+) | `scanner` |
-| Build phase after Wave 1, and no placed tower is Level 2+ | `upgrade` |
-| Wave 1 build phase, at least one tower exists | `startWave` |
+| Build phase after Wave 1, and no `placedTowers` entry is Level 2+ | `upgrade` |
+| Wave 1 build phase, `placedTowers` is non-empty | `startWave` |
 | Wave 1 build phase, no tower exists, a cell is selected | `towerCard` |
 | Wave 1 build phase, no tower/cell selection | `buildCell` |
 | Active wave / waiting between guided milestones | no callout |
@@ -151,7 +172,7 @@ The page owns the anchor keys/board points; target widgets only accept an option
 - **Build cell:** `game.boardCellCenter(const GridPosition(2, 2))`. On Outpost Alpha this is buildable and directly beside the `(3, 2)` path cell. Board geometry remains owned by `OrionDefenseGame`.
 - **Tower card:** add an optional guide anchor to the selected-cell `TowerBuildRail`; attach it only to the Laser card. The persistent idle rail does not receive this key, avoiding duplicate `GlobalKey`s during dock transitions.
 - **Wave:** optional anchor on `_PrimaryActionPill` in `IdleCommandBar`.
-- **Upgrade:** before a tower is selected, target `boardCellCenter` for the first placed tower. Once a tower is selected, target the radial Upgrade surface/button via an optional anchor in `TowerRadialActions`. This produces the requested "tower, then Upgrade" behavior without another tutorial step.
+- **Upgrade:** before a tower is selected, target `boardCellCenter` for `snapshot.placedTowers.first.position`. Once a tower is selected, target the radial Upgrade surface/button via an optional anchor in `TowerRadialActions`. This produces the requested "tower, then Upgrade" behavior without another tutorial step.
 - **Salvage Module:** optional anchor around the existing `run-module-draft-frame` surface.
 - **Scanner:** optional anchor on the collapsed `NextWaveScanner` control.
 
@@ -193,15 +214,17 @@ Add the same optional argument to `testGamePage()` so the full onboarding widget
 - Voiceover, new SFX, new sprites/illustrations, dimming masks, analytics, tutorial telemetry.
 - Persisting the active tutorial step or resume-in-place tutorial sessions.
 - Generic onboarding/coach-mark framework, event bus, controller, target registry, or tutorial data schema.
+- Tutorial-specific fields in `GameSession`/campaign save; the neutral `GameSnapshot.placedTowers` projection is the only game-state read change.
 - Campaign save migration/version bump.
 
 ## Validation
 
-### Pure/store tests
+### Pure/store/rules tests
 
 - Fresh `SharedPreferencesFirstMissionGuideStore` loads `false`; `true` and later `false` round-trip under `orion.firstMissionGuide`.
+- `game_session_test.dart`: initial snapshot has no `placedTowers`; after placement it contains that tower; after upgrade the snapshot contains the Level-2 replacement. Mutating the session later does not mutate an already-returned snapshot list.
 - `firstMissionGuideStepFor` covers: initial build cell, selected cell, tower created, active Wave 1 (no callout), Wave-2 build upgrade, pre-upgraded skip, first module draft, acquired module/scanner, and active-wave gaps.
-- A direct tower placement state proves drag/tap need no distinct guide branch.
+- A snapshot with `placedTowers` non-empty and `selectedCell == null` proves drag/tap need no distinct guide branch.
 
 ### Widget tests
 
@@ -237,7 +260,7 @@ Run the same path at 360×640 with no Flutter overflow and with dock/HUD control
 
 ### Regression gates
 
-- `flutter test test/onboarding/ test/widget/first_mission_guide_callout_test.dart test/widget/feedback_settings_sheet_test.dart test/widget_test.dart`
+- `flutter test test/game/game_session_test.dart test/onboarding/ test/widget/first_mission_guide_callout_test.dart test/widget/feedback_settings_sheet_test.dart test/widget_test.dart`
 - `flutter test integration_test/app_smoke_test.dart` when the integration target is available in the existing workflow/environment.
 - `dart format --set-exit-if-changed .`
 - `flutter analyze`
@@ -250,6 +273,7 @@ Run the same path at 360×640 with no Flutter overflow and with dock/HUD control
 | Fresh Alpha starts with build guidance | §1–§3 |
 | Tap + drag placement both advance | §2, validation |
 | Wave / upgrade / first module / scanner sequence | §2–§3 |
+| Reuses snapshot-only UI flow | §2 (`placedTowers` projection + resolver) |
 | Soft guidance; player may act in any order | Outcome, §2–§3 |
 | Skip/finish persist; replay clears | §1, §4 |
 | Survives Reset Campaign; no save bump | §1 |
