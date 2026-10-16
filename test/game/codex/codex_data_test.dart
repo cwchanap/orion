@@ -39,6 +39,21 @@ void main() {
         }
       }
     });
+
+    test('blurbs are the canonical specialization role sentences', () {
+      for (final t in CodexData.towers) {
+        for (final s in t.specializations) {
+          expect(s.description, s.specialization.role);
+        }
+      }
+    });
+
+    test('every role sentence stays compact enough for inspector cards', () {
+      for (final spec in TowerSpecialization.values) {
+        expect(spec.role, isNotEmpty, reason: spec.name);
+        expect(spec.role.length, lessThanOrEqualTo(90), reason: spec.name);
+      }
+    });
   });
 
   group('enemies', () {
