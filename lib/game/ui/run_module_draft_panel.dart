@@ -10,10 +10,14 @@ class RunModuleDraftPanel extends StatelessWidget {
     super.key,
     required this.offer,
     required this.onSelected,
+    this.beneficiaries = const {},
   });
 
   final RunModuleOffer offer;
   final ValueChanged<RunModuleId> onSelected;
+
+  /// Placed towers each offered module would affect right now.
+  final Map<RunModuleId, int> beneficiaries;
 
   @override
   Widget build(BuildContext context) {
@@ -39,6 +43,7 @@ class RunModuleDraftPanel extends StatelessWidget {
                 for (final id in offer.moduleIds) ...[
                   _RunModuleCard(
                     definition: runModuleDefinition(id),
+                    beneficiaryCount: beneficiaries[id] ?? 0,
                     onPressed: () => onSelected(id),
                   ),
                   const SizedBox(height: 10),
@@ -52,21 +57,44 @@ class RunModuleDraftPanel extends StatelessWidget {
   }
 }
 
+/// One line of current-run context for a draft card. Economy modules return
+/// null because their effect text already states the payoff directly.
+String? _beneficiaryContext(RunModuleDefinition definition, int count) {
+  if (!definition.affectsTowerStats) return null;
+  final noun = count == 1 ? 'tower' : 'towers';
+  if (definition.affinity == RunModuleAffinity.universal) {
+    return count == 0
+        ? 'Affects every tower you build'
+        : 'Affects your $count placed $noun';
+  }
+  final type = definition.affinity.label;
+  return count == 0
+      ? 'Benefits $type towers you build later'
+      : 'Affects your $count placed $type $noun';
+}
+
 class _RunModuleCard extends StatelessWidget {
-  const _RunModuleCard({required this.definition, required this.onPressed});
+  const _RunModuleCard({
+    required this.definition,
+    required this.beneficiaryCount,
+    required this.onPressed,
+  });
 
   final RunModuleDefinition definition;
+  final int beneficiaryCount;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final runContext = _beneficiaryContext(definition, beneficiaryCount);
     return Semantics(
       button: true,
       enabled: true,
       label:
           '${definition.title}. ${definition.effectText} '
-          'Affinity: ${definition.affinity.label}',
+          'Affinity: ${definition.affinity.label}'
+          '${runContext == null ? '' : '. $runContext'}',
       onTap: onPressed,
       excludeSemantics: true,
       child: OrionInnerSurface(
@@ -107,6 +135,16 @@ class _RunModuleCard extends StatelessWidget {
                         color: uiTheme.systemCyan,
                       ),
                     ),
+                    if (runContext != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        runContext,
+                        style: OrionTypography.microLabel(
+                          size: 9,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),

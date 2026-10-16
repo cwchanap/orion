@@ -463,6 +463,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   Positioned.fill(
                     child: RunModuleDraftPanel(
                       offer: offer,
+                      beneficiaries: snapshot.pendingRunModuleBeneficiaries,
                       onSelected: (moduleId) =>
                           game.selectRunModule(offer.offerId, moduleId),
                     ),
