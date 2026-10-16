@@ -215,8 +215,8 @@ class _InspectorBody extends StatelessWidget {
                 Expanded(
                   child: _StatRow(
                     key: const ValueKey('tower-stat-secondary'),
-                    label: _secondaryLabel(metric),
-                    value: _secondaryValue(metric, stats),
+                    label: _secondaryMetricLabel(metric),
+                    value: _secondaryMetricValue(metric, stats),
                     fill: scale.secondaryFill(stats) ?? 0,
                     accent: uiTheme.systemViolet,
                   ),
@@ -242,27 +242,120 @@ class _InspectorBody extends StatelessWidget {
       ],
     );
   }
+}
 
-  static String _secondaryLabel(TowerSecondaryMetric metric) =>
-      switch (metric) {
-        TowerSecondaryMetric.chainCount => 'Chain',
-        TowerSecondaryMetric.pierceCount => 'Pierce',
-        TowerSecondaryMetric.slowDuration => 'Slow',
-        TowerSecondaryMetric.splashRadius => 'Splash',
-        TowerSecondaryMetric.corrosionDamagePerSecond => 'Corrosion',
-        TowerSecondaryMetric.droneDamage => 'Drone dmg',
-      };
+String _secondaryMetricLabel(TowerSecondaryMetric metric) => switch (metric) {
+  TowerSecondaryMetric.chainCount => 'Chain',
+  TowerSecondaryMetric.pierceCount => 'Pierce',
+  TowerSecondaryMetric.slowDuration => 'Slow',
+  TowerSecondaryMetric.splashRadius => 'Splash',
+  TowerSecondaryMetric.corrosionDamagePerSecond => 'Corrosion',
+  TowerSecondaryMetric.droneDamage => 'Drone dmg',
+};
 
-  static String _secondaryValue(TowerSecondaryMetric metric, TowerStats stats) {
-    final value = number(metric.valueOf(stats));
-    return switch (metric) {
-      TowerSecondaryMetric.slowDuration => '${value}s',
-      TowerSecondaryMetric.chainCount ||
-      TowerSecondaryMetric.pierceCount ||
-      TowerSecondaryMetric.splashRadius => value,
-      TowerSecondaryMetric.corrosionDamagePerSecond => '$value/s',
-      TowerSecondaryMetric.droneDamage => value,
-    };
+String _secondaryMetricValue(TowerSecondaryMetric metric, TowerStats stats) {
+  final value = number(metric.valueOf(stats));
+  return switch (metric) {
+    TowerSecondaryMetric.slowDuration => '${value}s',
+    TowerSecondaryMetric.chainCount ||
+    TowerSecondaryMetric.pierceCount ||
+    TowerSecondaryMetric.splashRadius => value,
+    TowerSecondaryMetric.corrosionDamagePerSecond => '$value/s',
+    TowerSecondaryMetric.droneDamage => value,
+  };
+}
+
+typedef _PreviewRow = ({String label, String from, String to});
+
+/// Formats the inspector metrics that differ between two already-resolved
+/// stat blocks. Rows whose formatted values match are dropped so rounding
+/// never shows a no-op change.
+List<_PreviewRow> _previewRows(TowerStats current, TowerStats candidate) {
+  final metric = TowerStatScale.forType(current.type).secondaryMetric;
+  final rows = <_PreviewRow>[
+    (
+      label: 'Damage',
+      from: number(current.damage),
+      to: number(candidate.damage),
+    ),
+    (
+      label: 'Fire',
+      from: '${cadence(current.fireInterval)}s',
+      to: '${cadence(candidate.fireInterval)}s',
+    ),
+    (label: 'Range', from: number(current.range), to: number(candidate.range)),
+    if (metric != null)
+      (
+        label: _secondaryMetricLabel(metric),
+        from: _secondaryMetricValue(metric, current),
+        to: _secondaryMetricValue(metric, candidate),
+      ),
+  ];
+  return [
+    for (final row in rows)
+      if (row.from != row.to) row,
+  ];
+}
+
+String _spokenValue(String value) {
+  if (value.endsWith('/s')) {
+    return '${value.substring(0, value.length - 2)} per second';
+  }
+  if (value.endsWith('s')) {
+    return '${value.substring(0, value.length - 1)} seconds';
+  }
+  return value;
+}
+
+String _spokenRows(List<_PreviewRow> rows) => rows
+    .map(
+      (row) =>
+          '${row.label} ${_spokenValue(row.from)} to ${_spokenValue(row.to)}',
+    )
+    .join('. ');
+
+class _StatPreview extends StatelessWidget {
+  const _StatPreview({super.key, required this.rows, this.centered = false});
+
+  final List<_PreviewRow> rows;
+  final bool centered;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Column(
+      crossAxisAlignment: centered
+          ? CrossAxisAlignment.center
+          : CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final row in rows)
+          Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(
+                    text: '${row.label.toUpperCase()} ',
+                    style: OrionTypography.microLabel(
+                      size: 9,
+                      color: uiTheme.textMuted,
+                    ),
+                  ),
+                  TextSpan(
+                    text: '${row.from} → ${row.to}',
+                    style: OrionTypography.readout(
+                      size: 13,
+                      color: uiTheme.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+              textAlign: centered ? TextAlign.center : TextAlign.start,
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -372,14 +465,43 @@ class _ProgressionActions extends StatelessWidget {
           canMutate &&
           resolvedStats != null &&
           snapshot.gold >= resolvedStats.upgradeCost;
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.icon(
-          key: const ValueKey('tower-upgrade'),
-          onPressed: enabled ? onUpgrade : null,
-          icon: const Icon(Icons.upgrade, size: 17),
-          label: Text(cost == null ? 'Upgrade' : 'Upgrade $cost'),
-        ),
+      final candidate = snapshot.selectedTowerUpgradeStats;
+      final rows = resolvedStats == null || candidate == null
+          ? const <_PreviewRow>[]
+          : _previewRows(resolvedStats, candidate);
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OrionText.micro(
+            'UPGRADE - LV ${tower.level + 1}',
+            color: uiTheme.textMuted,
+            size: 11,
+          ),
+          if (rows.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Semantics(
+              label: 'Upgrade preview. ${_spokenRows(rows)}',
+              readOnly: true,
+              container: true,
+              excludeSemantics: true,
+              child: _StatPreview(
+                key: const ValueKey('tower-upgrade-preview'),
+                rows: rows,
+              ),
+            ),
+          ],
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: FilledButton.icon(
+              key: const ValueKey('tower-upgrade'),
+              onPressed: enabled ? onUpgrade : null,
+              icon: const Icon(Icons.upgrade, size: 17),
+              label: Text(cost == null ? 'Upgrade' : 'Upgrade $cost'),
+            ),
+          ),
+        ],
       );
     }
 
@@ -408,6 +530,9 @@ class _ProgressionActions extends StatelessWidget {
                 child: _SpecializationCard(
                   towerType: tower.type,
                   specialization: specialization,
+                  currentStats: resolvedStats,
+                  candidateStats:
+                      snapshot.selectedTowerSpecializationStats[specialization],
                   cost: cost,
                   enabled: enabled,
                   onSpecialize: onSpecialize,
@@ -425,6 +550,8 @@ class _SpecializationCard extends StatelessWidget {
   const _SpecializationCard({
     required this.towerType,
     required this.specialization,
+    required this.currentStats,
+    required this.candidateStats,
     required this.cost,
     required this.enabled,
     required this.onSpecialize,
@@ -432,6 +559,8 @@ class _SpecializationCard extends StatelessWidget {
 
   final TowerType towerType;
   final TowerSpecialization specialization;
+  final TowerStats? currentStats;
+  final TowerStats? candidateStats;
   final int? cost;
   final bool enabled;
   final ValueChanged<TowerSpecialization> onSpecialize;
@@ -439,15 +568,24 @@ class _SpecializationCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final current = currentStats;
+    final candidate = candidateStats;
+    final rows = current == null || candidate == null
+        ? const <_PreviewRow>[]
+        : _previewRows(current, candidate);
+    final title = cost == null
+        ? specialization.label
+        : '${specialization.label} $cost';
     return Semantics(
       key: ValueKey('tower-specialization-${specialization.name}'),
       button: true,
       enabled: enabled,
       onTap: enabled ? () => onSpecialize(specialization) : null,
       excludeSemantics: true,
-      label: cost == null
-          ? specialization.label
-          : '${specialization.label} $cost',
+      label: [
+        '$title. ${specialization.role}',
+        if (rows.isNotEmpty) _spokenRows(rows),
+      ].join(' '),
       child: InkWell(
         borderRadius: BorderRadius.circular(12),
         onTap: enabled ? () => onSpecialize(specialization) : null,
@@ -489,6 +627,25 @@ class _SpecializationCard extends StatelessWidget {
                     color: uiTheme.creditGold,
                   ),
                 ),
+              const SizedBox(height: 6),
+              Text(
+                specialization.role,
+                textAlign: TextAlign.center,
+                style: OrionTypography.microLabel(
+                  size: 9,
+                  color: uiTheme.textMuted,
+                ),
+              ),
+              if (rows.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                _StatPreview(
+                  key: ValueKey(
+                    'tower-specialization-preview-${specialization.name}',
+                  ),
+                  rows: rows,
+                  centered: true,
+                ),
+              ],
             ],
           ),
         ),
