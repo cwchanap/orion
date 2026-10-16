@@ -267,10 +267,46 @@ String _secondaryMetricValue(TowerSecondaryMetric metric, TowerStats stats) {
 
 typedef _PreviewRow = ({String label, String from, String to});
 
+/// Tower-specific mechanics that an upgrade can change but that the four
+/// inspector metrics don't show. Projectile speed and the specialization-only
+/// damage multipliers are left out: the former is cosmetic at this scale and
+/// the latter are explained by each specialization's role sentence.
+final List<({String label, String Function(TowerStats stats) format})>
+_mechanicMetrics = [
+  (label: 'Splash', format: (s) => number(s.splashRadius)),
+  (label: 'Slow', format: (s) => '${number(s.slowDuration)}s'),
+  (label: 'Slow power', format: (s) => percent(1 - s.slowMultiplier)),
+  (label: 'Pierce', format: (s) => '${s.pierceCount}'),
+  (label: 'Pierce width', format: (s) => number(s.pierceWidth)),
+  (label: 'Chain', format: (s) => '${s.chainCount}'),
+  (label: 'Chain range', format: (s) => number(s.chainRange)),
+  (label: 'Chain dmg', format: (s) => percent(s.chainFalloff)),
+  (
+    label: 'Corrosion',
+    format: (s) => '${number(s.corrosionDamagePerSecond)}/s',
+  ),
+  (label: 'Corrode time', format: (s) => '${number(s.corrosionDuration)}s'),
+  (label: 'Shred', format: (s) => percent(s.armorShred)),
+  (label: 'Field', format: (s) => number(s.fieldRadius)),
+  (label: 'Field time', format: (s) => '${number(s.fieldDuration)}s'),
+  (label: 'Field pulse', format: (s) => '${cadence(s.fieldTickInterval)}s'),
+  (label: 'Drones', format: (s) => '${s.droneCount}'),
+  (label: 'Max drones', format: (s) => '${s.maxActiveDrones}'),
+  (label: 'Drone dmg', format: (s) => number(s.droneDamage)),
+  (label: 'Drone life', format: (s) => '${number(s.droneLifetime)}s'),
+  (label: 'Drone fire', format: (s) => '${cadence(s.droneAttackInterval)}s'),
+];
+
 /// Formats the inspector metrics that differ between two already-resolved
 /// stat blocks. Rows whose formatted values match are dropped so rounding
-/// never shows a no-op change.
-List<_PreviewRow> _previewRows(TowerStats current, TowerStats candidate) {
+/// never shows a no-op change. With [includeMechanics], tower-specific
+/// mechanics follow the four inspector metrics; the upgrade preview needs
+/// them because, unlike a specialization card, it has no role sentence.
+List<_PreviewRow> _previewRows(
+  TowerStats current,
+  TowerStats candidate, {
+  bool includeMechanics = false,
+}) {
   final metric = TowerStatScale.forType(current.type).secondaryMetric;
   final rows = <_PreviewRow>[
     (
@@ -290,6 +326,14 @@ List<_PreviewRow> _previewRows(TowerStats current, TowerStats candidate) {
         from: _secondaryMetricValue(metric, current),
         to: _secondaryMetricValue(metric, candidate),
       ),
+    if (includeMechanics)
+      for (final mechanic in _mechanicMetrics)
+        if (metric == null || mechanic.label != _secondaryMetricLabel(metric))
+          (
+            label: mechanic.label,
+            from: mechanic.format(current),
+            to: mechanic.format(candidate),
+          ),
   ];
   return [
     for (final row in rows)
@@ -468,7 +512,7 @@ class _ProgressionActions extends StatelessWidget {
       final candidate = snapshot.selectedTowerUpgradeStats;
       final rows = resolvedStats == null || candidate == null
           ? const <_PreviewRow>[]
-          : _previewRows(resolvedStats, candidate);
+          : _previewRows(resolvedStats, candidate, includeMechanics: true);
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,

@@ -639,6 +639,91 @@ void main() {
       expect(upgrades, 1);
     });
 
+    testWidgets('upgrade preview includes tower-specific mechanics', (
+      tester,
+    ) async {
+      const expected = {
+        TowerType.gravityWell: ['FIELD 72 → 86', 'FIELD TIME 2s → 2.5s'],
+        TowerType.droneBay: [
+          'DRONES 2 → 3',
+          'MAX DRONES 4 → 6',
+          'DRONE LIFE 4s → 4.5s',
+          'DRONE FIRE 0.65s → 0.58s',
+        ],
+        TowerType.cryo: ['SLOW 1.4s → 2s', 'SLOW POWER 38% → 52%'],
+        TowerType.ionChain: ['CHAIN RANGE 85 → 95', 'CHAIN DMG 72% → 76%'],
+        TowerType.nanite: ['CORRODE TIME 2.5s → 3.2s', 'SHRED 12% → 18%'],
+      };
+      for (final MapEntry(key: type, value: rows) in expected.entries) {
+        await pumpInspector(
+          tester,
+          tower: PlacedTower(
+            id: 7,
+            type: type,
+            position: const GridPosition(2, 3),
+          ),
+          stats: GameBalance.towerStats(type, level: 1),
+          upgradeStats: GameBalance.towerStats(type, level: 2),
+        );
+        for (final row in rows) {
+          expect(
+            inPreview('tower-upgrade-preview', row),
+            findsOneWidget,
+            reason: '${type.name}: $row',
+          );
+        }
+      }
+
+      final semantics = tester.ensureSemantics();
+      try {
+        // The last pumped tower is the Nanite one.
+        expect(
+          find.bySemanticsLabel(
+            RegExp(
+              r'^Upgrade preview\. .*Corrode time 2\.5 seconds to '
+              r'3\.2 seconds\. Shred 12% to 18%$',
+            ),
+          ),
+          findsOneWidget,
+        );
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets('specialization cards keep the four inspector metrics', (
+      tester,
+    ) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.droneBay,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      await pumpInspector(
+        tester,
+        tower: tower,
+        stats: GameBalance.towerStats(TowerType.droneBay, level: 2),
+        specializationStats: {
+          for (final spec in GameBalance.specializationsFor(TowerType.droneBay))
+            spec: GameBalance.towerStats(
+              TowerType.droneBay,
+              level: 3,
+              specialization: spec,
+            ),
+        },
+      );
+
+      expect(
+        inPreview('tower-specialization-preview-hunterBay', 'DRONE DMG'),
+        findsOneWidget,
+      );
+      expect(
+        inPreview('tower-specialization-preview-hunterBay', 'DRONES'),
+        findsNothing,
+      );
+    });
+
     testWidgets('unchanged values are hidden from the comparison', (
       tester,
     ) async {
