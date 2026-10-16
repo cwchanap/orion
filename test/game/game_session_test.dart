@@ -60,6 +60,65 @@ void selectPendingModuleIfNeeded(GameSession session) {
   );
 }
 
+List<Object?> _statsSignature(TowerStats stats) => [
+  stats.type,
+  stats.level,
+  stats.specialization,
+  stats.cost,
+  stats.upgradeCost,
+  stats.specializationCost,
+  stats.damage,
+  stats.fireInterval,
+  stats.range,
+  stats.splashRadius,
+  stats.slowMultiplier,
+  stats.slowDuration,
+  stats.pierceCount,
+  stats.chainCount,
+  stats.corrosionDamagePerSecond,
+  stats.fieldRadius,
+  stats.fieldDuration,
+  stats.droneDamage,
+];
+
+const _laserCell = GridPosition(0, 2);
+const _cryoCell = GridPosition(1, 2);
+const _gravityCell = GridPosition(2, 2);
+
+/// A session with an active campaign modifier, a tower-affecting stage
+/// modifier, and two acquired Salvage Modules, with Laser, Cryo, and Gravity
+/// Well towers placed at level 1.
+GameSession _modifiedSession() {
+  final session = GameSession.initial(
+    stage: stageWithWaveCount(
+      8,
+      modifiers: const [StageModifier.amplifiedGravityWells],
+    ),
+    campaignModifiers: const CampaignModifiers(
+      laserDamageFraction: 0.25,
+      cryoSlowDurationBonus: 0.4,
+    ),
+    gold: 100000,
+    offerPicker: _RecordingOfferPicker(),
+  );
+  expect(session.placeTower(_laserCell, TowerType.laser).isAllowed, isTrue);
+  expect(session.placeTower(_cryoCell, TowerType.cryo).isAllowed, isTrue);
+  for (final moduleId in [RunModuleId.heavyCaliber, RunModuleId.longSight]) {
+    completeWave(session);
+    completeWave(session);
+    final offer = session.pendingRunModuleOffer!;
+    expect(
+      session.selectRunModule(offerId: offer.offerId, moduleId: moduleId),
+      isTrue,
+    );
+  }
+  expect(
+    session.placeTower(_gravityCell, TowerType.gravityWell).isAllowed,
+    isTrue,
+  );
+  return session;
+}
+
 void main() {
   group('GameSession', () {
     test('starts in build phase with approved economy', () {
@@ -1620,5 +1679,167 @@ void main() {
         expect(session.baseHealth, GameBalance.initialBaseHealth + 3);
       },
     );
+  });
+
+  group('GameSession progression previews', () {
+    test('upgrade preview equals the real resolved stats after upgrading', () {
+      final session = _modifiedSession();
+      expect(session.acquiredRunModules, [
+        RunModuleId.heavyCaliber,
+        RunModuleId.longSight,
+      ]);
+      for (final cell in [_laserCell, _cryoCell, _gravityCell]) {
+        final tower = session.towerAt(cell)!;
+        final preview = session
+            .snapshot(selectedTower: tower)
+            .selectedTowerUpgradeStats;
+        expect(preview, isNotNull, reason: tower.type.name);
+
+        expect(session.upgradeTower(tower.id), isTrue);
+        final actual = session.resolveTowerStats(session.towerAt(cell)!);
+        expect(
+          _statsSignature(preview!),
+          _statsSignature(actual),
+          reason: tower.type.name,
+        );
+      }
+    });
+
+    test(
+      'specialization previews equal the real resolved stats after choosing',
+      () {
+        for (final cell in [_laserCell, _cryoCell, _gravityCell]) {
+          final type = _modifiedSession().towerAt(cell)!.type;
+          for (final spec in GameBalance.specializationsFor(type)) {
+            final session = _modifiedSession();
+            final id = session.towerAt(cell)!.id;
+            expect(session.upgradeTower(id), isTrue);
+            final preview = session
+                .snapshot(selectedTower: session.towerAt(cell))
+                .selectedTowerSpecializationStats[spec];
+            expect(preview, isNotNull, reason: spec.name);
+
+            expect(session.specializeTower(id, spec), isTrue);
+            final actual = session.resolveTowerStats(session.towerAt(cell)!);
+            expect(
+              _statsSignature(preview!),
+              _statsSignature(actual),
+              reason: spec.name,
+            );
+          }
+        }
+      },
+    );
+
+    test('reading previews does not mutate the session', () {
+      final session = _modifiedSession();
+      final laser = session.towerAt(_laserCell)!;
+      expect(session.upgradeTower(laser.id), isTrue);
+
+      List<Object?> state() => [
+        session.gold,
+        session.phase,
+        session.waveIndex,
+        session.pendingRunModuleOffer,
+        [...session.acquiredRunModules],
+        [
+          for (final tower in session.towers)
+            (tower.id, tower.level, tower.specialization),
+        ],
+      ];
+
+      final before = state();
+      for (var i = 0; i < 3; i += 1) {
+        session.snapshot(selectedTower: session.towerAt(_laserCell));
+        session.snapshot(selectedTower: session.towerAt(_cryoCell));
+      }
+      expect(state(), before);
+    });
+
+    test('previews only exist for the next available progression step', () {
+      final session = _modifiedSession();
+      final none = session.snapshot();
+      expect(none.selectedTowerUpgradeStats, isNull);
+      expect(none.selectedTowerSpecializationStats, isEmpty);
+
+      final level1 = session.snapshot(
+        selectedTower: session.towerAt(_cryoCell),
+      );
+      expect(level1.selectedTowerUpgradeStats, isNotNull);
+      expect(level1.selectedTowerSpecializationStats, isEmpty);
+
+      final id = session.towerAt(_cryoCell)!.id;
+      expect(session.upgradeTower(id), isTrue);
+      final level2 = session.snapshot(
+        selectedTower: session.towerAt(_cryoCell),
+      );
+      expect(level2.selectedTowerUpgradeStats, isNull);
+      expect(
+        level2.selectedTowerSpecializationStats.keys,
+        GameBalance.specializationsFor(TowerType.cryo),
+      );
+
+      expect(
+        session.specializeTower(id, TowerSpecialization.frostbite),
+        isTrue,
+      );
+      final level3 = session.snapshot(
+        selectedTower: session.towerAt(_cryoCell),
+      );
+      expect(level3.selectedTowerUpgradeStats, isNull);
+      expect(level3.selectedTowerSpecializationStats, isEmpty);
+    });
+  });
+
+  group('GameSession module beneficiaries', () {
+    test('counts placed beneficiaries for each offered module only', () {
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        gold: 100000,
+        offerPicker: _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.cryoReservoir,
+            RunModuleId.emergencySalvage,
+          ],
+        ]),
+      );
+      expect(session.snapshot().pendingRunModuleBeneficiaries, isEmpty);
+      expect(
+        session.placeTower(const GridPosition(0, 2), TowerType.cryo).isAllowed,
+        isTrue,
+      );
+      expect(
+        session.placeTower(const GridPosition(1, 2), TowerType.cryo).isAllowed,
+        isTrue,
+      );
+      expect(
+        session.placeTower(const GridPosition(2, 2), TowerType.laser).isAllowed,
+        isTrue,
+      );
+      completeWave(session);
+      completeWave(session);
+
+      final offer = session.pendingRunModuleOffer!;
+      expect(offer.moduleIds, [
+        RunModuleId.heavyCaliber,
+        RunModuleId.cryoReservoir,
+        RunModuleId.emergencySalvage,
+      ]);
+      expect(session.snapshot().pendingRunModuleBeneficiaries, {
+        RunModuleId.heavyCaliber: 3,
+        RunModuleId.cryoReservoir: 2,
+        RunModuleId.emergencySalvage: 0,
+      });
+
+      expect(
+        session.selectRunModule(
+          offerId: offer.offerId,
+          moduleId: RunModuleId.cryoReservoir,
+        ),
+        isTrue,
+      );
+      expect(session.snapshot().pendingRunModuleBeneficiaries, isEmpty);
+    });
   });
 }

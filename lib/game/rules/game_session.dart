@@ -8,6 +8,7 @@ import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 import 'board_layout.dart';
 import 'module_offer_picker.dart';
+import 'run_module_rules.dart';
 import 'run_module_unlocks.dart';
 import 'stage_modifier_rules.dart';
 import 'tower_stats_resolver.dart';
@@ -160,6 +161,26 @@ class GameSession {
       selectedTowerStats: selectedTower == null
           ? null
           : resolveTowerStats(selectedTower),
+      selectedTowerUpgradeStats:
+          selectedTower != null && selectedTower.canUpgrade
+          ? resolveTowerStats(selectedTower.upgraded())
+          : null,
+      selectedTowerSpecializationStats:
+          selectedTower != null && selectedTower.canSpecialize
+          ? {
+              for (final spec in GameBalance.specializationsFor(
+                selectedTower.type,
+              ))
+                spec: resolveTowerStats(selectedTower.specialized(spec)),
+            }
+          : const {},
+      pendingRunModuleBeneficiaries: {
+        for (final id in _pendingRunModuleOffer?.moduleIds ?? const [])
+          id: RunModuleRules.beneficiaryCount(
+            runModuleDefinition(id),
+            _towersByPosition.values,
+          ),
+      },
     );
   }
 

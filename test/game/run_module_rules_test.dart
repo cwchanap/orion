@@ -171,4 +171,47 @@ void main() {
     expect(unchangedLaser.splashRadius, laser.splashRadius);
     expect(unchangedLaser.damage, laser.damage);
   });
+  test('only Emergency Salvage leaves tower stats unchanged', () {
+    for (final definition in runModuleCatalog) {
+      expect(
+        definition.affectsTowerStats,
+        definition.id != RunModuleId.emergencySalvage,
+        reason: definition.id.name,
+      );
+    }
+  });
+
+  group('beneficiaryCount', () {
+    PlacedTower tower(int id, TowerType type) =>
+        PlacedTower(id: id, type: type, position: GridPosition(id, 4));
+
+    final towers = [
+      tower(1, TowerType.cryo),
+      tower(2, TowerType.cryo),
+      tower(3, TowerType.laser),
+    ];
+
+    int count(RunModuleId id, Iterable<PlacedTower> placed) =>
+        RunModuleRules.beneficiaryCount(runModuleDefinition(id), placed);
+
+    test('universal stat modules count every placed tower', () {
+      expect(count(RunModuleId.heavyCaliber, towers), 3);
+      expect(count(RunModuleId.longSight, towers), 3);
+    });
+
+    test('affinity modules count only matching towers', () {
+      expect(count(RunModuleId.cryoReservoir, towers), 2);
+      expect(count(RunModuleId.rocketFusing, towers), 0);
+    });
+
+    test('economy modules affect no towers', () {
+      expect(count(RunModuleId.emergencySalvage, towers), 0);
+    });
+
+    test('no placed towers means no current beneficiaries', () {
+      for (final definition in runModuleCatalog) {
+        expect(count(definition.id, const []), 0);
+      }
+    });
+  });
 }
