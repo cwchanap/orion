@@ -57,6 +57,9 @@ GameSnapshot commandDeckSnapshot({
   GridPosition? selectedCell,
   PlacedTower? selectedTower,
   TowerStats? selectedTowerStats,
+  TowerStats? selectedTowerUpgradeStats,
+  Map<TowerSpecialization, TowerStats> selectedTowerSpecializationStats =
+      const {},
   String? feedback,
   bool isPaused = false,
   double speedMultiplier = 1,
@@ -64,6 +67,7 @@ GameSnapshot commandDeckSnapshot({
   double? autoStartCountdownRemaining,
   RunModuleOffer? pendingRunModuleOffer,
   List<RunModuleId> acquiredRunModules = const [],
+  Map<RunModuleId, int> pendingRunModuleBeneficiaries = const {},
 }) {
   return GameSnapshot(
     phase: phase,
@@ -81,6 +85,8 @@ GameSnapshot commandDeckSnapshot({
     selectedCell: selectedCell,
     selectedTower: selectedTower,
     selectedTowerStats: selectedTowerStats,
+    selectedTowerUpgradeStats: selectedTowerUpgradeStats,
+    selectedTowerSpecializationStats: selectedTowerSpecializationStats,
     feedback: feedback,
     isPaused: isPaused,
     speedMultiplier: speedMultiplier,
@@ -88,6 +94,7 @@ GameSnapshot commandDeckSnapshot({
     autoStartCountdownRemaining: autoStartCountdownRemaining,
     pendingRunModuleOffer: pendingRunModuleOffer,
     acquiredRunModules: acquiredRunModules,
+    pendingRunModuleBeneficiaries: pendingRunModuleBeneficiaries,
   );
 }
 

@@ -437,6 +437,16 @@ void main() {
                       tower.type,
                       level: tower.level,
                     ),
+                    selectedTowerSpecializationStats: {
+                      for (final spec in GameBalance.specializationsFor(
+                        tower.type,
+                      ))
+                        spec: GameBalance.towerStats(
+                          tower.type,
+                          level: 3,
+                          specialization: spec,
+                        ),
+                    },
                   ),
                   onUpgrade: () {},
                   onSpecialize: (_) {},
@@ -539,6 +549,274 @@ void main() {
       );
       expect(chip.width, greaterThanOrEqualTo(48), reason: mode.name);
       expect(chip.height, greaterThanOrEqualTo(48), reason: mode.name);
+    }
+  });
+  group('progression previews', () {
+    Future<void> pumpInspector(
+      WidgetTester tester, {
+      required PlacedTower tower,
+      required TowerStats stats,
+      TowerStats? upgradeStats,
+      Map<TowerSpecialization, TowerStats> specializationStats = const {},
+      int gold = 9999,
+      VoidCallback? onUpgrade,
+      ValueChanged<TowerSpecialization>? onSpecialize,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          theme: orionThemeData,
+          home: TowerInspector(
+            snapshot: commandDeckSnapshot(
+              gold: gold,
+              selectedTower: tower,
+              selectedTowerStats: stats,
+              selectedTowerUpgradeStats: upgradeStats,
+              selectedTowerSpecializationStats: specializationStats,
+            ),
+            onUpgrade: onUpgrade ?? () {},
+            onSpecialize: onSpecialize ?? (_) {},
+            onTargetingChanged: (_) {},
+            onSell: () {},
+            sellRefund: 41,
+          ),
+        ),
+      );
+    }
+
+    Finder inPreview(String key, String text) => find.descendant(
+      of: find.byKey(ValueKey(key)),
+      matching: find.textContaining(text, findRichText: true),
+    );
+
+    testWidgets('level 1 shows changed stats beside the upgrade action', (
+      tester,
+    ) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+      );
+      final current = GameBalance.towerStats(TowerType.laser, level: 1);
+      final next = GameBalance.towerStats(TowerType.laser, level: 2);
+      var upgrades = 0;
+      await pumpInspector(
+        tester,
+        tower: tower,
+        stats: current,
+        upgradeStats: next,
+        onUpgrade: () => upgrades++,
+      );
+
+      expect(find.text('UPGRADE - LV 2'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('tower-upgrade-preview')),
+        findsOneWidget,
+      );
+      expect(inPreview('tower-upgrade-preview', 'DAMAGE'), findsOneWidget);
+      expect(inPreview('tower-upgrade-preview', '12 → 18'), findsOneWidget);
+      expect(
+        inPreview('tower-upgrade-preview', '0.42s → 0.34s'),
+        findsOneWidget,
+      );
+      expect(inPreview('tower-upgrade-preview', '145 → 160'), findsOneWidget);
+      expect(find.text('Upgrade ${current.upgradeCost}'), findsOneWidget);
+
+      final semantics = tester.ensureSemantics();
+      try {
+        expect(
+          find.bySemanticsLabel(
+            'Upgrade preview. Damage 12 to 18. '
+            'Fire 0.42 seconds to 0.34 seconds. Range 145 to 160',
+          ),
+          findsOneWidget,
+        );
+      } finally {
+        semantics.dispose();
+      }
+
+      await tester.ensureVisible(find.byKey(const ValueKey('tower-upgrade')));
+      await tester.tap(find.byKey(const ValueKey('tower-upgrade')));
+      expect(upgrades, 1);
+    });
+
+    testWidgets('unchanged values are hidden from the comparison', (
+      tester,
+    ) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.cryo,
+        position: GridPosition(2, 3),
+      );
+      final current = GameBalance.towerStats(TowerType.cryo, level: 1);
+      await pumpInspector(
+        tester,
+        tower: tower,
+        stats: current,
+        upgradeStats: current.copyWith(damage: current.damage + 3),
+      );
+
+      expect(inPreview('tower-upgrade-preview', 'DAMAGE'), findsOneWidget);
+      for (final label in ['FIRE', 'RANGE', 'SLOW']) {
+        expect(inPreview('tower-upgrade-preview', label), findsNothing);
+      }
+    });
+
+    testWidgets('missing upgrade preview leaves the action unchanged', (
+      tester,
+    ) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+      );
+      final current = GameBalance.towerStats(TowerType.laser, level: 1);
+      await pumpInspector(tester, tower: tower, stats: current);
+
+      expect(find.byKey(const ValueKey('tower-upgrade-preview')), findsNothing);
+      expect(find.text('Upgrade ${current.upgradeCost}'), findsOneWidget);
+    });
+
+    testWidgets('specialization cards explain role and payoff', (tester) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.cryo,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      final current = GameBalance.towerStats(TowerType.cryo, level: 2);
+      final candidates = {
+        for (final spec in GameBalance.specializationsFor(TowerType.cryo))
+          spec: GameBalance.towerStats(
+            TowerType.cryo,
+            level: 3,
+            specialization: spec,
+          ),
+      };
+      final chosen = <TowerSpecialization>[];
+      await pumpInspector(
+        tester,
+        tower: tower,
+        stats: current,
+        specializationStats: candidates,
+        onSpecialize: chosen.add,
+      );
+
+      for (final spec in candidates.keys) {
+        final card = find.byKey(ValueKey('tower-specialization-${spec.name}'));
+        expect(
+          find.descendant(of: card, matching: find.text(spec.role)),
+          findsOneWidget,
+          reason: spec.name,
+        );
+        expect(
+          find.byKey(ValueKey('tower-specialization-preview-${spec.name}')),
+          findsOneWidget,
+          reason: spec.name,
+        );
+      }
+
+      final deepFreeze = candidates[TowerSpecialization.deepFreeze]!;
+      expect(
+        inPreview(
+          'tower-specialization-preview-deepFreeze',
+          '${number(current.slowDuration)}s → '
+              '${number(deepFreeze.slowDuration)}s',
+        ),
+        findsOneWidget,
+      );
+
+      final semantics = tester.ensureSemantics();
+      try {
+        expect(
+          find.bySemanticsLabel(
+            RegExp(
+              '^Deep Freeze ${current.specializationCost}\\. '
+              '${RegExp.escape(TowerSpecialization.deepFreeze.role)} '
+              'Fire ',
+            ),
+          ),
+          findsOneWidget,
+        );
+      } finally {
+        semantics.dispose();
+      }
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('tower-specialization-frostbite')),
+      );
+      await tester.tap(
+        find.byKey(const ValueKey('tower-specialization-frostbite')),
+      );
+      expect(chosen, [TowerSpecialization.frostbite]);
+    });
+
+    testWidgets('missing specialization preview keeps the role sentence', (
+      tester,
+    ) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      await pumpInspector(
+        tester,
+        tower: tower,
+        stats: GameBalance.towerStats(TowerType.laser, level: 2),
+      );
+
+      for (final spec in GameBalance.specializationsFor(TowerType.laser)) {
+        expect(find.text(spec.role), findsOneWidget, reason: spec.name);
+        expect(
+          find.byKey(ValueKey('tower-specialization-preview-${spec.name}')),
+          findsNothing,
+        );
+      }
+    });
+
+    for (final size in const [Size(360, 640), Size(390, 844)]) {
+      testWidgets(
+        'every tower type fits at ${size.width.toInt()}x${size.height.toInt()}',
+        (tester) async {
+          tester.view.physicalSize = size;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+
+          for (final type in TowerType.values) {
+            for (final level in const [1, 2]) {
+              final tower = PlacedTower(
+                id: 7,
+                type: type,
+                position: const GridPosition(2, 3),
+                level: level,
+              );
+              await pumpInspector(
+                tester,
+                tower: tower,
+                stats: GameBalance.towerStats(type, level: level),
+                upgradeStats: level == 1
+                    ? GameBalance.towerStats(type, level: 2)
+                    : null,
+                specializationStats: level == 2
+                    ? {
+                        for (final spec in GameBalance.specializationsFor(type))
+                          spec: GameBalance.towerStats(
+                            type,
+                            level: 3,
+                            specialization: spec,
+                          ),
+                      }
+                    : const {},
+              );
+              expect(
+                tester.takeException(),
+                isNull,
+                reason: '${type.name} L$level',
+              );
+            }
+          }
+        },
+      );
     }
   });
 }
