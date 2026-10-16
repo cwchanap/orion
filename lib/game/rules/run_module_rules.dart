@@ -10,7 +10,7 @@ abstract final class RunModuleRules {
 
     for (final definition in runModuleCatalog) {
       if (!acquired.contains(definition.id) ||
-          !_appliesToTower(definition.affinity, stats.type)) {
+          !appliesToTower(definition.affinity, stats.type)) {
         continue;
       }
 
@@ -29,12 +29,22 @@ abstract final class RunModuleRules {
     return stats;
   }
 
-  static bool _appliesToTower(
-    RunModuleAffinity affinity,
-    TowerType towerType,
-  ) => switch (affinity) {
-    RunModuleAffinity.universal => true,
-    RunModuleAffinity.cryo => towerType == TowerType.cryo,
-    RunModuleAffinity.rocket => towerType == TowerType.rocket,
-  };
+  /// Number of [towers] whose stats [definition] changes. Economy-only
+  /// modules affect no towers.
+  static int beneficiaryCount(
+    RunModuleDefinition definition,
+    Iterable<PlacedTower> towers,
+  ) {
+    if (!definition.affectsTowerStats) return 0;
+    return towers
+        .where((tower) => appliesToTower(definition.affinity, tower.type))
+        .length;
+  }
+
+  static bool appliesToTower(RunModuleAffinity affinity, TowerType towerType) =>
+      switch (affinity) {
+        RunModuleAffinity.universal => true,
+        RunModuleAffinity.cryo => towerType == TowerType.cryo,
+        RunModuleAffinity.rocket => towerType == TowerType.rocket,
+      };
 }

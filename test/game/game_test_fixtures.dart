@@ -1,7 +1,10 @@
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/models/game_models.dart';
 
-StageDefinition stageWithWaveCount(int count) {
+StageDefinition stageWithWaveCount(
+  int count, {
+  List<StageModifier> modifiers = const [],
+}) {
   if (count <= 0) throw ArgumentError.value(count, 'count');
   return StageDefinition(
     id: 'empty-wave-stage-$count',
@@ -19,5 +22,6 @@ StageDefinition stageWithWaveCount(int count) {
     mainPathOrder: 1,
     mapColumn: 0,
     mapRow: 0,
+    modifiers: modifiers,
   );
 }

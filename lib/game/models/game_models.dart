@@ -570,9 +570,19 @@ class GameSnapshot {
     this.pendingRunModuleOffer,
     List<RunModuleId> acquiredRunModules = const [],
     this.selectedTowerStats,
+    this.selectedTowerUpgradeStats,
+    Map<TowerSpecialization, TowerStats> selectedTowerSpecializationStats =
+        const {},
+    Map<RunModuleId, int> pendingRunModuleBeneficiaries = const {},
   }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes),
        stageModifiers = List.unmodifiable(stageModifiers),
-       acquiredRunModules = List.unmodifiable(acquiredRunModules);
+       acquiredRunModules = List.unmodifiable(acquiredRunModules),
+       selectedTowerSpecializationStats = Map.unmodifiable(
+         selectedTowerSpecializationStats,
+       ),
+       pendingRunModuleBeneficiaries = Map.unmodifiable(
+         pendingRunModuleBeneficiaries,
+       );
 
   final GamePhase phase;
   final int gold;
@@ -596,6 +606,18 @@ class GameSnapshot {
   final RunModuleOffer? pendingRunModuleOffer;
   final List<RunModuleId> acquiredRunModules;
   final TowerStats? selectedTowerStats;
+
+  /// Resolved Level 2 stats for [selectedTower]; non-null only while it can
+  /// still be upgraded.
+  final TowerStats? selectedTowerUpgradeStats;
+
+  /// Resolved stats for each specialization of [selectedTower]; non-empty
+  /// only while it can be specialized.
+  final Map<TowerSpecialization, TowerStats> selectedTowerSpecializationStats;
+
+  /// Placed towers each offered Salvage Module would affect; non-empty only
+  /// while a module draft is pending.
+  final Map<RunModuleId, int> pendingRunModuleBeneficiaries;
 
   bool get canStartWave =>
       phase == GamePhase.build && pendingRunModuleOffer == null;
@@ -624,6 +646,15 @@ final class RunModuleDefinition {
   final double splashRadiusMultiplier;
   final double slowDurationBonus;
   final int immediateGold;
+
+  /// Whether this module changes resolved tower stats (as opposed to a pure
+  /// economy effect such as [immediateGold]).
+  bool get affectsTowerStats =>
+      damageMultiplier != 1 ||
+      fireIntervalMultiplier != 1 ||
+      rangeMultiplier != 1 ||
+      splashRadiusMultiplier != 1 ||
+      slowDurationBonus != 0;
 
   String get effectText => switch (id) {
     RunModuleId.heavyCaliber =>
