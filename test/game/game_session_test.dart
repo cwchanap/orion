@@ -60,6 +60,8 @@ void selectPendingModuleIfNeeded(GameSession session) {
   );
 }
 
+/// Every [TowerStats] field, so "preview equals real stats" also covers the
+/// specialization-only mechanics. Keep in sync with the constructor.
 List<Object?> _statsSignature(TowerStats stats) => [
   stats.type,
   stats.level,
@@ -67,18 +69,37 @@ List<Object?> _statsSignature(TowerStats stats) => [
   stats.cost,
   stats.upgradeCost,
   stats.specializationCost,
+  stats.range,
   stats.damage,
   stats.fireInterval,
-  stats.range,
+  stats.projectileSpeed,
   stats.splashRadius,
   stats.slowMultiplier,
   stats.slowDuration,
   stats.pierceCount,
+  stats.pierceWidth,
   stats.chainCount,
+  stats.chainRange,
+  stats.chainFalloff,
   stats.corrosionDamagePerSecond,
+  stats.corrosionDuration,
+  stats.armorShred,
   stats.fieldRadius,
   stats.fieldDuration,
+  stats.fieldTickInterval,
+  stats.droneCount,
+  stats.droneLifetime,
   stats.droneDamage,
+  stats.droneAttackInterval,
+  stats.maxActiveDrones,
+  stats.shieldDamageMultiplier,
+  stats.armorDamageMultiplier,
+  stats.slowedDamageMultiplier,
+  stats.prismSplitDamageMultiplier,
+  stats.prismSplitRange,
+  stats.clusterBurstCount,
+  stats.clusterBurstDamageMultiplier,
+  stats.clusterBurstRadius,
 ];
 
 const _laserCell = GridPosition(0, 2);

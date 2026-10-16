@@ -67,7 +67,7 @@ Inside `tower_inspector.dart`, add a small private helper that turns `(current, 
 
 This is string formatting of two resolved `TowerStats`; it does no combat math. Every specialization in the current balance changes at least Range, so no specialization card ends up with zero rows; if one ever does, the card simply shows the role sentence alone.
 
-Mechanics that aren't one of the four metrics (prism split, armor/shield damage multipliers, cluster bursts, drone count, field radius) are explained by the role sentence rather than new rows, keeping the cards compact.
+The upgrade preview has no role sentence, so it also lists the tower-specific mechanics an upgrade changes after the four metrics: Slow power, Pierce width, Chain range/dmg, Corrode time, Shred, Field radius/time/pulse, and Drones, Max drones, Drone life and Drone fire (e.g. Drone Bay `Drones 2 → 3`, Gravity Well `Field 72 → 86`). Projectile speed is left out as cosmetic. Specialization cards keep the four metrics only; their specialization-only mechanics (prism split, armor/shield damage multipliers, cluster bursts, drone count, field radius) are explained by the role sentence, keeping the cards compact.
 
 ## 3. Upgrade preview placement
 
