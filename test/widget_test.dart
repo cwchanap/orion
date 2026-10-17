@@ -18,9 +18,11 @@ import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/game_session.dart';
+import 'package:orion/game/rules/module_offer_picker.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
@@ -45,6 +47,8 @@ Widget testGamePage({
   CampaignProgressStore? progressStore,
   Future<CampaignProgressStore> Function()? progressStoreLoader,
   FeedbackPreferencesStore? feedbackPreferencesStore,
+  FirstMissionGuideStore? firstMissionGuideStore,
+  ModuleOfferPicker? moduleOfferPicker,
   ValueChanged<OrionDefenseGame>? onGameCreated,
   GameFeedback gameFeedback = const NoOpGameFeedback(),
 }) {
@@ -61,6 +65,8 @@ Widget testGamePage({
       progressStore: progressStore,
       progressStoreLoader: progressStoreLoader,
       feedbackPreferencesStore: feedbackPreferencesStore,
+      firstMissionGuideStore: firstMissionGuideStore,
+      moduleOfferPicker: moduleOfferPicker,
       onGameCreated: onGameCreated,
       gameFeedback: gameFeedback,
     ),

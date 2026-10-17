@@ -265,6 +265,44 @@ void main() {
     expect(skips, 0);
   });
 
+  testWidgets('bubble chrome passes taps through to content beneath', (
+    tester,
+  ) async {
+    _setSize(tester);
+    var buttonTaps = 0;
+    var skips = 0;
+    await tester.pumpWidget(
+      _host(
+        FirstMissionGuideStep.startWave,
+        // Target (180, 120) places the bubble at roughly x 36..324,
+        // y 134..198; this probe sits on the bubble's copy area, well clear
+        // of the right-aligned Skip / Got it row at the bottom-right.
+        targetPoint: const Offset(180, 120),
+        onSkip: () => skips++,
+        beneath: [
+          Positioned(
+            left: 60,
+            top: 145,
+            child: GestureDetector(
+              key: const ValueKey('beneath-bubble-button'),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => buttonTaps++,
+              child: const SizedBox(width: 48, height: 20),
+            ),
+          ),
+        ],
+      ),
+    );
+    await _settle(tester);
+
+    await tester.tap(find.byKey(const ValueKey('beneath-bubble-button')));
+    await tester.pump();
+
+    expect(buttonTaps, 1);
+    expect(skips, 0);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reduced motion applies step transitions immediately', (
     tester,
   ) async {

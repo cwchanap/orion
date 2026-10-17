@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -10,6 +12,7 @@ void main() {
     WidgetTester tester, {
     FeedbackPreferences initial = const FeedbackPreferences(),
     bool reduceMotion = false,
+    Future<void> Function()? onReplayTutorial,
   }) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
@@ -20,6 +23,7 @@ void main() {
           body: FeedbackSettingsSheet(
             initialPreferences: initial,
             reduceMotion: reduceMotion,
+            onReplayTutorial: onReplayTutorial,
           ),
         ),
       ),
@@ -28,11 +32,49 @@ void main() {
 
   testWidgets('renders all labels', (tester) async {
     await pumpSheet(tester);
-    expect(findOrionTitle('Feedback'), findsOneWidget);
+    expect(findOrionTitle('Settings'), findsOneWidget);
     expect(find.text('Sound Effects'), findsOneWidget);
     expect(find.text('Haptics'), findsOneWidget);
     expect(find.text('Reduced Motion'), findsOneWidget);
+    expect(find.text('Replay Tutorial'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Replay Tutorial awaits the callback once, then confirms', (
+    tester,
+  ) async {
+    var calls = 0;
+    final replay = Completer<void>();
+    await pumpSheet(
+      tester,
+      onReplayTutorial: () {
+        calls++;
+        return replay.future;
+      },
+    );
+
+    await tester.tap(find.text('Replay Tutorial'));
+    await tester.pump();
+    expect(calls, 1);
+
+    // Duplicate requests are disabled while the replay is in flight.
+    await tester.tap(find.text('Replay Tutorial'), warnIfMissed: false);
+    await tester.pump();
+    expect(calls, 1);
+
+    replay.complete();
+    await tester.pumpAndSettle();
+    expect(calls, 1);
+    expect(
+      find.text('Tutorial will replay on your next Outpost Alpha run.'),
+      findsOneWidget,
+    );
+
+    // Duplicate requests stay disabled after success.
+    await tester.tap(find.text('Replay Tutorial'), warnIfMissed: false);
+    await tester.pump();
+    expect(calls, 1);
     expect(tester.takeException(), isNull);
   });
 
