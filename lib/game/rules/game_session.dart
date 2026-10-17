@@ -158,6 +158,7 @@ class GameSession {
       autoStartCountdownRemaining: autoStartCountdownRemaining,
       pendingRunModuleOffer: _pendingRunModuleOffer,
       acquiredRunModules: _acquiredRunModules,
+      placedTowers: _towersByPosition.values.toList(growable: false),
       selectedTowerStats: selectedTower == null
           ? null
           : resolveTowerStats(selectedTower),
