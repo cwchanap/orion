@@ -54,9 +54,23 @@ class MissionCommandDock extends StatelessWidget {
     required this.onSell,
     this.onPlacementPreviewEvent,
     this.worldMapAction,
+    this.laserGuideAnchorKey,
+    this.waveGuideAnchorKey,
   });
 
   final Widget? worldMapAction;
+
+  /// Laser card anchor for the first-mission guide; attached ONLY to the
+  /// selected-cell rail (never the persistent idle rail — the same GlobalKey
+  /// on both dock branches would collide during the dock transition).
+  ///
+  /// Anchor keys WRAP existing surfaces — they never replace gameplay
+  /// ValueKeys — and stay null unless the page supplies them, so production
+  /// behavior is unchanged.
+  final Key? laserGuideAnchorKey;
+
+  /// Primary wave-action anchor around `_PrimaryActionPill`.
+  final Key? waveGuideAnchorKey;
   final GameSnapshot snapshot;
   final VoidCallback onTogglePause;
   final ValueChanged<double> onSpeedSelected;
@@ -81,6 +95,8 @@ class MissionCommandDock extends StatelessWidget {
         unlockedTowerTypes: snapshot.unlockedTowerTypes,
         onPlaceTower: onPlaceTower,
         onPlacementPreviewEvent: onPlacementPreviewEvent,
+        // Selected-cell branch only: see [laserGuideAnchorKey].
+        laserGuideAnchorKey: laserGuideAnchorKey,
       );
     } else {
       contentKey = const ValueKey('command-dock-idle');
@@ -91,6 +107,7 @@ class MissionCommandDock extends StatelessWidget {
         onSpeedSelected: onSpeedSelected,
         onToggleAutoStart: onToggleAutoStart,
         onStartWave: onStartWave,
+        waveGuideAnchorKey: waveGuideAnchorKey,
       );
       // Artboard 1a's dock is two rows during build: the pacing controls
       // beside the primary action, and the tower rail beneath them. The rail
@@ -152,6 +169,7 @@ class IdleCommandBar extends StatelessWidget {
     required this.onToggleAutoStart,
     required this.onStartWave,
     this.worldMapAction,
+    this.waveGuideAnchorKey,
   });
 
   final Widget? worldMapAction;
@@ -160,6 +178,9 @@ class IdleCommandBar extends StatelessWidget {
   final ValueChanged<double> onSpeedSelected;
   final VoidCallback onToggleAutoStart;
   final VoidCallback onStartWave;
+
+  /// Optional first-mission guide anchor for the primary wave action.
+  final Key? waveGuideAnchorKey;
 
   @override
   Widget build(BuildContext context) {
@@ -196,20 +217,41 @@ class IdleCommandBar extends StatelessWidget {
             ),
             layoutBuilder: (currentChild, previousChildren) =>
                 currentChild ?? const SizedBox.shrink(),
-            child: _PrimaryActionPill(
-              key: ValueKey(reactorLabel),
+            child: _reactorPill(
+              reactorLabel: reactorLabel,
               tooltip: reactorTooltip,
               label: snapshot.canStartWave && countdown == null
                   ? 'Wave ${snapshot.waveNumber}'
                   : reactorLabel,
-              icon: snapshot.phase == GamePhase.wave
-                  ? Icons.radar
-                  : Icons.play_arrow_rounded,
-              onPressed: snapshot.canStartWave ? onStartWave : null,
             ),
           ),
         ],
       ),
+    );
+  }
+
+  /// The pill keeps its own [ValueKey] so the reactor transition still fires
+  /// on label changes; the guide anchor wraps that keyed pill so the callout
+  /// sees one stable measurement target across transitions.
+  Widget _reactorPill({
+    required String reactorLabel,
+    required String tooltip,
+    required String label,
+  }) {
+    final pill = _PrimaryActionPill(
+      key: ValueKey(reactorLabel),
+      tooltip: tooltip,
+      label: label,
+      icon: snapshot.phase == GamePhase.wave
+          ? Icons.radar
+          : Icons.play_arrow_rounded,
+      onPressed: snapshot.canStartWave ? onStartWave : null,
+    );
+    final guideKey = waveGuideAnchorKey;
+    if (guideKey == null) return pill;
+    return KeyedSubtree(
+      key: ValueKey(reactorLabel),
+      child: KeyedSubtree(key: guideKey, child: pill),
     );
   }
 
@@ -346,6 +388,7 @@ class TowerBuildRail extends StatefulWidget {
     required this.unlockedTowerTypes,
     required this.onPlaceTower,
     this.onPlacementPreviewEvent,
+    this.laserGuideAnchorKey,
   });
 
   final GamePhase phase;
@@ -353,6 +396,10 @@ class TowerBuildRail extends StatefulWidget {
   final List<TowerType> unlockedTowerTypes;
   final ValueChanged<TowerType> onPlaceTower;
   final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
+
+  /// Optional first-mission guide anchor for the Laser card. Supplied only by
+  /// the selected-cell rail; the persistent idle rail passes nothing.
+  final Key? laserGuideAnchorKey;
 
   @override
   State<TowerBuildRail> createState() => _TowerBuildRailState();
@@ -452,7 +499,7 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
               separatorBuilder: (_, index) => const SizedBox(width: 8),
               itemBuilder: (context, index) {
                 final type = TowerType.values[index];
-                return _TowerBuildCard(
+                final card = _TowerBuildCard(
                   type: type,
                   phase: widget.phase,
                   gold: widget.gold,
@@ -463,6 +510,16 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
                   onDragEnded: () => _handleDragEnded(type),
                   onDragCanceled: () => _handleDragCanceled(type),
                   onPointerUp: (position) => _handlePointerUp(type, position),
+                );
+                if (type != TowerType.laser ||
+                    widget.laserGuideAnchorKey == null) {
+                  return card;
+                }
+                // Anchor wraps the card; the card's own
+                // ValueKey('tower-card-laser') stays untouched.
+                return KeyedSubtree(
+                  key: widget.laserGuideAnchorKey,
+                  child: card,
                 );
               },
             ),

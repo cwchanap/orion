@@ -11,6 +11,7 @@ class RunModuleDraftPanel extends StatelessWidget {
     required this.offer,
     required this.onSelected,
     this.beneficiaries = const {},
+    this.guideAnchorKey,
   });
 
   final RunModuleOffer offer;
@@ -19,38 +20,47 @@ class RunModuleDraftPanel extends StatelessWidget {
   /// Placed towers each offered module would affect right now.
   final Map<RunModuleId, int> beneficiaries;
 
+  /// Optional first-mission guide anchor wrapped around the draft frame;
+  /// anchor keys wrap — `run-module-draft-frame` stays put.
+  final Key? guideAnchorKey;
+
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final frame = OrionSurface(
+      key: const ValueKey('run-module-draft-frame'),
+      tier: OrionSurfaceTier.t3,
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OrionTitle(
+            'Salvage Module ${offer.draftNumber} of ${offer.draftTotal}',
+            textAlign: TextAlign.center,
+            color: uiTheme.textPrimary,
+          ),
+          const SizedBox(height: 12),
+          for (final id in offer.moduleIds) ...[
+            _RunModuleCard(
+              definition: runModuleDefinition(id),
+              beneficiaryCount: beneficiaries[id] ?? 0,
+              onPressed: () => onSelected(id),
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
     return Material(
       color: uiTheme.voidBlack.withValues(alpha: 0.92),
       child: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: OrionSurface(
-            key: const ValueKey('run-module-draft-frame'),
-            tier: OrionSurfaceTier.t3,
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                OrionTitle(
-                  'Salvage Module ${offer.draftNumber} of ${offer.draftTotal}',
-                  textAlign: TextAlign.center,
-                  color: uiTheme.textPrimary,
-                ),
-                const SizedBox(height: 12),
-                for (final id in offer.moduleIds) ...[
-                  _RunModuleCard(
-                    definition: runModuleDefinition(id),
-                    beneficiaryCount: beneficiaries[id] ?? 0,
-                    onPressed: () => onSelected(id),
-                  ),
-                  const SizedBox(height: 10),
-                ],
-              ],
-            ),
-          ),
+          // First-mission guide anchor wraps the frame; the ValueKey stays
+          // the regression handle (anchors wrap, never replace).
+          child: guideAnchorKey == null
+              ? frame
+              : KeyedSubtree(key: guideAnchorKey, child: frame),
         ),
       ),
     );

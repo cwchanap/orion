@@ -17,6 +17,7 @@ class NextWaveScanner extends StatefulWidget {
     this.onCollapsedTapIntercept,
     this.onExpandedChanged,
     this.onStartWave,
+    this.collapsedGuideAnchorKey,
   });
   final WavePreview preview;
   final List<String> modifierTitles;
@@ -24,6 +25,10 @@ class NextWaveScanner extends StatefulWidget {
   final bool Function(Offset globalPosition)? onCollapsedTapIntercept;
   final ValueChanged<bool>? onExpandedChanged;
   final VoidCallback? onStartWave;
+
+  /// Optional first-mission guide anchor wrapped around the collapsed 48dp
+  /// control; anchor keys wrap — `next-wave-scanner-collapsed` stays put.
+  final Key? collapsedGuideAnchorKey;
   @override
   State<NextWaveScanner> createState() => _NextWaveScannerState();
 }
@@ -113,10 +118,20 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
         ignoring: widget.collapseRequested,
         child: _expanded
             ? const SizedBox.square(dimension: 48)
-            : _buildCollapsed(context, _toggle),
+            // First-mission guide anchor wraps the collapsed control (same
+            // 48dp rect); the expanded placeholder carries no anchor.
+            : _withGuideAnchor(_buildCollapsed(context, _toggle)),
       ),
     ),
   );
+
+  /// Wraps the collapsed control with the optional first-mission guide
+  /// anchor; null until the page supplies it, so behavior is unchanged.
+  Widget _withGuideAnchor(Widget collapsed) =>
+      widget.collapsedGuideAnchorKey == null
+      ? collapsed
+      : KeyedSubtree(key: widget.collapsedGuideAnchorKey, child: collapsed);
+
   Widget _buildCollapsed(BuildContext context, VoidCallback toggle) {
     final uiTheme = OrionUiTheme.of(context);
     final totalEnemyCount = widget.preview.groups.fold<int>(
