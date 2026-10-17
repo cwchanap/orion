@@ -43,7 +43,9 @@ import 'support/reactor_rim_visual_capture.dart';
 import 'support/real_fonts.dart';
 
 /// Common page shell for widget tests. Defaults to a no-op feedback service
-/// so ordinary tests never touch the native audio/haptics layer.
+/// so ordinary tests never touch the native audio/haptics layer, and to an
+/// already-completed first-mission guide store so the tutorial overlay only
+/// appears in tests that opt in with their own store.
 Widget testGamePage({
   CampaignProgressStore? progressStore,
   Future<CampaignProgressStore> Function()? progressStoreLoader,
@@ -66,7 +68,12 @@ Widget testGamePage({
       progressStore: progressStore,
       progressStoreLoader: progressStoreLoader,
       feedbackPreferencesStore: feedbackPreferencesStore,
-      firstMissionGuideStore: firstMissionGuideStore,
+      // Guide OFF unless a test opts in: a never-written in-memory record
+      // reads as "not completed" and the callout would cover every Alpha
+      // mount/parity capture that did not ask for it.
+      firstMissionGuideStore:
+          firstMissionGuideStore ??
+          InMemoryFirstMissionGuideStore(completed: true),
       moduleOfferPicker: moduleOfferPicker,
       onGameCreated: onGameCreated,
       gameFeedback: gameFeedback,
@@ -3928,6 +3935,10 @@ void main() {
       game,
       (snapshot) => snapshot.pendingRunModuleOffer != null,
     );
+    // The anchored callout renders nothing until its post-frame measure
+    // lands — give it a frame to attach.
+    await tester.pump();
+    await tester.pump();
     expect(
       find.text('Salvage Modules last only for this mission.'),
       findsOneWidget,
@@ -3955,7 +3966,10 @@ void main() {
   testWidgets(
     'laser drag from the idle rail commits straight to the wave lesson',
     (tester) async {
-      final game = await pumpMountedMission(tester);
+      final game = await pumpMountedMission(
+        tester,
+        firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+      );
       expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
 
       // Long-press-drag Laser from the persistent rail onto a buildable cell;
@@ -3990,7 +4004,10 @@ void main() {
   testWidgets(
     'a tower upgraded before Wave 1 clears silences the Wave-2 upgrade guide',
     (tester) async {
-      final game = await pumpMountedMission(tester);
+      final game = await pumpMountedMission(
+        tester,
+        firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+      );
 
       // Build and upgrade the laser out of order, before Wave 1 ever starts.
       await tapBoardCell(tester, game, const GridPosition(2, 2));
@@ -4024,7 +4041,10 @@ void main() {
   testWidgets('the guide callout leaves gameplay interactive while visible', (
     tester,
   ) async {
-    final game = await pumpMountedMission(tester);
+    final game = await pumpMountedMission(
+      tester,
+      firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+    );
     expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
 
     // With the callout up, another buildable cell still selects: the
@@ -4126,6 +4146,136 @@ void main() {
   );
 
   testWidgets(
+    'a wave starting past the scanner lesson completes the guide even '
+    'without the button path',
+    (tester) async {
+      final guideStore = InMemoryFirstMissionGuideStore();
+      final game = await pumpMountedMission(
+        tester,
+        firstMissionGuideStore: guideStore,
+      );
+
+      // The auto-start countdown calls game.startWave() directly, so the
+      // chrome's onStartWave never runs: completion must derive from the
+      // snapshot itself — the wave left the build phase under the scanner
+      // lesson's preconditions.
+      game.stateNotifier.value = commandDeckSnapshot(
+        phase: GamePhase.wave,
+        waveNumber: 3,
+        acquiredRunModules: const [RunModuleId.heavyCaliber],
+      );
+      await tester.pump();
+      await tester.pump();
+
+      expect(guideStore.completed, isTrue);
+      expect(find.byType(FirstMissionGuideCallout), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'a committed Alpha result with no guide record suppresses the tutorial',
+    (tester) async {
+      // The player cleared Outpost Alpha before the guide flag existed, so
+      // a never-written guide store resolves the flag through campaign
+      // progress: no record + an Alpha result means completed.
+      final progressStore = await storeWithResults({
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.silver,
+          bestBaseHealth: 14,
+        ),
+      });
+      await pumpMountedMission(
+        tester,
+        actionLabel: 'Replay Mission',
+        progressStore: progressStore,
+        firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+      );
+
+      expect(find.byType(FirstMissionGuideCallout), findsNothing);
+      expect(find.text('Tap an empty cell to build here.'), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets('Replay Tutorial stays enabled without confirming when the guide '
+      'store write fails', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      testGamePage(firstMissionGuideStore: _FailingFirstMissionGuideStore()),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replay Tutorial'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Tutorial will replay on your next Outpost Alpha run.'),
+      findsNothing,
+    );
+    final tile = tester.widget<ListTile>(
+      find.widgetWithText(ListTile, 'Replay Tutorial'),
+    );
+    expect(tile.enabled, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'a campaign load failure still builds the guide store so Skip persists',
+    (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      await _warmGameImages(tester);
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 100));
+      });
+      OrionDefenseGame? game;
+      // No firstMissionGuideStore and a failing campaign store: the page's
+      // catch branch must build the default SharedPreferences-backed guide
+      // store itself, or Skip/Got it persist nothing.
+      await tester.pumpWidget(
+        MaterialApp(
+          debugShowCheckedModeBanner: false,
+          theme: orionThemeData,
+          home: OrionGamePage(
+            progressStore: _TestCampaignProgressStore(
+              loadError: StateError('campaign load failed'),
+            ),
+            onGameCreated: (value) => game = value,
+            gameFeedback: const NoOpGameFeedback(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+      // The mounted game loop never settles under fake async: fixed pumps.
+      await tester.pump();
+      await tester.pump();
+      expect(game!.isMounted, isTrue);
+      expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
+
+      await tester.tap(find.text('Skip tutorial'));
+      await tester.pump();
+      await tester.pump();
+
+      // The guide store was acquired in the catch branch, so the skip
+      // actually persisted to SharedPreferences.
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getBool(SharedPreferencesFirstMissionGuideStore.key),
+        isTrue,
+        reason: 'Skip must persist even when campaign loading failed',
+      );
+    },
+  );
+
+  testWidgets(
     'Reset Campaign leaves a completed first-mission guide completed',
     (tester) async {
       final guideStore = InMemoryFirstMissionGuideStore(completed: true);
@@ -4180,6 +4330,7 @@ void main() {
 Future<OrionDefenseGame> pumpMountedMission(
   WidgetTester tester, {
   String mapLabel = 'Alpha',
+  String actionLabel = 'Start Mission',
   CampaignProgressStore? progressStore,
   FirstMissionGuideStore? firstMissionGuideStore,
   ModuleOfferPicker? moduleOfferPicker,
@@ -4204,7 +4355,11 @@ Future<OrionDefenseGame> pumpMountedMission(
     ),
   );
   await tester.pumpAndSettle();
-  await startStageFromBriefing(tester, mapLabel: mapLabel);
+  await startStageFromBriefing(
+    tester,
+    mapLabel: mapLabel,
+    actionLabel: actionLabel,
+  );
   // The mounted game loop never settles under fake async: fixed pumps only.
   await tester.pump();
   await tester.pump();
@@ -4473,6 +4628,20 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
 
     progress = CampaignProgress();
     techTree = CampaignTechTree();
+  }
+}
+
+/// A guide store whose writes always fail — Replay Tutorial must surface
+/// that failure (no confirmation, action stays enabled).
+class _FailingFirstMissionGuideStore implements FirstMissionGuideStore {
+  bool? completed = true;
+
+  @override
+  Future<bool?> loadCompleted() async => completed;
+
+  @override
+  Future<void> setCompleted(bool completed) async {
+    throw StateError('guide write failed');
   }
 }
 

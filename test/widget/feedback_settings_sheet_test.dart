@@ -78,6 +78,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('Replay Tutorial is disabled when no callback is supplied', (
+    tester,
+  ) async {
+    await pumpSheet(tester, onReplayTutorial: null);
+
+    // A live closure that only early-returns would still look tappable;
+    // the row must read disabled instead.
+    final tile = tester.widget<ListTile>(
+      find.widgetWithText(ListTile, 'Replay Tutorial'),
+    );
+    expect(tile.enabled, isFalse);
+    expect(tile.onTap, isNull);
+
+    await tester.tap(find.text('Replay Tutorial'), warnIfMissed: false);
+    await tester.pump();
+    expect(
+      find.text('Tutorial will replay on your next Outpost Alpha run.'),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('switches reflect the provided preferences independently', (
     tester,
   ) async {

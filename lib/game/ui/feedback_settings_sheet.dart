@@ -59,6 +59,12 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    // The row reads disabled unless the page supplied a callback and no
+    // replay is in flight or already confirmed.
+    final canReplay =
+        widget.onReplayTutorial != null &&
+        !_isReplayInFlight &&
+        !_isReplayConfirmed;
 
     return SafeArea(
       child: Padding(
@@ -116,9 +122,8 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
                         'Tutorial will replay on your next Outpost Alpha run.',
                       )
                     : null,
-                onTap: _isReplayInFlight || _isReplayConfirmed
-                    ? null
-                    : _replayTutorial,
+                enabled: canReplay,
+                onTap: canReplay ? _replayTutorial : null,
               ),
               const SizedBox(height: 8),
               FilledButton(

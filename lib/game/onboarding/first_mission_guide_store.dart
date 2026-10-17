@@ -1,7 +1,9 @@
 import 'package:shared_preferences/shared_preferences.dart';
 
 abstract interface class FirstMissionGuideStore {
-  Future<bool> loadCompleted();
+  /// `null` when no record exists or the stored value is unreadable —
+  /// callers resolve that through campaign progress instead of a default.
+  Future<bool?> loadCompleted();
   Future<void> setCompleted(bool completed);
 }
 
@@ -14,13 +16,16 @@ class SharedPreferencesFirstMissionGuideStore
   final SharedPreferences preferences;
 
   @override
-  Future<bool> loadCompleted() async {
+  Future<bool?> loadCompleted() async {
     try {
-      return preferences.getBool(key) ?? false;
+      if (!preferences.containsKey(key)) {
+        return null;
+      }
+      return preferences.getBool(key);
     } on TypeError {
       // A non-bool value stored under key (e.g. a stray string) makes
-      // SharedPreferences.getBool throw before the fallback is reached.
-      return false;
+      // SharedPreferences.getBool throw — no usable record.
+      return null;
     }
   }
 
@@ -34,12 +39,13 @@ class SharedPreferencesFirstMissionGuideStore
 }
 
 class InMemoryFirstMissionGuideStore implements FirstMissionGuideStore {
-  InMemoryFirstMissionGuideStore({this.completed = false});
+  InMemoryFirstMissionGuideStore({this.completed});
 
-  bool completed;
+  /// `null` models a never-written record, matching a fresh install.
+  bool? completed;
 
   @override
-  Future<bool> loadCompleted() async => completed;
+  Future<bool?> loadCompleted() async => completed;
 
   @override
   Future<void> setCompleted(bool completed) async {

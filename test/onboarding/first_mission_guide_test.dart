@@ -44,10 +44,10 @@ PlacedTower _tower({int level = 1}) {
   );
 }
 
-RunModuleOffer _offer() {
+RunModuleOffer _offer({int draftNumber = 1}) {
   return RunModuleOffer(
-    offerId: 1,
-    draftNumber: 1,
+    offerId: draftNumber,
+    draftNumber: draftNumber,
     draftTotal: 3,
     moduleIds: const [RunModuleId.heavyCaliber, RunModuleId.longSight],
   );
@@ -120,6 +120,23 @@ void main() {
           ),
         ),
         FirstMissionGuideStep.salvageModule,
+      );
+    });
+
+    test('a later module draft does not repeat the salvage lesson', () {
+      // The player already picked a module (acquired is non-empty), so this
+      // pending offer is a subsequent draft: it falls through to the normal
+      // scanner rule instead of re-showing the salvage callout.
+      expect(
+        firstMissionGuideStepFor(
+          _snapshot(
+            waveNumber: 5,
+            placedTowers: [_tower()],
+            pendingRunModuleOffer: _offer(draftNumber: 2),
+            acquiredRunModules: const [RunModuleId.heavyCaliber],
+          ),
+        ),
+        FirstMissionGuideStep.scanner,
       );
     });
 
