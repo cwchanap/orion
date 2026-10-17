@@ -65,11 +65,16 @@ class FirstMissionGuideCallout extends StatefulWidget {
 
 class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
   final GlobalKey _bubbleMeasureKey = GlobalKey();
+  final GlobalKey _buttonRowKey = GlobalKey();
 
   /// Anchor rect and bubble size in this callout's own coordinates; null
   /// until the matching post-frame measurement lands.
   Rect? _anchorRect;
   Size? _bubbleSize;
+
+  /// Height reserved for the (overlay) button row inside the chrome; corrected
+  /// from the live row's measured height after the first frame.
+  double _buttonRowHeight = 24;
 
   @override
   void didUpdateWidget(covariant FirstMissionGuideCallout oldWidget) {
@@ -106,10 +111,18 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
     final bubbleBox =
         _bubbleMeasureKey.currentContext?.findRenderObject() as RenderBox?;
     final bubbleSize = bubbleBox?.size;
-    if (anchorRect != _anchorRect || bubbleSize != _bubbleSize) {
+    final buttonRowBox =
+        _buttonRowKey.currentContext?.findRenderObject() as RenderBox?;
+    final buttonRowHeight = buttonRowBox?.size.height;
+    if (anchorRect != _anchorRect ||
+        bubbleSize != _bubbleSize ||
+        (buttonRowHeight != null && buttonRowHeight != _buttonRowHeight)) {
       setState(() {
         _anchorRect = anchorRect;
         _bubbleSize = bubbleSize;
+        if (buttonRowHeight != null) {
+          _buttonRowHeight = buttonRowHeight;
+        }
       });
     }
   }
@@ -186,41 +199,85 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
               curve: Curves.easeOutCubic,
               left: bubbleRect.left,
               top: bubbleRect.top,
-              child: KeyedSubtree(
-                key: firstMissionGuideBubbleKey,
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(
-                    maxWidth: math.max(0, safe.width),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // The chrome (surface + copy) never joins a gesture arena;
+                  // only the overlaid button row below receives tutorial
+                  // taps, so gameplay beneath the bubble stays interactive
+                  // (soft guidance, never a lock).
+                  IgnorePointer(
+                    child: KeyedSubtree(
+                      key: firstMissionGuideBubbleKey,
+                      child: ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxWidth: math.max(0, safe.width),
+                        ),
+                        child: OrionSurface(
+                          key: _bubbleMeasureKey,
+                          tier: OrionSurfaceTier.t1,
+                          radius: 16,
+                          padding: const EdgeInsets.fromLTRB(14, 8, 6, 6),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              // The copy never swallows a tap meant for the
+                              // control underneath the bubble; the whole
+                              // chrome is hit-transparent anyway.
+                              Semantics(
+                                liveRegion: true,
+                                label: copy,
+                                excludeSemantics: true,
+                                child: IgnorePointer(
+                                  child: Text(
+                                    copy,
+                                    style: OrionTypography.readout(
+                                      size: 13,
+                                      color: uiTheme.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              // Reserves the live button row's height so the
+                              // chrome keeps the exact size it had when the
+                              // row was inline.
+                              SizedBox(height: _buttonRowHeight),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
-                  child: OrionSurface(
-                    key: _bubbleMeasureKey,
-                    tier: OrionSurfaceTier.t1,
-                    radius: 16,
-                    padding: const EdgeInsets.fromLTRB(14, 8, 6, 6),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // The copy never swallows a tap meant for the control
-                        // underneath the bubble; only the buttons below are
-                        // tutorial hit targets.
-                        Semantics(
-                          liveRegion: true,
-                          label: copy,
-                          excludeSemantics: true,
-                          child: IgnorePointer(
+                  // The only tutorial hit targets, overlaid at the chrome's
+                  // bottom-right (padding right/bottom = 6).
+                  Positioned(
+                    right: 6,
+                    bottom: 6,
+                    child: KeyedSubtree(
+                      key: _buttonRowKey,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          TextButton(
+                            style: TextButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                              ),
+                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            ),
+                            onPressed: widget.onSkip,
                             child: Text(
-                              copy,
+                              'Skip tutorial',
                               style: OrionTypography.readout(
-                                size: 13,
-                                color: uiTheme.textPrimary,
+                                size: 12,
+                                color: uiTheme.textMuted,
                               ),
                             ),
                           ),
-                        ),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
+                          if (widget.onDone != null)
                             TextButton(
                               style: TextButton.styleFrom(
                                 visualDensity: VisualDensity.compact,
@@ -229,40 +286,20 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
                                 ),
                                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                               ),
-                              onPressed: widget.onSkip,
+                              onPressed: widget.onDone,
                               child: Text(
-                                'Skip tutorial',
+                                'Got it',
                                 style: OrionTypography.readout(
                                   size: 12,
-                                  color: uiTheme.textMuted,
+                                  color: uiTheme.systemCyan,
                                 ),
                               ),
                             ),
-                            if (widget.onDone != null)
-                              TextButton(
-                                style: TextButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                  ),
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                onPressed: widget.onDone,
-                                child: Text(
-                                  'Got it',
-                                  style: OrionTypography.readout(
-                                    size: 12,
-                                    color: uiTheme.systemCyan,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ],
