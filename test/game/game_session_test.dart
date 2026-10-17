@@ -1863,4 +1863,43 @@ void main() {
       expect(session.snapshot().pendingRunModuleBeneficiaries, isEmpty);
     });
   });
+
+  group('GameSession snapshot placed towers', () {
+    test('starts empty before any tower is placed', () {
+      final session = GameSession.initial();
+
+      expect(session.snapshot().placedTowers, isEmpty);
+    });
+
+    test('projects a newly placed tower as a Level-1 entry', () {
+      final session = GameSession.initial();
+
+      expect(
+        session.placeTower(const GridPosition(2, 2), TowerType.laser).isAllowed,
+        isTrue,
+      );
+
+      final towers = session.snapshot().placedTowers;
+      expect(towers, hasLength(1));
+      expect(towers.single.type, TowerType.laser);
+      expect(towers.single.position, const GridPosition(2, 2));
+      expect(towers.single.level, 1);
+    });
+
+    test('does not live-update an earlier snapshot after an upgrade', () {
+      final session = GameSession.initial(gold: 200);
+      expect(
+        session.placeTower(const GridPosition(2, 2), TowerType.laser).isAllowed,
+        isTrue,
+      );
+      final before = session.snapshot();
+      final tower = session.towers.single;
+      expect(before.placedTowers.single.level, 1);
+
+      expect(session.upgradeTower(tower.id), isTrue);
+
+      expect(before.placedTowers.single.level, 1);
+      expect(session.snapshot().placedTowers.single.level, 2);
+    });
+  });
 }
