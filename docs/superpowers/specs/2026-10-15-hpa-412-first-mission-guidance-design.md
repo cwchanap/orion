@@ -221,7 +221,7 @@ Add the same optional argument to `testGamePage()` so the full onboarding widget
 
 ### Pure/store/rules tests
 
-- Fresh `SharedPreferencesFirstMissionGuideStore` loads `false`; `true` and later `false` round-trip under `orion.firstMissionGuide`.
+- Fresh `SharedPreferencesFirstMissionGuideStore` loads `null` (no record); `true` and later explicit `false` round-trip under `orion.firstMissionGuide`.
 - `game_session_test.dart`: initial snapshot has no `placedTowers`; after placement it contains that tower; after upgrade the snapshot contains the Level-2 replacement. Mutating the session later does not mutate an already-returned snapshot list.
 - `firstMissionGuideStepFor` covers: initial build cell, selected cell, tower created, active Wave 1 (no callout), Wave-2 build upgrade, pre-upgraded skip, first module draft, acquired module/scanner, and active-wave gaps.
 - A snapshot with `placedTowers` non-empty and `selectedCell == null` proves drag/tap need no distinct guide branch.

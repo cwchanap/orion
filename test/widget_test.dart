@@ -68,9 +68,10 @@ Widget testGamePage({
       progressStore: progressStore,
       progressStoreLoader: progressStoreLoader,
       feedbackPreferencesStore: feedbackPreferencesStore,
-      // Guide OFF unless a test opts in: a never-written in-memory record
-      // reads as "not completed" and the callout would cover every Alpha
-      // mount/parity capture that did not ask for it.
+      // Guide OFF unless a test opts in: a store with no written record
+      // loads `null` and resolves through campaign progress — empty test
+      // progress means not-completed — so the callout would cover every
+      // Alpha mount/parity capture that did not ask for it.
       firstMissionGuideStore:
           firstMissionGuideStore ??
           InMemoryFirstMissionGuideStore(completed: true),
