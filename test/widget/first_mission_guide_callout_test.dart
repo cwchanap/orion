@@ -206,6 +206,118 @@ void main() {
     }
   });
 
+  testWidgets('an unattached anchor renders nothing until the anchor mounts', (
+    tester,
+  ) async {
+    _setSize(tester);
+    final anchorKey = GlobalKey();
+    Widget host({required bool attach}) => _host(
+      FirstMissionGuideStep.towerCard,
+      anchorKey: anchorKey,
+      beneath: [
+        if (attach)
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.center,
+              child: SizedBox(key: anchorKey, width: 40, height: 40),
+            ),
+          ),
+      ],
+    );
+
+    Finder connector() => find.descendant(
+      of: find.byType(FirstMissionGuideCallout),
+      matching: find.byType(CustomPaint),
+    );
+
+    // The anchor key is not mounted: no bubble, no connector, no copy —
+    // pointing at the (w/2, h/3) fallback would draw a meaningless ring.
+    await tester.pumpWidget(host(attach: false));
+    await _settle(tester);
+    expect(find.byKey(_bubbleKey), findsNothing);
+    expect(connector(), findsNothing);
+    expect(
+      find.text(_copyByStep[FirstMissionGuideStep.towerCard]!),
+      findsNothing,
+    );
+
+    // Once the anchor mounts the measure lands and the callout appears.
+    await tester.pumpWidget(host(attach: true));
+    await _settle(tester);
+    expect(find.byKey(_bubbleKey), findsOneWidget);
+    expect(connector(), findsWidgets);
+    _expectBubbleInsideSafeArea(tester);
+  });
+
+  testWidgets('the bubble and its button row clear a tall anchored target', (
+    tester,
+  ) async {
+    _setSize(tester);
+    final anchorKey = GlobalKey();
+    // A draft-frame-scale anchor: placement must measure from its edges,
+    // not its center, or the bubble (and the Skip button inside it)
+    // overlaps the anchor's lower half.
+    await tester.pumpWidget(
+      _host(
+        FirstMissionGuideStep.salvageModule,
+        anchorKey: anchorKey,
+        onDone: () {},
+        beneath: [
+          Positioned.fill(
+            child: Align(
+              alignment: Alignment.center,
+              child: SizedBox(key: anchorKey, width: 200, height: 300),
+            ),
+          ),
+        ],
+      ),
+    );
+    await _settle(tester);
+
+    final anchorRect = tester.getRect(find.byKey(anchorKey));
+    final bubbleRect = tester.getRect(find.byKey(_bubbleKey));
+    expect(
+      bubbleRect.overlaps(anchorRect),
+      isFalse,
+      reason: 'the bubble must sit outside the anchor, not over it',
+    );
+    for (final label in ['Skip tutorial', 'Got it']) {
+      expect(
+        tester.getRect(find.text(label)).overlaps(anchorRect),
+        isFalse,
+        reason: '$label must not sit on the anchor it points at',
+      );
+    }
+    _expectBubbleInsideSafeArea(tester);
+  });
+
+  testWidgets(
+    'a partially off-screen anchor still renders inside the SafeArea',
+    (tester) async {
+      _setSize(tester);
+      final anchorKey = GlobalKey();
+      await tester.pumpWidget(
+        _host(
+          FirstMissionGuideStep.towerCard,
+          anchorKey: anchorKey,
+          beneath: [
+            // Half of the anchor hangs off the left edge of the canvas.
+            Positioned(
+              left: -60,
+              top: 300,
+              child: SizedBox(key: anchorKey, width: 100, height: 100),
+            ),
+          ],
+        ),
+      );
+      await _settle(tester);
+
+      expect(find.byKey(_bubbleKey), findsOneWidget);
+      _expectBubbleInsideSafeArea(tester);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets(
     'board-path targetPoint renders a connector and stays in bounds',
     (tester) async {

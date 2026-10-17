@@ -129,16 +129,27 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
 
   /// Prefers below the target, flips above when tight, and always clamps to
   /// the SafeArea-inset bounds.
-  Rect _clampBubble(Rect safe, Offset target, Size bubbleSize) {
+  ///
+  /// An anchored target places against the anchor's EDGES — below its
+  /// bottom or above its top, horizontally centered on it — so the bubble
+  /// (and the Skip/Got it row inside it) never covers a tall anchor's
+  /// interior. Point targets keep point-relative placement.
+  Rect _clampBubble(
+    Rect safe,
+    Offset target,
+    Size bubbleSize, {
+    Rect? anchorRect,
+  }) {
     final width = math.min(bubbleSize.width, safe.width);
     final height = bubbleSize.height;
-    final belowTop = target.dy + _targetGap;
-    final aboveTop = target.dy - _targetGap - height;
+    final belowTop = (anchorRect?.bottom ?? target.dy) + _targetGap;
+    final aboveTop = (anchorRect?.top ?? target.dy) - _targetGap - height;
+    final centerDx = anchorRect?.center.dx ?? target.dx;
     final top = (belowTop + height <= safe.bottom || aboveTop < safe.top)
         ? belowTop
         : aboveTop;
     return Rect.fromLTWH(
-      (target.dx - width / 2).clamp(
+      (centerDx - width / 2).clamp(
         safe.left,
         math.max(safe.left, safe.right - width),
       ),
@@ -170,14 +181,33 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
           ),
         );
         final anchor = _anchorRect;
-        final target =
-            anchor?.center ??
-            widget.targetPoint ??
-            Offset(canvas.width / 2, canvas.height / 3);
+        // An anchored callout with no measured anchor rect renders nothing:
+        // the anchor is detached (its target surface is hidden this frame)
+        // or simply unmeasured — painting the ring at a fixed fallback
+        // point would point at nothing. The post-frame measure scheduled
+        // above still runs, and anchor attach/detach always coincides with
+        // a snapshot-driven rebuild, so the measure re-runs on every
+        // relevant change.
+        if (widget.anchorKey != null && anchor == null) {
+          return const SizedBox.shrink();
+        }
+        final pointTarget =
+            widget.targetPoint ?? Offset(canvas.width / 2, canvas.height / 3);
         final bubbleRect = _clampBubble(
           safe,
-          target,
+          pointTarget,
           _bubbleSize ?? _estimatedBubbleSize,
+          anchorRect: anchor,
+        );
+        // The ring marks the anchor boundary point nearest the bubble —
+        // never the anchor's interior — clamped into the SafeArea so a
+        // partially off-screen anchor cannot paint it off-canvas.
+        final ringTarget = anchor == null
+            ? pointTarget
+            : _boundaryPoint(anchor, bubbleRect.center);
+        final target = Offset(
+          ringTarget.dx.clamp(safe.left, safe.right),
+          ringTarget.dy.clamp(safe.top, safe.bottom),
         );
         return Stack(
           children: [
@@ -320,6 +350,22 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
   };
 }
 
+/// The point on [rect]'s boundary nearest [towards]: the clamped point for
+/// an outside approach, or the nearer horizontal edge when [towards] sits
+/// inside the rect.
+Offset _boundaryPoint(Rect rect, Offset towards) {
+  final clamped = Offset(
+    towards.dx.clamp(rect.left, rect.right),
+    towards.dy.clamp(rect.top, rect.bottom),
+  );
+  if (clamped != towards) return clamped;
+  // Target inside the rect: aim at the nearer horizontal edge.
+  return Offset(
+    towards.dx,
+    towards.dy < rect.center.dy ? rect.top : rect.bottom,
+  );
+}
+
 /// Ring around the target plus a short spoke from the bubble edge. Pure
 /// decoration — its host is wrapped in [IgnorePointer].
 class _GuideConnectorPainter extends CustomPainter {
@@ -347,19 +393,6 @@ class _GuideConnectorPainter extends CustomPainter {
     final end = target - (direction / direction.distance) * (_ringRadius + 3);
     if ((end - start).distance < 4) return;
     canvas.drawLine(start, end, stroke..color = color.withValues(alpha: 0.6));
-  }
-
-  Offset _boundaryPoint(Rect rect, Offset towards) {
-    final clamped = Offset(
-      towards.dx.clamp(rect.left, rect.right),
-      towards.dy.clamp(rect.top, rect.bottom),
-    );
-    if (clamped != towards) return clamped;
-    // Target inside the bubble: aim at the nearer horizontal edge.
-    return Offset(
-      towards.dx,
-      towards.dy < rect.center.dy ? rect.top : rect.bottom,
-    );
   }
 
   @override

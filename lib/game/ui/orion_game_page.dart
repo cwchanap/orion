@@ -208,7 +208,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committedProgress = save.progress;
         _committedTechTree = save.techTree;
         _firstMissionGuideStore = guideStore;
-        _firstMissionGuideCompleted = guideCompleted;
+        // A missing guide record resolves through campaign progress: a
+        // committed Alpha result means this player cleared the tutorial's
+        // mission before the flag existed, so the guide counts as done
+        // (nothing is persisted). An explicit stored false — Replay
+        // Tutorial — is always honored, so replay survives restarts.
+        _firstMissionGuideCompleted =
+            guideCompleted ??
+            (save.progress.resultFor(OrionCampaign.stageOneId) != null);
         _isLoading = false;
       });
     } catch (_) {
@@ -217,8 +224,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
 
       // The gate may clear on a campaign failure before a guide store could
-      // be built; the flag then falls back to false for the process.
+      // be built; build the default store here so Skip/Got it still
+      // persist, and keep the null-fallback if that fails too.
+      guideStore ??= await _defaultFirstMissionGuideStore(null);
+      if (!mounted) {
+        return;
+      }
+
       final guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _store = store;
@@ -227,7 +243,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committedProgress = CampaignProgress();
         _committedTechTree = CampaignTechTree();
         _firstMissionGuideStore = guideStore;
-        _firstMissionGuideCompleted = guideCompleted;
+        _firstMissionGuideCompleted = guideCompleted ?? false;
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
       });
@@ -311,17 +327,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
-  /// Store failures never block the guide flag; they fall back to false.
-  Future<bool> _loadFirstMissionGuideCompleted(
+  /// Store failures never block the guide flag; they read as no record,
+  /// which the callsite resolves through campaign progress.
+  Future<bool?> _loadFirstMissionGuideCompleted(
     FirstMissionGuideStore? store,
   ) async {
     if (store == null) {
-      return false;
+      return null;
     }
     try {
       return await store.loadCompleted();
     } catch (_) {
-      return false;
+      return null;
     }
   }
 
@@ -457,6 +474,23 @@ class _OrionGamePageState extends State<OrionGamePage> {
             final guideStep = guideEligible
                 ? firstMissionGuideStepFor(snapshot)
                 : null;
+
+            // Completion is a snapshot fact, not only a button fact: the
+            // auto-start countdown calls game.startWave() directly, so the
+            // wave leaving the build phase under the scanner lesson's
+            // conditions retires the tutorial even when the chrome's
+            // onStartWave never ran. setState inside build is illegal —
+            // defer the flag flip to a post-frame callback.
+            if (guideEligible &&
+                snapshot.phase != GamePhase.build &&
+                snapshot.waveNumber >= 3 &&
+                snapshot.acquiredRunModules.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _setFirstMissionGuideCompleted(true);
+                }
+              });
+            }
 
             GlobalKey? guideAnchorKey;
             Offset? guideTargetPoint;
@@ -721,7 +755,24 @@ class _OrionGamePageState extends State<OrionGamePage> {
         initialPreferences: _feedbackPreferences,
         reduceMotion: MediaQuery.disableAnimationsOf(context),
         onReplayTutorial: () async {
-          _setFirstMissionGuideCompleted(false);
+          // The sheet confirms only after this future completes, so the
+          // flag must be reset AND persisted here: a store problem throws
+          // back to the sheet, which leaves the action enabled and shows
+          // no confirmation. The write is unconditional — an in-memory
+          // false over a stale persisted true must still rewrite the
+          // record.
+          var store = _firstMissionGuideStore;
+          store ??= await _defaultFirstMissionGuideStore(null);
+          if (store == null) {
+            throw StateError('First-mission guide store is unavailable.');
+          }
+          _firstMissionGuideStore = store;
+          await store.setCompleted(false);
+          if (mounted) {
+            setState(() {
+              _firstMissionGuideCompleted = false;
+            });
+          }
         },
       ),
     );

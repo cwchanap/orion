@@ -813,6 +813,42 @@ void main() {
     expect(startWaveTaps, 0);
   });
 
+  testWidgets('attaching or detaching the wave guide anchor runs no reactor '
+      'transition, while a label change still does', (tester) async {
+    final guideKey = GlobalKey();
+    Widget host(Key? anchorKey, {GameSnapshot? snapshot}) => MaterialApp(
+      home: IdleCommandBar(
+        snapshot: snapshot ?? commandDeckSnapshot(),
+        onTogglePause: () {},
+        onSpeedSelected: (_) {},
+        onToggleAutoStart: () {},
+        onStartWave: () {},
+        waveGuideAnchorKey: anchorKey,
+      ),
+    );
+
+    await tester.pumpWidget(host(null));
+    await tester.pumpAndSettle();
+
+    // The switcher child's type AND key stay stable across the guide
+    // toggle, so neither direction schedules a transition.
+    await tester.pumpWidget(host(guideKey));
+    await tester.pump();
+    expect(tester.binding.transientCallbackCount, 0);
+
+    await tester.pumpWidget(host(null));
+    await tester.pump();
+    expect(tester.binding.transientCallbackCount, 0);
+
+    // Control: a real label change still animates — the outer keyed
+    // wrapper carries the reactor label key, not the pill itself.
+    await tester.pumpWidget(
+      host(null, snapshot: commandDeckSnapshot(phase: GamePhase.wave)),
+    );
+    await tester.pump();
+    expect(tester.binding.transientCallbackCount, greaterThan(0));
+  });
+
   testWidgets('reduced motion sets the idle reactor transition to zero', (
     tester,
   ) async {

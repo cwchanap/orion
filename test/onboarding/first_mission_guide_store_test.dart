@@ -20,10 +20,10 @@ void main() {
       );
     });
 
-    test('loads false when the key is missing', () async {
+    test('loads null when the key is missing (no record)', () async {
       final store = await _store({});
 
-      expect(await store.loadCompleted(), isFalse);
+      expect(await store.loadCompleted(), isNull);
     });
 
     test('setCompleted(true) round-trips true', () async {
@@ -34,32 +34,31 @@ void main() {
       expect(await store.loadCompleted(), isTrue);
     });
 
-    test('setCompleted(false) clears back to false', () async {
+    test('setCompleted(false) writes back an explicit false', () async {
       final store = await _store({});
       await store.setCompleted(true);
 
       await store.setCompleted(false);
 
+      // An explicit false is a real record — not the same as no record —
+      // so replay survives restarts instead of resolving through progress.
       expect(await store.loadCompleted(), isFalse);
     });
 
-    test(
-      'unexpected non-bool data under the key falls back to false',
-      () async {
-        final store = await _store(<String, Object>{
-          SharedPreferencesFirstMissionGuideStore.key: 'yes',
-        });
+    test('unexpected non-bool data under the key loads null', () async {
+      final store = await _store(<String, Object>{
+        SharedPreferencesFirstMissionGuideStore.key: 'yes',
+      });
 
-        expect(await store.loadCompleted(), isFalse);
-      },
-    );
+      expect(await store.loadCompleted(), isNull);
+    });
   });
 
   group('InMemoryFirstMissionGuideStore', () {
-    test('starts false and round-trips true and false', () async {
+    test('starts with no record and round-trips true and false', () async {
       final store = InMemoryFirstMissionGuideStore();
 
-      expect(await store.loadCompleted(), isFalse);
+      expect(await store.loadCompleted(), isNull);
 
       await store.setCompleted(true);
       expect(await store.loadCompleted(), isTrue);

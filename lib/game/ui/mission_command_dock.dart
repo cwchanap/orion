@@ -230,16 +230,17 @@ class IdleCommandBar extends StatelessWidget {
     );
   }
 
-  /// The pill keeps its own [ValueKey] so the reactor transition still fires
-  /// on label changes; the guide anchor wraps that keyed pill so the callout
-  /// sees one stable measurement target across transitions.
+  /// The AnimatedSwitcher's direct child keeps ONE runtimeType and key —
+  /// the outer KeyedSubtree's [ValueKey] on the reactor label — whether or
+  /// not the guide anchor is attached, so toggling the guide never fires a
+  /// transition while label changes still do. The inner KeyedSubtree
+  /// carries the (possibly null) guide anchor key.
   Widget _reactorPill({
     required String reactorLabel,
     required String tooltip,
     required String label,
   }) {
     final pill = _PrimaryActionPill(
-      key: ValueKey(reactorLabel),
       tooltip: tooltip,
       label: label,
       icon: snapshot.phase == GamePhase.wave
@@ -247,11 +248,9 @@ class IdleCommandBar extends StatelessWidget {
           : Icons.play_arrow_rounded,
       onPressed: snapshot.canStartWave ? onStartWave : null,
     );
-    final guideKey = waveGuideAnchorKey;
-    if (guideKey == null) return pill;
     return KeyedSubtree(
       key: ValueKey(reactorLabel),
-      child: KeyedSubtree(key: guideKey, child: pill),
+      child: KeyedSubtree(key: waveGuideAnchorKey, child: pill),
     );
   }
 
@@ -270,7 +269,6 @@ class IdleCommandBar extends StatelessWidget {
 /// idle dock never reflows when the phase label changes.
 class _PrimaryActionPill extends StatelessWidget {
   const _PrimaryActionPill({
-    super.key,
     required this.tooltip,
     required this.label,
     required this.icon,
