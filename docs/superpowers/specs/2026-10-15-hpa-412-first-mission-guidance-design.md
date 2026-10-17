@@ -62,7 +62,7 @@ Create `FirstMissionGuideStore` with exactly two operations:
 
 ```dart
 abstract interface class FirstMissionGuideStore {
-  Future<bool> loadCompleted();
+  Future<bool?> loadCompleted();
   Future<void> setCompleted(bool completed);
 }
 ```
@@ -72,7 +72,7 @@ Provide:
 - `SharedPreferencesFirstMissionGuideStore`, backed by the boolean key `orion.firstMissionGuide`.
 - `InMemoryFirstMissionGuideStore` for widget/unit tests.
 
-Missing or malformed data means `false` (show the guide). `setCompleted(true)` is used by Skip/finish; `setCompleted(false)` is used by Settings → Replay Tutorial.
+`null` means no usable record (missing or unreadable); the loader resolves it through campaign progress — a committed Alpha result counts as complete — while an explicit `false` is honored. `setCompleted(true)` is used by Skip/finish; `setCompleted(false)` by Settings → Replay Tutorial.
 
 `OrionGamePage` accepts an optional store. For the production/default path, reuse the same `SharedPreferences` instance already acquired during page startup when possible. The guide flag is loaded before the shell becomes interactive, so a completed player never gets a one-frame tutorial flash or a race where they can enter Alpha before eligibility is known.
 

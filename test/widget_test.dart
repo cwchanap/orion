@@ -4078,11 +4078,13 @@ void main() {
       ),
     });
 
+    // An absent record would resolve through the committed Alpha result —
+    // only an explicit false leaves the stage gate as the sole suppressor.
     await pumpMountedMission(
       tester,
       mapLabel: 'Relay',
       progressStore: progressStore,
-      firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+      firstMissionGuideStore: InMemoryFirstMissionGuideStore(completed: false),
     );
 
     expect(find.byType(FirstMissionGuideCallout), findsNothing);
