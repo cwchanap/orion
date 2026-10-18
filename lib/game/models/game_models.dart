@@ -562,6 +562,7 @@ class GameSnapshot {
     this.nextWavePreview,
     required this.selectedCell,
     required this.selectedTower,
+    this.selectedCellBuildable = true,
     required this.feedback,
     required this.isPaused,
     required this.speedMultiplier,
@@ -600,6 +601,13 @@ class GameSnapshot {
   final WavePreview? nextWavePreview;
   final GridPosition? selectedCell;
   final PlacedTower? selectedTower;
+
+  /// Whether [selectedCell] is a legal build site; false when the session
+  /// reports a path cell (or out-of-bounds position) as selected. Meaningful
+  /// only while [selectedCell] is non-null — the default keeps fixtures that
+  /// select a cell without declaring buildability on the old assume-buildable
+  /// behavior.
+  final bool selectedCellBuildable;
   final String? feedback;
   final bool isPaused;
   final double speedMultiplier;

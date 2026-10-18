@@ -151,6 +151,9 @@ class GameSession {
       nextWavePreview: nextWavePreview,
       selectedCell: selectedCell,
       selectedTower: selectedTower,
+      selectedCellBuildable:
+          selectedCell != null &&
+          BoardLayout.isBuildableCell(selectedCell, pathCells: stage.pathCells),
       feedback: feedback,
       isPaused: isPaused,
       speedMultiplier: speedMultiplier,

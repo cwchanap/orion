@@ -29,7 +29,14 @@ FirstMissionGuideStep? firstMissionGuideStepFor(GameSnapshot snapshot) {
     return null;
   }
 
-  if (snapshot.waveNumber >= 3 && snapshot.acquiredRunModules.isNotEmpty) {
+  // The scanner control collapses and ignores taps while any cell or tower
+  // is selected — point at it only when it can actually open. With a
+  // selection held the lesson falls through to the upgrade rule when that
+  // milestone is still pending, else stays silent until the deselect.
+  if (snapshot.waveNumber >= 3 &&
+      snapshot.acquiredRunModules.isNotEmpty &&
+      snapshot.selectedCell == null &&
+      snapshot.selectedTower == null) {
     return FirstMissionGuideStep.scanner;
   }
 
@@ -49,7 +56,9 @@ FirstMissionGuideStep? firstMissionGuideStepFor(GameSnapshot snapshot) {
     return FirstMissionGuideStep.startWave;
   }
 
-  if (snapshot.selectedCell != null) {
+  // A selected path cell can't take a tower — stay on the cell lesson
+  // rather than send the player at a card whose placement always fails.
+  if (snapshot.selectedCell != null && snapshot.selectedCellBuildable) {
     return FirstMissionGuideStep.towerCard;
   }
 
