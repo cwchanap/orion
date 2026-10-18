@@ -201,6 +201,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return;
       }
 
+      // A missing guide record resolves through campaign progress: a
+      // committed Alpha result means this player cleared the tutorial's
+      // mission before the flag existed.
+      final freezeInferredCompletion =
+          guideCompleted == null &&
+          save.progress.resultFor(OrionCampaign.stageOneId) != null;
+
       setState(() {
         _store = store;
         _progress = save.progress;
@@ -210,14 +217,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _firstMissionGuideStore = guideStore;
         // A missing guide record resolves through campaign progress: a
         // committed Alpha result means this player cleared the tutorial's
-        // mission before the flag existed, so the guide counts as done
-        // (nothing is persisted). An explicit stored false — Replay
-        // Tutorial — is always honored, so replay survives restarts.
+        // mission before the flag existed, so the guide counts as done.
+        // An explicit stored false — Replay Tutorial — is always honored,
+        // so replay survives restarts.
         _firstMissionGuideCompleted =
             guideCompleted ??
             (save.progress.resultFor(OrionCampaign.stageOneId) != null);
         _isLoading = false;
       });
+
+      // Freeze an inferred completion: Reset Campaign wipes the campaign
+      // evidence the inference reads, so only a persisted record keeps the
+      // grandfathered player's tutorial suppressed on the next launch.
+      // Best-effort — a write failure leaves the next load to infer again.
+      if (freezeInferredCompletion) {
+        guideStore?.setCompleted(true).catchError((_) {});
+      }
     } catch (_) {
       if (!mounted) {
         return;
