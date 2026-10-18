@@ -480,15 +480,31 @@ class _OrionGamePageState extends State<OrionGamePage> {
         child: ValueListenableBuilder<GameSnapshot>(
           valueListenable: game.stateNotifier,
           builder: (context, snapshot, _) {
+            // Board-cell guide targets derive from the live board layout;
+            // a resize re-lays the board without publishing a snapshot, so
+            // this builder must also rebuild on size changes or the points
+            // keep pointing at pre-rotation coordinates.
+            MediaQuery.sizeOf(context);
             // First-mission guidance is a soft overlay on eligible Alpha
             // runs only: snapshot facts choose the step, the completion flag
             // and stage choose eligibility. Never a lock.
             final guideEligible =
                 snapshot.stageId == OrionCampaign.stageOneId &&
                 !_firstMissionGuideCompleted;
-            final guideStep = guideEligible
+            final resolvedGuideStep = guideEligible
                 ? firstMissionGuideStepFor(snapshot)
                 : null;
+            // A selected tower the player cannot afford to upgrade leaves
+            // the Upgrade anchor pointing at a disabled button — suppress
+            // the callout until they deselect (it then points at the tower
+            // cell) or gold covers the cost. Mirrors the chrome's own
+            // enable condition in MissionChrome._upgradeSurface.
+            final upgradeAnchorDead =
+                resolvedGuideStep == FirstMissionGuideStep.upgrade &&
+                snapshot.selectedTower != null &&
+                (snapshot.selectedTowerStats == null ||
+                    snapshot.gold < snapshot.selectedTowerStats!.upgradeCost);
+            final guideStep = upgradeAnchorDead ? null : resolvedGuideStep;
 
             // Completion is a snapshot fact, not only a button fact: the
             // auto-start countdown calls game.startWave() directly, so the
