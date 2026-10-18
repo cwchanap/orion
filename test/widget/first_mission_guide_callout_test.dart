@@ -249,6 +249,49 @@ void main() {
     _expectBubbleInsideSafeArea(tester);
   });
 
+  testWidgets('switching the anchor key re-anchors the bubble', (tester) async {
+    _setSize(tester);
+    final anchorA = GlobalKey();
+    final anchorB = GlobalKey();
+    Widget host(GlobalKey anchor) => _host(
+      FirstMissionGuideStep.towerCard,
+      anchorKey: anchor,
+      beneath: [
+        Positioned.fill(
+          child: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(key: anchorA, width: 40, height: 40),
+          ),
+        ),
+        Positioned.fill(
+          child: Align(
+            alignment: Alignment.bottomRight,
+            child: SizedBox(key: anchorB, width: 40, height: 40),
+          ),
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(host(anchorA));
+    await _settle(tester);
+    final nearA = tester.getRect(find.byKey(_bubbleKey));
+
+    // Same widget slot, new anchor key: the stale-geometry reset must not
+    // leave the bubble parked on the old anchor. The bubble is wide
+    // enough that its center x saturates the SafeArea clamp, so the
+    // vertical edge placement is what distinguishes the anchors: below
+    // the top-left anchor, above the bottom-right one.
+    await tester.pumpWidget(host(anchorB));
+    await _settle(tester);
+    final nearB = tester.getRect(find.byKey(_bubbleKey));
+    final rectB = tester.getRect(find.byKey(anchorB));
+
+    expect(nearA.top, greaterThan(tester.getRect(find.byKey(anchorA)).bottom));
+    expect(nearB.bottom, lessThan(rectB.top));
+    expect(nearB.center.dy, greaterThan(nearA.center.dy));
+    _expectBubbleInsideSafeArea(tester);
+  });
+
   testWidgets('the bubble and its button row clear a tall anchored target', (
     tester,
   ) async {

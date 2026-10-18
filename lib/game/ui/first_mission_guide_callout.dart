@@ -76,6 +76,10 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
   /// from the live row's measured height after the first frame.
   double _buttonRowHeight = 24;
 
+  /// The last canvas size the LayoutBuilder saw; a change without a
+  /// widget rebuild (rotation with no fresh snapshot) still re-measures.
+  Size? _lastCanvasSize;
+
   @override
   void didUpdateWidget(covariant FirstMissionGuideCallout oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -167,6 +171,14 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final canvas = constraints.biggest;
+        // A resize that does not rebuild this widget's ancestors
+        // (rotation between snapshot publishes) leaves the measured
+        // anchor rect in stale coordinates — re-measure on any canvas
+        // change, not only on widget updates.
+        if (canvas != _lastCanvasSize) {
+          _lastCanvasSize = canvas;
+          _scheduleMeasure();
+        }
         final padding = MediaQuery.paddingOf(context);
         final safe = Rect.fromLTRB(
           padding.left + _margin,
@@ -209,6 +221,105 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
           ringTarget.dx.clamp(safe.left, safe.right),
           ringTarget.dy.clamp(safe.top, safe.bottom),
         );
+        final measured = _bubbleSize != null;
+        final bubble = Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // The chrome (surface + copy) never joins a gesture arena;
+            // only the overlaid button row below receives tutorial
+            // taps, so gameplay beneath the bubble stays interactive
+            // (soft guidance, never a lock).
+            IgnorePointer(
+              child: KeyedSubtree(
+                key: firstMissionGuideBubbleKey,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: math.max(0, safe.width),
+                  ),
+                  child: OrionSurface(
+                    key: _bubbleMeasureKey,
+                    tier: OrionSurfaceTier.t1,
+                    radius: 16,
+                    padding: const EdgeInsets.fromLTRB(14, 8, 6, 6),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // The copy never swallows a tap meant for the
+                        // control underneath the bubble; the whole
+                        // chrome is hit-transparent anyway.
+                        Semantics(
+                          liveRegion: true,
+                          label: copy,
+                          excludeSemantics: true,
+                          child: IgnorePointer(
+                            child: Text(
+                              copy,
+                              style: OrionTypography.readout(
+                                size: 13,
+                                color: uiTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Reserves the live button row's height so the
+                        // chrome keeps the exact size it had when the
+                        // row was inline.
+                        SizedBox(height: _buttonRowHeight),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // The only tutorial hit targets, overlaid at the chrome's
+            // bottom-right (padding right/bottom = 6).
+            Positioned(
+              right: 6,
+              bottom: 6,
+              child: KeyedSubtree(
+                key: _buttonRowKey,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextButton(
+                      style: TextButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      onPressed: widget.onSkip,
+                      child: Text(
+                        'Skip tutorial',
+                        style: OrionTypography.readout(
+                          size: 12,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ),
+                    if (widget.onDone != null)
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: widget.onDone,
+                        child: Text(
+                          'Got it',
+                          style: OrionTypography.readout(
+                            size: 12,
+                            color: uiTheme.systemCyan,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        );
         return Stack(
           children: [
             // Connector + ring are pure decoration and never join a gesture
@@ -218,120 +329,33 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
                 child: CustomPaint(
                   painter: _GuideConnectorPainter(
                     target: target,
-                    bubbleRect: bubbleRect,
+                    // The spoke starts on the bubble's measured edge; with
+                    // only the first-frame estimate it would draw from a
+                    // spot the bubble never occupied.
+                    bubbleRect: measured ? bubbleRect : Rect.zero,
                     color: uiTheme.systemCyan,
                   ),
                 ),
               ),
             ),
-            AnimatedPositioned(
-              duration: orionMotionDuration(context, orionSheetDuration),
-              curve: Curves.easeOutCubic,
-              left: bubbleRect.left,
-              top: bubbleRect.top,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // The chrome (surface + copy) never joins a gesture arena;
-                  // only the overlaid button row below receives tutorial
-                  // taps, so gameplay beneath the bubble stays interactive
-                  // (soft guidance, never a lock).
-                  IgnorePointer(
-                    child: KeyedSubtree(
-                      key: firstMissionGuideBubbleKey,
-                      child: ConstrainedBox(
-                        constraints: BoxConstraints(
-                          maxWidth: math.max(0, safe.width),
-                        ),
-                        child: OrionSurface(
-                          key: _bubbleMeasureKey,
-                          tier: OrionSurfaceTier.t1,
-                          radius: 16,
-                          padding: const EdgeInsets.fromLTRB(14, 8, 6, 6),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              // The copy never swallows a tap meant for the
-                              // control underneath the bubble; the whole
-                              // chrome is hit-transparent anyway.
-                              Semantics(
-                                liveRegion: true,
-                                label: copy,
-                                excludeSemantics: true,
-                                child: IgnorePointer(
-                                  child: Text(
-                                    copy,
-                                    style: OrionTypography.readout(
-                                      size: 13,
-                                      color: uiTheme.textPrimary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              // Reserves the live button row's height so the
-                              // chrome keeps the exact size it had when the
-                              // row was inline.
-                              SizedBox(height: _buttonRowHeight),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  // The only tutorial hit targets, overlaid at the chrome's
-                  // bottom-right (padding right/bottom = 6).
-                  Positioned(
-                    right: 6,
-                    bottom: 6,
-                    child: KeyedSubtree(
-                      key: _buttonRowKey,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          TextButton(
-                            style: TextButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                            ),
-                            onPressed: widget.onSkip,
-                            child: Text(
-                              'Skip tutorial',
-                              style: OrionTypography.readout(
-                                size: 12,
-                                color: uiTheme.textMuted,
-                              ),
-                            ),
-                          ),
-                          if (widget.onDone != null)
-                            TextButton(
-                              style: TextButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                ),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                              onPressed: widget.onDone,
-                              child: Text(
-                                'Got it',
-                                style: OrionTypography.readout(
-                                  size: 12,
-                                  color: uiTheme.systemCyan,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+            if (measured)
+              AnimatedPositioned(
+                duration: orionMotionDuration(context, orionSheetDuration),
+                curve: Curves.easeOutCubic,
+                left: bubbleRect.left,
+                top: bubbleRect.top,
+                child: bubble,
+              )
+            else
+              // First frame only: the bubble is being measured at its
+              // intrinsic size. Placing it at the estimate and sliding to
+              // the measured rect reads as a pop — keep it laid out (the
+              // measure needs it) but invisible and untouchable.
+              Positioned(
+                left: 0,
+                top: 0,
+                child: IgnorePointer(child: Opacity(opacity: 0, child: bubble)),
               ),
-            ),
           ],
         );
       },
@@ -385,6 +409,11 @@ class _GuideConnectorPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5;
     canvas.drawCircle(target, _ringRadius, stroke..color = color);
+
+    // No measured bubble yet (the first layout frame): the ring alone
+    // still marks the target — a spoke from Rect.zero would streak
+    // across the canvas.
+    if (bubbleRect.isEmpty) return;
 
     // Spoke from the bubble boundary nearest the target up to the ring.
     final start = _boundaryPoint(bubbleRect, target);

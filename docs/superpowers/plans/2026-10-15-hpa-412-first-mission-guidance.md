@@ -136,13 +136,13 @@ Implement `firstMissionGuideStepFor(GameSnapshot snapshot)` with the spec's prec
 
 In `first_mission_guide_store_test.dart`, use `SharedPreferences.setMockInitialValues` and assert:
 
-- missing key loads `false`;
+- missing key loads `null` (no record);
 - `setCompleted(true)` round-trips true;
-- `setCompleted(false)` clears it back to false;
-- unexpected non-bool data under the key falls back to false;
-- `InMemoryFirstMissionGuideStore` implements the same true/false behavior.
+- `setCompleted(false)` writes an explicit false record;
+- unexpected non-bool data under the key loads `null`;
+- `InMemoryFirstMissionGuideStore` implements the same nullable-record behavior.
 
-Then implement `SharedPreferencesFirstMissionGuideStore` with `getBool`/`setBool` (throw `StateError` if a set reports failure; bad stored type loads false) and `InMemoryFirstMissionGuideStore` with one mutable `bool completed`.
+Then implement `SharedPreferencesFirstMissionGuideStore` with `getBool`/`setBool` (throw `StateError` if a set reports failure; bad stored type loads `null`) and `InMemoryFirstMissionGuideStore` with one mutable `bool? completed`.
 
 - [ ] **Step 8: Verify Task 1**
 

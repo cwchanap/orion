@@ -3956,6 +3956,11 @@ void main() {
     );
     expect(tester.takeException(), isNull);
 
+    // The anchored scanner callout takes three frames to reveal — hidden
+    // while the anchor measures, invisible while the bubble measures —
+    // before its buttons are tappable.
+    await tester.pump();
+
     // Got it completes the guide and retires the callout for this run.
     await tester.tap(find.text('Got it'));
     await tester.pump();
@@ -4036,6 +4041,72 @@ void main() {
         find.text('Tap a tower, then Upgrade between waves.'),
         findsNothing,
       );
+    },
+  );
+
+  testWidgets(
+    'selecting a tower while gold is short of the upgrade cost shows no '
+    'callout on the disabled Upgrade button',
+    (tester) async {
+      final game = await pumpMountedMission(
+        tester,
+        firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+      );
+
+      await tapBoardCell(tester, game, const GridPosition(2, 2));
+      await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byTooltip('Start Wave'));
+      await tester.pump();
+      await advanceUntil(
+        tester,
+        game,
+        (snapshot) =>
+            snapshot.phase == GamePhase.build && snapshot.waveNumber == 2,
+      );
+      expect(
+        find.text('Tap a tower, then Upgrade between waves.'),
+        findsOneWidget,
+      );
+
+      // Drain gold below the 70g upgrade cost so the selected tower's
+      // Upgrade button renders disabled. Row 0 is entirely buildable.
+      const fillerCells = [
+        GridPosition(0, 0),
+        GridPosition(1, 0),
+        GridPosition(3, 0),
+        GridPosition(4, 0),
+        GridPosition(5, 0),
+        GridPosition(7, 0),
+      ];
+      var placed = 0;
+      while (game.snapshot.gold >= 70 && placed < fillerCells.length) {
+        await tapBoardCell(tester, game, fillerCells[placed]);
+        await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+        await tester.pump();
+        await tester.pump();
+        placed += 1;
+      }
+      expect(game.snapshot.gold, lessThan(70));
+
+      // Selected + unaffordable: the callout stays away rather than
+      // pointing at a button that cannot respond.
+      await tapBoardCell(tester, game, const GridPosition(2, 2));
+      expect(game.snapshot.selectedTower, isNotNull);
+      await tester.pump();
+      await tester.pump();
+      expect(find.byType(FirstMissionGuideCallout), findsNothing);
+
+      // Deselecting restores the hint, anchored back on the tower cell.
+      await tapBoardCell(tester, game, const GridPosition(6, 0));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text('Tap a tower, then Upgrade between waves.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
     },
   );
 
@@ -4277,6 +4348,55 @@ void main() {
       );
     },
   );
+
+  testWidgets('the default guide store persists Skip through the success-path '
+      'SharedPreferences instance', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(loadRealFonts);
+    await _warmGameImages(tester);
+    addTearDown(() async {
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 100));
+    });
+    OrionDefenseGame? game;
+    // No stores injected anywhere: the page must reuse the
+    // SharedPreferences instance acquired for the default campaign
+    // store to back the default guide store on the successful load
+    // path too — not only in the failure branch covered above.
+    await tester.pumpWidget(
+      MaterialApp(
+        debugShowCheckedModeBanner: false,
+        theme: orionThemeData,
+        home: OrionGamePage(
+          onGameCreated: (value) => game = value,
+          gameFeedback: const NoOpGameFeedback(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    // The mounted game loop never settles under fake async: fixed pumps.
+    await tester.pump();
+    await tester.pump();
+    expect(game!.isMounted, isTrue);
+    expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
+
+    await tester.tap(find.text('Skip tutorial'));
+    await tester.pump();
+    await tester.pump();
+
+    final preferences = await SharedPreferences.getInstance();
+    expect(
+      preferences.getBool(SharedPreferencesFirstMissionGuideStore.key),
+      isTrue,
+      reason:
+          'Skip must persist through the default guide store when '
+          'campaign loading succeeded',
+    );
+  });
 
   testWidgets(
     'Reset Campaign leaves a completed first-mission guide completed',
