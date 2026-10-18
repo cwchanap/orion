@@ -569,6 +569,7 @@ class GameSnapshot {
     required this.autoStartCountdownRemaining,
     this.pendingRunModuleOffer,
     List<RunModuleId> acquiredRunModules = const [],
+    List<PlacedTower> placedTowers = const [],
     this.selectedTowerStats,
     this.selectedTowerUpgradeStats,
     Map<TowerSpecialization, TowerStats> selectedTowerSpecializationStats =
@@ -577,6 +578,7 @@ class GameSnapshot {
   }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes),
        stageModifiers = List.unmodifiable(stageModifiers),
        acquiredRunModules = List.unmodifiable(acquiredRunModules),
+       placedTowers = List.unmodifiable(placedTowers),
        selectedTowerSpecializationStats = Map.unmodifiable(
          selectedTowerSpecializationStats,
        ),
@@ -605,6 +607,10 @@ class GameSnapshot {
   final double? autoStartCountdownRemaining;
   final RunModuleOffer? pendingRunModuleOffer;
   final List<RunModuleId> acquiredRunModules;
+
+  /// Neutral read-only projection of every placed tower at snapshot time;
+  /// not a live view of later session mutations.
+  final List<PlacedTower> placedTowers;
   final TowerStats? selectedTowerStats;
 
   /// Resolved Level 2 stats for [selectedTower]; non-null only while it can

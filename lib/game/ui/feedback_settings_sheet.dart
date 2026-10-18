@@ -4,20 +4,27 @@ import '../feedback/feedback_preferences.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-/// Self-contained settings sheet for the two persisted feedback toggles.
+/// Self-contained settings sheet for the two persisted feedback toggles plus
+/// the first-mission tutorial replay action.
 ///
 /// Owns only a local draft of the preferences and pops the final value when
-/// Done is tapped. Persistence and platform feedback calls live in the
-/// page, never here.
+/// Done is tapped. Persistence, platform feedback calls, and the tutorial
+/// store live in the page, never here — replay is a plain async callback.
 class FeedbackSettingsSheet extends StatefulWidget {
   const FeedbackSettingsSheet({
     super.key,
     required this.initialPreferences,
     required this.reduceMotion,
+    this.onReplayTutorial,
   });
 
   final FeedbackPreferences initialPreferences;
   final bool reduceMotion;
+
+  /// Invoked once per Replay Tutorial tap; null (or an already-confirmed
+  /// replay) keeps the action disabled. The page owns whatever the callback
+  /// persists.
+  final Future<void> Function()? onReplayTutorial;
 
   @override
   State<FeedbackSettingsSheet> createState() => _FeedbackSettingsSheetState();
@@ -25,10 +32,39 @@ class FeedbackSettingsSheet extends StatefulWidget {
 
 class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
   late FeedbackPreferences _draft = widget.initialPreferences;
+  bool _isReplayInFlight = false;
+  bool _isReplayConfirmed = false;
+
+  Future<void> _replayTutorial() async {
+    if (_isReplayInFlight ||
+        _isReplayConfirmed ||
+        widget.onReplayTutorial == null) {
+      return;
+    }
+    setState(() => _isReplayInFlight = true);
+    try {
+      await widget.onReplayTutorial!();
+      if (mounted) {
+        setState(() => _isReplayConfirmed = true);
+      }
+    } catch (_) {
+      // Replay request failed; leave the action enabled for another attempt.
+    } finally {
+      if (mounted) {
+        setState(() => _isReplayInFlight = false);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    // The row reads disabled unless the page supplied a callback and no
+    // replay is in flight or already confirmed.
+    final canReplay =
+        widget.onReplayTutorial != null &&
+        !_isReplayInFlight &&
+        !_isReplayConfirmed;
 
     return SafeArea(
       child: Padding(
@@ -38,7 +74,7 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              OrionTitle('Feedback', color: uiTheme.textPrimary),
+              OrionTitle('Settings', color: uiTheme.textPrimary),
               const SizedBox(height: 8),
               SwitchListTile(
                 title: const Text('Sound Effects'),
@@ -78,6 +114,16 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
                         : Icons.radio_button_unchecked,
                   ),
                 ),
+              ),
+              ListTile(
+                title: const Text('Replay Tutorial'),
+                subtitle: _isReplayConfirmed
+                    ? const Text(
+                        'Tutorial will replay on your next Outpost Alpha run.',
+                      )
+                    : null,
+                enabled: canReplay,
+                onTap: canReplay ? _replayTutorial : null,
               ),
               const SizedBox(height: 8),
               FilledButton(

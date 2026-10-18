@@ -43,6 +43,10 @@ class MissionChrome extends StatefulWidget {
     this.towerAnchor,
     this.onInspectTower,
     this.onBoardViewportChanged,
+    this.laserGuideAnchorKey,
+    this.waveGuideAnchorKey,
+    this.upgradeGuideAnchorKey,
+    this.scannerGuideAnchorKey,
   });
 
   final GameSnapshot snapshot;
@@ -67,6 +71,14 @@ class MissionChrome extends StatefulWidget {
   /// Closed scene-1e drag-preview event family, forwarded from the dock to
   /// the page. Presentation only — the page maps events onto the game.
   final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
+
+  /// Optional first-mission guide anchors, forwarded to the dock/radial/
+  /// scanner owners. Anchor keys WRAP existing surfaces — they never replace
+  /// gameplay ValueKeys — and stay null unless the page supplies them.
+  final Key? laserGuideAnchorKey;
+  final Key? waveGuideAnchorKey;
+  final Key? upgradeGuideAnchorKey;
+  final Key? scannerGuideAnchorKey;
 
   @override
   State<MissionChrome> createState() => _MissionChromeState();
@@ -222,6 +234,7 @@ class _MissionChromeState extends State<MissionChrome> {
                             widget.snapshot.selectedCell != null ||
                             widget.snapshot.selectedTower != null,
                         onCollapsedTapIntercept: widget.onBoardTapIntercept,
+                        collapsedGuideAnchorKey: widget.scannerGuideAnchorKey,
                       ),
                     ],
                   ],
@@ -252,6 +265,7 @@ class _MissionChromeState extends State<MissionChrome> {
                       onInspect: widget.onInspectTower!,
                       onSell: widget.onSell,
                       onTargetingChanged: widget.onTargetingChanged,
+                      upgradeGuideAnchorKey: widget.upgradeGuideAnchorKey,
                     ),
                   ),
                 ),
@@ -303,6 +317,8 @@ class _MissionChromeState extends State<MissionChrome> {
                           onSell: widget.onSell,
                           onPlacementPreviewEvent:
                               widget.onPlacementPreviewEvent,
+                          laserGuideAnchorKey: widget.laserGuideAnchorKey,
+                          waveGuideAnchorKey: widget.waveGuideAnchorKey,
                         ),
                       ),
                     ),
@@ -401,6 +417,7 @@ class TowerRadialActions extends StatelessWidget {
     required this.onInspect,
     required this.onSell,
     required this.onTargetingChanged,
+    this.upgradeGuideAnchorKey,
   });
   final GameSnapshot snapshot;
   final VoidCallback onUpgrade;
@@ -408,16 +425,14 @@ class TowerRadialActions extends StatelessWidget {
   final VoidCallback onSell;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
 
+  /// Optional first-mission guide anchor wrapped around the top
+  /// Upgrade/Specialize surface only.
+  final Key? upgradeGuideAnchorKey;
+
   @override
   Widget build(BuildContext context) {
     final tower = snapshot.selectedTower!;
-    final stats = snapshot.selectedTowerStats;
     final build = snapshot.phase == GamePhase.build;
-    final canUpgrade =
-        build &&
-        tower.canUpgrade &&
-        stats != null &&
-        snapshot.gold >= stats.upgradeCost;
     final t = OrionUiTheme.of(context);
     final labelStyle = OrionTypography.readout(size: 11, color: t.creditGold);
     return IntrinsicWidth(
@@ -426,40 +441,15 @@ class TowerRadialActions extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            OrionSurface(
-              tier: OrionSurfaceTier.t1,
-              radius: 28,
-              padding: EdgeInsets.zero,
-              child: IconButton(
-                constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
-                tooltip: tower.canUpgrade
-                    ? 'Upgrade ${stats?.upgradeCost ?? ''}'
-                    : tower.canSpecialize
-                    ? 'Specialize tower'
-                    : 'Max level',
-                onPressed: tower.canUpgrade
-                    ? (canUpgrade ? onUpgrade : null)
-                    : tower.canSpecialize
-                    ? onInspect
-                    : null,
-                icon: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      tower.canUpgrade
-                          ? Icons.upgrade
-                          : tower.canSpecialize
-                          ? Icons.auto_awesome
-                          : Icons.check,
-                      color: t.systemCyan,
-                      size: 22,
-                    ),
-                    if (tower.canUpgrade && stats != null)
-                      Text('${stats.upgradeCost}', style: labelStyle),
-                  ],
-                ),
-              ),
-            ),
+            // Guide anchor wraps the top Upgrade/Specialize surface; the
+            // surface itself (and its tooltip/semantics) is unchanged.
+            if (upgradeGuideAnchorKey != null)
+              KeyedSubtree(
+                key: upgradeGuideAnchorKey,
+                child: _upgradeSurface(t, labelStyle),
+              )
+            else
+              _upgradeSurface(t, labelStyle),
             const SizedBox(height: 2),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -518,6 +508,52 @@ class TowerRadialActions extends StatelessWidget {
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The top Upgrade/Specialize surface, unchanged; split out only so the
+  /// optional guide anchor can wrap it.
+  Widget _upgradeSurface(OrionUiTheme t, TextStyle labelStyle) {
+    final tower = snapshot.selectedTower!;
+    final stats = snapshot.selectedTowerStats;
+    final canUpgrade =
+        snapshot.phase == GamePhase.build &&
+        tower.canUpgrade &&
+        stats != null &&
+        snapshot.gold >= stats.upgradeCost;
+    return OrionSurface(
+      tier: OrionSurfaceTier.t1,
+      radius: 28,
+      padding: EdgeInsets.zero,
+      child: IconButton(
+        constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
+        tooltip: tower.canUpgrade
+            ? 'Upgrade ${stats?.upgradeCost ?? ''}'
+            : tower.canSpecialize
+            ? 'Specialize tower'
+            : 'Max level',
+        onPressed: tower.canUpgrade
+            ? (canUpgrade ? onUpgrade : null)
+            : tower.canSpecialize
+            ? onInspect
+            : null,
+        icon: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              tower.canUpgrade
+                  ? Icons.upgrade
+                  : tower.canSpecialize
+                  ? Icons.auto_awesome
+                  : Icons.check,
+              color: t.systemCyan,
+              size: 22,
+            ),
+            if (tower.canUpgrade && stats != null)
+              Text('${stats.upgradeCost}', style: labelStyle),
           ],
         ),
       ),

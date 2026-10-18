@@ -14,11 +14,15 @@ import '../campaign/tech_tree.dart';
 import '../feedback/feedback_preferences.dart';
 import '../feedback/game_feedback.dart';
 import '../models/game_models.dart';
+import '../onboarding/first_mission_guide.dart';
+import '../onboarding/first_mission_guide_store.dart';
 import '../orion_defense_game.dart';
+import '../rules/module_offer_picker.dart';
 import '../rules/run_module_unlocks.dart';
 import '../rules/stage_modifier_rules.dart';
 import 'codex_view.dart';
 import 'feedback_settings_sheet.dart';
+import 'first_mission_guide_callout.dart';
 import 'mission_chrome.dart';
 import 'mission_command_dock.dart';
 import 'mission_report_content.dart';
@@ -50,6 +54,8 @@ class OrionGamePage extends StatefulWidget {
     this.progressStore,
     this.progressStoreLoader,
     this.feedbackPreferencesStore,
+    this.firstMissionGuideStore,
+    this.moduleOfferPicker,
     this.gameFeedback,
     this.onGameCreated,
   });
@@ -57,6 +63,16 @@ class OrionGamePage extends StatefulWidget {
   final CampaignProgressStore? progressStore;
   final Future<CampaignProgressStore> Function()? progressStoreLoader;
   final FeedbackPreferencesStore? feedbackPreferencesStore;
+
+  /// Optional persistence for the first-mission tutorial completion flag.
+  /// Defaults to a SharedPreferences-backed store (reusing the campaign's
+  /// instance on the default load path).
+  final FirstMissionGuideStore? firstMissionGuideStore;
+
+  /// Optional deterministic seam for run-module draft offers; null keeps the
+  /// game's built-in (random) picking.
+  final ModuleOfferPicker? moduleOfferPicker;
+
   final GameFeedback? gameFeedback;
   final ValueChanged<OrionDefenseGame>? onGameCreated;
 
@@ -83,6 +99,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
   FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
   FeedbackPreferencesStore? _feedbackPreferencesStore;
   bool _feedbackPreferencesLoaded = false;
+  FirstMissionGuideStore? _firstMissionGuideStore;
+  bool _firstMissionGuideCompleted = false;
+  // Guide anchor keys wrap the existing gameplay surfaces (dock cards, wave
+  // pill, radial Upgrade, collapsed scanner, draft frame) so the callout can
+  // point at real widgets; they are only attached while their step is active.
+  final GlobalKey _laserGuideAnchorKey = GlobalKey();
+  final GlobalKey _waveGuideAnchorKey = GlobalKey();
+  final GlobalKey _upgradeGuideAnchorKey = GlobalKey();
+  final GlobalKey _scannerGuideAnchorKey = GlobalKey();
+  final GlobalKey _moduleDraftGuideAnchorKey = GlobalKey();
   bool _isSavingFeedback = false;
   late final GameFeedback _gameFeedback;
   _ShellView _activeView = _ShellView.worldMap;
@@ -139,13 +165,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
   Future<void> _loadProgress() async {
     CampaignProgressStore? store = widget.progressStore;
     FeedbackPreferencesStore? feedbackStore = widget.feedbackPreferencesStore;
+    // The first-mission guide flag must resolve (or fall back to false)
+    // before the loading gate clears, so it loads alongside the campaign.
+    FirstMissionGuideStore? guideStore = widget.firstMissionGuideStore;
 
     try {
+      SharedPreferences? preferences;
       if (store == null && widget.progressStoreLoader == null) {
         // Campaign falls back to the default SharedPreferences-backed store.
         // When the feedback store is also defaulted, one SharedPreferences
         // instance backs both.
-        final preferences = await SharedPreferences.getInstance();
+        preferences = await SharedPreferences.getInstance();
         store = SharedPreferencesCampaignProgressStore(
           preferences: preferences,
           knownStages: OrionCampaign.stages,
@@ -160,11 +190,23 @@ class _OrionGamePageState extends State<OrionGamePage> {
         store = await loader!();
       }
 
+      // The default path reuses the already-acquired SharedPreferences; a
+      // custom campaign store fetches an instance solely for the guide.
+      guideStore ??= await _defaultFirstMissionGuideStore(preferences);
+      final guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
+
       final save = await store.load();
 
       if (!mounted) {
         return;
       }
+
+      // A missing guide record resolves through campaign progress: a
+      // committed Alpha result means this player cleared the tutorial's
+      // mission before the flag existed.
+      final freezeInferredCompletion =
+          guideCompleted == null &&
+          save.progress.resultFor(OrionCampaign.stageOneId) != null;
 
       setState(() {
         _store = store;
@@ -172,9 +214,39 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _techTree = save.techTree;
         _committedProgress = save.progress;
         _committedTechTree = save.techTree;
+        _firstMissionGuideStore = guideStore;
+        // A missing guide record resolves through campaign progress: a
+        // committed Alpha result means this player cleared the tutorial's
+        // mission before the flag existed, so the guide counts as done.
+        // An explicit stored false — Replay Tutorial — is always honored,
+        // so replay survives restarts.
+        _firstMissionGuideCompleted =
+            guideCompleted ??
+            (save.progress.resultFor(OrionCampaign.stageOneId) != null);
         _isLoading = false;
       });
+
+      // Freeze an inferred completion: Reset Campaign wipes the campaign
+      // evidence the inference reads, so only a persisted record keeps the
+      // grandfathered player's tutorial suppressed on the next launch.
+      // Best-effort — a write failure leaves the next load to infer again.
+      if (freezeInferredCompletion) {
+        guideStore?.setCompleted(true).catchError((_) {});
+      }
     } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      // The gate may clear on a campaign failure before a guide store could
+      // be built; build the default store here so Skip/Got it still
+      // persist, and keep the null-fallback if that fails too.
+      guideStore ??= await _defaultFirstMissionGuideStore(null);
+      if (!mounted) {
+        return;
+      }
+
+      final guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
       if (!mounted) {
         return;
       }
@@ -185,6 +257,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _techTree = CampaignTechTree();
         _committedProgress = CampaignProgress();
         _committedTechTree = CampaignTechTree();
+        _firstMissionGuideStore = guideStore;
+        _firstMissionGuideCompleted = guideCompleted ?? false;
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
       });
@@ -250,6 +324,49 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _feedbackPreferencesLoaded = true;
       });
     }
+  }
+
+  /// Builds the default SharedPreferences-backed guide store, reusing an
+  /// already-acquired instance when there is one. SharedPreferences problems
+  /// (e.g. tests without mock initial values) leave the store null; the flag
+  /// then reads as false for the process.
+  Future<FirstMissionGuideStore?> _defaultFirstMissionGuideStore(
+    SharedPreferences? preferences,
+  ) async {
+    try {
+      return SharedPreferencesFirstMissionGuideStore(
+        preferences: preferences ?? await SharedPreferences.getInstance(),
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Store failures never block the guide flag; they read as no record,
+  /// which the callsite resolves through campaign progress.
+  Future<bool?> _loadFirstMissionGuideCompleted(
+    FirstMissionGuideStore? store,
+  ) async {
+    if (store == null) {
+      return null;
+    }
+    try {
+      return await store.loadCompleted();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// In-memory state wins immediately; the store write-through is best-effort
+  /// and a failure never touches campaign or feedback breadcrumbs.
+  void _setFirstMissionGuideCompleted(bool completed) {
+    if (_firstMissionGuideCompleted == completed) {
+      return;
+    }
+    setState(() {
+      _firstMissionGuideCompleted = completed;
+    });
+    _firstMissionGuideStore?.setCompleted(completed).catchError((_) {});
   }
 
   @override
@@ -363,6 +480,61 @@ class _OrionGamePageState extends State<OrionGamePage> {
         child: ValueListenableBuilder<GameSnapshot>(
           valueListenable: game.stateNotifier,
           builder: (context, snapshot, _) {
+            // First-mission guidance is a soft overlay on eligible Alpha
+            // runs only: snapshot facts choose the step, the completion flag
+            // and stage choose eligibility. Never a lock.
+            final guideEligible =
+                snapshot.stageId == OrionCampaign.stageOneId &&
+                !_firstMissionGuideCompleted;
+            final guideStep = guideEligible
+                ? firstMissionGuideStepFor(snapshot)
+                : null;
+
+            // Completion is a snapshot fact, not only a button fact: the
+            // auto-start countdown calls game.startWave() directly, so the
+            // wave leaving the build phase under the scanner lesson's
+            // conditions retires the tutorial even when the chrome's
+            // onStartWave never ran. setState inside build is illegal —
+            // defer the flag flip to a post-frame callback.
+            if (guideEligible &&
+                snapshot.phase != GamePhase.build &&
+                snapshot.waveNumber >= 3 &&
+                snapshot.acquiredRunModules.isNotEmpty) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) {
+                  _setFirstMissionGuideCompleted(true);
+                }
+              });
+            }
+
+            GlobalKey? guideAnchorKey;
+            Offset? guideTargetPoint;
+            switch (guideStep) {
+              case null:
+                break;
+              case FirstMissionGuideStep.buildCell:
+                guideTargetPoint = game.boardCellCenter(
+                  const GridPosition(2, 2),
+                );
+              case FirstMissionGuideStep.towerCard:
+                guideAnchorKey = _laserGuideAnchorKey;
+              case FirstMissionGuideStep.startWave:
+                guideAnchorKey = _waveGuideAnchorKey;
+              case FirstMissionGuideStep.upgrade:
+                // The resolver guarantees a tower exists for the upgrade
+                // step, so the unselected branch can always point at one.
+                if (snapshot.selectedTower == null) {
+                  guideTargetPoint = game.boardCellCenter(
+                    snapshot.placedTowers.first.position,
+                  );
+                } else {
+                  guideAnchorKey = _upgradeGuideAnchorKey;
+                }
+              case FirstMissionGuideStep.salvageModule:
+                guideAnchorKey = _moduleDraftGuideAnchorKey;
+              case FirstMissionGuideStep.scanner:
+                guideAnchorKey = _scannerGuideAnchorKey;
+            }
             return Stack(
               children: [
                 // The GameWidget fills the entire SafeArea so the Flame
@@ -404,6 +576,25 @@ class _OrionGamePageState extends State<OrionGamePage> {
                         : game.boardCellCenter(
                             snapshot.selectedTower!.position,
                           ),
+                    // Guide anchor keys are only attached for the active
+                    // step, so gameplay surfaces stay untouched otherwise.
+                    laserGuideAnchorKey:
+                        guideStep == FirstMissionGuideStep.towerCard
+                        ? _laserGuideAnchorKey
+                        : null,
+                    waveGuideAnchorKey:
+                        guideStep == FirstMissionGuideStep.startWave
+                        ? _waveGuideAnchorKey
+                        : null,
+                    upgradeGuideAnchorKey:
+                        guideStep == FirstMissionGuideStep.upgrade &&
+                            snapshot.selectedTower != null
+                        ? _upgradeGuideAnchorKey
+                        : null,
+                    scannerGuideAnchorKey:
+                        guideStep == FirstMissionGuideStep.scanner
+                        ? _scannerGuideAnchorKey
+                        : null,
                     onInspectTower:
                         _inspectedTowerId == snapshot.selectedTower?.id
                         ? null
@@ -413,7 +604,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           ),
                     onBoardTapIntercept: _routeTapToBoard,
                     onWorldMap: game.returnToMap,
-                    onStartWave: game.startWave,
+                    onStartWave: () {
+                      // The scanner lesson completes the tutorial: flip the
+                      // flag before the wave starts so no later snapshot
+                      // still shows guidance.
+                      if (guideStep == FirstMissionGuideStep.scanner) {
+                        _setFirstMissionGuideCompleted(true);
+                      }
+                      game.startWave();
+                    },
                     onTogglePause: game.togglePause,
                     onSpeedSelected: game.setSpeedMultiplier,
                     onToggleAutoStart: game.toggleAutoStart,
@@ -464,6 +663,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     child: RunModuleDraftPanel(
                       offer: offer,
                       beneficiaries: snapshot.pendingRunModuleBeneficiaries,
+                      guideAnchorKey:
+                          guideStep == FirstMissionGuideStep.salvageModule
+                          ? _moduleDraftGuideAnchorKey
+                          : null,
                       onSelected: (moduleId) =>
                           game.selectRunModule(offer.offerId, moduleId),
                     ),
@@ -497,6 +700,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           : _returnFromMissionReport,
                       onRetrySave: _missionSaveState == MissionSaveState.failed
                           ? _saveMissionResult
+                          : null,
+                    ),
+                  ),
+                // Rendered last so it sits above the module panel/report
+                // layers while remaining non-modal (no barrier, no lock).
+                if (guideStep case final step?)
+                  Positioned.fill(
+                    child: FirstMissionGuideCallout(
+                      step: step,
+                      anchorKey: guideAnchorKey,
+                      targetPoint: guideTargetPoint,
+                      onSkip: () => _setFirstMissionGuideCompleted(true),
+                      // "Got it" is scanner-only: the callout renders it iff
+                      // onDone is non-null.
+                      onDone: step == FirstMissionGuideStep.scanner
+                          ? () => _setFirstMissionGuideCompleted(true)
                           : null,
                     ),
                   ),
@@ -550,6 +769,26 @@ class _OrionGamePageState extends State<OrionGamePage> {
       builder: (context) => FeedbackSettingsSheet(
         initialPreferences: _feedbackPreferences,
         reduceMotion: MediaQuery.disableAnimationsOf(context),
+        onReplayTutorial: () async {
+          // The sheet confirms only after this future completes, so the
+          // flag must be reset AND persisted here: a store problem throws
+          // back to the sheet, which leaves the action enabled and shows
+          // no confirmation. The write is unconditional — an in-memory
+          // false over a stale persisted true must still rewrite the
+          // record.
+          var store = _firstMissionGuideStore;
+          store ??= await _defaultFirstMissionGuideStore(null);
+          if (store == null) {
+            throw StateError('First-mission guide store is unavailable.');
+          }
+          _firstMissionGuideStore = store;
+          await store.setCompleted(false);
+          if (mounted) {
+            setState(() {
+              _firstMissionGuideCompleted = false;
+            });
+          }
+        },
       ),
     );
 
@@ -642,6 +881,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       stage: stage,
       campaignModifiers: campaignModifiers,
       availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
+      moduleOfferPicker: widget.moduleOfferPicker,
       onStageWon: _handleStageWon,
       onReturnToMap: _returnFromMissionReport,
       gameFeedback: _gameFeedback,
