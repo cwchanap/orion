@@ -7,6 +7,8 @@ GameSnapshot _snapshot({
   int waveNumber = 1,
   List<PlacedTower> placedTowers = const [],
   GridPosition? selectedCell,
+  bool selectedCellBuildable = true,
+  PlacedTower? selectedTower,
   RunModuleOffer? pendingRunModuleOffer,
   List<RunModuleId> acquiredRunModules = const [],
 }) {
@@ -23,7 +25,8 @@ GameSnapshot _snapshot({
     unlockedTowerTypes: const [TowerType.laser],
     stageModifiers: const [],
     selectedCell: selectedCell,
-    selectedTower: null,
+    selectedCellBuildable: selectedCellBuildable,
+    selectedTower: selectedTower,
     feedback: null,
     isPaused: false,
     speedMultiplier: 1,
@@ -68,6 +71,20 @@ void main() {
           _snapshot(selectedCell: const GridPosition(2, 2)),
         ),
         FirstMissionGuideStep.towerCard,
+      );
+    });
+
+    test('keeps the cell lesson when the selected cell is a path cell', () {
+      // A selected-but-unbuildable cell can't take a tower; advancing to the
+      // card lesson would point at an action that always fails placement.
+      expect(
+        firstMissionGuideStepFor(
+          _snapshot(
+            selectedCell: const GridPosition(3, 2),
+            selectedCellBuildable: false,
+          ),
+        ),
+        FirstMissionGuideStep.buildCell,
       );
     });
 
@@ -160,6 +177,66 @@ void main() {
             phase: GamePhase.wave,
             waveNumber: 3,
             placedTowers: [_tower()],
+            acquiredRunModules: const [RunModuleId.heavyCaliber],
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('a cell selection during the scanner lesson redirects to a pending '
+        'upgrade', () {
+      // The collapsed scanner ignores taps while a selection is held; the
+      // guide falls back to the still-unsatisfied upgrade milestone.
+      expect(
+        firstMissionGuideStepFor(
+          _snapshot(
+            waveNumber: 3,
+            placedTowers: [_tower()],
+            selectedCell: const GridPosition(4, 8),
+            acquiredRunModules: const [RunModuleId.heavyCaliber],
+          ),
+        ),
+        FirstMissionGuideStep.upgrade,
+      );
+    });
+
+    test('a tower selection during the scanner lesson redirects to a pending '
+        'upgrade', () {
+      expect(
+        firstMissionGuideStepFor(
+          _snapshot(
+            waveNumber: 3,
+            placedTowers: [_tower()],
+            selectedTower: _tower(),
+            acquiredRunModules: const [RunModuleId.heavyCaliber],
+          ),
+        ),
+        FirstMissionGuideStep.upgrade,
+      );
+    });
+
+    test('a selection during the scanner lesson stays silent once upgrade is '
+        'done', () {
+      // No fallback lesson remains: the callout hides until deselect
+      // rather than anchoring on the disabled collapsed scanner.
+      expect(
+        firstMissionGuideStepFor(
+          _snapshot(
+            waveNumber: 3,
+            placedTowers: [_tower(level: 2)],
+            selectedCell: const GridPosition(4, 8),
+            acquiredRunModules: const [RunModuleId.heavyCaliber],
+          ),
+        ),
+        isNull,
+      );
+      expect(
+        firstMissionGuideStepFor(
+          _snapshot(
+            waveNumber: 3,
+            placedTowers: [_tower(level: 2)],
+            selectedTower: _tower(level: 2),
             acquiredRunModules: const [RunModuleId.heavyCaliber],
           ),
         ),

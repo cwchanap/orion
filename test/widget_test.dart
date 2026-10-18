@@ -4110,6 +4110,111 @@ void main() {
     },
   );
 
+  testWidgets(
+    'selecting a path cell keeps the build-cell lesson instead of the tower '
+    'card',
+    (tester) async {
+      final game = await pumpMountedMission(
+        tester,
+        firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+      );
+      expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
+
+      // (3, 2) is a path cell on Alpha: it still selects (enemies stay
+      // inspectable there during waves), but no tower can be placed on it,
+      // so the guide must not advance to a card that can only fail.
+      await tapBoardCell(tester, game, const GridPosition(3, 2));
+      expect(game.snapshot.selectedCell, const GridPosition(3, 2));
+      expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
+      expect(find.text('Pick a tower.'), findsNothing);
+
+      // A buildable selection still advances the lesson as before.
+      await tapBoardCell(tester, game, const GridPosition(2, 2));
+      expect(find.text('Pick a tower.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
+    'selecting a cell or tower during the scanner lesson redirects it to a '
+    'usable target',
+    (tester) async {
+      final game = await pumpMountedMission(
+        tester,
+        firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+        moduleOfferPicker: _ScriptedModuleOfferPicker(_scriptedModuleOffers),
+      );
+
+      // Reach the Wave-3 scanner lesson with the laser still at Level 1.
+      await tapBoardCell(tester, game, const GridPosition(2, 2));
+      await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+      await tester.pump();
+      await tester.pump();
+      await tester.tap(find.byTooltip('Start Wave'));
+      await tester.pump();
+      await advanceUntil(
+        tester,
+        game,
+        (snapshot) =>
+            snapshot.phase == GamePhase.build && snapshot.waveNumber == 2,
+      );
+      await tester.tap(find.byTooltip('Start Wave'));
+      await tester.pump();
+      await advanceUntil(
+        tester,
+        game,
+        (snapshot) => snapshot.pendingRunModuleOffer != null,
+      );
+      await tester.tap(find.text('Heavy Caliber'));
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.text('Check the scanner before the next wave.'),
+        findsOneWidget,
+      );
+
+      // A cell selection collapses the scanner into a control that ignores
+      // taps: the callout leaves it and points at the still-pending upgrade
+      // milestone instead.
+      await tapBoardCell(tester, game, const GridPosition(4, 8));
+      expect(game.snapshot.selectedCell, const GridPosition(4, 8));
+      expect(
+        find.text('Check the scanner before the next wave.'),
+        findsNothing,
+      );
+      expect(
+        find.text('Tap a tower, then Upgrade between waves.'),
+        findsOneWidget,
+      );
+
+      // Selecting the tower collapses the scanner the same way; the upgrade
+      // copy re-anchors on the radial's usable Upgrade surface.
+      await tapBoardCell(tester, game, const GridPosition(2, 2));
+      expect(game.snapshot.selectedTower, isNotNull);
+      expect(
+        find.text('Check the scanner before the next wave.'),
+        findsNothing,
+      );
+      expect(
+        find.text('Tap a tower, then Upgrade between waves.'),
+        findsOneWidget,
+      );
+
+      // Deselecting restores the scanner callout once the control can open.
+      game.handleBoardTap(const Offset(-1, -1));
+      await tester.pump();
+      await tester.pump();
+      expect(game.snapshot.selectedCell, isNull);
+      expect(game.snapshot.selectedTower, isNull);
+      expect(
+        find.text('Check the scanner before the next wave.'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('the guide callout leaves gameplay interactive while visible', (
     tester,
   ) async {
