@@ -4297,6 +4297,58 @@ void main() {
     },
   );
 
+  testWidgets(
+    'an Alpha-result-inferred completion persists through Reset Campaign '
+    'and relaunch',
+    (tester) async {
+      // A veteran who cleared Alpha before the flag existed has no record;
+      // the load-time inference must be frozen into the guide store, or
+      // wiping the campaign — which removes the result the inference
+      // reads — re-arms the tutorial on the next launch.
+      final progressStore = await storeWithResults({
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.silver,
+          bestBaseHealth: 14,
+        ),
+      });
+      final guideStore = InMemoryFirstMissionGuideStore();
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      // The committed Alpha result renders a medal sprite on the world map.
+      await tester.runAsync(loadRealFonts);
+      await _warmGameImages(tester);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: progressStore,
+          firstMissionGuideStore: guideStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // The Alpha-result inference is frozen into the guide store at load.
+      expect(guideStore.completed, isTrue);
+
+      await tester.tap(find.byTooltip('Reset Campaign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+      expect(guideStore.completed, isTrue);
+
+      // Relaunch into Alpha: the reset campaign has no result left to
+      // infer from, so only the persisted record suppresses the tutorial.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 100));
+      await pumpMountedMission(
+        tester,
+        progressStore: progressStore,
+        firstMissionGuideStore: guideStore,
+      );
+      expect(find.byType(FirstMissionGuideCallout), findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Replay Tutorial re-arms the guide for the next Alpha run', (
     tester,
   ) async {
