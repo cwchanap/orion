@@ -97,7 +97,7 @@ Avoid a new registry, ownership collection, per-stage duplicate strings, save mi
 - Guard on captured `_missionPriorResult == null`; already-cleared replay, later medal improvement, and loss do not falsely celebrate first recovery.
 - Keep `MissionRewardFact` and `mission_report_panel.dart` unchanged unless a specific measured layout failure appears.
 
-Draft cards gain the six affinity labels and effect copy from the existing catalog; do not change picker UI.
+Draft cards gain the six affinity labels and effect copy from the existing catalog; update the existing label plumbing without changing picker layout, interaction, or selection policy.
 
 ## Acceptance and validation
 
