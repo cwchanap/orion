@@ -80,6 +80,11 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
   /// widget rebuild (rotation with no fresh snapshot) still re-measures.
   Size? _lastCanvasSize;
 
+  /// Guards the in-flight post-frame measure: at most one callback is
+  /// ever queued, so builds and the anchored re-arm below cannot stack
+  /// duplicates across a frame.
+  bool _measurePending = false;
+
   @override
   void didUpdateWidget(covariant FirstMissionGuideCallout oldWidget) {
     super.didUpdateWidget(oldWidget);
@@ -93,7 +98,12 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
   }
 
   void _scheduleMeasure() {
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
+    if (_measurePending) return;
+    _measurePending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _measurePending = false;
+      _measure();
+    });
   }
 
   void _measure() {
@@ -128,6 +138,14 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
           _buttonRowHeight = buttonRowHeight;
         }
       });
+    }
+    // An anchor can move without rebuilding this widget — the module
+    // draft's SingleChildScrollView slides its keyed frame — so while
+    // anchored the measure re-arms for the next produced frame. A queued
+    // post-frame callback never schedules a frame itself: the loop sleeps
+    // whenever nothing repaints and wakes on the scroll's own frames.
+    if (widget.anchorKey != null) {
+      _scheduleMeasure();
     }
   }
 
