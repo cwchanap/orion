@@ -47,8 +47,9 @@ In `game_models.dart`:
 - Add only `chainCountBonus`, `pierceCountBonus`, and `fieldRadiusMultiplier` to `RunModuleDefinition`, with neutral defaults (0, 0, 1). Include them in `affectsTowerStats` so beneficiary indicators remain truthful.
 - Extend `RunModuleRules.applyTowerStats` to apply those three fields and update `RunModuleRules.appliesToTower` for the six new affinities. Effects should apply to Level 1, Level 2 and both specializations for only their matching family.
 - Extend `GameSession._affinityTower` for the six cases. Do not edit `ModuleOfferPicker` or add a second eligibility/offer policy.
+- Pin `RunModuleRules.beneficiaryCount` for the three scalar-only modules (Relay Arc, Siege Rounds, Gravity Echo): at least one matching placed tower must count as affected, while unrelated towers must not count. These tests catch an omitted `affectsTowerStats` branch even when pure stat-delta tests pass.
 
-The family-preference rule is **not a guaranteed offer**. Four universal modules exist, so an unlocked but unplaced family can legitimately be absent from a draft while at least three matching candidates remain. Late Gravity Well (wave 5) and Drone Bay (wave 6) are meaningful choices by draft 3 **when built**, and may appear through fallback when fewer than three stronger candidates remain. Do not force them into drafts, adjust the random picker, or add wave-specific exceptions.
+The family-preference rule is **not a guaranteed offer**. Five universal modules exist in the catalog (four available before Relay Calibration is recovered), so an unlocked but unplaced family can legitimately be absent from a draft while at least three matching candidates remain. Late Gravity Well (wave 5) and Drone Bay (wave 6) are meaningful choices by draft 3 **when built**, and may appear through fallback when fewer than three stronger candidates remain. Do not force them into drafts, adjust the random picker, or add wave-specific exceptions.
 
 ## One unlock source, seven rewards
 
@@ -85,7 +86,7 @@ Draft cards gain the six affinity labels and effect copy from the existing catal
 ## Acceptance and validation
 
 1. Catalog has exactly 13 unique IDs and one blueprint per each of the seven real stage IDs; base pool stays the six original ungated modules.
-2. Each of the six new modules only affects its intended family and its existing specializations, at correct effective values. Unrelated stats/families are unchanged.
+2. Each of the six new modules only affects its intended family and its existing specializations, at correct effective values. Unrelated stats/families are unchanged; Relay Arc, Siege Rounds, and Gravity Echo also report correct nonzero matching-family beneficiary counts.
 3. An isolated committed stage clear unlocks **only** its stage-specific module; prior progress remains valid, save failure changes nothing, reset removes unlocks. Same-game Replay reads refreshed committed eligibility.
 4. Existing draft order and selection behavior remain intact. Verify wave-6 late-family builds can be candidates for draft 3; do not test that random cards are guaranteed.
 5. All seven map nodes, locked/recovered briefing copy, and three Mission Report save states work with long module names and optional-stage dual rewards at **360×640**.
