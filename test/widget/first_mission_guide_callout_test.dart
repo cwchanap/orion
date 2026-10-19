@@ -334,6 +334,62 @@ void main() {
     _expectBubbleInsideSafeArea(tester);
   });
 
+  testWidgets('the bubble tracks its anchor when an enclosing scroll view '
+      'scrolls', (tester) async {
+    _setSize(tester);
+    final anchorKey = GlobalKey();
+    final scrollController = ScrollController();
+    addTearDown(scrollController.dispose);
+    await tester.pumpWidget(
+      _host(
+        FirstMissionGuideStep.salvageModule,
+        anchorKey: anchorKey,
+        onDone: () {},
+        beneath: [
+          // Mirrors production: the draft frame's guide anchor sits inside
+          // RunModuleDraftPanel's SingleChildScrollView, so scrolling moves
+          // the anchor's rect without rebuilding this sibling callout.
+          Positioned.fill(
+            child: SingleChildScrollView(
+              controller: scrollController,
+              child: Column(
+                children: [
+                  const SizedBox(height: 200),
+                  SizedBox(key: anchorKey, width: 200, height: 300),
+                  const SizedBox(height: 400),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    await _settle(tester);
+    final anchorBefore = tester.getRect(find.byKey(anchorKey));
+    final bubbleBefore = tester.getRect(find.byKey(_bubbleKey));
+
+    scrollController.jumpTo(140);
+    // First settle: the scroll frame runs the armed post-frame measure and
+    // the next frame rebuilds with the bubble's slide starting from the old
+    // spot. The second window lets the 220ms slide actually finish.
+    await _settle(tester);
+    await tester.pump(const Duration(milliseconds: 260));
+
+    final anchorAfter = tester.getRect(find.byKey(anchorKey));
+    final bubbleAfter = tester.getRect(find.byKey(_bubbleKey));
+    expect(anchorAfter.top, lessThan(anchorBefore.top));
+    expect(
+      bubbleAfter.top,
+      lessThan(bubbleBefore.top),
+      reason: 'the bubble must re-measure and follow a scrolled anchor',
+    );
+    // Edge placement still holds after the re-measure: the bubble sits
+    // below the anchor's moved bottom edge, off its interior.
+    expect(bubbleAfter.top, greaterThanOrEqualTo(anchorAfter.bottom));
+    _expectBubbleInsideSafeArea(tester);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'a partially off-screen anchor still renders inside the SafeArea',
     (tester) async {
