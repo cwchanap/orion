@@ -41,6 +41,7 @@
 - `test/game/game_session_test.dart`
 - `test/game/game_balance_test.dart`
 - `test/widget/stage_briefing_sheet_test.dart`
+- `test/widget/world_map_command_deck_test.dart` (dedicated world-map blueprint semantics regression)
 - `test/widget_test.dart` (world map, report, save/replay integration)
 
 No new runtime files anticipated; the existing rules and widgets already provide all needed seams.
@@ -51,7 +52,7 @@ No new runtime files anticipated; the existing rules and widgets already provide
 
 **Tests first:**
 - `module_offer_picker_test.dart`: every `RunModuleId` appears exactly once in `runModuleCatalog` and catalog length becomes 13; preserve pure picker behavior.
-- `run_module_rules_test.dart`: each of six modules changes only its matching tower family (including Level 1 / Level 2 / both Level 3 specializations). Check exact scalar differences and no unrelated-stat drift.
+- `run_module_rules_test.dart`: each of six modules changes only its matching tower family (including Level 1 / Level 2 / both Level 3 specializations). Check exact scalar differences and no unrelated-stat drift. For Relay Arc, Siege Rounds, and Gravity Echo specifically, assert `RunModuleRules.beneficiaryCount` is **positive for matching placed towers** and **zero for nonmatching towers**. This guards `RunModuleDefinition.affectsTowerStats` in addition to resolved stat deltas.
 - `tower_stats_resolver_test.dart`: combined campaign + stage + acquired-module resolution remains in the existing order, especially amplified gravity → Gravity Echo field radius.
 - `game_balance_test.dart`: include new `TowerStats.copyWith` fields in assertions and verify stable tower baseline without an acquired module.
 
@@ -107,7 +108,7 @@ No new runtime files anticipated; the existing rules and widgets already provide
 2. Keep pending/saved/failed titles; insert the correct blueprint name in pending/recovered copy. Failed state tells the player to Retry Save; replay on prior clear has no recovery fact.
 3. No new Mission Report model or view type.
 
-**Widget tests:** in `test/widget_test.dart` and `test/widget/stage_briefing_sheet_test.dart`, exercise the seven map statuses, locked/recovered briefings for a main and a side stage, dual reward display, every stage name/effect, semantics, and no overflow at **360×640**. Keep tests deterministic; reuse present test stores and fake progress.
+**Widget tests:** extend the existing `test/widget/world_map_command_deck_test.dart` case **"Alpha blueprint semantics follow committed progress"** to assert correct locked/recovered semantics across the other six stages, including optional-stage nodes with both campaign reward and blueprint semantics. Also use `test/widget_test.dart` and `test/widget/stage_briefing_sheet_test.dart` for locked/recovered briefings on a main and side stage, dual reward display, every stage name/effect, and no overflow at **360×640**. Keep tests deterministic; reuse present test stores and fake progress.
 
 ## Task 4 — Preserve report commit semantics and validate together
 
@@ -129,6 +130,7 @@ flutter test test/game/tower_stats_resolver_test.dart
 flutter test test/game/module_offer_picker_test.dart
 flutter test test/game/game_session_test.dart
 flutter test test/widget/stage_briefing_sheet_test.dart
+flutter test test/widget/world_map_command_deck_test.dart
 flutter test test/widget_test.dart
 flutter test
 ```
