@@ -97,7 +97,7 @@ No new runtime files anticipated; the existing rules, stage data and widgets pro
 
 **Candidate tests (`game_session_test.dart`):**
 - Use one table-driven test over all eight tower-family modules. Build the matching family at its **first legal wave**, progress to an appropriate scheduled draft (2, 4, or 6), then assert the already-eligible module appears in the recording picker's **candidate set**. This includes Gravity Well after wave 5 and Drone Bay after wave 6.
-- When the family is unplaced, assert it is not in the **preferred family-matching pass**, but do **not** assert it can never enter the final candidate list: after two prior picks the current policy may legitimately use unlocked-family or remaining fallback to reach three candidates. Cover this fallback with one explicit regression.
+- For an **unplaced** family, assert absence only in a controlled draft where at least three universal/placed-family candidates already exist (so no fallback runs). Also pin a later-draft case where fewer than three preferred candidates remain and an eligible unplaced-family module legitimately enters through the existing fallback. Do **not** assert universal exclusion of unplaced-family modules or expose private candidate-policy internals just for tests.
 - Verify an uncommitted/unavailable family blueprint is never a candidate, acquired modules are excluded, and three-card offers remain distinct. Assert candidate sets, **not** that the random picker must offer a named card.
 
 **No new progression logic, persistable blueprint collection, picker weighting, forced family cards, or artificial wave exceptions.**
