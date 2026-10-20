@@ -529,8 +529,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+      final module = runModuleDefinition(OrionCampaign.stageOne.blueprint!);
       expect(
-        find.text('Blueprint recovered: Relay Calibration'),
+        find.text(
+          'Blueprint recovered: ${module.title} • ${module.effectText}',
+        ),
         findsOneWidget,
       );
       expect(find.byTooltip('Replay Mission'), findsOneWidget);
@@ -1690,6 +1693,50 @@ void main() {
     expect(find.text('Blueprint not recovered'), findsNothing);
     expect(find.text('Blueprint recovered: Relay Calibration'), findsNothing);
   });
+
+  // The Mission Report resolves the module generically from the mission's
+  // own stage: a side-stage first clear must celebrate ITS blueprint,
+  // not Alpha's.
+  testWidgets(
+    'side-stage first-clear Mission Report reports that stage\'s blueprint',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha', 'nebula-relay'}),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Rift',
+        actionLabel: 'Start Mission',
+      );
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      expect(find.text('Blueprint recovery pending'), findsOneWidget);
+      expect(
+        find.text('Salvaged Drones unlocks after this result is saved.'),
+        findsOneWidget,
+      );
+
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Blueprint recovered: Salvaged Drones'), findsOneWidget);
+    },
+  );
 
   testWidgets('mission save composes with a subsequent tech-tree purchase', (
     tester,
@@ -3247,7 +3294,7 @@ void main() {
   );
 
   testWidgets(
-    'cleared Alpha world map shows blueprint recovered and no locked row',
+    'cleared Alpha world map shows blueprint recovered, other stages stay locked',
     (tester) async {
       final store = await storeWithResults({
         OrionCampaign.stageOneId: const StageResult(
@@ -3264,7 +3311,22 @@ void main() {
         RegExp(r'Outpost Alpha.*Blueprint • Recovered'),
         findsOneWidget,
       );
-      expectSemanticsLabel(tester, RegExp(r'Blueprint • Locked'), findsNothing);
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Outpost Alpha.*Blueprint • Locked'),
+        findsNothing,
+      );
+      // Every other blueprint stage node keeps its Locked signal.
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Blueprint • Locked'),
+        findsNWidgets(6),
+      );
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Nebula Relay.*Blueprint • Locked'),
+        findsOneWidget,
+      );
     },
   );
 
@@ -3284,10 +3346,14 @@ void main() {
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Blueprint recovered: Relay Calibration'), findsOneWidget);
+    final module = runModuleDefinition(OrionCampaign.stageOne.blueprint!);
+    expect(
+      find.text('Blueprint recovered: ${module.title} • ${module.effectText}'),
+      findsOneWidget,
+    );
   });
 
-  testWidgets('fresh Alpha briefing omits the blueprint recovered line', (
+  testWidgets('fresh Alpha briefing teases the locked blueprint module', (
     tester,
   ) async {
     final store = InMemoryCampaignProgressStore(
@@ -3300,7 +3366,12 @@ void main() {
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Blueprint recovered: Relay Calibration'), findsNothing);
+    final module = runModuleDefinition(OrionCampaign.stageOne.blueprint!);
+    expect(
+      find.text('Blueprint locked: ${module.title} • ${module.effectText}'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('Blueprint recovered'), findsNothing);
   });
 
   testWidgets('Alpha blueprint glyph fits at 360x640', (tester) async {
@@ -3366,6 +3437,12 @@ void main() {
         tester,
         RegExp(r'Outpost Alpha.*Blueprint • Locked'),
         findsOneWidget,
+      );
+      // The reset re-derives Locked for all seven blueprint stages.
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Blueprint • Locked'),
+        findsNWidgets(7),
       );
       expectSemanticsLabel(
         tester,

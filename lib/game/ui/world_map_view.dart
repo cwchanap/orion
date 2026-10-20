@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
-import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_reward_label.dart';
 import 'campaign_presentation.dart';
@@ -128,9 +127,6 @@ class _WorldMapViewState extends State<WorldMapView> {
                     stage: stage,
                     status: widget.progress.statusFor(stage),
                     result: widget.progress.resultFor(stage.id),
-                    blueprintRecovered: widget.progress.isCleared(
-                      OrionCampaign.stageOneId,
-                    ),
                     isBusy: _isBusy,
                     onStageSelected: widget.onStageSelected,
                     onLockedStageSelected: widget.onLockedStageSelected,
@@ -585,7 +581,6 @@ class _IllustratedStageNode extends StatelessWidget {
     required this.stage,
     required this.status,
     required this.result,
-    required this.blueprintRecovered,
     required this.isBusy,
     required this.onStageSelected,
     required this.onLockedStageSelected,
@@ -594,7 +589,6 @@ class _IllustratedStageNode extends StatelessWidget {
   final StageDefinition stage;
   final StageProgressStatus status;
   final StageResult? result;
-  final bool blueprintRecovered;
   final bool isBusy;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
@@ -609,11 +603,14 @@ class _IllustratedStageNode extends StatelessWidget {
       stage,
       isCleared: status == StageProgressStatus.cleared,
     );
-    final blueprintLabel = stage.id == OrionCampaign.stageOneId
-        ? blueprintRecovered
-              ? 'Blueprint • Recovered'
-              : 'Blueprint • Locked'
-        : null;
+    // A committed clear is the only path to owning the stage's blueprint,
+    // so the node's own cleared status is the Recovered/Locked signal.
+    final blueprintRecovered = status == StageProgressStatus.cleared;
+    final blueprintLabel = stage.blueprint == null
+        ? null
+        : blueprintRecovered
+        ? 'Blueprint • Recovered'
+        : 'Blueprint • Locked';
     final semanticsLabel = [
       stage.name,
       stage.isMainPath ? 'Main mission' : 'Optional mission',

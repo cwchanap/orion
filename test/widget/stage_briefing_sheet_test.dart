@@ -82,9 +82,10 @@ Future<_PopRecorder> _pumpBriefing(
 
 Future<void> _expectActionWithinViewport(
   WidgetTester tester,
-  Size viewport,
-) async {
-  final action = find.byTooltip('Start Mission');
+  Size viewport, {
+  String actionTooltip = 'Start Mission',
+}) async {
+  final action = find.byTooltip(actionTooltip);
   expect(action, findsOneWidget);
   // ensureVisible performs a zero-duration jump whose geometry only lands on
   // the next frame; measuring without the pump reads the pre-scroll rect.
@@ -294,6 +295,111 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets(
+    'locked blueprint teaser shows the module name and exact effect',
+    (tester) async {
+      await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+
+      final module = runModuleDefinition(OrionCampaign.stageOne.blueprint!);
+      expect(
+        find.text('Blueprint locked: ${module.title} • ${module.effectText}'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Blueprint recovered'), findsNothing);
+      expect(find.text('BLUEPRINT'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'committed result flips the briefing row to Blueprint recovered',
+    (tester) async {
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
+      );
+
+      final module = runModuleDefinition(OrionCampaign.stageOne.blueprint!);
+      expect(
+        find.text(
+          'Blueprint recovered: ${module.title} • ${module.effectText}',
+        ),
+        findsOneWidget,
+      );
+      expect(find.textContaining('Blueprint locked'), findsNothing);
+    },
+  );
+
+  testWidgets('side-stage briefing keeps SALVAGE and BLUEPRINT rows separate', (
+    tester,
+  ) async {
+    final rift = OrionCampaign.stages.firstWhere(
+      (stage) => stage.id == 'salvage-rift',
+    );
+    final module = runModuleDefinition(rift.blueprint!);
+
+    await _pumpBriefing(tester, stage: rift);
+    expect(
+      find.text('Blueprint locked: ${module.title} • ${module.effectText}'),
+      findsOneWidget,
+    );
+
+    await _dismissBriefing(tester);
+    await _pumpBriefing(
+      tester,
+      stage: rift,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    expect(
+      find.text('Blueprint recovered: ${module.title} • ${module.effectText}'),
+      findsOneWidget,
+    );
+    // The independent campaign reward keeps its own row.
+    expect(find.text('SALVAGE'), findsOneWidget);
+    expect(
+      find.text('Reward earned: +${GameBalance.salvageRiftGoldBonus} Gold'),
+      findsOneWidget,
+    );
+    expect(find.text('BLUEPRINT'), findsOneWidget);
+  });
+
+  testWidgets('every blueprint stage briefs its module name and exact effect', (
+    tester,
+  ) async {
+    for (final stage in OrionCampaign.stages) {
+      final module = runModuleDefinition(stage.blueprint!);
+      await _pumpBriefing(tester, stage: stage);
+      expect(
+        find.text('Blueprint locked: ${module.title} • ${module.effectText}'),
+        findsOneWidget,
+        reason: stage.id,
+      );
+      await _dismissBriefing(tester);
+    }
+  });
+
+  testWidgets(
+    'fully loaded side-stage briefing keeps the action reachable at 360x640',
+    (tester) async {
+      const viewport = Size(360, 640);
+      final rift = OrionCampaign.stages.firstWhere(
+        (stage) => stage.id == 'salvage-rift',
+      );
+      await _pumpBriefing(
+        tester,
+        stage: rift,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        viewport: viewport,
+      );
+      await _expectActionWithinViewport(
+        tester,
+        viewport,
+        actionTooltip: 'Replay Mission',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('no TOWER CAP tile or copy exists', (tester) async {
     await _pumpBriefing(tester, stage: OrionCampaign.stageOne);

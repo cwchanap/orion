@@ -250,17 +250,20 @@ class StageBriefingSheet extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 7),
                               ],
-                              // HPA-528: a committed Outpost Alpha clear also
-                              // recovers the Relay Calibration blueprint; the
-                              // committed `result` is the first-clear signal.
-                              if (stage.id == OrionCampaign.stageOneId &&
-                                  result != null) ...[
+                              // A stage's blueprint module is knowable before
+                              // deploying: locked stages tease the module name
+                              // and exact effect; the committed `result` is the
+                              // first-clear signal that flips the row to
+                              // Recovered.
+                              if (stage.blueprint case final blueprint?) ...[
                                 _BriefingIntelRow(
                                   icon: Icons.memory_rounded,
                                   color: uiTheme.systemViolet,
                                   title: 'BLUEPRINT',
-                                  detail:
-                                      'Blueprint recovered: Relay Calibration',
+                                  detail: _briefingBlueprintLabel(
+                                    runModuleDefinition(blueprint),
+                                    recovered: result != null,
+                                  ),
                                 ),
                                 const SizedBox(height: 7),
                               ],
@@ -844,6 +847,16 @@ class _BriefingIntelRow extends StatelessWidget {
     );
   }
 }
+
+/// One compact row serves locked and recovered states: the module name plus
+/// its exact effect, with the committed-clear signal flipping the status
+/// prefix. Mirrors the Mission Report's `Blueprint recovered: <name>` copy.
+String _briefingBlueprintLabel(
+  RunModuleDefinition module, {
+  required bool recovered,
+}) =>
+    '${recovered ? 'Blueprint recovered' : 'Blueprint locked'}: '
+    '${module.title} • ${module.effectText}';
 
 String _briefingRewardLabel(CampaignReward reward, {required bool earned}) {
   // Persistent campaign rewards are granted once per stage when it is first
