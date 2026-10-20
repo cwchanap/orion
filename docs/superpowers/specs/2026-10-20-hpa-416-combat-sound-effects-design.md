@@ -43,27 +43,27 @@ Add these methods to `GameFeedback` (and corresponding no-op methods / recording
 
 For tower family mapping use exactly: laser, cryo, rocket, railgun, ion_chain, nanite, gravity_well, drone_bay. Enumerate `TowerType` exhaustively in the playback mapping (prefer a switch), so a newly added family requires an explicit decision.
 
-Preserve the four existing files/cues: confirm, clear, victory, defeat. A boss kill should play `bossDefeated` instead of a second generic death sound. A lethal leak should play the existing `baseDefeated` stinger instead of a simultaneous `coreHit`. Ordinary multi-hit visual cues may describe one attack with several targets: **one sound per resolved cue**, not one sound per target. Keep haptics unchanged apart from a light impact on boss arrival; respect the independent haptics preference.
+Preserve the four existing files/cues: confirm, clear, victory, defeat. A boss kill should play `bossDefeated` instead of a second generic death sound. A lethal leak should play the existing `baseDefeated` stinger instead of a simultaneous `coreHit`. Each resolved splash, chain or pierce attack emits **one visual feedback component containing all resolved target positions**, not one per target (see `ProjectileComponent._resolveHit`, `_resolveChainHit`, and `_resolvePierceHit`). Each component requests one audio cue. Multiple attacks in a busy frame can still issue repeated requests; the limiter's per-kind interval folds those into fewer *audible* cues without changing impact rendering or damage. Cluster bursts do not add separate splash components. Keep haptics unchanged apart from a light impact on boss arrival; respect the independent haptics preference.
 
 ## Rate limits, caps, and priority
 
 Audio intensity is measured in **real wall-clock elapsed time** (monotonic `Stopwatch`), never Flame's speed-scaled `dt`. A 3× session may produce more requests, but not more sound starts per real second. Drop a denied cue; **no queue or catch-up burst**.
 
-Implement one small pure `CombatSoundLimiter` in `lib/game/feedback/combat_sound_limiter.dart`, called by `PlatformGameFeedback` *after* checking the live Sound Effects flag. The limiter takes a concrete cue identifier and injected `nowMs`, making bursts deterministic in unit tests. Model accepted voices as short-lived reservations based on the known WAV duration plus a small safety margin; include pending asynchronous starts in the reservation count and release on a failed playback. This is a conservative admission bound, not an audio-analysis engine.
+Implement one small pure `CombatSoundLimiter` in `lib/game/feedback/combat_sound_limiter.dart`, called by `PlatformGameFeedback` *after* checking the live Sound Effects flag **and playback readiness**. The limiter takes a concrete cue identifier and injected `nowMs`, making bursts deterministic in unit tests. Keep the last accepted timestamp for each cue and the last N accepted timestamps per priority lane. Prune lane timestamps older than a fixed **500 ms rolling window**, then accept only if the cue's minimum interval has elapsed and the lane has room. One synchronous admission check happens before asynchronous playback. No timers, WAV-duration table, in-flight reservations, or failure-release bookkeeping: an attempted start that fails simply occupies a lane slot until its timestamp ages out.
 
 Initial tuning targets (adjust only after one device listen; one place for constants):
 
-| Lane | Cues | Max concurrent reservations | Minimum interval |
+| Lane | Cues | Max accepted starts per rolling 500 ms | Minimum interval per cue |
 | --- | --- | ---: | ---: |
 | Low | eight tower firing and three multi-target impacts | 2 total | 120 ms per tower-family cue; 180 ms per impact kind |
 | Normal | enemy destroyed, wave start, tower sold | 1 total | 150 ms for enemy deaths; 250 ms for other normal cues |
 | Critical | core hit, boss arrival, boss defeat | 2 total | 200 ms core hit; boss cues one per actual event |
 
-Maximum **five accepted combat voices at a time** (2 low + 1 normal + 2 critical). The reserved normal/critical lanes ensure a busy laser barrage cannot drown out kills, leaks, or boss calls. Existing one-shot confirmation/clear/victory/defeat remain outside the combat limiter; they are rare player/system feedback, not autonomous combat spam. The final loss/victory stinger takes precedence at its owning call site as specified above.
+Maximum **five accepted combat starts in any rolling 500 ms** (2 low + 1 normal + 2 critical). HPA-385 will keep every new combat WAV at or below 500 ms; with this bound the admission policy also caps nominal concurrent combat cue playback, without tracking individual asset lengths. It is an admission/start-rate bound, not an exact measurement of platform mixer voices or old stingers. The reserved normal/critical lanes ensure a busy laser barrage cannot consume capacity reserved for kills, leaks, or boss calls. Existing one-shot confirmation/clear/victory/defeat remain outside the combat limiter; they are rare player/system feedback, not autonomous combat spam. The final loss/victory stinger takes precedence at its owning call site as specified above.
 
 Use `AudioPool` for high-frequency sounds (family shots, impacts and enemy death; core leak may use one too). Start pools best-effort when `PlatformGameFeedback` is initialized and keep pool construction asynchronous so gameplay never waits for sound. Set each pool's maxPlayers conservatively (1–2); the **explicit limiter** is the admission authority, rather than assuming a pool cap is a global cap. Rare wave/boss/sell sounds may stay on `FlameAudio.play`. Preload the asset list once, as current feedback does. No user-visible error or blocking dialog on an audio failure.
 
-If the pool is not ready or failed to initialize, drop the cue rather than enqueue it. If audio playback fails after reserving a slot, release its reservation. The Sound Effects callback is evaluated at each request; turning it off prevents any **new** starts, without shutting off haptics. No settings schema changes.
+If the pool is not ready or failed to initialize, drop the cue without consuming limiter capacity or enqueueing it. After admission, a failed playback start is swallowed by the existing best-effort error path and keeps its short rolling-window slot; no retries or async release bookkeeping. The Sound Effects callback is evaluated at each request; turning it off prevents any **new** starts, without shutting off haptics. No settings schema changes.
 
 ### Ownership and shutdown
 
@@ -80,9 +80,9 @@ If the pool is not ready or failed to initialize, drop the cue rather than enque
 
 ## Validation and acceptance
 
-- Pure limiter unit tests advance an injected wall clock: repeated same-family fire, mixed families, impact bursts, lane saturation, priority while low is saturated, and expiry/failure release. Assert <= 2 low, <= 1 normal, <= 2 critical, <= 5 combat reservations. Add a dense synthetic 3× pattern (many calls at the same timestamps).
+- Pure limiter unit tests advance an injected wall clock: repeated same-family fire, mixed families, impact bursts, lane saturation, priority while low is saturated, and rolling-window expiry. Assert at most 2 low, 1 normal, 2 critical, and 5 accepted starts in *every* 500 ms window. Add a dense synthetic 3× pattern (many calls at the same timestamps); no async start-failure/release tests in the pure limiter.
 - `platform_game_feedback_test.dart`: exact filename mapping for all eight types and three impacts, existing four cues remain, Sound Effects off suppresses **all** combat audio, haptics gate remains independent, constructor warm-up and pool ready/failure behavior do not throw, and owned pools clean up.
-- `orion_defense_game_test.dart`: recording fake verifies successful vs denied start/sell, both direct and auto-start wave transitions, shot invocation through projectile/field/drone branches, one hit sound per resolved splash/chain/pierce, boss arrival/defeat, enemy death, nonlethal leak, lethal defeat without duplicated leak cue.
+- `orion_defense_game_test.dart`: recording fake verifies successful vs denied start/sell, both direct and auto-start wave transitions, shot invocation through projectile/field/drone branches, one request per resolved splash/chain/pierce visual component (regardless of its target count), boss arrival/defeat, enemy death, nonlethal leak, lethal defeat without duplicated leak cue.
 - `game_feedback_test.dart`: `NoOpGameFeedback` covers all added methods.
 - Regression: `flutter analyze`, focused tests, `flutter test`. On device, listen to a busy 3× board and ensure frame pacing is unchanged, high-priority cues remain distinguishable, Sound Effects toggle silences new starts, and haptics still work independently. Asset-production listening/README checks remain HPA-385 acceptance.
 
