@@ -1738,6 +1738,231 @@ void main() {
     },
   );
 
+  // HPA-415 Task 4: the Alpha lifecycle proof replayed on a non-Alpha
+  // blueprint — a first Nebula Relay clear must not carry Relay Arc while
+  // the save is pending, must celebrate Relay Arc after commit, and a
+  // same-object Replay must pick up the refreshed eligibility.
+  testWidgets(
+    'Nebula Relay first-clear commit then same-game Replay refreshes Relay Arc eligibility',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Relay',
+        actionLabel: 'Start Mission',
+      );
+
+      final firstAttemptGame = game!;
+      expect(
+        firstAttemptGame.availableRunModules,
+        isNot(contains(RunModuleId.relayArc)),
+      );
+
+      await publishVictory(
+        tester,
+        firstAttemptGame,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      expect(find.text('Blueprint recovery pending'), findsOneWidget);
+      expect(
+        firstAttemptGame.availableRunModules,
+        isNot(contains(RunModuleId.relayArc)),
+      );
+
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Blueprint recovered: Relay Arc'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.pumpAndSettle();
+
+      expect(identical(game, firstAttemptGame), isTrue);
+      expect(
+        firstAttemptGame.availableRunModules,
+        contains(RunModuleId.relayArc),
+      );
+      expect(find.byTooltip('Start Wave'), findsOneWidget);
+    },
+  );
+
+  // HPA-415 Task 4: the retry path on a later optional stage — Void
+  // Bastion's failed first-clear save reports Blueprint not recovered, and
+  // Retry Save then recovers Siege Rounds, the stage's own blueprint.
+  testWidgets(
+    'Void Bastion failed Retry Save then success recovers Siege Rounds',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({
+          'outpost-alpha',
+          'nebula-relay',
+          'asteroid-foundry',
+          'aurora-gate',
+        }),
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Bastion',
+        actionLabel: 'Start Mission',
+      );
+      expect(
+        game!.availableRunModules,
+        isNot(contains(RunModuleId.siegeRounds)),
+      );
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint not recovered'), findsOneWidget);
+      expect(find.byTooltip('Retry Save'), findsOneWidget);
+      store.failOnSaveIndices.clear();
+
+      await tester.tap(find.byTooltip('Retry Save'));
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint recovered: Siege Rounds'), findsOneWidget);
+    },
+  );
+
+  // HPA-415 Task 4: an already-cleared non-Alpha replay stays silent about
+  // first-clear recovery even when the replay earns a better medal.
+  testWidgets(
+    'already-cleared Nebula Relay replay with a better medal has no recovery fact',
+    (tester) async {
+      final store = await storeWithResults({
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+        'nebula-relay': const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+      });
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Relay',
+        actionLabel: 'Replay Mission',
+      );
+
+      // A strictly better result on a cleared stage is retained — the
+      // first-clear reward copy must not appear.
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Blueprint recovery pending'), findsNothing);
+      expect(find.text('Blueprint not recovered'), findsNothing);
+      expect(find.text('Blueprint recovered: Relay Arc'), findsNothing);
+    },
+  );
+
+  // HPA-415 Task 4: reset clears a non-Alpha blueprint both ways — the map
+  // node loses its Recovered status, and eligibility observed through a
+  // Replay before the reset no longer survives it (the node itself locks
+  // again; rules-level removal is covered by run_module_unlocks_test).
+  testWidgets(
+    'campaign reset removes Nebula Relay recovered status and eligibility',
+    (tester) async {
+      final store = await storeWithResults({
+        OrionCampaign.stageOneId: const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+        'nebula-relay': const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+      });
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Nebula Relay.*Blueprint • Recovered'),
+        findsOneWidget,
+      );
+
+      await startStageFromBriefing(
+        tester,
+        mapLabel: 'Relay',
+        actionLabel: 'Replay Mission',
+      );
+      expect(game!.availableRunModules, contains(RunModuleId.relayArc));
+
+      await tester.tap(find.byTooltip('World Map').last);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Reset Campaign'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Campaign reset.'), findsOneWidget);
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Nebula Relay.*Blueprint • Locked'),
+        findsOneWidget,
+      );
+      expectSemanticsLabel(
+        tester,
+        RegExp(r'Blueprint • Recovered'),
+        findsNothing,
+      );
+    },
+  );
+
   testWidgets('mission save composes with a subsequent tech-tree purchase', (
     tester,
   ) async {
