@@ -872,9 +872,9 @@ void main() {
           const [
             RunModuleId.heavyCaliber,
             RunModuleId.overclockRelay,
-            // Drone Bay is placed, so its family module fills draft 3's
-            // first-pass candidates instead of the unlocked-family fallback.
-            RunModuleId.salvagedDrones,
+            // Drone Bay's own blueprint is uncommitted, so draft 3's third
+            // candidate comes from the unlocked-family fallback instead.
+            RunModuleId.cryoReservoir,
           ],
         ]);
         final game = OrionDefenseGame(
@@ -975,9 +975,9 @@ void main() {
           const [
             RunModuleId.heavyCaliber,
             RunModuleId.overclockRelay,
-            // Gravity Well is placed, so its family module fills draft 3's
-            // first-pass candidates instead of the unlocked-family fallback.
-            RunModuleId.gravityEcho,
+            // Gravity Well's own blueprint is uncommitted, so draft 3's third
+            // candidate comes from the unlocked-family fallback instead.
+            RunModuleId.cryoReservoir,
           ],
         ]);
         final game = OrionDefenseGame(

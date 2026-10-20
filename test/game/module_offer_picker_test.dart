@@ -16,6 +16,12 @@ void main() {
     expect(RunModuleId.values, hasLength(13));
     expect(catalogIds.toSet().difference(RunModuleUnlocks.baseModules), {
       RunModuleId.relayCalibration,
+      RunModuleId.relayArc,
+      RunModuleId.salvagedDrones,
+      RunModuleId.foundryNanites,
+      RunModuleId.auroraFocus,
+      RunModuleId.siegeRounds,
+      RunModuleId.gravityEcho,
     });
 
     // Legacy definitions keep their pinned values and families.
