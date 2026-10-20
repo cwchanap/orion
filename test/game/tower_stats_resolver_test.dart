@@ -128,6 +128,60 @@ void main() {
       },
     );
 
+    test(
+      'amplified gravity stage and Gravity Echo compose multiplicatively',
+      () {
+        const tower = PlacedTower(
+          id: 1,
+          type: TowerType.gravityWell,
+          position: GridPosition(0, 0),
+        );
+        final base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+
+        final resolved = TowerStatsResolver.resolve(
+          tower,
+          stageModifiers: const [StageModifier.amplifiedGravityWells],
+          runModules: const [RunModuleId.gravityEcho],
+        );
+
+        // Gravity Echo grows the post-modifier (stage-amplified) radius.
+        expect(
+          resolved.fieldRadius,
+          closeTo(base.fieldRadius * 1.20 * 1.15, 1e-9),
+        );
+        expect(
+          resolved.fieldDuration,
+          closeTo(base.fieldDuration * 1.25, 1e-9),
+        );
+        expect(resolved.damage, base.damage);
+        expect(resolved.range, base.range);
+      },
+    );
+
+    test('campaign laser damage then Aurora Focus compose in order', () {
+      final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      final resolved = TowerStatsResolver.resolve(
+        tower(TowerType.laser),
+        campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+        runModules: const [RunModuleId.auroraFocus],
+      );
+      expect(resolved.damage, closeTo(base.damage * 1.10, 1e-9));
+      expect(resolved.fireInterval, closeTo(base.fireInterval * 0.88, 1e-9));
+      expect(resolved.range, base.range);
+    });
+
+    test('Siege Rounds pierce bonus survives stage and module composition', () {
+      final base = GameBalance.towerStats(TowerType.railgun, level: 1);
+      final resolved = TowerStatsResolver.resolve(
+        tower(TowerType.railgun),
+        campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+        stageModifiers: StageModifier.values,
+        runModules: const [RunModuleId.siegeRounds, RunModuleId.heavyCaliber],
+      );
+      expect(resolved.pierceCount, base.pierceCount + 1);
+      expect(resolved.damage, closeTo(base.damage * 1.20, 1e-9));
+    });
+
     test('amplified wells leave every other tower type unchanged', () {
       for (final type in TowerType.values.where(
         (type) => type != TowerType.gravityWell,

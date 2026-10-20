@@ -146,7 +146,7 @@ class _AcquiredModuleRow extends StatelessWidget {
         ),
         const SizedBox(height: 2),
         Text(
-          definition.affinity.label,
+          definition.affinityLabel,
           style: OrionTypography.microLabel(color: uiTheme.systemCyan),
         ),
       ],

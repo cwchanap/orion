@@ -427,12 +427,6 @@ class GameSession {
     return null;
   }
 
-  TowerType? _affinityTower(RunModuleAffinity affinity) => switch (affinity) {
-    RunModuleAffinity.universal => null,
-    RunModuleAffinity.cryo => TowerType.cryo,
-    RunModuleAffinity.rocket => TowerType.rocket,
-  };
-
   List<RunModuleId> _moduleCandidates() {
     final acquired = _acquiredRunModules.toSet();
     final placedTypes = _towersByPosition.values
@@ -457,13 +451,13 @@ class GameSession {
     }
 
     addMatching((definition) {
-      final tower = _affinityTower(definition.affinity);
+      final tower = definition.tower;
       return tower == null || placedTypes.contains(tower);
     });
 
     if (candidates.length < 3) {
       addMatching((definition) {
-        final tower = _affinityTower(definition.affinity);
+        final tower = definition.tower;
         return tower != null && unlockedTypes.contains(tower);
       });
     }

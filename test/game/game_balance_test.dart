@@ -1205,6 +1205,24 @@ void main() {
       expect(amplified.damage, base.damage);
       expect(amplified.slowDuration, base.slowDuration);
     });
+
+    test('overrides chain and pierce counts only', () {
+      final base = GameBalance.towerStats(TowerType.ionChain, level: 1);
+      final tuned = base.copyWith(
+        chainCount: base.chainCount + 1,
+        pierceCount: base.pierceCount + 1,
+      );
+
+      expect(tuned.chainCount, base.chainCount + 1);
+      expect(tuned.pierceCount, base.pierceCount + 1);
+      expect(tuned.chainRange, base.chainRange);
+      expect(tuned.chainFalloff, base.chainFalloff);
+      expect(tuned.pierceWidth, base.pierceWidth);
+      expect(tuned.damage, base.damage);
+      expect(tuned.range, base.range);
+      expect(tuned.fireInterval, base.fireInterval);
+      expect(tuned.cost, base.cost);
+    });
   });
 
   group('SummonMechanic', () {

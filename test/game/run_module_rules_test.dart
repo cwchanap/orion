@@ -146,6 +146,30 @@ void main() {
       runModuleDefinition(RunModuleId.rocketFusing).effectText,
       'Rocket splash grows 25%; damage drops 10%.',
     );
+    expect(
+      runModuleDefinition(RunModuleId.relayArc).effectText,
+      'Ion Chain arcs to 1 more target.',
+    );
+    expect(
+      runModuleDefinition(RunModuleId.salvagedDrones).effectText,
+      'Drone attacks deal 20% more damage.',
+    );
+    expect(
+      runModuleDefinition(RunModuleId.foundryNanites).effectText,
+      'Nanite impact and corrosion damage rise 20%.',
+    );
+    expect(
+      runModuleDefinition(RunModuleId.auroraFocus).effectText,
+      'Laser attack interval drops 12%.',
+    );
+    expect(
+      runModuleDefinition(RunModuleId.siegeRounds).effectText,
+      'Railgun shots pierce 1 more target.',
+    );
+    expect(
+      runModuleDefinition(RunModuleId.gravityEcho).effectText,
+      'Gravity Well field radius grows 15%.',
+    );
   });
 
   test('Rocket Fusing changes splash and damage only on Rocket towers', () {
@@ -171,6 +195,129 @@ void main() {
     expect(unchangedLaser.splashRadius, laser.splashRadius);
     expect(unchangedLaser.damage, laser.damage);
   });
+  group('boss blueprint family modules', () {
+    // Every stat RunModuleRules can mutate, so "no unrelated stat change" is
+    // checked across the full mutation surface of the resolver.
+    final statFields = <String, double Function(TowerStats)>{
+      'damage': (stats) => stats.damage,
+      'fireInterval': (stats) => stats.fireInterval,
+      'range': (stats) => stats.range,
+      'splashRadius': (stats) => stats.splashRadius,
+      'slowDuration': (stats) => stats.slowDuration,
+      'corrosionDamagePerSecond': (stats) => stats.corrosionDamagePerSecond,
+      'droneDamage': (stats) => stats.droneDamage,
+      'chainCount': (stats) => stats.chainCount.toDouble(),
+      'pierceCount': (stats) => stats.pierceCount.toDouble(),
+      'fieldRadius': (stats) => stats.fieldRadius,
+    };
+
+    final familyCases =
+        <
+          (
+            RunModuleId,
+            TowerType,
+            Map<String, double Function(TowerStats base)>,
+          )
+        >[
+          (
+            RunModuleId.relayArc,
+            TowerType.ionChain,
+            {'chainCount': (base) => (base.chainCount + 1).toDouble()},
+          ),
+          (
+            RunModuleId.salvagedDrones,
+            TowerType.droneBay,
+            {'droneDamage': (base) => base.droneDamage * 1.20},
+          ),
+          (
+            RunModuleId.foundryNanites,
+            TowerType.nanite,
+            {
+              'damage': (base) => base.damage * 1.20,
+              'corrosionDamagePerSecond': (base) =>
+                  base.corrosionDamagePerSecond * 1.20,
+            },
+          ),
+          (
+            RunModuleId.auroraFocus,
+            TowerType.laser,
+            {'fireInterval': (base) => base.fireInterval * 0.88},
+          ),
+          (
+            RunModuleId.siegeRounds,
+            TowerType.railgun,
+            {'pierceCount': (base) => (base.pierceCount + 1).toDouble()},
+          ),
+          (
+            RunModuleId.gravityEcho,
+            TowerType.gravityWell,
+            {'fieldRadius': (base) => base.fieldRadius * 1.15},
+          ),
+        ];
+
+    test('each module changes only its tower family across every level', () {
+      for (final (id, towerType, expectedChanges) in familyCases) {
+        final definition = runModuleDefinition(id);
+        expect(definition.tower, towerType, reason: id.name);
+
+        final progression =
+            <({int level, TowerSpecialization? specialization})>[
+              (level: 1, specialization: null),
+              (level: 2, specialization: null),
+              for (final specialization in GameBalance.specializationsFor(
+                towerType,
+              ))
+                (level: 3, specialization: specialization),
+            ];
+
+        for (final stage in progression) {
+          final reason = '${id.name} ${towerType.name} ${stage.specialization}';
+          final base = GameBalance.towerStats(
+            towerType,
+            level: stage.level,
+            specialization: stage.specialization,
+          );
+          final resolved = RunModuleRules.applyTowerStats(base, [id]);
+
+          for (final entry in statFields.entries) {
+            final expected = expectedChanges[entry.key];
+            if (expected == null) {
+              expect(
+                entry.value(resolved),
+                entry.value(base),
+                reason: '$reason unexpectedly changes ${entry.key}',
+              );
+            } else {
+              expect(
+                entry.value(resolved),
+                closeTo(expected(base), 1e-9),
+                reason: '$reason wrong ${entry.key} delta',
+              );
+            }
+          }
+        }
+      }
+    });
+
+    test('no family module touches any unrelated tower family', () {
+      for (final (id, towerType, _) in familyCases) {
+        for (final other in TowerType.values.where(
+          (type) => type != towerType,
+        )) {
+          final base = GameBalance.towerStats(other, level: 1);
+          final resolved = RunModuleRules.applyTowerStats(base, [id]);
+          for (final entry in statFields.entries) {
+            expect(
+              entry.value(resolved),
+              entry.value(base),
+              reason: '${id.name} must not change ${other.name}.${entry.key}',
+            );
+          }
+        }
+      }
+    });
+  });
+
   test('only Emergency Salvage leaves tower stats unchanged', () {
     for (final definition in runModuleCatalog) {
       expect(
@@ -199,9 +346,23 @@ void main() {
       expect(count(RunModuleId.longSight, towers), 3);
     });
 
-    test('affinity modules count only matching towers', () {
-      expect(count(RunModuleId.cryoReservoir, towers), 2);
-      expect(count(RunModuleId.rocketFusing, towers), 0);
+    test('family modules count one matching tower as 1, unrelated as 0', () {
+      const familyCases = <(RunModuleId, TowerType)>[
+        (RunModuleId.cryoReservoir, TowerType.cryo),
+        (RunModuleId.rocketFusing, TowerType.rocket),
+        (RunModuleId.relayArc, TowerType.ionChain),
+        (RunModuleId.salvagedDrones, TowerType.droneBay),
+        (RunModuleId.foundryNanites, TowerType.nanite),
+        (RunModuleId.auroraFocus, TowerType.laser),
+        (RunModuleId.siegeRounds, TowerType.railgun),
+        (RunModuleId.gravityEcho, TowerType.gravityWell),
+      ];
+      for (final (id, family) in familyCases) {
+        expect(runModuleDefinition(id).tower, family, reason: id.name);
+        expect(count(id, [tower(1, family)]), 1, reason: id.name);
+        final unrelated = TowerType.values.firstWhere((type) => type != family);
+        expect(count(id, [tower(2, unrelated)]), 0, reason: id.name);
+      }
     });
 
     test('economy modules affect no towers', () {

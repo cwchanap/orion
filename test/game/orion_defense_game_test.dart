@@ -872,7 +872,9 @@ void main() {
           const [
             RunModuleId.heavyCaliber,
             RunModuleId.overclockRelay,
-            RunModuleId.cryoReservoir,
+            // Drone Bay is placed, so its family module fills draft 3's
+            // first-pass candidates instead of the unlocked-family fallback.
+            RunModuleId.salvagedDrones,
           ],
         ]);
         final game = OrionDefenseGame(
@@ -973,7 +975,9 @@ void main() {
           const [
             RunModuleId.heavyCaliber,
             RunModuleId.overclockRelay,
-            RunModuleId.cryoReservoir,
+            // Gravity Well is placed, so its family module fills draft 3's
+            // first-pass candidates instead of the unlocked-family fallback.
+            RunModuleId.gravityEcho,
           ],
         ]);
         final game = OrionDefenseGame(
