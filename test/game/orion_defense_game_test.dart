@@ -1083,6 +1083,111 @@ void main() {
     );
 
     test(
+      'gravity echo grows a lingering gravity field\'s radius and reach',
+      () {
+        final picker = _FixedModuleOfferPicker([
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.longSight,
+          ],
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            RunModuleId.emergencySalvage,
+          ],
+          const [
+            RunModuleId.heavyCaliber,
+            RunModuleId.overclockRelay,
+            // Offered as a real unlock: gravityEcho is committed in
+            // availableRunModules and gravity well is placed by draft 3.
+            RunModuleId.gravityEcho,
+          ],
+        ]);
+        final game = OrionDefenseGame(
+          stage: _gravityWellModuleRefreshStage(),
+          moduleOfferPicker: picker,
+          // Gravity Echo is a stage blueprint; mark it committed so it is
+          // eligible for the draft like a real committed-clear unlock.
+          availableRunModules: {
+            ...RunModuleUnlocks.baseModules,
+            RunModuleId.gravityEcho,
+          },
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        // Clear waves 1-2 and choose Long Sight from draft 1.
+        game.startWave();
+        game.update(0);
+        game.startWave();
+        game.update(0);
+        var offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.longSight);
+
+        // Clear waves 3-4 and choose Emergency Salvage from draft 2.
+        game.startWave();
+        game.update(0);
+        game.startWave();
+        game.update(0);
+        offer = game.snapshot.pendingRunModuleOffer!;
+        game.selectRunModule(offer.offerId, RunModuleId.emergencySalvage);
+
+        // Place the wave-5 gravity well and clear the empty wave.
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.gravityWell);
+        game.processLifecycleEvents();
+        game.startWave();
+        game.update(0);
+        game.processLifecycleEvents();
+
+        // Wave 6: fire the gravity well so a field is created, then consume
+        // some of its duration so it lingers into the draft.
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        game.children.whereType<TowerComponent>().single.update(0.01);
+        game.processLifecycleEvents();
+        final field = game.children.whereType<GravityFieldComponent>().single;
+        final base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+        expect(field.radius, closeTo(base.fieldRadius, 0.001));
+        field.update(0.5);
+
+        game.children.whereType<EnemyComponent>().single.applyDamage(1000000);
+        game.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.snapshot.phase, GamePhase.build);
+        offer = game.snapshot.pendingRunModuleOffer!;
+        expect(field.parent, same(game)); // lingers into the draft
+
+        // Gravity Echo multiplies fieldRadius by 1.15; the lingering field's
+        // collision circle must grow too, not only its stats.
+        game.selectRunModule(offer.offerId, RunModuleId.gravityEcho);
+        game.processLifecycleEvents();
+        final echo = runModuleDefinition(RunModuleId.gravityEcho);
+        final expectedRadius = base.fieldRadius * echo.fieldRadiusMultiplier;
+        expect(field.stats.fieldRadius, closeTo(expectedRadius, 1e-9));
+        expect(field.radius, closeTo(expectedRadius, 0.001));
+
+        // An enemy outside the original radius but inside the grown one is
+        // now damaged on the next tick.
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final wave7Enemy = game.children.whereType<EnemyComponent>().single;
+        wave7Enemy.position.setFrom(
+          field.position + Vector2(base.fieldRadius + 6, 0),
+        );
+        expect(
+          wave7Enemy.position.distanceTo(field.position),
+          greaterThan(base.fieldRadius),
+        );
+        final healthBeforeTick = wave7Enemy.health;
+        field.update(base.fieldTickInterval);
+        expect(wave7Enemy.health, lessThan(healthBeforeTick));
+      },
+    );
+
+    test(
       'TowerComponent.updateTower resolves through its provider callback',
       () {
         var resolveCalls = 0;

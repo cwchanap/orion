@@ -31,9 +31,12 @@ class GravityFieldComponent extends CircleComponent {
 
   /// Replaces only the combat stats; remaining duration and tick cooldown
   /// continue from their current values so a lingering field is not restarted
-  /// mid-run when a run module is selected between waves.
+  /// mid-run when a run module is selected between waves. The component
+  /// radius is resynced so a newly resolved `fieldRadius` (e.g. Gravity Echo)
+  /// also resizes an active field's reach.
   void updateStats(TowerStats stats) {
     this.stats = stats;
+    radius = stats.fieldRadius;
   }
 
   @override
