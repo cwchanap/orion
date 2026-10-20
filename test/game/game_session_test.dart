@@ -1361,90 +1361,206 @@ void main() {
       );
     });
 
+    test('placed family modules surface as draft candidates once built', () {
+      const familyModuleByTower = <TowerType, RunModuleId>{
+        TowerType.cryo: RunModuleId.cryoReservoir,
+        TowerType.rocket: RunModuleId.rocketFusing,
+        TowerType.ionChain: RunModuleId.relayArc,
+        TowerType.nanite: RunModuleId.foundryNanites,
+        TowerType.laser: RunModuleId.auroraFocus,
+        TowerType.railgun: RunModuleId.siegeRounds,
+        TowerType.gravityWell: RunModuleId.gravityEcho,
+        TowerType.droneBay: RunModuleId.salvagedDrones,
+      };
+
+      for (final family in familyModuleByTower.entries) {
+        final picker = _RecordingOfferPicker();
+        final session = GameSession.initial(
+          stage: stageWithWaveCount(8),
+          gold: 9999,
+          offerPicker: picker,
+          availableRunModules: {...RunModuleUnlocks.baseModules, family.value},
+        );
+        const cell = GridPosition(2, 1);
+
+        if (session.isTowerUnlocked(family.key)) {
+          expect(
+            session.placeTower(cell, family.key).isAllowed,
+            isTrue,
+            reason: '${family.key} must be placeable from wave 1',
+          );
+        }
+
+        // Build the family at its first legal wave, resolving any scheduled
+        // drafts that open before the tower type unlocks.
+        while (session.towers.isEmpty) {
+          completeWave(session);
+          final pending = session.pendingRunModuleOffer;
+          if (pending != null) {
+            expect(
+              session.selectRunModule(
+                offerId: pending.offerId,
+                moduleId: pending.moduleIds.first,
+              ),
+              isTrue,
+            );
+          }
+          if (session.isTowerUnlocked(family.key)) {
+            expect(
+              session.placeTower(cell, family.key).isAllowed,
+              isTrue,
+              reason:
+                  '${family.key} should be placeable at unlock wave '
+                  '${GameBalance.towerUnlockWave(family.key)}',
+            );
+          }
+        }
+
+        // The next scheduled draft must surface the placed family's module.
+        while (session.pendingRunModuleOffer == null) {
+          completeWave(session);
+        }
+        final draftIndex = picker.candidateHistory.length - 1;
+        expect(
+          picker.candidateHistory[draftIndex],
+          contains(family.value),
+          reason:
+              '${family.key} built at unlock wave '
+              '${GameBalance.towerUnlockWave(family.key)} puts ${family.value} '
+              'among draft ${draftIndex + 1} candidates',
+        );
+        expect(session.pendingRunModuleOffer!.moduleIds.toSet(), hasLength(3));
+      }
+    });
+
+    test('eligible unplaced family module skips a full first pass', () {
+      final picker = _RecordingOfferPicker();
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        offerPicker: picker,
+        availableRunModules: {
+          ...RunModuleUnlocks.baseModules,
+          RunModuleId.gravityEcho,
+        },
+      );
+
+      clearTwoWaves(session);
+
+      // Four universal candidates remain, so the fallback never runs and the
+      // unplaced Gravity Well family is not preferred for draft 1.
+      final candidates = picker.candidateHistory.single;
+      expect(candidates, hasLength(greaterThanOrEqualTo(3)));
+      expect(
+        candidates.every((id) => runModuleDefinition(id).tower == null),
+        isTrue,
+      );
+    });
+
     test(
-      'module candidates include unlocked affinity fallbacks for a laser build',
+      'eligible unplaced family module enters via the later-draft fallback',
       () {
-        // Pinned to the legacy ungated set so the fallback branch (fewer than
-        // three universal+placed-family candidates) stays observable; the six
-        // boss modules fill that quota once default-eligible. Task 2 owns
-        // candidate tests against the full catalog.
-        final picker = _FixedModuleOfferPicker([
-          const [
-            RunModuleId.heavyCaliber,
-            RunModuleId.overclockRelay,
-            RunModuleId.longSight,
-          ],
-          const [
-            RunModuleId.overclockRelay,
-            RunModuleId.longSight,
-            RunModuleId.emergencySalvage,
-          ],
-          const [
-            RunModuleId.cryoReservoir,
-            RunModuleId.rocketFusing,
-            RunModuleId.emergencySalvage,
-          ],
-        ]);
+        final picker = _RecordingOfferPicker();
         final session = GameSession.initial(
           stage: stageWithWaveCount(8),
           offerPicker: picker,
-          availableRunModules: RunModuleUnlocks.baseModules.difference(const {
-            RunModuleId.relayArc,
-            RunModuleId.salvagedDrones,
-            RunModuleId.foundryNanites,
-            RunModuleId.auroraFocus,
-            RunModuleId.siegeRounds,
+          availableRunModules: {
+            ...RunModuleUnlocks.baseModules,
             RunModuleId.gravityEcho,
-          }),
-        );
-        expect(
-          session
-              .placeTower(const GridPosition(2, 1), TowerType.laser)
-              .isAllowed,
-          isTrue,
+          },
         );
 
-        completeWave(session);
-        completeWave(session);
-        final firstOffer = session.pendingRunModuleOffer!;
-        final firstCandidates = picker.seenCandidates[0];
-        expect(firstCandidates, isNotEmpty);
-        expect(
-          firstCandidates.every((id) => runModuleDefinition(id).tower == null),
-          isTrue,
-        );
+        clearTwoWaves(session);
+        var offer = session.pendingRunModuleOffer!;
         expect(
           session.selectRunModule(
-            offerId: firstOffer.offerId,
+            offerId: offer.offerId,
             moduleId: RunModuleId.heavyCaliber,
           ),
           isTrue,
         );
-        completeWave(session);
-        completeWave(session);
-        final secondOffer = session.pendingRunModuleOffer!;
+
+        clearTwoWaves(session);
+        // Draft 2 excludes the acquired Heavy Caliber.
         expect(
-          picker.seenCandidates[1],
+          picker.candidateHistory[1],
           isNot(contains(RunModuleId.heavyCaliber)),
         );
+        offer = session.pendingRunModuleOffer!;
         expect(
           session.selectRunModule(
-            offerId: secondOffer.offerId,
+            offerId: offer.offerId,
             moduleId: RunModuleId.overclockRelay,
           ),
           isTrue,
         );
-        completeWave(session);
-        completeWave(session);
 
-        final candidates = picker.seenCandidates[2];
+        clearTwoWaves(session);
+        // Only two universal candidates remain, so the unlocked-family fallback
+        // legitimately admits the eligible-but-unplaced Gravity Echo.
+        final candidates = picker.candidateHistory[2];
         expect(candidates, isNot(contains(RunModuleId.heavyCaliber)));
         expect(candidates, isNot(contains(RunModuleId.overclockRelay)));
         expect(candidates, contains(RunModuleId.cryoReservoir));
         expect(candidates, contains(RunModuleId.rocketFusing));
-        expect(candidates, hasLength(greaterThanOrEqualTo(3)));
+        expect(candidates, contains(RunModuleId.gravityEcho));
       },
     );
+
+    test('uncommitted family blueprints are never draft candidates', () {
+      final picker = _RecordingOfferPicker();
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        gold: 9999,
+        offerPicker: picker,
+      );
+      const cell = GridPosition(2, 1);
+
+      while (session.towers.isEmpty) {
+        completeWave(session);
+        final pending = session.pendingRunModuleOffer;
+        if (pending != null) {
+          expect(
+            session.selectRunModule(
+              offerId: pending.offerId,
+              moduleId: pending.moduleIds.first,
+            ),
+            isTrue,
+          );
+        }
+        if (session.isTowerUnlocked(TowerType.gravityWell)) {
+          expect(
+            session.placeTower(cell, TowerType.gravityWell).isAllowed,
+            isTrue,
+          );
+        }
+      }
+      while (session.pendingRunModuleOffer == null) {
+        completeWave(session);
+      }
+
+      const gatedBlueprints = {
+        RunModuleId.relayCalibration,
+        RunModuleId.relayArc,
+        RunModuleId.salvagedDrones,
+        RunModuleId.foundryNanites,
+        RunModuleId.auroraFocus,
+        RunModuleId.siegeRounds,
+        RunModuleId.gravityEcho,
+      };
+      expect(
+        session.availableRunModules.intersection(gatedBlueprints),
+        isEmpty,
+      );
+      expect(
+        picker.candidateHistory.every(
+          (ids) => ids.toSet().intersection(gatedBlueprints).isEmpty,
+        ),
+        isTrue,
+        reason:
+            'Placed Gravity Well must not surface the uncommitted '
+            'Gravity Echo blueprint',
+      );
+    });
 
     test('default session excludes the locked blueprint', () {
       final picker = _RecordingOfferPicker();

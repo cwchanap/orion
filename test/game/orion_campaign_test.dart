@@ -78,6 +78,58 @@ void main() {
       ]);
     });
 
+    test('assigns the exact boss blueprint to every stage', () {
+      const expectedBlueprints = <String, RunModuleId>{
+        'outpost-alpha': RunModuleId.relayCalibration,
+        'nebula-relay': RunModuleId.relayArc,
+        'salvage-rift': RunModuleId.salvagedDrones,
+        'asteroid-foundry': RunModuleId.foundryNanites,
+        'aurora-gate': RunModuleId.auroraFocus,
+        'void-bastion': RunModuleId.siegeRounds,
+        'singularity-core': RunModuleId.gravityEcho,
+      };
+
+      for (final stage in OrionCampaign.stages) {
+        expect(
+          stage.blueprint,
+          expectedBlueprints[stage.id],
+          reason: '${stage.id} carries the wrong blueprint',
+        );
+      }
+    });
+
+    test('stage blueprints are non-null, unique, and catalogued once', () {
+      expect(OrionCampaign.stages, hasLength(7));
+      final blueprints = OrionCampaign.stages
+          .map((stage) => stage.blueprint)
+          .whereType<RunModuleId>()
+          .toSet();
+
+      expect(blueprints, hasLength(7));
+      for (final blueprint in blueprints) {
+        expect(
+          runModuleCatalog.where((definition) => definition.id == blueprint),
+          hasLength(1),
+          reason: '$blueprint must exist exactly once in the catalog',
+        );
+      }
+    });
+
+    test('standalone test stages default to a null blueprint', () {
+      final stage = StageDefinition(
+        id: 'blueprint-less',
+        name: 'Blueprint-less',
+        mapLabel: 'Test',
+        description: 'Fixture stage without a blueprint',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [],
+        mapColumn: 0,
+        mapRow: 0,
+      );
+
+      expect(stage.blueprint, isNull);
+    });
+
     test(
       'validation rejects duplicate modifiers without campaign-specific rules',
       () {

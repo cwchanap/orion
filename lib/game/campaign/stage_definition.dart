@@ -14,6 +14,7 @@ class StageDefinition {
     this.isMainPath = true,
     this.mainPathOrder,
     this.reward,
+    this.blueprint,
     required this.mapColumn,
     required this.mapRow,
     List<StageModifier> modifiers = const [],
@@ -32,6 +33,10 @@ class StageDefinition {
   final bool isMainPath;
   final int? mainPathOrder;
   final CampaignReward? reward;
+
+  /// Boss blueprint module recovered from this stage's first committed clear;
+  /// null for lightweight test stages with no blueprint reward.
+  final RunModuleId? blueprint;
   final int mapColumn;
   final int mapRow;
   final List<StageModifier> modifiers;
