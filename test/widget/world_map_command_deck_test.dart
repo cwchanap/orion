@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/campaign_presentation.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
@@ -474,36 +475,134 @@ void main() {
     expect(find.byKey(const ValueKey('sector-route-layer')), findsNothing);
   });
 
-  testWidgets('Alpha blueprint semantics follow committed progress', (
+  testWidgets(
+    'blueprint semantics follow committed progress on every stage node',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        // Fresh campaign: all seven blueprint-bearing nodes report Locked.
+        await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+        for (final stage in OrionCampaign.stages) {
+          expect(
+            find.bySemanticsLabel(RegExp('${stage.name}.*Blueprint • Locked')),
+            findsOneWidget,
+            reason: stage.id,
+          );
+        }
+        expect(
+          find.bySemanticsLabel(RegExp(r'Blueprint • Recovered')),
+          findsNothing,
+        );
+
+        // A committed clear flips only its own stage's node to Recovered;
+        // the other six stay Locked.
+        final rift = OrionCampaign.stages.firstWhere(
+          (stage) => stage.id == 'salvage-rift',
+        );
+        await tester.pumpWidget(
+          buildMap(
+            progress: CampaignProgress(
+              bestResultsByStageId: {
+                rift.id: const StageResult(
+                  medal: StageMedal.gold,
+                  bestBaseHealth: 20,
+                ),
+              },
+            ),
+          ),
+        );
+        expect(
+          find.bySemanticsLabel(RegExp('${rift.name}.*Blueprint • Recovered')),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsLabel(RegExp(r'Blueprint • Locked')),
+          findsNWidgets(6),
+        );
+
+        // Full clear: every node Recovered.
+        await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+        for (final stage in OrionCampaign.stages) {
+          expect(
+            find.bySemanticsLabel(
+              RegExp('${stage.name}.*Blueprint • Recovered'),
+            ),
+            findsOneWidget,
+            reason: stage.id,
+          );
+        }
+        expect(
+          find.bySemanticsLabel(RegExp(r'Blueprint • Locked')),
+          findsNothing,
+        );
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+
+  testWidgets(
+    'optional side-stage nodes expose dual reward and blueprint facts',
+    (tester) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+        expect(
+          find.bySemanticsLabel(
+            RegExp(
+              'Salvage Rift.*'
+              'Reward: \\+${GameBalance.salvageRiftGoldBonus} Gold.*'
+              r'Blueprint • Locked',
+            ),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsLabel(
+            RegExp(
+              'Void Bastion.*'
+              'Reward: \\+${GameBalance.voidBastionHealthBonus} HP.*'
+              r'Blueprint • Locked',
+            ),
+          ),
+          findsOneWidget,
+        );
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+
+  testWidgets('dual reward glyphs stay clear of the crest at 360x640', (
     tester,
   ) async {
-    final semantics = tester.ensureSemantics();
-    try {
-      await tester.pumpWidget(buildMap(progress: CampaignProgress()));
-      expect(
-        find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Blueprint • Locked')),
-        findsOneWidget,
-      );
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        buildMap(
-          progress: CampaignProgress(
-            bestResultsByStageId: {
-              OrionCampaign.stageOneId: const StageResult(
-                medal: StageMedal.clear,
-                bestBaseHealth: 6,
-              ),
-            },
-          ),
+    // Cleared optional stages stack the worst glyph crowding: medal,
+    // campaign reward, and blueprint on one crest.
+    await tester.pumpWidget(
+      buildMap(
+        progress: CampaignProgress(
+          bestResultsByStageId: {
+            'salvage-rift': const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'void-bastion': const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
         ),
-      );
-      expect(
-        find.bySemanticsLabel(RegExp(r'Outpost Alpha.*Blueprint • Recovered')),
-        findsOneWidget,
-      );
-    } finally {
-      semantics.dispose();
+      ),
+    );
+
+    for (final id in ['salvage-rift', 'void-bastion']) {
+      expect(find.byKey(ValueKey('sector-stage-$id')), findsOneWidget);
     }
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('stage semantics tap action selects the stage', (tester) async {

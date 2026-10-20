@@ -1111,25 +1111,33 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
-  // The blueprint recovery reward is a first-clear fact for stage one only.
-  // Because _missionPriorResult was captured from committed progress at
-  // attempt start, a successful save can advance _committedProgress without
-  // changing the first-clear fact for the completed attempt. Replay
-  // recaptures _missionPriorResult from committed progress (now non-null)
-  // and suppresses duplicate celebration (HPA-528).
+  // The blueprint recovery reward is a first-clear fact: _missionPriorResult
+  // was captured from committed progress at attempt start, so a successful
+  // save can advance _committedProgress without changing the first-clear
+  // fact for the completed attempt. Replay recaptures _missionPriorResult
+  // from committed progress (now non-null) and suppresses duplicate
+  // celebration. The module identity resolves generically from the
+  // mission's own stage (HPA-415); Alpha's strings are the Relay
+  // Calibration instance of the same pattern.
   MissionRewardFact? _missionRewardFact() {
-    if (_missionStageId != OrionCampaign.stageOneId ||
-        _missionPriorResult != null) {
+    final stageId = _missionStageId;
+    if (stageId == null || _missionPriorResult != null) {
       return null;
     }
 
+    final blueprint = OrionCampaign.stageById(stageId).blueprint;
+    if (blueprint == null) {
+      return null;
+    }
+    final module = runModuleDefinition(blueprint);
+
     return switch (_missionSaveState) {
-      MissionSaveState.saving => const MissionRewardFact(
+      MissionSaveState.saving => MissionRewardFact(
         title: 'Blueprint recovery pending',
-        detail: 'Relay Calibration unlocks after this result is saved.',
+        detail: '${module.title} unlocks after this result is saved.',
       ),
-      MissionSaveState.saved => const MissionRewardFact(
-        title: 'Blueprint recovered: Relay Calibration',
+      MissionSaveState.saved => MissionRewardFact(
+        title: 'Blueprint recovered: ${module.title}',
         detail: 'Available in Salvage Module drafts on future runs.',
       ),
       MissionSaveState.failed => const MissionRewardFact(
