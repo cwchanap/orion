@@ -9,13 +9,13 @@
 
 ## Definition of done
 
-The game emits one meaningful semantic request at each real combat resolution point. The sound backend checks the existing live Sound Effects preference and admits only a bounded number of sounds in elapsed real time, protecting kill/core/boss messages during a busy 3× fight. Existing haptics and four feedback cues continue working. Focused tests + whole Flutter suite pass; device listening and frame pacing are checked. No code changes outside this ticket's stated responsibility.
+The game emits one meaningful semantic request per resolved combat feedback component/transition (one splash/chain/pierce component can contain several target positions). The sound backend checks the existing live Sound Effects preference and admits only a bounded number of sounds in elapsed real time, protecting kill/core/boss messages during a busy 3× fight. Existing haptics and four feedback cues continue working. Focused tests + whole Flutter suite pass; device listening and frame pacing are checked. No code changes outside this ticket's stated responsibility.
 
 ## File map
 
 **Add**
-- `lib/game/feedback/combat_sound_limiter.dart` — pure, small cue/priority admission logic using supplied monotonic milliseconds and fixed known sound durations; no timers, Flutter, or `GameSession`.
-- `test/feedback/combat_sound_limiter_test.dart` — deterministic burst/priority/expiry tests.
+- `lib/game/feedback/combat_sound_limiter.dart` — pure, small cue/priority admission logic using supplied monotonic milliseconds and per-lane rolling admission timestamps; no per-asset duration data, timers, Flutter, or `GameSession`.
+- `test/feedback/combat_sound_limiter_test.dart` — deterministic burst/priority/rolling-window tests.
 
 **Modify**
 - `lib/game/feedback/game_feedback.dart` — add typed cue methods, no-op definitions, platform filename mapping, high-frequency `AudioPool` startup, admission before playback, async failure handling and owned-resource disposal. If necessary, put a **single narrow playback test seam** here; no audio registry/framework.
@@ -32,38 +32,37 @@ The game emits one meaningful semantic request at each real combat resolution po
 
 ## Step 1 — Lock the API and the gate in tests
 
-**Start with tests:**
-1. Add an exhaustive recording/no-op test for `towerFired(TowerType)`, `splashImpact`, `chainImpact`, `pierceImpact`, `enemyDestroyed`, `coreHit`, `waveStarted`, `bossArrived`, `bossDefeated` (existing signature), and `towerSold`.
+**Compile-safe first slice:**
+1. Extend `GameFeedback` and `NoOpGameFeedback` with the typed methods `towerFired(TowerType)`, `splashImpact`, `chainImpact`, `pierceImpact`, `enemyDestroyed`, `coreHit`, `waveStarted`, `bossArrived` and `towerSold`; keep the existing `bossDefeated` signature. Update `_RecordingGameFeedback` and any other implementers so the project compiles before adding call-site assertions. Then add exhaustive no-op/recording tests.
 2. Add pure limiter tests with an explicit `nowMs` argument; model real-time bursts. Cases:
    - 100 same-family fire requests at the same millisecond admit at most one from that family; mixed simultaneous families cannot exceed the **two low** budget.
    - Repeated splash/chain/pierce each obey a 180 ms per-kind interval and share that low budget.
    - Saturated low lane does **not** suppress an enemy kill (normal lane) or a core hit/boss cue (critical lane).
-   - At most **one normal**, **two critical**, and **five total** combat reservations remain live at once.
-   - Expired reservations free capacity; a playback-start failure also releases its reservation.
+   - Across any rolling **500 ms** interval, admit at most **two low**, **one normal**, **two critical**, and **five total** combat starts.
+   - Old timestamps fall out of the window and allow new starts; a failed player start **does not** release its admitted timestamp early.
    - Advancing the *game* time by 3× without advancing wall-clock `nowMs` does not admit additional sounds.
-   - Disabled Sound Effects does not consume an admission, so re-enabling doesn't mysteriously suppress the next event.
 3. Add a table of `TowerType -> fire_<family>.wav` filenames and impact/semantic mappings to the playback test. Keep asset names in one implementation switch/mapping, not string concatenation scattered across the game.
 
-**Implementation:** Small `CombatSoundLimiter` with three reserved lanes (low 2; normal 1; critical 2), last-admitted timestamp per cue, known short occupancy windows, and no background timers. Use monotonic `Stopwatch.elapsedMilliseconds` from the platform feedback. Reserve synchronously before asynchronous play so same-frame bursts cannot race past limits. Release a reservation when a start fails. No audio controls in `GameSession`.
+**Implementation:** Small `CombatSoundLimiter` with three reserved lanes (low 2; normal 1; critical 2) and a single 500 ms rolling window. Hold the last N admitted timestamps per lane plus the last-admitted time per concrete cue for its minimum interval. Use monotonic `Stopwatch.elapsedMilliseconds` from platform feedback and record admitted starts **synchronously** before async playback, so same-frame bursts cannot race past limits. No timers, WAV-duration table, reservations, playback-failure release logic, or audio controls in `GameSession`. HPA-385 supplies WAVs no longer than 500 ms, so the rolling bound also constrains nominal simultaneous combat output without per-asset coupling.
 
 ## Step 2 — Extend PlatformGameFeedback without a new audio stack
 
-**Tests first:** Verify all 17 new cue filenames, the original four cue mappings, sounds on/off, haptics on/off, best-effort warm-up/pool creation, and disposal. Include an injected recording output at the narrow admission boundary if existing `AudioCache`/platform-channel fakes do not expose actual starts or voice counts reliably; avoid mocking the entire game/Flame engine.
+**Tests first:** Verify all 17 new cue filenames, the original four cue mappings, sounds on/off, haptics on/off, best-effort warm-up/pool creation, and disposal. Test **Sound Effects OFF does not call or consume the limiter**, so an immediate re-enable permits a new sound, here in the platform integration test (not the pure-limiter test). Include an injected recording output at the narrow admission boundary if existing `AudioCache`/platform-channel fakes do not expose accepted start requests reliably; avoid mocking the entire game/Flame engine.
 
 **Implement:**
-1. Extend the existing `GameFeedback` contract and `NoOpGameFeedback`. Use `TowerType` for `towerFired`, keeping the mapping exhaustive.
+1. Reuse the typed `GameFeedback` / `NoOpGameFeedback` contract established in Step 1; map `TowerType` to filenames exhaustively (no additional event API).
 2. Preserve `PlatformGameFeedback`'s constructor-time cache warm-up and live preference callbacks. Start `AudioPool` instances **once per page-owned service**, asynchronously and best-effort, for shots, multi-target impacts and enemy death; no work per tower/game tick apart from the limiter check. Use pool limits 1–2 per sound *in addition to* the explicit gate. Rare events may retain `FlameAudio.play`. The asset list must match HPA-385 exactly after its PR merges.
-3. Skip play on disabled sound, unavailable/uninitialized pool, or denied admission. Do not enqueue/resume skipped sounds. Preserve haptics separately; add a light boss-arrival haptic and keep boss-defeat medium haptic.
+3. Skip play on disabled sound, unavailable/uninitialized pool, or denied admission. Disabled sound or unready pool never calls/consumes the limiter; after admission, a failed audio start retains its short window slot. Do not enqueue/resume skipped sounds. Preserve haptics separately; add a light boss-arrival haptic and keep boss-defeat medium haptic.
 4. Provide idempotent/best-effort `PlatformGameFeedback.dispose()` that prevents late pool initialization from leaking or playing and releases owned pools. Do not touch shared `FlameAudio.audioCache` or add lifecycle methods to every fake.
 
-**Important:** `AudioPool.maxPlayers` is not a substitute for the five-voice priority gate. The tests must assert **accepted playback requests**, not merely pool size.
+**Important:** `AudioPool.maxPlayers` is not a substitute for the five-starts-per-500-ms priority gate. Tests assert **accepted playback requests in every rolling window**, not a fabricated exact platform mixer voice count or merely pool size.
 
 ## Step 3 — Wire only existing resolved gameplay call sites
 
 In `lib/game/orion_defense_game.dart`, follow the real success branch rather than a UI-button click or a snapshot observation:
 
 1. In `_launchProjectile`, call `gameFeedback.towerFired(tower.placedTower.type)` once **before** the gravity-field/drone early returns. Never produce additional fire cues per drone's autonomous attack or gravity tick.
-2. In `_addCombatFeedback`, switch only the `splash`, `chain`, and `pierce` variants to the three impact methods. Ignore its `enemyDestroyed` and `coreImpact` variants for **audio** (visual rendering continues unchanged); those are owned by their handlers.
+2. In `_addCombatFeedback`, switch only the `splash`, `chain`, and `pierce` variants to the three impact methods. Each splash/chain/pierce **visual component is one resolved multi-target event** with a list of positions, so emit one audio request per component, **not per target**. The limiter suppresses rapid *separate attack* requests; no change to damage or visual callback multiplicity. Ignore `enemyDestroyed` and `coreImpact` variants for **audio** (visual rendering continues unchanged); those are owned by their handlers.
 3. In `_handleEnemyKilled`, call `enemyDestroyed` for regular kills; for a `BossDefinition`, call the already-existing `bossDefeated` once, with no generic death audio.
 4. In `_handleEnemyReachedBase`, check the post-damage phase; use `coreHit` on nonlethal leaks, and existing `baseDefeated` on a losing leak. Do not stack both.
 5. In `startWave`, emit `waveStarted` after `_session.startWave()` returns true. This covers manual and auto-start without duplicating code.
@@ -107,7 +106,7 @@ Mark draft ready only after the single coding PR contains its implementation and
 | --- | --- |
 | All tower-family, impact, kill, leak, wave, boss, sell cues | Steps 2–3 |
 | Every cue silent when Sound Effects off | Steps 1–2, 5 |
-| Capped voices and priority at 3× | Steps 1–2, 5 |
+| Bounded combat start density / nominal voices and priority at 3× | Steps 1–2, 5 (with HPA-385 <= 500 ms clip bound) |
 | Preserve old sounds/haptics; boss-arrival haptic | Steps 2–3 |
 | Recording-fake + gameplay tests | Steps 1, 4 |
 | WAV generation and asset documentation | **HPA-385 (separate asset ticket/PR)** |
