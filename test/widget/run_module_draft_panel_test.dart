@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/orion_finders.dart';
+
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
@@ -46,7 +47,7 @@ void main() {
       final definition = runModuleDefinition(id);
       expect(find.text(definition.title), findsOneWidget);
       expect(find.text(definition.effectText), findsOneWidget);
-      expect(find.text(definition.affinity.label), findsAtLeastNWidgets(1));
+      expect(find.text(definition.affinityLabel), findsAtLeastNWidgets(1));
     }
     expect(
       find.byKey(const ValueKey('run-module-draft-frame')),
@@ -67,7 +68,7 @@ void main() {
         expect(
           find.bySemanticsLabel(
             '${definition.title}. ${definition.effectText} '
-            'Affinity: ${definition.affinity.label}${contextById[id]}',
+            'Affinity: ${definition.affinityLabel}${contextById[id]}',
           ),
           findsOneWidget,
         );
@@ -228,7 +229,7 @@ void main() {
         expect(
           find.bySemanticsLabel(
             '${salvage.title}. ${salvage.effectText} '
-            'Affinity: ${salvage.affinity.label}',
+            'Affinity: ${salvage.affinityLabel}',
           ),
           findsOneWidget,
         );

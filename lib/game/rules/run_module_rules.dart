@@ -10,7 +10,7 @@ abstract final class RunModuleRules {
 
     for (final definition in runModuleCatalog) {
       if (!acquired.contains(definition.id) ||
-          !appliesToTower(definition.affinity, stats.type)) {
+          !appliesToTower(definition, stats.type)) {
         continue;
       }
 
@@ -23,6 +23,9 @@ abstract final class RunModuleRules {
         range: stats.range * definition.rangeMultiplier,
         splashRadius: stats.splashRadius * definition.splashRadiusMultiplier,
         slowDuration: stats.slowDuration + definition.slowDurationBonus,
+        chainCount: stats.chainCount + definition.chainCountBonus,
+        pierceCount: stats.pierceCount + definition.pierceCountBonus,
+        fieldRadius: stats.fieldRadius * definition.fieldRadiusMultiplier,
       );
     }
 
@@ -37,14 +40,12 @@ abstract final class RunModuleRules {
   ) {
     if (!definition.affectsTowerStats) return 0;
     return towers
-        .where((tower) => appliesToTower(definition.affinity, tower.type))
+        .where((tower) => appliesToTower(definition, tower.type))
         .length;
   }
 
-  static bool appliesToTower(RunModuleAffinity affinity, TowerType towerType) =>
-      switch (affinity) {
-        RunModuleAffinity.universal => true,
-        RunModuleAffinity.cryo => towerType == TowerType.cryo,
-        RunModuleAffinity.rocket => towerType == TowerType.rocket,
-      };
+  static bool appliesToTower(
+    RunModuleDefinition definition,
+    TowerType towerType,
+  ) => definition.tower == null || definition.tower == towerType;
 }

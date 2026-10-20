@@ -72,12 +72,12 @@ class RunModuleDraftPanel extends StatelessWidget {
 String? _beneficiaryContext(RunModuleDefinition definition, int count) {
   if (!definition.affectsTowerStats) return null;
   final noun = count == 1 ? 'tower' : 'towers';
-  if (definition.affinity == RunModuleAffinity.universal) {
+  if (definition.tower == null) {
     return count == 0
         ? 'Affects every tower you build'
         : 'Affects your $count placed $noun';
   }
-  final type = definition.affinity.label;
+  final type = definition.affinityLabel;
   return count == 0
       ? 'Benefits $type towers you build later'
       : 'Affects your $count placed $type $noun';
@@ -103,7 +103,7 @@ class _RunModuleCard extends StatelessWidget {
       enabled: true,
       label:
           '${definition.title}. ${definition.effectText} '
-          'Affinity: ${definition.affinity.label}'
+          'Affinity: ${definition.affinityLabel}'
           '${runContext == null ? '' : '. $runContext'}',
       onTap: onPressed,
       excludeSemantics: true,
@@ -140,7 +140,7 @@ class _RunModuleCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      definition.affinity.label,
+                      definition.affinityLabel,
                       style: OrionTypography.microLabel(
                         color: uiTheme.systemCyan,
                       ),

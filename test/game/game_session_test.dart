@@ -1364,6 +1364,10 @@ void main() {
     test(
       'module candidates include unlocked affinity fallbacks for a laser build',
       () {
+        // Pinned to the legacy ungated set so the fallback branch (fewer than
+        // three universal+placed-family candidates) stays observable; the six
+        // boss modules fill that quota once default-eligible. Task 2 owns
+        // candidate tests against the full catalog.
         final picker = _FixedModuleOfferPicker([
           const [
             RunModuleId.heavyCaliber,
@@ -1384,6 +1388,14 @@ void main() {
         final session = GameSession.initial(
           stage: stageWithWaveCount(8),
           offerPicker: picker,
+          availableRunModules: RunModuleUnlocks.baseModules.difference(const {
+            RunModuleId.relayArc,
+            RunModuleId.salvagedDrones,
+            RunModuleId.foundryNanites,
+            RunModuleId.auroraFocus,
+            RunModuleId.siegeRounds,
+            RunModuleId.gravityEcho,
+          }),
         );
         expect(
           session
@@ -1398,10 +1410,7 @@ void main() {
         final firstCandidates = picker.seenCandidates[0];
         expect(firstCandidates, isNotEmpty);
         expect(
-          firstCandidates.every(
-            (id) =>
-                runModuleDefinition(id).affinity == RunModuleAffinity.universal,
-          ),
+          firstCandidates.every((id) => runModuleDefinition(id).tower == null),
           isTrue,
         );
         expect(

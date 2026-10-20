@@ -145,15 +145,12 @@ enum RunModuleId {
   cryoReservoir,
   rocketFusing,
   relayCalibration,
-}
-
-enum RunModuleAffinity {
-  universal('Universal'),
-  cryo('Cryo'),
-  rocket('Rocket');
-
-  const RunModuleAffinity(this.label);
-  final String label;
+  relayArc,
+  salvagedDrones,
+  foundryNanites,
+  auroraFocus,
+  siegeRounds,
+  gravityEcho,
 }
 
 class GridPosition {
@@ -282,9 +279,9 @@ class TowerStats {
   /// resolvers need to mutate: `damage` and `slowDuration` for campaign tech
   /// upgrades, `fieldRadius` and `fieldDuration` for stage environmental
   /// modifiers (e.g. amplified gravity wells), and `range`, `fireInterval`,
-  /// `splashRadius`, `corrosionDamagePerSecond`, and `droneDamage` for run
-  /// modules. Everything else copies from `this`. Kept narrow on purpose —
-  /// extend only if another feature needs it.
+  /// `splashRadius`, `corrosionDamagePerSecond`, `droneDamage`, `chainCount`,
+  /// and `pierceCount` for run modules. Everything else copies from `this`.
+  /// Kept narrow on purpose — extend only if another feature needs it.
   TowerStats copyWith({
     double? damage,
     double? slowDuration,
@@ -295,6 +292,8 @@ class TowerStats {
     double? splashRadius,
     double? corrosionDamagePerSecond,
     double? droneDamage,
+    int? chainCount,
+    int? pierceCount,
   }) {
     return TowerStats(
       type: type,
@@ -310,9 +309,9 @@ class TowerStats {
       splashRadius: splashRadius ?? this.splashRadius,
       slowMultiplier: slowMultiplier,
       slowDuration: slowDuration ?? this.slowDuration,
-      pierceCount: pierceCount,
+      pierceCount: pierceCount ?? this.pierceCount,
       pierceWidth: pierceWidth,
-      chainCount: chainCount,
+      chainCount: chainCount ?? this.chainCount,
       chainRange: chainRange,
       chainFalloff: chainFalloff,
       corrosionDamagePerSecond:
@@ -642,24 +641,34 @@ final class RunModuleDefinition {
   const RunModuleDefinition({
     required this.id,
     required this.title,
-    required this.affinity,
+    this.tower,
     this.damageMultiplier = 1,
     this.fireIntervalMultiplier = 1,
     this.rangeMultiplier = 1,
     this.splashRadiusMultiplier = 1,
     this.slowDurationBonus = 0,
+    this.chainCountBonus = 0,
+    this.pierceCountBonus = 0,
+    this.fieldRadiusMultiplier = 1,
     this.immediateGold = 0,
   });
 
   final RunModuleId id;
   final String title;
-  final RunModuleAffinity affinity;
+
+  /// Tower family this module affects; null applies to every tower.
+  final TowerType? tower;
   final double damageMultiplier;
   final double fireIntervalMultiplier;
   final double rangeMultiplier;
   final double splashRadiusMultiplier;
   final double slowDurationBonus;
+  final int chainCountBonus;
+  final int pierceCountBonus;
+  final double fieldRadiusMultiplier;
   final int immediateGold;
+
+  String get affinityLabel => tower?.label ?? 'Universal';
 
   /// Whether this module changes resolved tower stats (as opposed to a pure
   /// economy effect such as [immediateGold]).
@@ -668,7 +677,10 @@ final class RunModuleDefinition {
       fireIntervalMultiplier != 1 ||
       rangeMultiplier != 1 ||
       splashRadiusMultiplier != 1 ||
-      slowDurationBonus != 0;
+      slowDurationBonus != 0 ||
+      chainCountBonus != 0 ||
+      pierceCountBonus != 0 ||
+      fieldRadiusMultiplier != 1;
 
   String get effectText => switch (id) {
     RunModuleId.heavyCaliber =>
@@ -688,6 +700,18 @@ final class RunModuleDefinition {
     RunModuleId.relayCalibration =>
       'All towers gain ${percent(rangeMultiplier - 1)} range; '
           'attack interval drops ${percent(1 - fireIntervalMultiplier)}.',
+    RunModuleId.relayArc => 'Ion Chain arcs to $chainCountBonus more target.',
+    RunModuleId.salvagedDrones =>
+      'Drone attacks deal ${percent(damageMultiplier - 1)} more damage.',
+    RunModuleId.foundryNanites =>
+      'Nanite impact and corrosion damage rise '
+          '${percent(damageMultiplier - 1)}.',
+    RunModuleId.auroraFocus =>
+      'Laser attack interval drops ${percent(1 - fireIntervalMultiplier)}.',
+    RunModuleId.siegeRounds =>
+      'Railgun shots pierce $pierceCountBonus more target.',
+    RunModuleId.gravityEcho =>
+      'Gravity Well field radius grows ${percent(fieldRadiusMultiplier - 1)}.',
   };
 }
 
@@ -695,48 +719,79 @@ const runModuleCatalog = <RunModuleDefinition>[
   RunModuleDefinition(
     id: RunModuleId.heavyCaliber,
     title: 'Heavy Caliber',
-    affinity: RunModuleAffinity.universal,
     damageMultiplier: 1.20,
     fireIntervalMultiplier: 1.10,
   ),
   RunModuleDefinition(
     id: RunModuleId.overclockRelay,
     title: 'Overclock Relay',
-    affinity: RunModuleAffinity.universal,
     fireIntervalMultiplier: 0.85,
     damageMultiplier: 0.92,
   ),
   RunModuleDefinition(
     id: RunModuleId.longSight,
     title: 'Long Sight',
-    affinity: RunModuleAffinity.universal,
     rangeMultiplier: 1.15,
   ),
   RunModuleDefinition(
     id: RunModuleId.emergencySalvage,
     title: 'Emergency Salvage',
-    affinity: RunModuleAffinity.universal,
     immediateGold: 90,
   ),
   RunModuleDefinition(
     id: RunModuleId.cryoReservoir,
     title: 'Cryo Reservoir',
-    affinity: RunModuleAffinity.cryo,
+    tower: TowerType.cryo,
     slowDurationBonus: 0.60,
   ),
   RunModuleDefinition(
     id: RunModuleId.rocketFusing,
     title: 'Rocket Fusing',
-    affinity: RunModuleAffinity.rocket,
+    tower: TowerType.rocket,
     splashRadiusMultiplier: 1.25,
     damageMultiplier: 0.90,
   ),
   RunModuleDefinition(
     id: RunModuleId.relayCalibration,
     title: 'Relay Calibration',
-    affinity: RunModuleAffinity.universal,
     rangeMultiplier: 1.08,
     fireIntervalMultiplier: 0.92,
+  ),
+  RunModuleDefinition(
+    id: RunModuleId.relayArc,
+    title: 'Relay Arc',
+    tower: TowerType.ionChain,
+    chainCountBonus: 1,
+  ),
+  RunModuleDefinition(
+    id: RunModuleId.salvagedDrones,
+    title: 'Salvaged Drones',
+    tower: TowerType.droneBay,
+    damageMultiplier: 1.20,
+  ),
+  RunModuleDefinition(
+    id: RunModuleId.foundryNanites,
+    title: 'Foundry Nanites',
+    tower: TowerType.nanite,
+    damageMultiplier: 1.20,
+  ),
+  RunModuleDefinition(
+    id: RunModuleId.auroraFocus,
+    title: 'Aurora Focus',
+    tower: TowerType.laser,
+    fireIntervalMultiplier: 0.88,
+  ),
+  RunModuleDefinition(
+    id: RunModuleId.siegeRounds,
+    title: 'Siege Rounds',
+    tower: TowerType.railgun,
+    pierceCountBonus: 1,
+  ),
+  RunModuleDefinition(
+    id: RunModuleId.gravityEcho,
+    title: 'Gravity Echo',
+    tower: TowerType.gravityWell,
+    fieldRadiusMultiplier: 1.15,
   ),
 ];
 
