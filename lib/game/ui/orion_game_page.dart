@@ -111,6 +111,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
   final GlobalKey _moduleDraftGuideAnchorKey = GlobalKey();
   bool _isSavingFeedback = false;
   late final GameFeedback _gameFeedback;
+
+  /// The feedback this page created, if any. Non-null only when no
+  /// [OrionGamePage.gameFeedback] was injected; disposed in [dispose] —
+  /// never an injected implementation.
+  PlatformGameFeedback? _ownedGameFeedback;
   _ShellView _activeView = _ShellView.worldMap;
   bool _isLoading = true;
   int _progressGeneration = 0;
@@ -127,25 +132,36 @@ class _OrionGamePageState extends State<OrionGamePage> {
   @override
   void initState() {
     super.initState();
-    _gameFeedback =
-        widget.gameFeedback ??
-        PlatformGameFeedback(
-          // Suppress both channels until the persisted preference store has
-          // resolved. _feedbackPreferences defaults to both-enabled, so
-          // without this gate a delayed store load (e.g. a slow first
-          // SharedPreferences read) would let cues fire against the default
-          // true values during the window between _isLoading clearing and
-          // _feedbackPreferencesLoaded flipping — violating a user's saved
-          // soundEffectsEnabled:false / hapticsEnabled:false choice. Gameplay
-          // itself is not blocked: only feedback is held until preferences
-          // resolve (or fail and defaults are intentionally adopted).
-          soundEffectsEnabled: () =>
-              _feedbackPreferencesLoaded &&
-              _feedbackPreferences.soundEffectsEnabled,
-          hapticsEnabled: () =>
-              _feedbackPreferencesLoaded && _feedbackPreferences.hapticsEnabled,
-        );
+    _ownedGameFeedback = widget.gameFeedback == null
+        ? PlatformGameFeedback(
+            // Suppress both channels until the persisted preference store has
+            // resolved. _feedbackPreferences defaults to both-enabled, so
+            // without this gate a delayed store load (e.g. a slow first
+            // SharedPreferences read) would let cues fire against the default
+            // true values during the window between _isLoading clearing and
+            // _feedbackPreferencesLoaded flipping — violating a user's saved
+            // soundEffectsEnabled:false / hapticsEnabled:false choice. Gameplay
+            // itself is not blocked: only feedback is held until preferences
+            // resolve (or fail and defaults are intentionally adopted).
+            soundEffectsEnabled: () =>
+                _feedbackPreferencesLoaded &&
+                _feedbackPreferences.soundEffectsEnabled,
+            hapticsEnabled: () =>
+                _feedbackPreferencesLoaded &&
+                _feedbackPreferences.hapticsEnabled,
+          )
+        : null;
+    _gameFeedback = widget.gameFeedback ?? _ownedGameFeedback!;
     _loadProgress();
+  }
+
+  // Only the page-owned feedback is disposed here; map/stage transitions
+  // never tear down the app's home page, so this fires once at real
+  // teardown (widget unmount / app root disposal).
+  @override
+  void dispose() {
+    _ownedGameFeedback?.dispose();
+    super.dispose();
   }
 
   @override

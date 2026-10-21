@@ -116,6 +116,26 @@ final class PlatformGameFeedback implements GameFeedback {
   /// a field so the page-owned disposal step can release the players.
   final _pools = <CombatSoundCue, AudioPool>{};
 
+  bool _disposed = false;
+
+  /// Idempotent, best-effort cleanup for the owning page's teardown: marks
+  /// the service disposed and releases the owned combat pools. Pools that
+  /// finish initializing after this call are disposed immediately. Never
+  /// clears the shared Flame audio cache; an injected [GameFeedback] must
+  /// never have this called (only the page that created this instance
+  /// may call it).
+  void dispose() {
+    if (_disposed) {
+      return;
+    }
+    _disposed = true;
+    final pools = Map.of(_pools);
+    _pools.clear();
+    for (final MapEntry(key: cue, value: pool) in pools.entries) {
+      unawaited(_disposePool(pool, cue.filename));
+    }
+  }
+
   @override
   void towerConfirmed() =>
       _emit(sound: 'confirm.wav', haptic: HapticFeedback.selectionClick);
@@ -180,8 +200,9 @@ final class PlatformGameFeedback implements GameFeedback {
   /// gameplay.
   Future<void> _initPools() async {
     for (final cue in CombatSoundCue.values) {
+      final AudioPool pool;
       try {
-        _pools[cue] = await FlameAudio.createPool(
+        pool = await FlameAudio.createPool(
           cue.filename,
           maxPlayers: _playersPerPool,
         );
@@ -190,7 +211,25 @@ final class PlatformGameFeedback implements GameFeedback {
           'PlatformGameFeedback: failed to init combat pool '
           '"${cue.filename}": $error',
         );
+        continue;
       }
+      if (_disposed) {
+        // The owning page was disposed while this pool was initializing:
+        // dispose the late-completed pool immediately.
+        unawaited(_disposePool(pool, cue.filename));
+        continue;
+      }
+      _pools[cue] = pool;
+    }
+  }
+
+  Future<void> _disposePool(AudioPool pool, String file) async {
+    try {
+      await pool.dispose();
+    } catch (error) {
+      debugPrint(
+        'PlatformGameFeedback: failed to dispose combat pool "$file": $error',
+      );
     }
   }
 

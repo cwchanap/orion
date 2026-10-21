@@ -1,10 +1,17 @@
 import 'dart:async';
 
 import 'package:flame_audio/flame_audio.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/campaign_progress_store.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/onboarding/first_mission_guide_store.dart';
+import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 
 /// An [AudioCache] that records [loadAll] invocations and can be configured
 /// to throw, so the warming path and its failure branch are both reachable
@@ -43,6 +50,89 @@ const MethodChannel _globalAudioChannel = MethodChannel(
   'xyz.luan/audioplayers.global',
 );
 const MethodChannel _audioChannel = MethodChannel('xyz.luan/audioplayers');
+
+/// An [AudioCache] that hands pool creation a fake file path so
+/// `AudioPool.create` succeeds even though the HPA-385 combat WAVs are not
+/// on disk yet, while still recording the constructor-time `loadAll`
+/// warm-up without touching the asset bundle.
+class _FakeReadyAudioCache extends AudioCache {
+  @override
+  Future<List<Uri>> loadAll(List<String> fileNames) async => const <Uri>[];
+
+  @override
+  Future<String> loadPath(String fileName) async => '/fake/$fileName';
+}
+
+/// Recording success-path harness for the audioplayers per-player channel:
+/// player creation, source preparation, and disposal all succeed (the
+/// 'prepared' event is synthesized the way audioplayers' own test utilities
+/// inject platform events), and playerIds are recorded per operation so
+/// disposal tests can prove every created player was — or was not —
+/// released.
+class _PoolChannelHarness {
+  final createdPlayerIds = <String>[];
+  final disposedPlayerIds = <String>[];
+  final resumedPlayerIds = <String>[];
+
+  /// When set, every 'create' parks until the gate completes, simulating
+  /// pool initialization still in flight.
+  Completer<void>? createGate;
+
+  void install() {
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_audioChannel, _handle);
+  }
+
+  Future<Object?> _handle(MethodCall call) async {
+    switch (call.method) {
+      case 'create':
+        final playerId = call.arguments['playerId'] as String;
+        final gate = createGate;
+        if (gate != null) {
+          await gate.future;
+        }
+        createdPlayerIds.add(playerId);
+        // Stub this player's event channel so its 'listen' activation does
+        // not report a MissingPluginException.
+        TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(
+              MethodChannel('xyz.luan/audioplayers/events/$playerId'),
+              (MethodCall eventCall) async => null,
+            );
+        return null;
+      case 'setPlayerMode':
+      case 'setReleaseMode':
+      case 'setVolume':
+      case 'setAudioContext':
+      case 'stop':
+      case 'release':
+        return null;
+      case 'setSourceUrl':
+        _emitPrepared(call.arguments['playerId'] as String);
+        return null;
+      case 'resume':
+        resumedPlayerIds.add(call.arguments['playerId'] as String);
+        return null;
+      case 'dispose':
+        disposedPlayerIds.add(call.arguments['playerId'] as String);
+        return null;
+      default:
+        return null;
+    }
+  }
+
+  void _emitPrepared(String playerId) {
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          'xyz.luan/audioplayers/events/$playerId',
+          const StandardMethodCodec().encodeSuccessEnvelope(<String, dynamic>{
+            'event': 'audio.onPrepared',
+            'value': true,
+          }),
+          (reply) {},
+        );
+  }
+}
 
 void main() {
   late AudioCache originalAudioCache;
@@ -94,6 +184,20 @@ void main() {
     // the microtask chains behind the mocked platform channels.
     for (var i = 0; i < 5; i++) {
       await tester.pump(const Duration(milliseconds: 5));
+    }
+  }
+
+  // Lets the pool creation/disposal chain settle. The audioplayers global
+  // scope init completer is primed once per file by flutter_test_config in
+  // the runner's root zone, so its first resumption only runs in real time
+  // (runAsync); the per-player hops complete inside this test's FakeAsync
+  // zone (flushed by pumps). Alternate both until [settled], bounded.
+  Future<void> flushPools(WidgetTester tester, bool Function() settled) async {
+    for (var round = 0; round < 40 && !settled(); round++) {
+      await tester.runAsync(() async {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      });
+      await flush(tester);
     }
   }
 
@@ -704,4 +808,157 @@ void main() {
       );
     },
   );
+
+  // Minimal page harness for ownership tests: every store injected so the
+  // page never touches SharedPreferences, and the first-mission guide
+  // store pre-completed so no tutorial overlay interferes. MaterialApp is
+  // required: OrionGamePage builds a Scaffold.
+  Widget feedbackOwnerPage({GameFeedback? gameFeedback}) => MaterialApp(
+    theme: orionThemeData,
+    home: OrionGamePage(
+      progressStore: InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      ),
+      feedbackPreferencesStore: InMemoryFeedbackPreferencesStore(),
+      firstMissionGuideStore: InMemoryFirstMissionGuideStore(completed: true),
+      gameFeedback: gameFeedback,
+    ),
+  );
+
+  group('PlatformGameFeedback page ownership and disposal', () {
+    testWidgets('dispose releases every owned pool player and is idempotent', (
+      tester,
+    ) async {
+      FlameAudio.audioCache = _FakeReadyAudioCache();
+      final harness = _PoolChannelHarness()..install();
+      final feedback = PlatformGameFeedback(
+        soundEffectsEnabled: () => true,
+        hapticsEnabled: () => true,
+      );
+      await flushPools(tester, () => harness.createdPlayerIds.length == 13);
+
+      expect(harness.createdPlayerIds, hasLength(13));
+
+      feedback.dispose();
+      await flushPools(tester, () => harness.disposedPlayerIds.length == 13);
+      expect(harness.disposedPlayerIds, harness.createdPlayerIds);
+
+      // Idempotent: a second dispose releases nothing new.
+      feedback.dispose();
+      await flush(tester);
+      expect(harness.disposedPlayerIds, harness.createdPlayerIds);
+
+      // Disposed pools are gone: a cue is dropped, no pooled start ever
+      // reaches the channel.
+      feedback.coreHit();
+      await flush(tester);
+      expect(harness.resumedPlayerIds, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets(
+      'unmounting the page disposes the page-created feedback pools',
+      (tester) async {
+        FlameAudio.audioCache = _FakeReadyAudioCache();
+        final harness = _PoolChannelHarness()..install();
+
+        await tester.pumpWidget(feedbackOwnerPage());
+        await flushPools(tester, () => harness.createdPlayerIds.length == 13);
+        // All pools exist before teardown: unmount itself does the work.
+        expect(harness.createdPlayerIds, hasLength(13));
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await flushPools(tester, () => harness.disposedPlayerIds.length == 13);
+
+        // Every pool player the page-created feedback created is released
+        // exactly when the owning page goes away — whatever completed
+        // before unmount via dispose(), the rest via the late-init guard.
+        expect(harness.createdPlayerIds, hasLength(13));
+        expect(harness.disposedPlayerIds, harness.createdPlayerIds);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets('pool initialization completing after page unmount is disposed '
+        'immediately', (tester) async {
+      FlameAudio.audioCache = _FakeReadyAudioCache();
+      final harness = _PoolChannelHarness()..install();
+      harness.createGate = Completer<void>();
+
+      await tester.pumpWidget(feedbackOwnerPage());
+      await flush(tester);
+      // Creation is parked on the gate: no pool player exists yet.
+      expect(harness.createdPlayerIds, isEmpty);
+
+      await tester.pumpWidget(const SizedBox.shrink());
+      await flush(tester);
+
+      // All 13 pools finish initializing only after disposal; each is
+      // disposed immediately instead of being kept alive for a dead page.
+      harness.createGate!.complete();
+      await flushPools(
+        tester,
+        () =>
+            harness.createdPlayerIds.length == 13 &&
+            harness.disposedPlayerIds.length == 13,
+      );
+
+      expect(harness.createdPlayerIds, hasLength(13));
+      expect(harness.disposedPlayerIds, harness.createdPlayerIds);
+      expect(harness.resumedPlayerIds, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('unmounting the page never touches an injected feedback '
+        'implementation', (tester) async {
+      final harness = _PoolChannelHarness()..install();
+
+      await tester.pumpWidget(
+        feedbackOwnerPage(gameFeedback: const NoOpGameFeedback()),
+      );
+      await flush(tester);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await flush(tester);
+
+      // No page-created platform feedback exists, and unmount creates or
+      // disposes nothing on the audio channels.
+      expect(harness.createdPlayerIds, isEmpty);
+      expect(harness.disposedPlayerIds, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('unmounting the page does not dispose an injected '
+        'PlatformGameFeedback', (tester) async {
+      FlameAudio.audioCache = _FakeReadyAudioCache();
+      final harness = _PoolChannelHarness()..install();
+      final injected = PlatformGameFeedback(
+        soundEffectsEnabled: () => true,
+        hapticsEnabled: () => true,
+      );
+      await flushPools(
+        tester,
+        () => harness.createdPlayerIds.length == 13,
+      ); // the injected instance's pools finish first
+      expect(harness.createdPlayerIds, hasLength(13));
+
+      await tester.pumpWidget(feedbackOwnerPage(gameFeedback: injected));
+      await tester.pumpWidget(const SizedBox.shrink());
+      await flush(tester);
+
+      // The page must not dispose feedback it does not own.
+      expect(harness.disposedPlayerIds, isEmpty);
+      expect(tester.takeException(), isNull);
+
+      // The injected instance keeps playing after the page is gone.
+      injected.coreHit();
+      await flushPools(tester, () => harness.resumedPlayerIds.isNotEmpty);
+      expect(harness.resumedPlayerIds, hasLength(1));
+
+      // Teardown of the test-owned instance: stops the pooled player so
+      // no frame callback outlives the test.
+      injected.dispose();
+      await flushPools(tester, () => harness.disposedPlayerIds.length == 13);
+      expect(tester.takeException(), isNull);
+    });
+  });
 }
