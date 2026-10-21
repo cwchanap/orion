@@ -45,6 +45,9 @@ enum _RecordedFeedbackCall {
 final class _RecordingGameFeedback implements GameFeedback {
   final calls = <_RecordedFeedbackCall>[];
 
+  /// Typed payloads for the `towerFired` entries in [calls], index-aligned.
+  final firedTowerTypes = <TowerType>[];
+
   @override
   void towerConfirmed() => calls.add(_RecordedFeedbackCall.towerConfirmed);
   @override
@@ -52,8 +55,11 @@ final class _RecordingGameFeedback implements GameFeedback {
   @override
   void moduleSelected() => calls.add(_RecordedFeedbackCall.moduleSelected);
   @override
-  void towerFired(TowerType type) =>
-      calls.add(_RecordedFeedbackCall.towerFired);
+  void towerFired(TowerType type) {
+    calls.add(_RecordedFeedbackCall.towerFired);
+    firedTowerTypes.add(type);
+  }
+
   @override
   void splashImpact() => calls.add(_RecordedFeedbackCall.splashImpact);
   @override
@@ -658,7 +664,9 @@ void main() {
 
       // Waves 1-2 were cleared on the way to the draft.
       expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
         _RecordedFeedbackCall.waveCleared,
+        _RecordedFeedbackCall.waveStarted,
         _RecordedFeedbackCall.waveCleared,
         _RecordedFeedbackCall.moduleSelected,
       ]);
@@ -667,7 +675,9 @@ void main() {
       game.selectRunModule(offer.offerId, RunModuleId.heavyCaliber);
 
       expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
         _RecordedFeedbackCall.waveCleared,
+        _RecordedFeedbackCall.waveStarted,
         _RecordedFeedbackCall.waveCleared,
         _RecordedFeedbackCall.moduleSelected,
       ]);
@@ -686,13 +696,19 @@ void main() {
         game.startWave();
         game.update(0); // clear wave 1 → non-terminal
 
-        expect(feedback.calls, [_RecordedFeedbackCall.waveCleared]);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.waveCleared,
+        ]);
 
         game.startWave();
         game.update(0); // clear wave 2 → terminal victory
 
         expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
           _RecordedFeedbackCall.waveCleared,
+          _RecordedFeedbackCall.waveStarted,
+          // The winning clear plays missionVictory instead of waveCleared.
           _RecordedFeedbackCall.missionVictory,
         ]);
         expect(game.snapshot.phase, GamePhase.won);
@@ -700,7 +716,9 @@ void main() {
         game.update(0);
 
         expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
           _RecordedFeedbackCall.waveCleared,
+          _RecordedFeedbackCall.waveStarted,
           _RecordedFeedbackCall.missionVictory,
         ]);
       },
@@ -715,13 +733,19 @@ void main() {
       game.onGameResize(Vector2(800, 1200));
       game.startWave();
       game.update(0); // clear wave 1 → one waveCleared
-      expect(feedback.calls, [_RecordedFeedbackCall.waveCleared]);
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
+        _RecordedFeedbackCall.waveCleared,
+      ]);
 
       game.onGameResize(Vector2(390, 640));
       game.processLifecycleEvents();
       game.update(0);
 
-      expect(feedback.calls, [_RecordedFeedbackCall.waveCleared]);
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
+        _RecordedFeedbackCall.waveCleared,
+      ]);
     });
 
     test('active-wave resize still covers the viewport with the backdrop', () {
@@ -2580,16 +2604,17 @@ void main() {
       );
       game.update(0);
       game.processLifecycleEvents();
-      expect(
-        feedback.calls,
-        isEmpty,
-        reason: 'projectile must not land on the mount frame',
-      );
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
+        _RecordedFeedbackCall.bossArrived,
+      ], reason: 'projectile must not land on the mount frame');
 
       game.update(1);
       game.processLifecycleEvents();
 
       expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
+        _RecordedFeedbackCall.bossArrived,
         _RecordedFeedbackCall.bossDefeated,
       ], reason: 'the kill resolves during super.update');
       // Minions survive so the wave is not complete — phase stays wave.
@@ -2598,7 +2623,11 @@ void main() {
       // Lifecycle/update work after resolution appends nothing.
       game.update(0);
       game.processLifecycleEvents();
-      expect(feedback.calls, [_RecordedFeedbackCall.bossDefeated]);
+      expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
+        _RecordedFeedbackCall.bossArrived,
+        _RecordedFeedbackCall.bossDefeated,
+      ]);
     });
 
     test(
@@ -2664,6 +2693,8 @@ void main() {
         game.processLifecycleEvents();
 
         expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.bossArrived,
           _RecordedFeedbackCall.bossDefeated,
           _RecordedFeedbackCall.missionVictory,
         ]);
@@ -2673,6 +2704,8 @@ void main() {
         game.update(0);
         game.processLifecycleEvents();
         expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.bossArrived,
           _RecordedFeedbackCall.bossDefeated,
           _RecordedFeedbackCall.missionVictory,
         ]);
@@ -2704,7 +2737,7 @@ void main() {
       expect(game.snapshot.phase, GamePhase.lost);
       expect(
         feedback.calls,
-        [_RecordedFeedbackCall.baseDefeated],
+        [_RecordedFeedbackCall.waveStarted, _RecordedFeedbackCall.baseDefeated],
         reason: 'base defeat fires exactly once on the wave → lost transition',
       );
       // reach-base never rewards gold; a spurious onKilled for the trailing
@@ -2718,6 +2751,7 @@ void main() {
       // A follow-up frame after defeat must not replay the cue.
       game.update(0);
       expect(feedback.calls, [
+        _RecordedFeedbackCall.waveStarted,
         _RecordedFeedbackCall.baseDefeated,
       ], reason: 'post-defeat updates must not replay base defeat');
     });
@@ -3283,6 +3317,488 @@ void main() {
         expect(game.children.whereType<CombatFeedbackComponent>(), isEmpty);
       });
     });
+
+    group('combat sound emission hooks', () {
+      // Places [type] in range of the path start, lets it fire once at the
+      // two co-located enemies, and lands the projectile, returning the
+      // single resolved impact cue through the real resolution pipeline.
+      CombatFeedbackComponent landImpactOnColocatedEnemies(
+        OrionDefenseGame game, {
+        required TowerType type,
+      }) {
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        for (var wave = 0; wave < 2; wave += 1) {
+          game.startWave();
+          game.update(0); // clear the empty unlock wave
+          game.processLifecycleEvents();
+          _selectPendingModuleIfNeeded(game);
+        }
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(type);
+        game.processLifecycleEvents();
+
+        game.startWave(); // wave 3: two co-located durable enemies
+        game.update(0.01);
+        game.processLifecycleEvents();
+        expect(game.children.whereType<EnemyComponent>(), hasLength(2));
+
+        game.children.whereType<TowerComponent>().single.update(0.01); // fire
+        game.update(1); // the projectile lands mid-frame
+        game.processLifecycleEvents();
+
+        final cues = game.children
+            .whereType<CombatFeedbackComponent>()
+            .toList();
+        expect(cues, hasLength(1));
+        return cues.single;
+      }
+
+      test('projectile tower emits one typed towerFired per shot', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _oneEnemyStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+
+        game.startWave();
+        game.update(0.01); // spawn the enemy after super.update
+        game.processLifecycleEvents();
+
+        game.children.whereType<TowerComponent>().single.update(0.01);
+        game.processLifecycleEvents();
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.towerConfirmed,
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.towerFired,
+        ]);
+        expect(feedback.firedTowerTypes, [TowerType.laser]);
+
+        // The next shot after the fire interval fires again: one token per
+        // launch, never per frame. One update consumes the interval; the
+        // following frame launches.
+        final tower = game.children.whereType<TowerComponent>().single;
+        tower.update(tower.stats.fireInterval);
+        game.processLifecycleEvents();
+        expect(feedback.firedTowerTypes, [TowerType.laser]);
+        tower.update(0.01);
+        game.processLifecycleEvents();
+        expect(feedback.firedTowerTypes, [TowerType.laser, TowerType.laser]);
+      });
+
+      test('gravity well emits towerFired when its field is tracked', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _gravityWellUnlockStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        for (var wave = 0; wave < 4; wave += 1) {
+          game.startWave();
+          game.update(0);
+          game.processLifecycleEvents();
+          _selectPendingModuleIfNeeded(game);
+        }
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.gravityWell);
+        game.processLifecycleEvents();
+
+        game.startWave(); // wave 5: one durable enemy
+        game.update(0.01);
+        game.processLifecycleEvents();
+        game.children.whereType<TowerComponent>().single.update(0.01);
+        game.processLifecycleEvents();
+
+        expect(game.children.whereType<GravityFieldComponent>(), hasLength(1));
+        expect(feedback.firedTowerTypes, [TowerType.gravityWell]);
+      });
+
+      test(
+        'drone bay emits one towerFired per batch and stays silent at capacity',
+        () {
+          final feedback = _RecordingGameFeedback();
+          final game = OrionDefenseGame(
+            stage: _droneBayUnlockStage(),
+            gameFeedback: feedback,
+          );
+          game.onGameResize(Vector2(800, 1200));
+
+          for (var wave = 0; wave < 5; wave += 1) {
+            game.startWave();
+            game.update(0);
+            game.processLifecycleEvents();
+            _selectPendingModuleIfNeeded(game);
+          }
+          _tapCell(game, const GridPosition(0, 1));
+          game.placeTower(TowerType.droneBay);
+          game.processLifecycleEvents();
+
+          game.startWave(); // wave 6: one durable enemy
+          game.update(0.01);
+          game.processLifecycleEvents();
+
+          final tower = game.children.whereType<TowerComponent>().single;
+          // Run modules resolved during the unlock loop may scale the fire
+          // interval, so read it off the live tower stats.
+          final fireInterval = tower.stats.fireInterval;
+          tower.update(0.01); // batch 1: two drones, one sound
+          game.processLifecycleEvents();
+          expect(game.children.whereType<DroneComponent>(), hasLength(2));
+          expect(feedback.firedTowerTypes, [TowerType.droneBay]);
+
+          // One update consumes the fire interval without launching; the
+          // next frame fires batch 2: two more drones, still one sound.
+          tower.update(fireInterval);
+          game.processLifecycleEvents();
+          expect(game.children.whereType<DroneComponent>(), hasLength(2));
+          tower.update(0.01);
+          game.processLifecycleEvents();
+          expect(game.children.whereType<DroneComponent>(), hasLength(4));
+          expect(feedback.firedTowerTypes, [
+            TowerType.droneBay,
+            TowerType.droneBay,
+          ]);
+
+          // Bay at per-tower capacity → no launch, no firing sound.
+          tower.update(fireInterval);
+          tower.update(0.01);
+          game.processLifecycleEvents();
+          expect(game.children.whereType<DroneComponent>(), hasLength(4));
+          expect(feedback.firedTowerTypes, hasLength(2));
+        },
+      );
+
+      test(
+        'one splash sound per resolved splash component with two targets',
+        () {
+          final feedback = _RecordingGameFeedback();
+          final game = OrionDefenseGame(
+            stage: _impactColocatedStage(),
+            gameFeedback: feedback,
+          );
+          final cue = landImpactOnColocatedEnemies(
+            game,
+            type: TowerType.rocket,
+          );
+
+          // One resolved component carries both co-located targets and asks
+          // for exactly one splash sound.
+          expect(cue.kind, CombatFeedbackKind.splash);
+          expect(cue.positions, hasLength(2));
+          expect(
+            feedback.calls.where(
+              (call) => call == _RecordedFeedbackCall.splashImpact,
+            ),
+            hasLength(1),
+          );
+          expect(feedback.firedTowerTypes, [TowerType.rocket]);
+        },
+      );
+
+      test('one chain sound per resolved chain component with two targets', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _impactColocatedStage(),
+          gameFeedback: feedback,
+        );
+        final cue = landImpactOnColocatedEnemies(
+          game,
+          type: TowerType.ionChain,
+        );
+
+        expect(cue.kind, CombatFeedbackKind.chain);
+        expect(cue.positions, hasLength(2));
+        expect(
+          feedback.calls.where(
+            (call) => call == _RecordedFeedbackCall.chainImpact,
+          ),
+          hasLength(1),
+        );
+        expect(feedback.firedTowerTypes, [TowerType.ionChain]);
+      });
+
+      test(
+        'one pierce sound per resolved pierce component with two targets',
+        () {
+          final feedback = _RecordingGameFeedback();
+          final game = OrionDefenseGame(
+            stage: _impactColocatedStage(),
+            gameFeedback: feedback,
+          );
+          final cue = landImpactOnColocatedEnemies(
+            game,
+            type: TowerType.railgun,
+          );
+
+          expect(cue.kind, CombatFeedbackKind.pierce);
+          expect(cue.positions, hasLength(2));
+          expect(
+            feedback.calls.where(
+              (call) => call == _RecordedFeedbackCall.pierceImpact,
+            ),
+            hasLength(1),
+          );
+          expect(feedback.firedTowerTypes, [TowerType.railgun]);
+        },
+      );
+
+      test(
+        'normal kill in wave phase emits enemyDestroyed and keeps reward',
+        () {
+          final feedback = _RecordingGameFeedback();
+          final game = OrionDefenseGame(
+            stage: _oneEnemyStage(),
+            gameFeedback: feedback,
+          );
+          game.onGameResize(Vector2(800, 1200));
+          game.startWave();
+          game.update(0.01);
+          game.processLifecycleEvents();
+          final enemy = game.children.whereType<EnemyComponent>().single;
+          final goldBefore = game.snapshot.gold;
+
+          enemy.applyDamage(9999);
+          game.processLifecycleEvents();
+
+          expect(feedback.calls, [
+            _RecordedFeedbackCall.waveStarted,
+            _RecordedFeedbackCall.enemyDestroyed,
+          ]);
+          expect(game.snapshot.gold, goldBefore + enemy.stats.goldReward);
+        },
+      );
+
+      test('kill after loss emits no kill audio and keeps reward', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _twoEnemyDefeatStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemies = game.children.whereType<EnemyComponent>().toList();
+        expect(enemies, hasLength(2));
+
+        // The lead leak defeats the player; the loop breaks so the trailing
+        // enemy is still alive (off-board) afterwards.
+        game.update(60);
+        game.processLifecycleEvents();
+        expect(game.snapshot.phase, GamePhase.lost);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.baseDefeated,
+        ]);
+
+        final goldBefore = game.snapshot.gold;
+        enemies.last.applyDamage(9999);
+        game.processLifecycleEvents();
+        // Non-vacuous: the damage dispatched the kill resolution.
+        expect(enemies.last.isAlive, isFalse);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.baseDefeated,
+        ], reason: 'post-loss kills must stay silent');
+        // Kill rewards are wave-gated by the session (pre-existing), so gold
+        // is unchanged; the assertion above is about the audio silence.
+        expect(game.snapshot.gold, goldBefore);
+      });
+
+      test('nonlethal leak in wave phase emits coreHit before waveCleared', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _oneEnemyStage(waveCount: 2),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+
+        game.update(11);
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.phase, isNot(GamePhase.lost));
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.coreHit,
+          _RecordedFeedbackCall.waveCleared,
+        ]);
+      });
+
+      test('fatal leak emits baseDefeated instead of coreHit', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _lethalSingleEnemyStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+
+        game.update(1);
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.phase, GamePhase.lost);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.baseDefeated,
+        ]);
+      });
+
+      test('second same-tick leak after fatal damage emits nothing', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _twoEnemyDefeatStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final enemies = game.children.whereType<EnemyComponent>().toList();
+        expect(enemies, hasLength(2));
+
+        game.update(60);
+        game.processLifecycleEvents();
+        expect(game.snapshot.phase, GamePhase.lost);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.baseDefeated,
+        ]);
+
+        // A second leak in the same tick after the fatal one must produce no
+        // core-hit audio and no second defeat stinger. Its visual cue still
+        // resolves, proving the handler ran and the audio gating is real.
+        enemies.last.resolveReachedBase();
+        game.processLifecycleEvents();
+        final cues = game.children
+            .whereType<CombatFeedbackComponent>()
+            .toList();
+        expect(cues, hasLength(1), reason: 'the leak still resolves visually');
+        expect(cues.single.kind, CombatFeedbackKind.coreImpact);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.baseDefeated,
+        ]);
+      });
+
+      test('startWave emits waveStarted on success only, manual and auto', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(2),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        // Manual success.
+        game.startWave();
+        expect(feedback.calls, [_RecordedFeedbackCall.waveStarted]);
+
+        // Rejected while a wave is active → no second token.
+        game.startWave();
+        expect(feedback.calls, [_RecordedFeedbackCall.waveStarted]);
+
+        // Clear wave 1, then auto-start fires startWave for wave 2.
+        game.update(0);
+        game.toggleAutoStart();
+        game.update(3);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.waveCleared,
+          _RecordedFeedbackCall.waveStarted,
+        ]);
+      });
+
+      test('boss spawn emits bossArrived once; minions never do', () async {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _bossSummonStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final boss = game.children.whereType<EnemyComponent>().single;
+        expect(boss.stats, isA<BossDefinition>());
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.bossArrived,
+        ]);
+
+        // Summoned minions arrive via _spawnMinion — no extra bossArrived.
+        game.update(0.51);
+        game.processLifecycleEvents();
+        final minions = game.children
+            .whereType<EnemyComponent>()
+            .where((enemy) => enemy != boss)
+            .toList();
+        expect(minions, isNotEmpty);
+        expect(
+          feedback.calls.where(
+            (call) => call == _RecordedFeedbackCall.bossArrived,
+          ),
+          hasLength(1),
+        );
+      });
+
+      test('towerSold fires on refund only; denied sale stays silent', () {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(2),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(TowerType.laser);
+        game.processLifecycleEvents();
+
+        // Denied during an active wave (no refund) → no towerSold.
+        game.startWave();
+        _tapCell(game, const GridPosition(0, 1)); // re-select during wave
+        game.processLifecycleEvents();
+        game.sellSelectedTower();
+        game.processLifecycleEvents();
+        expect(game.snapshot.feedback, 'Sell towers between waves.');
+        expect(
+          feedback.calls.where(
+            (call) => call == _RecordedFeedbackCall.towerSold,
+          ),
+          isEmpty,
+        );
+
+        // Back in build phase after the empty wave clears → refund → one cue.
+        game.update(0);
+        game.processLifecycleEvents();
+        expect(game.snapshot.phase, GamePhase.build);
+        _tapCell(game, const GridPosition(0, 1));
+        game.processLifecycleEvents();
+        game.sellSelectedTower();
+        game.processLifecycleEvents();
+        expect(
+          feedback.calls.where(
+            (call) => call == _RecordedFeedbackCall.towerSold,
+          ),
+          hasLength(1),
+        );
+        expect(game.children.whereType<TowerComponent>(), isEmpty);
+      });
+    });
   });
 }
 
@@ -3553,23 +4069,61 @@ StageDefinition _lethalSingleEnemyStage() {
   );
 }
 
-StageDefinition _oneEnemyStage() {
+StageDefinition _oneEnemyStage({int waveCount = 1}) {
   return StageDefinition(
     id: 'one-enemy-stage',
     name: 'One Enemy Stage',
     mapLabel: 'One',
     description: 'Stage with one enemy for orchestrator ticking tests',
     pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+    waves: [
+      for (var i = 0; i < waveCount; i += 1)
+        const WaveDefinition(
+          groups: [
+            WaveGroup(
+              enemyCount: 1,
+              enemyStats: EnemyStats(
+                health: 100,
+                speed: 10,
+                baseDamage: 1,
+                goldReward: 1,
+              ),
+            ),
+          ],
+          clearBonus: 0,
+        ),
+    ],
+    unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+/// Stage whose first two waves are empty (so wave 3 unlocks every impact
+/// tower used here) and whose third wave spawns two co-located durable
+/// enemies for impact sound tests.
+StageDefinition _impactColocatedStage() {
+  return StageDefinition(
+    id: 'impact-colocated-stage',
+    name: 'Impact Colocated Stage',
+    mapLabel: 'Impact',
+    description: 'Two co-located durable enemies for impact sound tests',
+    pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
     waves: const [
+      WaveDefinition(groups: [], clearBonus: 0),
+      WaveDefinition(groups: [], clearBonus: 0),
       WaveDefinition(
         groups: [
           WaveGroup(
-            enemyCount: 1,
+            enemyCount: 2,
+            spawnInterval: 0,
             enemyStats: EnemyStats(
-              health: 100,
-              speed: 10,
+              health: 10000,
+              speed: 1,
               baseDamage: 1,
-              goldReward: 1,
+              goldReward: 0,
             ),
           ),
         ],

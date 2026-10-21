@@ -509,6 +509,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     }
     _activeDronesByTower.remove(tower.id);
     _clearSelection();
+    gameFeedback.towerSold();
     _publishSnapshot(feedback: 'Sold for $refund gold.');
   }
 
@@ -547,6 +548,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       return;
     }
 
+    gameFeedback.waveStarted();
     _autoStartCountdownRemaining = null;
     _resetWaveSpawnState();
     _clearSelection();
@@ -799,6 +801,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
           priority: 25,
         ),
       );
+      gameFeedback.towerFired(tower.stats.type);
       return;
     }
 
@@ -819,6 +822,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         priority: 30,
       ),
     );
+    gameFeedback.towerFired(tower.stats.type);
   }
 
   /// Adds a transient combat entity (projectile, drone, gravity field),
@@ -860,6 +864,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         ),
       );
     }
+    // One firing sound per successful launch batch, never at capacity.
+    gameFeedback.towerFired(tower.stats.type);
   }
 
   int get _activeDroneCount =>
@@ -1040,6 +1046,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _nextEnemyId += 1;
     _activeEnemyComponents[enemy.enemyId] = enemy;
     add(enemy);
+    if (bossDef != null) {
+      gameFeedback.bossArrived();
+    }
   }
 
   void _handleSummonMinions(EnemyComponent source, int count) {
@@ -1087,6 +1096,20 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   void _addCombatFeedback(CombatFeedbackComponent feedback) {
     _emittedFeedbackCues += 1;
+    // One audio request per resolved feedback component, regardless of how
+    // many target positions it carries. enemyDestroyed/coreImpact cues are
+    // visual-only here; kill and leak audio is emitted by their handlers.
+    switch (feedback.kind) {
+      case CombatFeedbackKind.splash:
+        gameFeedback.splashImpact();
+      case CombatFeedbackKind.chain:
+        gameFeedback.chainImpact();
+      case CombatFeedbackKind.pierce:
+        gameFeedback.pierceImpact();
+      case CombatFeedbackKind.enemyDestroyed:
+      case CombatFeedbackKind.coreImpact:
+        break;
+    }
     // Expired cues self-remove; pruning keeps the set to pending/live cues
     // instead of retaining everything emitted since the last teardown.
     _combatFeedbackComponents.removeWhere(
@@ -1115,6 +1138,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     );
     if (enemy.stats is BossDefinition) {
       gameFeedback.bossDefeated();
+    } else if (_session.phase == GamePhase.wave) {
+      gameFeedback.enemyDestroyed();
     }
     _publishSnapshot();
   }
@@ -1141,6 +1166,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       _resetWaveSpawnState();
       _resetPacing();
       _layoutBoardIfReady();
+    } else if (phaseBeforeDamage == GamePhase.wave && !didLose) {
+      gameFeedback.coreHit();
     }
     _publishSnapshot();
   }
