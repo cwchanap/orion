@@ -3,12 +3,22 @@ import 'dart:async';
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:orion/game/models/game_models.dart';
 
 abstract interface class GameFeedback {
   void towerConfirmed();
   void waveCleared();
   void moduleSelected();
+  void towerFired(TowerType type);
+  void splashImpact();
+  void chainImpact();
+  void pierceImpact();
+  void enemyDestroyed();
+  void coreHit();
+  void waveStarted();
+  void bossArrived();
   void bossDefeated();
+  void towerSold();
   void missionVictory();
   void baseDefeated();
 }
@@ -23,7 +33,25 @@ final class NoOpGameFeedback implements GameFeedback {
   @override
   void moduleSelected() {}
   @override
+  void towerFired(TowerType type) {}
+  @override
+  void splashImpact() {}
+  @override
+  void chainImpact() {}
+  @override
+  void pierceImpact() {}
+  @override
+  void enemyDestroyed() {}
+  @override
+  void coreHit() {}
+  @override
+  void waveStarted() {}
+  @override
+  void bossArrived() {}
+  @override
   void bossDefeated() {}
+  @override
+  void towerSold() {}
   @override
   void missionVictory() {}
   @override
@@ -64,6 +92,35 @@ final class PlatformGameFeedback implements GameFeedback {
   @override
   void waveCleared() =>
       _emit(sound: 'clear.wav', haptic: HapticFeedback.lightImpact);
+
+  // Combat cue playback is wired in the HPA-416 playback step; for now the
+  // new cues are silent stubs so every implementer compiles.
+  @override
+  void towerFired(TowerType type) {}
+
+  @override
+  void splashImpact() {}
+
+  @override
+  void chainImpact() {}
+
+  @override
+  void pierceImpact() {}
+
+  @override
+  void enemyDestroyed() {}
+
+  @override
+  void coreHit() {}
+
+  @override
+  void waveStarted() {}
+
+  @override
+  void bossArrived() {}
+
+  @override
+  void towerSold() {}
 
   @override
   void bossDefeated() => _emit(haptic: HapticFeedback.mediumImpact);
