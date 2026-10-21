@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
+import 'package:orion/game/feedback/combat_sound_limiter.dart';
 import 'package:orion/game/models/game_models.dart';
 
 abstract interface class GameFeedback {
@@ -59,18 +60,32 @@ final class NoOpGameFeedback implements GameFeedback {
 }
 
 final class PlatformGameFeedback implements GameFeedback {
-  // Best-effort cache warm-up at construction time, so the first semantic
-  // cue does not pay the uncached first-play latency. The design explicitly
-  // specifies this fires when the service is constructed, not lazily on the
-  // first emit (which would defeat the warm-up for the very cue it is meant
-  // to help). Errors are swallowed by _warmAudioCache.
   PlatformGameFeedback({
     required this.soundEffectsEnabled,
     required this.hapticsEnabled,
-  }) {
+    Future<void> Function(String file)? startCombatSound,
+    int Function()? nowMs,
+  }) : _nowMs = nowMs ?? _defaultNowMs {
+    _startCombatSound = startCombatSound;
+    // Best-effort cache warm-up at construction time, so the first semantic
+    // cue does not pay the uncached first-play latency. The design explicitly
+    // specifies this fires when the service is constructed, not lazily on the
+    // first emit (which would defeat the warm-up for the very cue it is meant
+    // to help). Errors are swallowed by _warmAudioCache.
     unawaited(_warmAudioCache());
+    // Production: eagerly initialize the 13 high-frequency AudioPools once,
+    // asynchronously and best-effort. An injected starter (tests) replaces
+    // pool creation and readiness entirely.
+    if (_startCombatSound == null) {
+      unawaited(_initPools());
+    }
   }
 
+  /// The four pre-existing stingers, the only files the constructor-time
+  /// loadAll warm-up loads (Ruling B: the warm-up list stays exactly these
+  /// four). The 13 high-frequency combat clips are warmed by their
+  /// eagerly-created AudioPools instead; the four rare transition cues play
+  /// uncached as one-shots, like these stingers once did.
   static const sounds = [
     'confirm.wav',
     'clear.wav',
@@ -78,8 +93,28 @@ final class PlatformGameFeedback implements GameFeedback {
     'defeat.wav',
   ];
 
+  /// Per-pool player reuse budget. Pool size is NOT the global admission
+  /// cap — [CombatSoundLimiter] owns that.
+  static const int _playersPerPool = 2;
+
+  static final Stopwatch _processClock = Stopwatch()..start();
+
+  /// Monotonic wall-clock milliseconds, never Flame's speed-scaled dt.
+  static int _defaultNowMs() => _processClock.elapsedMilliseconds;
+
   final bool Function() soundEffectsEnabled;
   final bool Function() hapticsEnabled;
+
+  // ignore: prefer_initializing_formals — the public parameter name is part
+  // of the design contract; Dart has no private named initializing formals.
+  Future<void> Function(String file)? _startCombatSound;
+  final int Function() _nowMs;
+  final CombatSoundLimiter _limiter = CombatSoundLimiter();
+
+  /// Ready pools per combat cue. A missing entry means still initializing
+  /// or failed: its cues are dropped without consuming admission. Kept as
+  /// a field so the page-owned disposal step can release the players.
+  final _pools = <CombatSoundCue, AudioPool>{};
 
   @override
   void towerConfirmed() =>
@@ -93,37 +128,42 @@ final class PlatformGameFeedback implements GameFeedback {
   void waveCleared() =>
       _emit(sound: 'clear.wav', haptic: HapticFeedback.lightImpact);
 
-  // Combat cue playback is wired in the HPA-416 playback step; for now the
-  // new cues are silent stubs so every implementer compiles.
+  // Combat cues: the 13 high-frequency sounds go through limiter admission
+  // and a pooled start; admission order is enabled → ready → limiter → start.
   @override
-  void towerFired(TowerType type) {}
+  void towerFired(TowerType type) =>
+      _playCombat(CombatSoundCue.fireCueFor(type));
 
   @override
-  void splashImpact() {}
+  void splashImpact() => _playCombat(CombatSoundCue.splashImpact);
 
   @override
-  void chainImpact() {}
+  void chainImpact() => _playCombat(CombatSoundCue.chainImpact);
 
   @override
-  void pierceImpact() {}
+  void pierceImpact() => _playCombat(CombatSoundCue.pierceImpact);
 
   @override
-  void enemyDestroyed() {}
+  void enemyDestroyed() => _playCombat(CombatSoundCue.enemyDestroyed);
 
   @override
-  void coreHit() {}
+  void coreHit() => _playCombat(CombatSoundCue.coreHit);
+
+  // Always-audible rare transition cues: FlameAudio.play directly, outside
+  // the limiter, so bursts of combat can never suppress them.
+  @override
+  void waveStarted() => _emit(sound: waveStartedSound);
 
   @override
-  void waveStarted() {}
+  void bossArrived() =>
+      _emit(sound: bossArrivalSound, haptic: HapticFeedback.lightImpact);
 
   @override
-  void bossArrived() {}
+  void towerSold() => _emit(sound: towerSoldSound);
 
   @override
-  void towerSold() {}
-
-  @override
-  void bossDefeated() => _emit(haptic: HapticFeedback.mediumImpact);
+  void bossDefeated() =>
+      _emit(sound: bossDefeatedSound, haptic: HapticFeedback.mediumImpact);
 
   @override
   void missionVictory() =>
@@ -132,6 +172,75 @@ final class PlatformGameFeedback implements GameFeedback {
   @override
   void baseDefeated() =>
       _emit(sound: 'defeat.wav', haptic: HapticFeedback.heavyImpact);
+
+  /// Eagerly creates the 13 combat AudioPools, one per cue, sequentially
+  /// and best-effort: a missing/failed WAV (HPA-385 not merged, corrupted
+  /// asset, channel error) leaves that cue's map entry absent so its cues
+  /// are silently dropped instead of crashing gameplay. Never awaited by
+  /// gameplay.
+  Future<void> _initPools() async {
+    for (final cue in CombatSoundCue.values) {
+      try {
+        _pools[cue] = await FlameAudio.createPool(
+          cue.filename,
+          maxPlayers: _playersPerPool,
+        );
+      } catch (error) {
+        debugPrint(
+          'PlatformGameFeedback: failed to init combat pool '
+          '"${cue.filename}": $error',
+        );
+      }
+    }
+  }
+
+  void _playCombat(CombatSoundCue cue) {
+    if (!soundEffectsEnabled()) {
+      return;
+    }
+    final start = _startCombatSound;
+    if (start != null) {
+      // Test seam: the starter is always "ready", replacing pools entirely.
+      if (!_limiter.admit(cue, nowMs: _nowMs())) {
+        return;
+      }
+      unawaited(_startViaCallback(start, cue.filename));
+      return;
+    }
+    // Unready or failed pool: drop without consuming an admission slot.
+    final pool = _pools[cue];
+    if (pool == null) {
+      return;
+    }
+    if (!_limiter.admit(cue, nowMs: _nowMs())) {
+      return;
+    }
+    // Admitted: the timestamp stays even if the start below fails.
+    unawaited(_startPooledSound(pool, cue.filename));
+  }
+
+  Future<void> _startViaCallback(
+    Future<void> Function(String file) start,
+    String file,
+  ) async {
+    try {
+      await start(file);
+    } catch (error) {
+      debugPrint(
+        'PlatformGameFeedback: failed to start combat sound "$file": $error',
+      );
+    }
+  }
+
+  Future<void> _startPooledSound(AudioPool pool, String file) async {
+    try {
+      await pool.start();
+    } catch (error) {
+      debugPrint(
+        'PlatformGameFeedback: failed to start combat sound "$file": $error',
+      );
+    }
+  }
 
   void _emit({String? sound, Future<void> Function()? haptic}) {
     if (sound != null && soundEffectsEnabled()) {
