@@ -28,7 +28,16 @@ enum _RecordedFeedbackCall {
   towerConfirmed,
   waveCleared,
   moduleSelected,
+  towerFired,
+  splashImpact,
+  chainImpact,
+  pierceImpact,
+  enemyDestroyed,
+  coreHit,
+  waveStarted,
+  bossArrived,
   bossDefeated,
+  towerSold,
   missionVictory,
   baseDefeated,
 }
@@ -43,7 +52,26 @@ final class _RecordingGameFeedback implements GameFeedback {
   @override
   void moduleSelected() => calls.add(_RecordedFeedbackCall.moduleSelected);
   @override
+  void towerFired(TowerType type) =>
+      calls.add(_RecordedFeedbackCall.towerFired);
+  @override
+  void splashImpact() => calls.add(_RecordedFeedbackCall.splashImpact);
+  @override
+  void chainImpact() => calls.add(_RecordedFeedbackCall.chainImpact);
+  @override
+  void pierceImpact() => calls.add(_RecordedFeedbackCall.pierceImpact);
+  @override
+  void enemyDestroyed() => calls.add(_RecordedFeedbackCall.enemyDestroyed);
+  @override
+  void coreHit() => calls.add(_RecordedFeedbackCall.coreHit);
+  @override
+  void waveStarted() => calls.add(_RecordedFeedbackCall.waveStarted);
+  @override
+  void bossArrived() => calls.add(_RecordedFeedbackCall.bossArrived);
+  @override
   void bossDefeated() => calls.add(_RecordedFeedbackCall.bossDefeated);
+  @override
+  void towerSold() => calls.add(_RecordedFeedbackCall.towerSold);
   @override
   void missionVictory() => calls.add(_RecordedFeedbackCall.missionVictory);
   @override
