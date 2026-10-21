@@ -3952,19 +3952,11 @@ void main() {
     tester,
   ) async {
     // No gameFeedback is injected, so the page builds a PlatformGameFeedback
-    // whose enabled-closures read _feedbackPreferences. Stub the audio and
-    // haptic channels so the detached emit futures complete (with errors
-    // PlatformGameFeedback swallows) instead of hanging on a missing
-    // engine.
+    // whose enabled-closures read _feedbackPreferences. The audioplayers
+    // channels are stubbed by the shared test/flutter_test_config.dart;
+    // stub haptics here so the detached emit futures complete (with errors
+    // PlatformGameFeedback swallows) instead of hanging on a missing engine.
     final binding = TestWidgetsFlutterBinding.instance;
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('xyz.luan/audioplayers.global'),
-      (MethodCall call) async => null,
-    );
-    binding.defaultBinaryMessenger.setMockMethodCallHandler(
-      const MethodChannel('xyz.luan/audioplayers'),
-      (MethodCall call) async => throw Exception('audioplayers unavailable'),
-    );
     binding.defaultBinaryMessenger.setMockMethodCallHandler(
       SystemChannels.platform,
       (MethodCall call) async => null,
@@ -4014,14 +4006,8 @@ void main() {
       // and violate a user's saved soundEffectsEnabled:false /
       // hapticsEnabled:false choice.
       final binding = TestWidgetsFlutterBinding.instance;
-      binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        const MethodChannel('xyz.luan/audioplayers.global'),
-        (MethodCall call) async => null,
-      );
-      binding.defaultBinaryMessenger.setMockMethodCallHandler(
-        const MethodChannel('xyz.luan/audioplayers'),
-        (MethodCall call) async => throw Exception('audioplayers unavailable'),
-      );
+      // The audioplayers channels are stubbed by the shared
+      // test/flutter_test_config.dart; only haptics need a local mock here.
       final hapticCalls = <Object?>[];
       binding.defaultBinaryMessenger.setMockMethodCallHandler(
         SystemChannels.platform,
