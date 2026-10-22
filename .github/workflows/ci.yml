@@ -89,6 +89,20 @@ jobs:
           use_oidc: true
           fail_ci_if_error: true
 
+  audio-contract:
+    name: Audio asset contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Run audio asset contract tests
+        run: python3 -m unittest discover -s scripts -p 'test_*.py'
+
   integration-test:
     name: Integration test (Android)
     runs-on: ubuntu-22.04
