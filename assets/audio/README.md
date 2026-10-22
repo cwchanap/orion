@@ -79,10 +79,12 @@ agreement; it is not represented as CC0, public domain, or unrestricted stock.
 allow embedding output with other material in games, subject to the applicable
 plan, and restrict making isolated audio files or sound libraries available.
 [Commercial use requires an eligible plan](https://help.elevenlabs.io/hc/en-us/articles/13313564601361-Can-I-publish-the-content-I-generate-on-the-platform).
-The MCP does not expose proof of this account's plan or a separate distribution
-agreement. Distribution and commercial use remain subject to the generating
-account's agreement; inclusion in this repository does not grant unrestricted
-redistribution rights.
+The MCP does not expose proof of this account's plan; the generating account
+owner has confirmed that the account's agreement permits distributing the 21
+mastered WAVs as individually tracked files in this public repository, while
+the raw source takes in `sources/` stay private. Distribution and commercial
+use remain subject to the generating account's agreement; inclusion in this
+repository does not grant unrestricted redistribution rights.
 
 Automated checks cover regeneration, existing-cue preservation, WAV format,
 duration, non-silence, peak headroom, and zero-valued endpoints. Distinctness,
