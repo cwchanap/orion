@@ -25,6 +25,31 @@ ORIGINAL = {
 }
 
 
+class PublicAssetContractTest(unittest.TestCase):
+    def test_tracked_wavs_match_names_hashes_and_combat_contract(self):
+        audio_dir = ROOT / "assets/audio"
+        expected = {f"{name}.wav" for name in COMBAT | ORIGINAL.keys()}
+        self.assertEqual({p.name for p in audio_dir.glob("*.wav")}, expected)
+        for name, digest in ORIGINAL.items():
+            self.assertEqual(hashlib.sha256((audio_dir / f"{name}.wav").read_bytes()).hexdigest(),
+                             digest, name)
+        for name in COMBAT:
+            with self.subTest(cue=name):
+                with wave.open(str(audio_dir / f"{name}.wav")) as audio:
+                    self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()),
+                                     (1, 2, 44100))
+                    duration = audio.getnframes() / audio.getframerate()
+                    self.assertGreater(duration, 0)
+                    self.assertLessEqual(duration, 0.5)
+                    if name.startswith(("fire_", "impact_")) or name == "enemy_destroyed":
+                        self.assertLessEqual(duration, 0.25)
+                    pcm = audio.readframes(audio.getnframes())
+                samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
+                self.assertEqual((samples[0], samples[-1]), (0, 0))
+                self.assertGreater(max(map(abs, samples)), 100)
+                self.assertLess(max(map(abs, samples)), 7500)
+
+
 class FeedbackAudioTest(unittest.TestCase):
     def test_offline_regeneration_preserves_cues_and_meets_combat_contract(self):
         sources = ROOT / "assets/audio/sources"
@@ -48,21 +73,8 @@ class FeedbackAudioTest(unittest.TestCase):
                                  digest, name)
             for name in COMBAT:
                 with self.subTest(cue=name):
-                    path = output / f"{name}.wav"
-                    self.assertEqual(path.read_bytes(), (ROOT / "assets/audio" / path.name).read_bytes())
-                    with wave.open(str(path)) as audio:
-                        self.assertEqual((audio.getnchannels(), audio.getsampwidth(), audio.getframerate()),
-                                         (1, 2, 44100))
-                        duration = audio.getnframes() / audio.getframerate()
-                        self.assertGreater(duration, 0)
-                        self.assertLessEqual(duration, 0.5)
-                        if name.startswith(("fire_", "impact_")) or name == "enemy_destroyed":
-                            self.assertLessEqual(duration, 0.25)
-                        pcm = audio.readframes(audio.getnframes())
-                    samples = struct.unpack(f"<{len(pcm) // 2}h", pcm)
-                    self.assertEqual((samples[0], samples[-1]), (0, 0))
-                    self.assertGreater(max(map(abs, samples)), 100)
-                    self.assertLess(max(map(abs, samples)), 7500)
+                    self.assertEqual((output / f"{name}.wav").read_bytes(),
+                                     (ROOT / "assets/audio" / f"{name}.wav").read_bytes())
 
             # A changed source must fail before touching known-good outputs.
             source = root / "assets/audio/sources/fire_laser.wav"
