@@ -82,6 +82,23 @@ flutter:
     - assets/audio/clear.wav
     - assets/audio/victory.wav
     - assets/audio/defeat.wav
+    - assets/audio/fire_laser.wav
+    - assets/audio/fire_cryo.wav
+    - assets/audio/fire_rocket.wav
+    - assets/audio/fire_railgun.wav
+    - assets/audio/fire_ion_chain.wav
+    - assets/audio/fire_nanite.wav
+    - assets/audio/fire_gravity_well.wav
+    - assets/audio/fire_drone_bay.wav
+    - assets/audio/impact_splash.wav
+    - assets/audio/impact_chain.wav
+    - assets/audio/impact_pierce.wav
+    - assets/audio/enemy_destroyed.wav
+    - assets/audio/core_hit.wav
+    - assets/audio/wave_start.wav
+    - assets/audio/boss_arrival.wav
+    - assets/audio/boss_defeated.wav
+    - assets/audio/tower_sold.wav
     - assets/fonts/OFL-Oxanium.txt
     - assets/fonts/OFL-ChakraPetch.txt
 
