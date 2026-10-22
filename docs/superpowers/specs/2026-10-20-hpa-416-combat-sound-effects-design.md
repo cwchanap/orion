@@ -3,7 +3,7 @@
 **Linear:** [HPA-416](https://linear.app/cwchanap/issue/HPA-416/orion-add-combat-sound-effects)  
 **Separate asset supply:** [HPA-385](https://linear.app/cwchanap/issue/HPA-385/orion-produce-combat-sfx-pack-for-hpa-416)  
 **Baseline:** `main` at `3e2a7e76f7272d106d7ad059dffe3b933a356ba9` (2026-10-20)  
-**Status:** design proposal; this draft PR is documentation-only.
+**Status:** design implemented in this PR; asset-contract and device gates pending HPA-385.
 
 ## Outcome and constraints
 
