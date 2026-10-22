@@ -880,7 +880,7 @@ void main() {
     );
 
     testWidgets('pool initialization completing after page unmount is disposed '
-        'immediately', (tester) async {
+        'immediately and starts no further pools', (tester) async {
       FlameAudio.audioCache = _FakeReadyAudioCache();
       final harness = _PoolChannelHarness()..install();
       harness.createGate = Completer<void>();
@@ -893,17 +893,21 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await flush(tester);
 
-      // All 13 pools finish initializing only after disposal; each is
-      // disposed immediately instead of being kept alive for a dead page.
+      // Only the pool already in flight lands after disposal: it is
+      // disposed immediately and the init loop stops instead of creating
+      // the remaining pools for the dead page. Keep pumping after it
+      // settles so a wrongly continuing loop would run to completion and
+      // be caught by the assertions below.
       harness.createGate!.complete();
-      await flushPools(
-        tester,
-        () =>
-            harness.createdPlayerIds.length == 13 &&
-            harness.disposedPlayerIds.length == 13,
-      );
+      await flushPools(tester, () => harness.disposedPlayerIds.isNotEmpty);
+      for (var i = 0; i < 20; i++) {
+        await tester.runAsync(() async {
+          await Future<void>.delayed(const Duration(milliseconds: 5));
+        });
+        await flush(tester);
+      }
 
-      expect(harness.createdPlayerIds, hasLength(13));
+      expect(harness.createdPlayerIds, hasLength(1));
       expect(harness.disposedPlayerIds, harness.createdPlayerIds);
       expect(harness.resumedPlayerIds, isEmpty);
       expect(tester.takeException(), isNull);
