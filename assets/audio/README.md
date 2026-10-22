@@ -46,6 +46,12 @@ takes decoded once from ElevenLabs MP3 to mono PCM with FFmpeg 8.1.2. They retai
 the generated audio before mastering; do not replace them during regeneration.
 No existing recording or third-party reference sample was supplied to the model.
 
+`sources/` is gitignored and **not tracked in this public repository**: the
+Sound Effects terms restrict making generated output available as isolated audio
+files. Authorized maintainers obtain `sources/` (the 17 WAVs and
+`provenance.json`) from the project owner's private storage and place it at
+`assets/audio/sources/` before regenerating.
+
 From the repository root:
 
 ```sh
