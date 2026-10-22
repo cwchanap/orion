@@ -74,9 +74,9 @@ allow embedding output with other material in games, subject to the applicable
 plan, and restrict making isolated audio files or sound libraries available.
 [Commercial use requires an eligible plan](https://help.elevenlabs.io/hc/en-us/articles/13313564601361-Can-I-publish-the-content-I-generate-on-the-platform).
 The MCP does not expose proof of this account's plan or a separate distribution
-agreement. Before publishing these raw assets to Orion's public repository,
-confirm that the account's agreement permits that distribution. No public PR
-containing the audio has been opened during local production.
+agreement. Distribution and commercial use remain subject to the generating
+account's agreement; inclusion in this repository does not grant unrestricted
+redistribution rights.
 
 Automated checks cover regeneration, existing-cue preservation, WAV format,
 duration, non-silence, peak headroom, and zero-valued endpoints. Distinctness,
