@@ -27,14 +27,17 @@ ORIGINAL = {
 
 class FeedbackAudioTest(unittest.TestCase):
     def test_offline_regeneration_preserves_cues_and_meets_combat_contract(self):
+        sources = ROOT / "assets/audio/sources"
+        if not sources.exists():
+            self.skipTest(
+                "assets/audio/sources/ is not tracked; obtain the private bundle "
+                "per assets/audio/README.md before regenerating")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             scripts = root / "scripts"
             scripts.mkdir()
             shutil.copy(ROOT / "scripts/generate_feedback_audio.py", scripts)
-            sources = ROOT / "assets/audio/sources"
-            if sources.exists():
-                shutil.copytree(sources, root / "assets/audio/sources")
+            shutil.copytree(sources, root / "assets/audio/sources")
             subprocess.run([sys.executable, str(scripts / "generate_feedback_audio.py")],
                            check=True, capture_output=True)
             output = root / "assets/audio"
