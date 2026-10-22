@@ -200,6 +200,9 @@ final class PlatformGameFeedback implements GameFeedback {
   /// gameplay.
   Future<void> _initPools() async {
     for (final cue in CombatSoundCue.values) {
+      if (_disposed) {
+        break;
+      }
       final AudioPool pool;
       try {
         pool = await FlameAudio.createPool(
@@ -215,9 +218,10 @@ final class PlatformGameFeedback implements GameFeedback {
       }
       if (_disposed) {
         // The owning page was disposed while this pool was initializing:
-        // dispose the late-completed pool immediately.
+        // dispose the late-completed pool immediately and stop — creating
+        // the remaining pools would only pay to dispose each one.
         unawaited(_disposePool(pool, cue.filename));
-        continue;
+        break;
       }
       _pools[cue] = pool;
     }
