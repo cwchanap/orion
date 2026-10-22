@@ -95,6 +95,11 @@ CUES = {
 }
 
 if __name__ == "__main__":
+    if not (SOURCES / "provenance.json").is_file():
+        raise SystemExit(
+            f"Missing {SOURCES}: source takes are not tracked; "
+            "obtain them from private storage first (see assets/audio/README.md)."
+        )
     provenance = json.loads((SOURCES / "provenance.json").read_text())
     combat = [(cue, master_combat(cue)) for cue in provenance["cues"]]
     for filename, notes in CUES.items():

@@ -42,6 +42,9 @@ app.*.symbols
 # Obfuscation related
 app.*.map.json
 
+# Raw ElevenLabs source takes are kept in private storage, not tracked publicly
+/assets/audio/sources/
+
 # Android Studio will place build artifacts here
 /android/app/debug
 /android/app/profile
