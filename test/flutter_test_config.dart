@@ -19,6 +19,9 @@ import 'package:flutter_test/flutter_test.dart';
 const MethodChannel _globalAudioChannel = MethodChannel(
   'xyz.luan/audioplayers.global',
 );
+const MethodChannel _globalAudioEventChannel = MethodChannel(
+  'xyz.luan/audioplayers.global/events',
+);
 const MethodChannel _audioChannel = MethodChannel('xyz.luan/audioplayers');
 
 Future<void> testExecutable(Future<void> Function() testMain) async {
@@ -28,11 +31,17 @@ Future<void> testExecutable(Future<void> Function() testMain) async {
     _globalAudioChannel,
     (MethodCall call) async => null,
   );
-  // Temporarily permissive while priming, so the warm-up player below can
-  // complete its setup chain.
+  // `GlobalAudioScope` subscribes the global event channel the moment
+  // `AudioPlayer.global` is first touched; without a stub its 'listen'
+  // activation reports a MissingPluginException that can surface inside an
+  // unrelated test's error collection.
+  messenger.setMockMethodCallHandler(
+    _globalAudioEventChannel,
+    (MethodCall call) async => null,
+  );
   messenger.setMockMethodCallHandler(
     _audioChannel,
-    (MethodCall call) async => null,
+    (MethodCall call) async => throw Exception('audioplayers unavailable'),
   );
 
   // Prime the audioplayers global scope once per file, here in the
@@ -41,19 +50,16 @@ Future<void> testExecutable(Future<void> Function() testMain) async {
   // zone, every later test awaiting the same Completer would stall forever,
   // because the resumption microtask stays trapped in the finished test's
   // zone. Completing it here keeps AudioPlayer creation unblocked in every
-  // test; per-player operations still fail promptly via the default stubs
-  // registered below.
-  final warmupPlayer = AudioPlayer();
+  // test. Priming deliberately creates no AudioPlayer: ensureInitialized
+  // only needs the global init call, whereas a real player's _create would
+  // succeed under the permissive global stub and then subscribe a
+  // per-player `xyz.luan/audioplayers/events/<id>` channel that has no stub.
   try {
-    await warmupPlayer.setPlayerMode(PlayerMode.mediaPlayer);
+    await AudioPlayer.global.ensureInitialized();
   } catch (error) {
     // Never let warm-up trouble fail the file; tests stub channels anyway.
     debugPrint('flutter_test_config: audioplayers warm-up failed: $error');
   }
 
-  messenger.setMockMethodCallHandler(
-    _audioChannel,
-    (MethodCall call) async => throw Exception('audioplayers unavailable'),
-  );
   await testMain();
 }
