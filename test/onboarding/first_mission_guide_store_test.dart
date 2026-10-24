@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/onboarding/contextual_tips.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -65,6 +66,98 @@ void main() {
 
       await store.setCompleted(false);
       expect(await store.loadCompleted(), isFalse);
+    });
+  });
+
+  group('SharedPreferences seen tips', () {
+    test('exposes the persistence key', () {
+      expect(
+        SharedPreferencesFirstMissionGuideStore.tipsKey,
+        'orion.contextualTips',
+      );
+    });
+
+    test('loads empty when the key is missing', () async {
+      final store = await _store({});
+
+      expect(await store.loadSeenTips(), isEmpty);
+    });
+
+    test('loads empty when the stored value is unreadable', () async {
+      final store = await _store(<String, Object>{
+        SharedPreferencesFirstMissionGuideStore.tipsKey: true,
+      });
+
+      expect(await store.loadSeenTips(), isEmpty);
+    });
+
+    test('persists sorted enum names and reads them back typed', () async {
+      final store = await _store({});
+
+      await store.setSeenTips({
+        ContextualTip.droneBay,
+        ContextualTip.bossWave,
+        ContextualTip.targeting,
+      });
+
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getStringList(
+          SharedPreferencesFirstMissionGuideStore.tipsKey,
+        ),
+        ['bossWave', 'droneBay', 'targeting'],
+      );
+      expect(await store.loadSeenTips(), {
+        ContextualTip.bossWave,
+        ContextualTip.droneBay,
+        ContextualTip.targeting,
+      });
+    });
+
+    test('drops unknown stored names', () async {
+      final store = await _store({
+        SharedPreferencesFirstMissionGuideStore.tipsKey: <String>[
+          'bossWave',
+          'notATip',
+        ],
+      });
+
+      expect(await store.loadSeenTips(), {ContextualTip.bossWave});
+    });
+
+    test('leaves the original guide flag record untouched', () async {
+      final store = await _store({});
+
+      await store.setSeenTips({ContextualTip.bossWave});
+
+      expect(await store.loadCompleted(), isNull);
+      await store.setCompleted(true);
+      expect(await store.loadCompleted(), isTrue);
+      expect(await store.loadSeenTips(), {ContextualTip.bossWave});
+    });
+  });
+
+  group('InMemory seen tips', () {
+    test('seeds from the constructor and round-trips', () async {
+      final seeded = InMemoryFirstMissionGuideStore(
+        seenTips: {ContextualTip.bossWave},
+      );
+      expect(await seeded.loadSeenTips(), {ContextualTip.bossWave});
+
+      final store = InMemoryFirstMissionGuideStore();
+      expect(await store.loadSeenTips(), isEmpty);
+
+      await store.setSeenTips({ContextualTip.targeting});
+      expect(await store.loadSeenTips(), {ContextualTip.targeting});
+    });
+
+    test('loaded sets cannot be mutated through the read reference', () async {
+      final store = InMemoryFirstMissionGuideStore();
+      await store.setSeenTips({ContextualTip.bossWave});
+
+      final loaded = await store.loadSeenTips();
+
+      expect(() => loaded.add(ContextualTip.railgun), throwsUnsupportedError);
     });
   });
 }

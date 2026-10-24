@@ -264,9 +264,7 @@ class WaveScannerScene extends StatelessWidget {
       1,
       (n, g) => g.enemyCount > n ? g.enemyCount : n,
     );
-    final bosses = preview.groups.where(
-      (g) => GameBalance.bosses.any((b) => b.name == g.label),
-    );
+    final bosses = preview.bossGroups;
     final traits = {
       ...preview.traits,
       for (final group in preview.groups) ...group.traits,

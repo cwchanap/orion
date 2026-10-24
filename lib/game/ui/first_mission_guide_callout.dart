@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../onboarding/contextual_tips.dart';
 import '../onboarding/first_mission_guide.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
@@ -21,19 +22,13 @@ const double _ringRadius = 26;
 /// frame and the position corrected (no second layout system).
 const Size _estimatedBubbleSize = Size(300, 120);
 
-/// One soft, non-modal first-mission guidance callout.
+/// One soft, non-modal first-mission guidance callout (HPA-412 guide mode).
 ///
-/// A compact [OrionSurface] bubble pointing at either a [GlobalKey] anchor
-/// ([anchorKey], measured after layout) or a board point ([targetPoint]) in
-/// the surrounding Stack's coordinate space. There is deliberately no modal
-/// barrier, spotlight mask, or full-screen gesture surface: the connector and
-/// ring are ignored-pointer decoration, the bubble copy ignores the pointer,
-/// and only the Skip / Got it buttons are tutorial hit targets — the game
-/// beneath stays fully interactive (soft guidance, never a lock).
-///
-/// Presentation only: no controller, no overlay service. The page places it
-/// last in the mission Stack inside bounded (Positioned.fill) constraints.
-class FirstMissionGuideCallout extends StatefulWidget {
+/// A thin adapter over the shared [_GuideCallout] renderer: it only maps the
+/// guided step to its copy and keeps the tutorial actions (Skip everywhere,
+/// Got it on the scanner step). All geometry, semantics and touch behavior
+/// live in the shared renderer.
+class FirstMissionGuideCallout extends StatelessWidget {
   const FirstMissionGuideCallout({
     super.key,
     required this.step,
@@ -59,11 +54,98 @@ class FirstMissionGuideCallout extends StatefulWidget {
   final VoidCallback? onDone;
 
   @override
-  State<FirstMissionGuideCallout> createState() =>
-      _FirstMissionGuideCalloutState();
+  Widget build(BuildContext context) {
+    return _GuideCallout(
+      copy: switch (step) {
+        FirstMissionGuideStep.buildCell => 'Tap an empty cell to build here.',
+        FirstMissionGuideStep.towerCard => 'Pick a tower.',
+        FirstMissionGuideStep.startWave =>
+          "Start the wave when you're ready. Towers fire on their own.",
+        FirstMissionGuideStep.upgrade =>
+          'Tap a tower, then Upgrade between waves.',
+        FirstMissionGuideStep.salvageModule =>
+          'Salvage Modules last only for this mission.',
+        FirstMissionGuideStep.scanner =>
+          'Check the scanner before the next wave.',
+      },
+      showSkip: true,
+      anchorKey: anchorKey,
+      targetPoint: targetPoint,
+      onSkip: onSkip,
+      onDone: onDone,
+    );
+  }
 }
 
-class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
+/// One soft, non-modal contextual-tip callout (HPA-413 mode).
+///
+/// Thin adapter over the same shared renderer as [FirstMissionGuideCallout],
+/// preserving its wrapper, semantics, keys and geometry. Shows the tip copy
+/// and Got it — contextual tips are never skippable, only acknowledged.
+class ContextualTipCallout extends StatelessWidget {
+  const ContextualTipCallout({
+    super.key,
+    required this.tip,
+    this.anchorKey,
+    this.targetPoint,
+    required this.onDone,
+  });
+
+  final ContextualTip tip;
+
+  /// Optional Flutter target (e.g. the collapsed scanner control) measured
+  /// against this callout's own space after layout.
+  final GlobalKey? anchorKey;
+
+  /// Fallback target in the surrounding Stack's coordinate space.
+  final Offset? targetPoint;
+
+  final VoidCallback onDone;
+
+  @override
+  Widget build(BuildContext context) {
+    return _GuideCallout(
+      copy: contextualTipCopy[tip]!,
+      showSkip: false,
+      anchorKey: anchorKey,
+      targetPoint: targetPoint,
+      onSkip: null,
+      onDone: onDone,
+    );
+  }
+}
+
+/// The shared callout renderer: anchor measurement, SafeArea clamping,
+/// hit-transparent chrome and the overlaid action row. No controller, no
+/// overlay service — the page places it last in the mission Stack inside
+/// bounded (Positioned.fill) constraints.
+class _GuideCallout extends StatefulWidget {
+  const _GuideCallout({
+    required this.copy,
+    required this.showSkip,
+    this.anchorKey,
+    this.targetPoint,
+    required this.onSkip,
+    this.onDone,
+  });
+
+  final String copy;
+
+  /// Whether the Skip tutorial action renders (HPA-412 only).
+  final bool showSkip;
+
+  final GlobalKey? anchorKey;
+  final Offset? targetPoint;
+  final VoidCallback? onSkip;
+
+  /// Final acknowledgement; rendered only when non-null.
+  final VoidCallback? onDone;
+
+  @override
+  State<_GuideCallout> createState() => _GuideCalloutState();
+}
+
+class _GuideCalloutState extends State<_GuideCallout> {
   final GlobalKey _bubbleMeasureKey = GlobalKey();
   final GlobalKey _buttonRowKey = GlobalKey();
 
@@ -86,9 +168,9 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
   bool _measurePending = false;
 
   @override
-  void didUpdateWidget(covariant FirstMissionGuideCallout oldWidget) {
+  void didUpdateWidget(covariant _GuideCallout oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.step != widget.step ||
+    if (oldWidget.copy != widget.copy ||
         oldWidget.anchorKey != widget.anchorKey ||
         oldWidget.targetPoint != widget.targetPoint) {
       // Drop stale geometry; the post-frame measure re-derives both.
@@ -185,7 +267,7 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
   Widget build(BuildContext context) {
     _scheduleMeasure();
     final uiTheme = OrionUiTheme.of(context);
-    final copy = _copyFor(widget.step);
+    final copy = widget.copy;
     return LayoutBuilder(
       builder: (context, constraints) {
         final canvas = constraints.biggest;
@@ -301,21 +383,22 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextButton(
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 8),
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      onPressed: widget.onSkip,
-                      child: Text(
-                        'Skip tutorial',
-                        style: OrionTypography.readout(
-                          size: 12,
-                          color: uiTheme.textMuted,
+                    if (widget.showSkip)
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: widget.onSkip,
+                        child: Text(
+                          'Skip tutorial',
+                          style: OrionTypography.readout(
+                            size: 12,
+                            color: uiTheme.textMuted,
+                          ),
                         ),
                       ),
-                    ),
                     if (widget.onDone != null)
                       TextButton(
                         style: TextButton.styleFrom(
@@ -379,17 +462,6 @@ class _FirstMissionGuideCalloutState extends State<FirstMissionGuideCallout> {
       },
     );
   }
-
-  String _copyFor(FirstMissionGuideStep step) => switch (step) {
-    FirstMissionGuideStep.buildCell => 'Tap an empty cell to build here.',
-    FirstMissionGuideStep.towerCard => 'Pick a tower.',
-    FirstMissionGuideStep.startWave =>
-      "Start the wave when you're ready. Towers fire on their own.",
-    FirstMissionGuideStep.upgrade => 'Tap a tower, then Upgrade between waves.',
-    FirstMissionGuideStep.salvageModule =>
-      'Salvage Modules last only for this mission.',
-    FirstMissionGuideStep.scanner => 'Check the scanner before the next wave.',
-  };
 }
 
 /// The point on [rect]'s boundary nearest [towards]: the clamped point for

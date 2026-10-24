@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:orion/game/onboarding/contextual_tips.dart';
 import 'package:orion/game/onboarding/first_mission_guide.dart';
 import 'package:orion/game/ui/first_mission_guide_callout.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
@@ -26,6 +27,35 @@ final Map<FirstMissionGuideStep, String> _copyByStep = {
       'Salvage Modules last only for this mission.',
   FirstMissionGuideStep.scanner: 'Check the scanner before the next wave.',
 };
+
+Widget _contextualHost(
+  ContextualTip tip, {
+  GlobalKey? anchorKey,
+  Offset? targetPoint,
+  VoidCallback? onDone,
+}) {
+  return MaterialApp(
+    theme: orionThemeData,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(padding: _safePadding),
+      child: child!,
+    ),
+    home: Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: ContextualTipCallout(
+              tip: tip,
+              anchorKey: anchorKey,
+              targetPoint: targetPoint,
+              onDone: onDone ?? () {},
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 void _setSize(WidgetTester tester) {
   tester.view.physicalSize = _viewport;
@@ -544,5 +574,58 @@ void main() {
     );
     expect(tester.binding.transientCallbackCount, 0);
     expect(tester.takeException(), isNull);
+  });
+
+  group('contextual tip mode', () {
+    testWidgets('renders every tip copy verbatim', (tester) async {
+      _setSize(tester);
+      for (final tip in ContextualTip.values) {
+        await tester.pumpWidget(
+          _contextualHost(tip, targetPoint: const Offset(180, 140)),
+        );
+        await _settle(tester);
+        expect(
+          find.text(contextualTipCopy[tip]!),
+          findsOneWidget,
+          reason: tip.name,
+        );
+      }
+    });
+
+    testWidgets('shows Got it without Skip tutorial', (tester) async {
+      _setSize(tester);
+      var dones = 0;
+      await tester.pumpWidget(
+        _contextualHost(
+          ContextualTip.bossWave,
+          targetPoint: const Offset(180, 140),
+          onDone: () => dones++,
+        ),
+      );
+      await _settle(tester);
+
+      expect(find.text('Got it'), findsOneWidget);
+      expect(find.text('Skip tutorial'), findsNothing);
+
+      await tester.tap(find.text('Got it'));
+      await tester.pump();
+      expect(dones, 1);
+    });
+
+    testWidgets('keeps the shared bubble geometry inside the SafeArea', (
+      tester,
+    ) async {
+      _setSize(tester);
+      await tester.pumpWidget(
+        _contextualHost(
+          ContextualTip.bossWave,
+          targetPoint: const Offset(180, 140),
+        ),
+      );
+      await _settle(tester);
+
+      _expectBubbleInsideSafeArea(tester);
+      expect(find.byKey(_bubbleKey), findsOneWidget);
+    });
   });
 }

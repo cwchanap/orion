@@ -475,6 +475,12 @@ class WavePreview {
   final Set<EnemyTrait> traits;
   final int clearBonus;
   final List<TowerType> recommendedTowerTypes;
+
+  /// Groups whose label matches a [GameBalance.bosses] entry. The one shared
+  /// boss predicate: the scanner's boss cards and the contextual boss-tip
+  /// resolution both read this getter, so they can never drift apart.
+  Iterable<WavePreviewGroup> get bossGroups =>
+      groups.where((g) => GameBalance.bosses.any((b) => b.name == g.label));
 }
 
 class PlacedTower {

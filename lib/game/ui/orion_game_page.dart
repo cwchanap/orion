@@ -14,6 +14,7 @@ import '../campaign/tech_tree.dart';
 import '../feedback/feedback_preferences.dart';
 import '../feedback/game_feedback.dart';
 import '../models/game_models.dart';
+import '../onboarding/contextual_tips.dart';
 import '../onboarding/first_mission_guide.dart';
 import '../onboarding/first_mission_guide_store.dart';
 import '../orion_defense_game.dart';
@@ -101,6 +102,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
   bool _feedbackPreferencesLoaded = false;
   FirstMissionGuideStore? _firstMissionGuideStore;
   bool _firstMissionGuideCompleted = false;
+  // Typed seen set for the HPA-413 contextual tips, loaded alongside the
+  // guide flag before the loading gate clears; acknowledged in memory first,
+  // then written through best-effort.
+  Set<ContextualTip> _seenTips = const {};
   // Guide anchor keys wrap the existing gameplay surfaces (dock cards, wave
   // pill, radial Upgrade, collapsed scanner, draft frame) so the callout can
   // point at real widgets; they are only attached while their step is active.
@@ -210,6 +215,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // custom campaign store fetches an instance solely for the guide.
       guideStore ??= await _defaultFirstMissionGuideStore(preferences);
       final guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
+      final seenTips = await _loadSeenTips(guideStore);
 
       final save = await store.load();
 
@@ -239,6 +245,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _firstMissionGuideCompleted =
             guideCompleted ??
             (save.progress.resultFor(OrionCampaign.stageOneId) != null);
+        _seenTips = seenTips;
         _isLoading = false;
       });
 
@@ -266,6 +273,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
       if (!mounted) {
         return;
       }
+      final seenTips = await _loadSeenTips(guideStore);
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         _store = store;
@@ -275,6 +286,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committedTechTree = CampaignTechTree();
         _firstMissionGuideStore = guideStore;
         _firstMissionGuideCompleted = guideCompleted ?? false;
+        _seenTips = seenTips;
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
       });
@@ -373,6 +385,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
+  /// Same failure convention as the guide flag: unreadable means empty.
+  Future<Set<ContextualTip>> _loadSeenTips(
+    FirstMissionGuideStore? store,
+  ) async {
+    if (store == null) {
+      return const {};
+    }
+    try {
+      return await store.loadSeenTips();
+    } catch (_) {
+      return const {};
+    }
+  }
+
   /// In-memory state wins immediately; the store write-through is best-effort
   /// and a failure never touches campaign or feedback breadcrumbs.
   void _setFirstMissionGuideCompleted(bool completed) {
@@ -383,6 +409,19 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _firstMissionGuideCompleted = completed;
     });
     _firstMissionGuideStore?.setCompleted(completed).catchError((_) {});
+  }
+
+  /// Marks a contextual tip seen: in-memory flip first, then the HPA-412
+  /// fire-and-forget write-through. Play never waits on the write.
+  void _acknowledgeContextualTip(ContextualTip tip) {
+    final updated = Set.unmodifiable({..._seenTips, tip});
+    if (updated.length == _seenTips.length) {
+      return; // already acknowledged
+    }
+    setState(() {
+      _seenTips = updated;
+    });
+    _firstMissionGuideStore?.setSeenTips(updated).catchError((_) {});
   }
 
   @override
@@ -522,6 +561,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     snapshot.gold < snapshot.selectedTowerStats!.upgradeCost);
             final guideStep = upgradeAnchorDead ? null : resolvedGuideStep;
 
+            // The old HPA-412 guide always wins: while it is eligible (a
+            // not-yet-completed Alpha run) no contextual tip shows, even
+            // between guide lessons.
+            final contextualTip = guideEligible
+                ? null
+                : contextualTipFor(snapshot, _seenTips);
+
             // Completion is a snapshot fact, not only a button fact: the
             // auto-start countdown calls game.startWave() directly, so the
             // wave leaving the build phase under the scanner lesson's
@@ -624,7 +670,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
                         ? _upgradeGuideAnchorKey
                         : null,
                     scannerGuideAnchorKey:
-                        guideStep == FirstMissionGuideStep.scanner
+                        guideStep == FirstMissionGuideStep.scanner ||
+                            contextualTip == ContextualTip.bossWave
                         ? _scannerGuideAnchorKey
                         : null,
                     onInspectTower:
@@ -642,6 +689,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       // still shows guidance.
                       if (guideStep == FirstMissionGuideStep.scanner) {
                         _setFirstMissionGuideCompleted(true);
+                      }
+                      // Starting the wave while the boss tip is up
+                      // acknowledges it; both flips are synchronous and the
+                      // write-through is fire-and-forget, so game.startWave
+                      // below is never blocked or delayed.
+                      final tip = contextualTip;
+                      if (tip != null) {
+                        _acknowledgeContextualTip(tip);
                       }
                       game.startWave();
                     },
@@ -751,6 +806,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           : null,
                     ),
                   ),
+                if (contextualTip == ContextualTip.bossWave)
+                  Positioned.fill(
+                    child: ContextualTipCallout(
+                      tip: contextualTip!,
+                      // The collapsed scanner control is the boss tip's
+                      // anchor; the resolver guarantees nothing is selected,
+                      // so the control is usable whenever the tip shows.
+                      anchorKey: _scannerGuideAnchorKey,
+                      onDone: () =>
+                          _acknowledgeContextualTip(ContextualTip.bossWave),
+                    ),
+                  ),
               ],
             );
           },
@@ -802,21 +869,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
         initialPreferences: _feedbackPreferences,
         reduceMotion: MediaQuery.disableAnimationsOf(context),
         onReplayTutorial: () async {
-          // The sheet confirms only after this future completes, so the
-          // flag must be reset AND persisted here: a store problem throws
-          // back to the sheet, which leaves the action enabled and shows
-          // no confirmation. The write is unconditional — an in-memory
-          // false over a stale persisted true must still rewrite the
-          // record.
+          // The sheet confirms only after this future completes, so the flags
+          // must be reset AND persisted here: a store problem throws back to
+          // the sheet, which leaves the action enabled and shows no
+          // confirmation. The writes are unconditional — an in-memory reset
+          // over a stale persisted record must still rewrite both.
           var store = _firstMissionGuideStore;
           store ??= await _defaultFirstMissionGuideStore(null);
           if (store == null) {
             throw StateError('First-mission guide store is unavailable.');
           }
           _firstMissionGuideStore = store;
+          await store.setSeenTips(const {});
           await store.setCompleted(false);
           if (mounted) {
             setState(() {
+              _seenTips = const {};
               _firstMissionGuideCompleted = false;
             });
           }

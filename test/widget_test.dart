@@ -18,6 +18,7 @@ import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/onboarding/contextual_tips.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
@@ -5209,6 +5210,14 @@ class _FailingFirstMissionGuideStore implements FirstMissionGuideStore {
 
   @override
   Future<void> setCompleted(bool completed) async {
+    throw StateError('guide write failed');
+  }
+
+  @override
+  Future<Set<ContextualTip>> loadSeenTips() async => {};
+
+  @override
+  Future<void> setSeenTips(Set<ContextualTip> tips) async {
     throw StateError('guide write failed');
   }
 }
