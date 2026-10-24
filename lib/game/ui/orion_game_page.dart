@@ -109,7 +109,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // Guide anchor keys wrap the existing gameplay surfaces (dock cards, wave
   // pill, radial Upgrade, collapsed scanner, draft frame) so the callout can
   // point at real widgets; they are only attached while their step is active.
-  final GlobalKey _laserGuideAnchorKey = GlobalKey();
+  // The ONE card anchor key: HPA-412's Laser lesson and the HPA-413 unlock
+  // tips are mutually exclusive (the old guide wins while eligible), so a
+  // single GlobalKey serves exactly one active card at a time.
+  final GlobalKey _towerCardGuideAnchorKey = GlobalKey();
   final GlobalKey _waveGuideAnchorKey = GlobalKey();
   final GlobalKey _upgradeGuideAnchorKey = GlobalKey();
   final GlobalKey _scannerGuideAnchorKey = GlobalKey();
@@ -568,6 +571,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 ? null
                 : contextualTipFor(snapshot, _seenTips);
 
+            // Placing a tower of an unlock family demonstrates its lesson:
+            // union the learned facts post-frame (setState is illegal
+            // mid-build). Idempotent, so steady-state snapshots add no work;
+            // acknowledgements write through best-effort.
+            final learned = learnedTipsIn(snapshot);
+            if (learned.any((tip) => !_seenTips.contains(tip))) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) return;
+                for (final tip in learned) {
+                  _acknowledgeContextualTip(tip);
+                }
+              });
+            }
+
             // Completion is a snapshot fact, not only a button fact: the
             // auto-start countdown calls game.startWave() directly, so the
             // wave leaving the build phase under the scanner lesson's
@@ -585,6 +602,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
               });
             }
 
+            // Exactly one active card anchor: HPA-412's Laser card, or —
+            // only when the old guide is silent — the contextual unlock
+            // tip's card. The two never compete (guideEligible forces the
+            // contextual tip null), and bossWave maps to the scanner, not
+            // a card.
+            final TowerType? anchoredCardType =
+                guideStep == FirstMissionGuideStep.towerCard
+                ? TowerType.laser
+                : contextualTip == null
+                ? null
+                : contextualTipTowerTypes[contextualTip];
+
             GlobalKey? guideAnchorKey;
             Offset? guideTargetPoint;
             switch (guideStep) {
@@ -595,7 +624,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   const GridPosition(2, 2),
                 );
               case FirstMissionGuideStep.towerCard:
-                guideAnchorKey = _laserGuideAnchorKey;
+                guideAnchorKey = _towerCardGuideAnchorKey;
               case FirstMissionGuideStep.startWave:
                 guideAnchorKey = _waveGuideAnchorKey;
               case FirstMissionGuideStep.upgrade:
@@ -656,10 +685,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           ),
                     // Guide anchor keys are only attached for the active
                     // step, so gameplay surfaces stay untouched otherwise.
-                    laserGuideAnchorKey:
-                        guideStep == FirstMissionGuideStep.towerCard
-                        ? _laserGuideAnchorKey
-                        : null,
+                    towerCardGuideAnchor: anchoredCardType == null
+                        ? null
+                        : (
+                            type: anchoredCardType,
+                            anchorKey: _towerCardGuideAnchorKey,
+                          ),
                     waveGuideAnchorKey:
                         guideStep == FirstMissionGuideStep.startWave
                         ? _waveGuideAnchorKey
@@ -806,16 +837,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           : null,
                     ),
                   ),
-                if (contextualTip == ContextualTip.bossWave)
+                if (contextualTip case final ContextualTip tip)
                   Positioned.fill(
                     child: ContextualTipCallout(
-                      tip: contextualTip!,
-                      // The collapsed scanner control is the boss tip's
-                      // anchor; the resolver guarantees nothing is selected,
-                      // so the control is usable whenever the tip shows.
-                      anchorKey: _scannerGuideAnchorKey,
-                      onDone: () =>
-                          _acknowledgeContextualTip(ContextualTip.bossWave),
+                      tip: tip,
+                      // Boss anchors at the collapsed scanner; unlock tips
+                      // anchor at their build-rail card (attached above).
+                      anchorKey: tip == ContextualTip.bossWave
+                          ? _scannerGuideAnchorKey
+                          : _towerCardGuideAnchorKey,
+                      onDone: () => _acknowledgeContextualTip(tip),
                     ),
                   ),
               ],

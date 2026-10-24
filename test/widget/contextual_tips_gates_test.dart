@@ -361,4 +361,144 @@ void main() {
     );
     expect(find.text(_bossCopy), findsOneWidget);
   });
+
+  group('unlock tips on the selected-cell rail', () {
+    const railgunCopy = 'Railgun unlocked. Pierces enemies in a line.';
+    const ionChainCopy = 'Ion Chain unlocked. Lightning jumps between targets.';
+    const droneBayCopy =
+        'Drone Bay unlocked. Launches autonomous interceptors.';
+    const cell = GridPosition(2, 2);
+
+    PlacedTower placedTower(TowerType type, int id) =>
+        PlacedTower(id: id, type: type, position: GridPosition(2, 2 + id));
+
+    testWidgets('tip anchors to the rail card; no Wave pill is present in '
+        'this dock branch', (tester) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      final ref = await _pumpMission(tester, guideStore: store);
+
+      await _project(
+        tester,
+        ref.game!,
+        commandDeckSnapshot(selectedCell: cell),
+      );
+
+      expect(find.text(railgunCopy), findsOneWidget);
+      expect(find.text('Got it'), findsOneWidget);
+      // The selected-cell branch replaces the idle bar: no Wave pill exists
+      // to obstruct, ever.
+      expect(find.byTooltip('Start Wave'), findsNothing);
+
+      await tester.tap(find.text('Got it'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text(railgunCopy), findsNothing);
+      // The next unlock candidate chains in immediately.
+      expect(find.text(ionChainCopy), findsOneWidget);
+      expect(await store.loadSeenTips(), {ContextualTip.railgun});
+    });
+
+    testWidgets(
+      'offscreen Drone Bay card is revealed once at 360x640 and 1.3x text '
+      'scale, with Got it reachable',
+      (tester) async {
+        tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+        addTearDown(tester.platformDispatcher.clearAllTestValues);
+        // Everything up to Drone Bay already seen: Drone Bay is the one
+        // candidate, and its card sits past the 360px viewport's end.
+        final preloaded = InMemoryFirstMissionGuideStore(
+          completed: true,
+          seenTips: {
+            ContextualTip.railgun,
+            ContextualTip.ionChain,
+            ContextualTip.nanite,
+            ContextualTip.gravityWell,
+          },
+        );
+        final ref = await _pumpMission(tester, guideStore: preloaded);
+        final game = ref.game!;
+
+        await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+        // The reveal animation's ticker starts in the mount frame's
+        // post-frame callbacks, so its first tick lands one frame later;
+        // give it its full 240ms window before asserting.
+        await tester.pump(const Duration(milliseconds: 260));
+        await tester.pump();
+
+        expect(find.text(droneBayCopy), findsOneWidget);
+        final card = tester.getRect(
+          find.byKey(const ValueKey('tower-card-droneBay')),
+        );
+        expect(card.left, greaterThanOrEqualTo(0));
+        expect(card.right, lessThanOrEqualTo(360));
+        final gotIt = tester.getRect(find.text('Got it'));
+        expect(gotIt.left, greaterThanOrEqualTo(0));
+        expect(gotIt.right, lessThanOrEqualTo(360));
+        expect(gotIt.top, greaterThanOrEqualTo(0));
+
+        await tester.tap(find.text('Got it'));
+        await tester.pump();
+        await tester.pump();
+        expect(await preloaded.loadSeenTips(), {
+          ContextualTip.railgun,
+          ContextualTip.ionChain,
+          ContextualTip.nanite,
+          ContextualTip.gravityWell,
+          ContextualTip.droneBay,
+        });
+      },
+    );
+
+    testWidgets(
+      'dock branch transitions with the tip active never duplicate the card '
+      'GlobalKey',
+      (tester) async {
+        final store = InMemoryFirstMissionGuideStore(completed: true);
+        final ref = await _pumpMission(tester, guideStore: store);
+        final game = ref.game!;
+
+        await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+        expect(find.text(railgunCopy), findsOneWidget);
+
+        // Deselect → idle branch (persistent rail, no anchor) runs through
+        // the AnimatedSwitcher, then re-select → build branch again.
+        await _project(tester, game, commandDeckSnapshot());
+        await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+
+        expect(tester.takeException(), isNull);
+        expect(find.text(railgunCopy), findsOneWidget);
+      },
+    );
+
+    testWidgets('placing a tower teaches its unlock tip without Got it', (
+      tester,
+    ) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      final ref = await _pumpMission(tester, guideStore: store);
+      final game = ref.game!;
+
+      // A snapshot fact: a Railgun is on the board. The learned union must
+      // acknowledge it post-frame with no explicit Got it.
+      await _project(
+        tester,
+        game,
+        commandDeckSnapshot(placedTowers: [placedTower(TowerType.railgun, 1)]),
+      );
+      await tester.pump();
+      expect(await store.loadSeenTips(), {ContextualTip.railgun});
+
+      // Selecting a cell now skips Railgun: its lesson is learned.
+      await _project(
+        tester,
+        game,
+        commandDeckSnapshot(
+          selectedCell: cell,
+          placedTowers: [placedTower(TowerType.railgun, 1)],
+        ),
+      );
+      expect(find.text(railgunCopy), findsNothing);
+      expect(find.text(ionChainCopy), findsOneWidget);
+    });
+  });
 }

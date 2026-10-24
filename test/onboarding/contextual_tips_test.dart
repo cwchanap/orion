@@ -35,6 +35,12 @@ GameSnapshot _snapshot({
   PlacedTower? selectedTower,
   RunModuleOffer? pendingRunModuleOffer,
   List<StageModifier> stageModifiers = const [],
+  List<TowerType> unlockedTowerTypes = const [
+    TowerType.laser,
+    TowerType.railgun,
+  ],
+  bool selectedCellBuildable = true,
+  List<PlacedTower> placedTowers = const [],
 }) {
   return GameSnapshot(
     phase: phase,
@@ -46,20 +52,24 @@ GameSnapshot _snapshot({
     stageId: 'nebula-relay',
     stageName: 'Nebula Relay',
     stageLabel: 'NR',
-    unlockedTowerTypes: const [TowerType.laser, TowerType.railgun],
+    unlockedTowerTypes: unlockedTowerTypes,
     stageModifiers: stageModifiers,
     nextWavePreview: nextWavePreview,
     selectedCell: selectedCell,
     selectedTower: selectedTower,
+    selectedCellBuildable: selectedCellBuildable,
     feedback: null,
     isPaused: false,
     speedMultiplier: 1,
     autoStartEnabled: false,
     autoStartCountdownRemaining: null,
     pendingRunModuleOffer: pendingRunModuleOffer,
-    placedTowers: const [],
+    placedTowers: placedTowers,
   );
 }
+
+PlacedTower _placed(TowerType type, int id) =>
+    PlacedTower(id: id, type: type, position: GridPosition(2, 2 + id));
 
 void main() {
   group('ContextualTip enum', () {
@@ -224,26 +234,17 @@ void main() {
     });
 
     test('requires no selected cell so the collapsed scanner is usable', () {
+      // With every unlock lesson already seen, a selected cell leaves no
+      // unlock candidate — and the boss tip must NOT take over, because the
+      // collapsed scanner ignores taps while a cell is selected.
+      final unlockLessonsSeen = contextualTipTowerTypes.keys.toSet();
       expect(
         contextualTipFor(
           _snapshot(
             nextWavePreview: _bossPreview(),
             selectedCell: const GridPosition(2, 2),
           ),
-          {},
-        ),
-        isNull,
-      );
-      // Even an unbuildable (path) selection.
-      expect(
-        contextualTipFor(
-          _snapshot(
-            nextWavePreview: _bossPreview(),
-            selectedCell: const GridPosition(3, 2),
-            // selectedCellBuildable defaults true; an explicit buildable
-            // false variant is covered by the page gates.
-          ),
-          {},
+          unlockLessonsSeen,
         ),
         isNull,
       );
@@ -276,6 +277,242 @@ void main() {
         {},
       );
       expect(tip, isNot(ContextualTip.stageModifier));
+    });
+  });
+
+  group('learnedTipsIn', () {
+    test('an empty board teaches nothing', () {
+      expect(learnedTipsIn(_snapshot()), isEmpty);
+    });
+
+    test('each placed unlock family marks exactly its own tip', () {
+      final snapshot = _snapshot(
+        placedTowers: [
+          _placed(TowerType.railgun, 1),
+          _placed(TowerType.droneBay, 2),
+        ],
+      );
+      expect(learnedTipsIn(snapshot), {
+        ContextualTip.railgun,
+        ContextualTip.droneBay,
+      });
+    });
+
+    test('covers every unlock family in one board', () {
+      final snapshot = _snapshot(
+        placedTowers: [
+          _placed(TowerType.railgun, 1),
+          _placed(TowerType.ionChain, 2),
+          _placed(TowerType.nanite, 3),
+          _placed(TowerType.gravityWell, 4),
+          _placed(TowerType.droneBay, 5),
+        ],
+      );
+      expect(learnedTipsIn(snapshot), {
+        ContextualTip.railgun,
+        ContextualTip.ionChain,
+        ContextualTip.nanite,
+        ContextualTip.gravityWell,
+        ContextualTip.droneBay,
+      });
+    });
+
+    test('wave-1 families have no tips and teach nothing', () {
+      final snapshot = _snapshot(
+        placedTowers: [
+          _placed(TowerType.laser, 1),
+          _placed(TowerType.rocket, 2),
+          _placed(TowerType.cryo, 3),
+        ],
+      );
+      expect(learnedTipsIn(snapshot), isEmpty);
+    });
+  });
+
+  group('unlock tips (selected-cell rail)', () {
+    const cell = GridPosition(2, 2);
+
+    test('an unlocked unseen Railgun is eligible when a buildable cell is '
+        'selected', () {
+      expect(
+        contextualTipFor(
+          _snapshot(unlockedTowerTypes: TowerType.values, selectedCell: cell),
+          {},
+        ),
+        ContextualTip.railgun,
+      );
+    });
+
+    test('multiple eligible tips resolve in unlock (enum) order', () {
+      final snapshot = _snapshot(
+        unlockedTowerTypes: TowerType.values,
+        selectedCell: cell,
+      );
+      expect(contextualTipFor(snapshot, {}), ContextualTip.railgun);
+      expect(
+        contextualTipFor(snapshot, {ContextualTip.railgun}),
+        ContextualTip.ionChain,
+      );
+      expect(
+        contextualTipFor(snapshot, {
+          ContextualTip.railgun,
+          ContextualTip.ionChain,
+        }),
+        ContextualTip.nanite,
+      );
+      expect(
+        contextualTipFor(snapshot, {
+          ContextualTip.railgun,
+          ContextualTip.ionChain,
+          ContextualTip.nanite,
+        }),
+        ContextualTip.gravityWell,
+      );
+      expect(
+        contextualTipFor(snapshot, {
+          ContextualTip.railgun,
+          ContextualTip.ionChain,
+          ContextualTip.nanite,
+          ContextualTip.gravityWell,
+        }),
+        ContextualTip.droneBay,
+      );
+      expect(
+        contextualTipFor(snapshot, {
+          ContextualTip.railgun,
+          ContextualTip.ionChain,
+          ContextualTip.nanite,
+          ContextualTip.gravityWell,
+          ContextualTip.droneBay,
+        }),
+        isNull,
+      );
+    });
+
+    test('a locked card is skipped in favor of the next unlocked tip', () {
+      // Only Drone Bay has cleared its unlock wave among the five.
+      expect(
+        contextualTipFor(
+          _snapshot(
+            unlockedTowerTypes: const [TowerType.laser, TowerType.droneBay],
+            selectedCell: cell,
+          ),
+          {},
+        ),
+        ContextualTip.droneBay,
+      );
+    });
+
+    test('stays silent without a selected cell', () {
+      expect(
+        contextualTipFor(_snapshot(unlockedTowerTypes: TowerType.values), {}),
+        isNull,
+      );
+    });
+
+    test('stays silent on a nonbuildable (path) selection', () {
+      expect(
+        contextualTipFor(
+          _snapshot(
+            unlockedTowerTypes: TowerType.values,
+            selectedCell: cell,
+            selectedCellBuildable: false,
+          ),
+          {},
+        ),
+        isNull,
+      );
+    });
+
+    test('stays silent while a tower is selected', () {
+      expect(
+        contextualTipFor(
+          _snapshot(
+            unlockedTowerTypes: TowerType.values,
+            selectedCell: cell,
+            selectedTower: _placed(TowerType.laser, 1),
+          ),
+          {},
+        ),
+        isNull,
+      );
+    });
+
+    test(
+      'stays silent during an active wave, a draft, or an ended session',
+      () {
+        for (final (description, snapshot) in [
+          (
+            'wave',
+            _snapshot(
+              phase: GamePhase.wave,
+              unlockedTowerTypes: TowerType.values,
+              selectedCell: cell,
+            ),
+          ),
+          (
+            'draft',
+            _snapshot(
+              unlockedTowerTypes: TowerType.values,
+              selectedCell: cell,
+              pendingRunModuleOffer: RunModuleOffer(
+                offerId: 1,
+                draftNumber: 1,
+                draftTotal: 3,
+                moduleIds: const [RunModuleId.heavyCaliber],
+              ),
+            ),
+          ),
+          (
+            'won',
+            _snapshot(
+              phase: GamePhase.won,
+              unlockedTowerTypes: TowerType.values,
+              selectedCell: cell,
+            ),
+          ),
+          (
+            'lost',
+            _snapshot(
+              phase: GamePhase.lost,
+              unlockedTowerTypes: TowerType.values,
+              selectedCell: cell,
+            ),
+          ),
+        ]) {
+          expect(contextualTipFor(snapshot, {}), isNull, reason: description);
+        }
+      },
+    );
+
+    test('a placed type counts as learned and suppresses its own hint', () {
+      final snapshot = _snapshot(
+        unlockedTowerTypes: TowerType.values,
+        selectedCell: cell,
+        placedTowers: [_placed(TowerType.railgun, 1)],
+      );
+      expect(
+        contextualTipFor(snapshot, learnedTipsIn(snapshot)),
+        ContextualTip.ionChain,
+      );
+    });
+
+    test('boss keeps priority only when nothing is selected', () {
+      // With a cell selected, unlocks are the candidates — even an unseen
+      // boss stays silent because the scanner is unusable then.
+      final cellSelected = _snapshot(
+        unlockedTowerTypes: TowerType.values,
+        selectedCell: cell,
+        nextWavePreview: _bossPreview(),
+      );
+      expect(contextualTipFor(cellSelected, {}), ContextualTip.railgun);
+
+      // Nothing selected: boss leads, exactly as before.
+      final idle = _snapshot(
+        unlockedTowerTypes: TowerType.values,
+        nextWavePreview: _bossPreview(),
+      );
+      expect(contextualTipFor(idle, {}), ContextualTip.bossWave);
     });
   });
 }

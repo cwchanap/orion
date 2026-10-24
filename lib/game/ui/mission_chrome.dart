@@ -43,7 +43,7 @@ class MissionChrome extends StatefulWidget {
     this.towerAnchor,
     this.onInspectTower,
     this.onBoardViewportChanged,
-    this.laserGuideAnchorKey,
+    this.towerCardGuideAnchor,
     this.waveGuideAnchorKey,
     this.upgradeGuideAnchorKey,
     this.scannerGuideAnchorKey,
@@ -75,7 +75,7 @@ class MissionChrome extends StatefulWidget {
   /// Optional first-mission guide anchors, forwarded to the dock/radial/
   /// scanner owners. Anchor keys WRAP existing surfaces — they never replace
   /// gameplay ValueKeys — and stay null unless the page supplies them.
-  final Key? laserGuideAnchorKey;
+  final TowerCardGuideAnchor? towerCardGuideAnchor;
   final Key? waveGuideAnchorKey;
   final Key? upgradeGuideAnchorKey;
   final Key? scannerGuideAnchorKey;
@@ -317,7 +317,7 @@ class _MissionChromeState extends State<MissionChrome> {
                           onSell: widget.onSell,
                           onPlacementPreviewEvent:
                               widget.onPlacementPreviewEvent,
-                          laserGuideAnchorKey: widget.laserGuideAnchorKey,
+                          towerCardGuideAnchor: widget.towerCardGuideAnchor,
                           waveGuideAnchorKey: widget.waveGuideAnchorKey,
                         ),
                       ),

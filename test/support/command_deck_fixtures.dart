@@ -68,6 +68,8 @@ GameSnapshot commandDeckSnapshot({
   RunModuleOffer? pendingRunModuleOffer,
   List<RunModuleId> acquiredRunModules = const [],
   Map<RunModuleId, int> pendingRunModuleBeneficiaries = const {},
+  List<PlacedTower> placedTowers = const [],
+  bool selectedCellBuildable = true,
 }) {
   return GameSnapshot(
     phase: phase,
@@ -95,6 +97,8 @@ GameSnapshot commandDeckSnapshot({
     pendingRunModuleOffer: pendingRunModuleOffer,
     acquiredRunModules: acquiredRunModules,
     pendingRunModuleBeneficiaries: pendingRunModuleBeneficiaries,
+    placedTowers: placedTowers,
+    selectedCellBuildable: selectedCellBuildable,
   );
 }
 
