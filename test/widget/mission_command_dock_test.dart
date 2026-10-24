@@ -1196,4 +1196,169 @@ void main() {
       ]);
     },
   );
+
+  group('tower card guide anchor (HPA-413 unlock tips)', () {
+    testWidgets('wraps exactly the requested card and keeps taps working', (
+      tester,
+    ) async {
+      final anchorKey = GlobalKey();
+      final placed = <TowerType>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              width: 375,
+              height: 104,
+              child: TowerBuildRail(
+                phase: GamePhase.build,
+                gold: 9999,
+                unlockedTowerTypes: TowerType.values,
+                onPlaceTower: placed.add,
+                towerCardGuideAnchor: (
+                  type: TowerType.railgun,
+                  anchorKey: anchorKey,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // The anchor is an ancestor of the Railgun card — and of no other.
+      expect(
+        find.ancestor(
+          of: find.byKey(const ValueKey('tower-card-railgun')),
+          matching: find.byKey(anchorKey),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(
+          of: find.byKey(const ValueKey('tower-card-laser')),
+          matching: find.byKey(anchorKey),
+        ),
+        findsNothing,
+      );
+      // The wrapper never swallows the card's own tap.
+      await tester.tap(find.byKey(const ValueKey('tower-card-railgun')));
+      expect(placed, [TowerType.railgun]);
+    });
+
+    testWidgets('persistent idle rail never carries the anchor key', (
+      tester,
+    ) async {
+      final anchorKey = GlobalKey();
+      Widget dock(GameSnapshot snapshot) => MaterialApp(
+        home: MissionCommandDock(
+          snapshot: snapshot,
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+          onStartWave: () {},
+          onPlaceTower: (_) {},
+          onUpgrade: () {},
+          onSpecialize: (_) {},
+          onTargetingChanged: (_) {},
+          onSell: () {},
+          towerCardGuideAnchor: (type: TowerType.railgun, anchorKey: anchorKey),
+        ),
+      );
+
+      // Idle dock: the persistent rail is present, the anchor is not.
+      await tester.pumpWidget(dock(commandDeckSnapshot()));
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('command-dock-persistent-rail')),
+        findsOneWidget,
+      );
+      expect(find.byKey(anchorKey), findsNothing);
+
+      // Selected-cell branch mounts with the anchor...
+      await tester.pumpWidget(
+        dock(commandDeckSnapshot(selectedCell: const GridPosition(1, 1))),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(anchorKey), findsOneWidget);
+
+      // ...and the AnimatedSwitcher transition back to the idle branch
+      // must never mount the same GlobalKey on both branches.
+      await tester.pumpWidget(dock(commandDeckSnapshot()));
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(anchorKey), findsNothing);
+    });
+
+    testWidgets('all eight cards build eagerly in one scrollable row', (
+      tester,
+    ) async {
+      await tester.pumpWidget(railHost());
+
+      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      expect(find.byType(ListView), findsNothing);
+      // At 375 logical pixels the last card is offscreen — yet already
+      // built, so the guide can anchor and reveal it.
+      expect(find.byKey(const ValueKey('tower-card-droneBay')), findsOneWidget);
+      // Separators preserved between all eight cards.
+      expect(find.byKey(const ValueKey('tower-card-laser')), findsOneWidget);
+    });
+
+    testWidgets(
+      'reveals the anchored offscreen card once and never fights the user',
+      (tester) async {
+        final anchorKey = GlobalKey();
+        Widget host(({TowerType type, Key anchorKey})? anchor) => MaterialApp(
+          home: Align(
+            alignment: Alignment.bottomCenter,
+            child: SizedBox(
+              width: 375,
+              height: 104,
+              child: TowerBuildRail(
+                phase: GamePhase.build,
+                gold: 9999,
+                unlockedTowerTypes: TowerType.values,
+                onPlaceTower: (_) {},
+                towerCardGuideAnchor: anchor == null
+                    ? null
+                    : (type: anchor.type, anchorKey: anchorKey),
+              ),
+            ),
+          ),
+        );
+
+        double pixels() => tester
+            .state<ScrollableState>(find.byType(Scrollable).first)
+            .position
+            .pixels;
+
+        // Mounting with an offscreen Drone Bay anchor scrolls it into view.
+        await tester.pumpWidget(
+          host((type: TowerType.droneBay, anchorKey: anchorKey)),
+        );
+        await tester.pumpAndSettle();
+        expect(pixels(), greaterThan(0));
+        final railTop = tester
+            .getTopLeft(find.byKey(const ValueKey('tower-card-droneBay')))
+            .dy;
+        expect(railTop, greaterThanOrEqualTo(0));
+
+        // The user scrolls back: a parent rebuild with the SAME activation
+        // must never re-scroll (no fighting the player).
+        await tester.drag(
+          find.byKey(const ValueKey('tower-card-droneBay')),
+          const Offset(400, 0),
+        );
+        await tester.pumpAndSettle();
+        final afterUserScroll = pixels();
+        expect(afterUserScroll, lessThan(100));
+        await tester.pumpWidget(
+          host((type: TowerType.droneBay, anchorKey: anchorKey)),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        expect(pixels(), afterUserScroll);
+      },
+    );
+  });
 }

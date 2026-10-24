@@ -39,6 +39,12 @@ final class TowerPlacementPreviewCancel extends TowerPlacementPreviewEvent {
   const TowerPlacementPreviewCancel();
 }
 
+/// One guide anchor over exactly one build-rail card: which tower type the
+/// guide points at, and the key wrapping that card. The same key is never
+/// attached to two cards (or both dock branches) at once — the page owns it
+/// and supplies it only while a single card is the active guide target.
+typedef TowerCardGuideAnchor = ({TowerType type, Key anchorKey});
+
 class MissionCommandDock extends StatelessWidget {
   const MissionCommandDock({
     super.key,
@@ -54,20 +60,21 @@ class MissionCommandDock extends StatelessWidget {
     required this.onSell,
     this.onPlacementPreviewEvent,
     this.worldMapAction,
-    this.laserGuideAnchorKey,
+    this.towerCardGuideAnchor,
     this.waveGuideAnchorKey,
   });
 
   final Widget? worldMapAction;
 
-  /// Laser card anchor for the first-mission guide; attached ONLY to the
-  /// selected-cell rail (never the persistent idle rail — the same GlobalKey
-  /// on both dock branches would collide during the dock transition).
+  /// Card anchor for the first-mission/contextual guide; attached ONLY to
+  /// the selected-cell rail (never the persistent idle rail — the same
+  /// GlobalKey on both dock branches would collide during the dock
+  /// transition).
   ///
   /// Anchor keys WRAP existing surfaces — they never replace gameplay
   /// ValueKeys — and stay null unless the page supplies them, so production
   /// behavior is unchanged.
-  final Key? laserGuideAnchorKey;
+  final TowerCardGuideAnchor? towerCardGuideAnchor;
 
   /// Primary wave-action anchor around `_PrimaryActionPill`.
   final Key? waveGuideAnchorKey;
@@ -95,8 +102,8 @@ class MissionCommandDock extends StatelessWidget {
         unlockedTowerTypes: snapshot.unlockedTowerTypes,
         onPlaceTower: onPlaceTower,
         onPlacementPreviewEvent: onPlacementPreviewEvent,
-        // Selected-cell branch only: see [laserGuideAnchorKey].
-        laserGuideAnchorKey: laserGuideAnchorKey,
+        // Selected-cell branch only: see [towerCardGuideAnchor].
+        towerCardGuideAnchor: towerCardGuideAnchor,
       );
     } else {
       contentKey = const ValueKey('command-dock-idle');
@@ -386,7 +393,7 @@ class TowerBuildRail extends StatefulWidget {
     required this.unlockedTowerTypes,
     required this.onPlaceTower,
     this.onPlacementPreviewEvent,
-    this.laserGuideAnchorKey,
+    this.towerCardGuideAnchor,
   });
 
   final GamePhase phase;
@@ -395,9 +402,9 @@ class TowerBuildRail extends StatefulWidget {
   final ValueChanged<TowerType> onPlaceTower;
   final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
 
-  /// Optional first-mission guide anchor for the Laser card. Supplied only by
-  /// the selected-cell rail; the persistent idle rail passes nothing.
-  final Key? laserGuideAnchorKey;
+  /// Optional guide anchor for exactly one card. Supplied only by the
+  /// selected-cell rail; the persistent idle rail passes nothing.
+  final TowerCardGuideAnchor? towerCardGuideAnchor;
 
   @override
   State<TowerBuildRail> createState() => _TowerBuildRailState();
@@ -410,8 +417,88 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   TowerType? _activeDraggedType;
   Offset? _latestGlobalPointer;
 
+  @override
+  void initState() {
+    super.initState();
+    _revealAnchorCard();
+  }
+
+  @override
+  void didUpdateWidget(TowerBuildRail oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A changed (or freshly attached) target type is a new activation; the
+    // same activation rebuilding must never re-scroll — the user may have
+    // scrolled elsewhere in between.
+    if (widget.towerCardGuideAnchor?.type !=
+        oldWidget.towerCardGuideAnchor?.type) {
+      _revealAnchorCard();
+    }
+  }
+
+  /// Brings the anchored card into view once per activation: post-frame (so
+  /// the branch switch has laid the card out), centered, reduced-motion
+  /// aware. Detaching the anchor during the frame cancels the reveal.
+  void _revealAnchorCard() {
+    final type = widget.towerCardGuideAnchor?.type;
+    if (type == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || widget.towerCardGuideAnchor?.type != type) return;
+      final key = widget.towerCardGuideAnchor?.anchorKey;
+      final context = key is GlobalKey ? key.currentContext : null;
+      if (context == null || !context.mounted) return;
+      // Reveal only what the player cannot already reach: ensureVisible
+      // re-centers even a fully visible card, which would scroll the rail
+      // out from under their finger at branch mount.
+      final scrollable = Scrollable.maybeOf(context);
+      final viewportBox = scrollable?.context.findRenderObject() as RenderBox?;
+      final cardBox = context.findRenderObject() as RenderBox?;
+      if (viewportBox == null || cardBox == null || !cardBox.attached) {
+        return;
+      }
+      final cardRect =
+          cardBox.localToGlobal(Offset.zero, ancestor: viewportBox) &
+          cardBox.size;
+      final viewportRect = Offset.zero & viewportBox.size;
+      final fullyVisible =
+          cardRect.left >= viewportRect.left &&
+          cardRect.top >= viewportRect.top &&
+          cardRect.right <= viewportRect.right &&
+          cardRect.bottom <= viewportRect.bottom;
+      if (fullyVisible) return;
+      final reducedMotion = MediaQuery.disableAnimationsOf(context);
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.5,
+        duration: reducedMotion
+            ? Duration.zero
+            : const Duration(milliseconds: 240),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   void _emit(TowerPlacementPreviewEvent event) {
     widget.onPlacementPreviewEvent?.call(event);
+  }
+
+  /// Builds one rail card, wrapping it in the guide anchor when it is the
+  /// single active target. The card's own ValueKey stays untouched.
+  Widget _buildCard(TowerType type) {
+    final card = _TowerBuildCard(
+      type: type,
+      phase: widget.phase,
+      gold: widget.gold,
+      unlocked: widget.unlockedTowerTypes.contains(type),
+      onPlaceTower: widget.onPlaceTower,
+      onDragStarted: () => _handleDragStarted(type),
+      onDragUpdate: (position) => _handleDragUpdate(type, position),
+      onDragEnded: () => _handleDragEnded(type),
+      onDragCanceled: () => _handleDragCanceled(type),
+      onPointerUp: (position) => _handlePointerUp(type, position),
+    );
+    final anchor = widget.towerCardGuideAnchor;
+    if (anchor == null || type != anchor.type) return card;
+    return KeyedSubtree(key: anchor.anchorKey, child: card);
   }
 
   /// Each card owns its recognizer, so `maxSimultaneousDrags: 1` cannot stop
@@ -490,36 +577,22 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
         height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
         child: Stack(
           children: [
-            ListView.separated(
+            // Eight fixed cards: one eager Row in a scroll view. Every card
+            // is always built, so the guide can anchor and reveal any card
+            // (even offscreen) — lazy viewport items could not.
+            Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              scrollDirection: Axis.horizontal,
-              itemCount: TowerType.values.length,
-              separatorBuilder: (_, index) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final type = TowerType.values[index];
-                final card = _TowerBuildCard(
-                  type: type,
-                  phase: widget.phase,
-                  gold: widget.gold,
-                  unlocked: widget.unlockedTowerTypes.contains(type),
-                  onPlaceTower: widget.onPlaceTower,
-                  onDragStarted: () => _handleDragStarted(type),
-                  onDragUpdate: (position) => _handleDragUpdate(type, position),
-                  onDragEnded: () => _handleDragEnded(type),
-                  onDragCanceled: () => _handleDragCanceled(type),
-                  onPointerUp: (position) => _handlePointerUp(type, position),
-                );
-                if (type != TowerType.laser ||
-                    widget.laserGuideAnchorKey == null) {
-                  return card;
-                }
-                // Anchor wraps the card; the card's own
-                // ValueKey('tower-card-laser') stays untouched.
-                return KeyedSubtree(
-                  key: widget.laserGuideAnchorKey,
-                  child: card,
-                );
-              },
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final (index, type) in TowerType.values.indexed) ...[
+                      if (index > 0) const SizedBox(width: 8),
+                      _buildCard(type),
+                    ],
+                  ],
+                ),
+              ),
             ),
             // 1e treatment: the rail reads DROP TO BUILD while a long-press
             // drag is airborne. Overlay only — the rail's height never shifts.
