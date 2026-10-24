@@ -1,107 +1,96 @@
-# HPA-413 — First-Time Contextual Tips Implementation Plan
+# HPA-413 — Contextual Tips Implementation Plan
 
-> **For implementing agents:** use the existing `hpa-413-contextual-first-time-tips` branch and **this single draft PR** from spec through implementation and tests. Do not open separate PRs per task or for review fixes. Keep intermediate commits buildable and tests green.
+> **One PR / one ticket:** continue on `hpa-413-contextual-first-time-tips` / draft PR #42. Design, code, tests, and review follow-ups remain in this PR. End each vertical slice in a runnable/testable state. Do not create a second PR for any phase.
 
 **Linear:** https://linear.app/cwchanap/issue/HPA-413/orion-explain-new-systems-the-first-time-they-appear  
-**Design:** `docs/superpowers/specs/2026-10-22-hpa-413-contextual-tips-design.md`  
-**Status:** Proposed; not yet implemented.
+**Spec:** `docs/superpowers/specs/2026-10-22-hpa-413-contextual-tips-design.md`  
+**Status:** Documentation plan, not yet implemented.
 
-## Goal and constraints
+## Architecture and reuse contract
 
-Deliver nine concise once-only contextual hints (five unlocks + specialization + upcoming boss + stage modifier + targeting) by reusing the HPA-412 SharedPreferences injection and anchored non-modal callout. Remain offline and presentation-only: **no GameSession/GameSnapshot schema additions, combat changes, balance tuning, new packages, image art, or SFX**. One small `WavePreview` read-only boss-groups getter is allowed solely to share the scanner's existing predicate. One PR for the ticket.
+- Page coordinates eligibility and owns `Set<ContextualTip> _seenTips`. A pure `contextualTipFor(snapshot, seen)` picks **one current** candidate; `learnedTipsIn(snapshot)` supplies action-based acknowledgements. No pending-fact collection, sticky active-tip queue, timers, or generic tutorial controller.
+- The old HPA-412 guide always wins. Only build-phase, no-draft, no-inspector gameplay can show a contextual tip; the modifier tip belongs to a separate briefing route.
+- Extend the existing `FirstMissionGuideStore`, reusing its page injection and SharedPreferences instance. Typed `Set<ContextualTip>`, with `orion.contextualTips` storing sorted enum names; unknown stored IDs ignored. Update SharedPreferences, in-memory and `test/widget_test.dart`'s `_FailingFirstMissionGuideStore`.
+- Share one read-only `WavePreview.bossGroups` getter between scanner and tip resolver. Do not change `GameSnapshot`, `GameSession`, combat, campaign save or tuning.
+- Reuse the existing HPA-412 callout geometry, anchor wrappers, stage sheet and Settings Replay Tutorial. All UI is non-modal and normal game input remains active.
+- No new assets, SFX, runtime packages, engine, event bus, persisted current-step queue or generalized scheduler.
 
-The important existing contracts to preserve:
+### Key acceptance risk: Wave button overlap
 
-- `OrionGamePage` is the state/persistence coordinator; widget consumers read `GameSnapshot`, not `GameSession`.
-- `FirstMissionGuideStore.loadCompleted/setCompleted` and `orion.firstMissionGuide` remain semantically unchanged; `Replay Tutorial` awaits a store write and reports errors.
-- Existing `FirstMissionGuideCallout` has hit-transparent chrome and safe-area anchor measurement. Reuse/refactor the renderer, not duplicate it.
-- Dock has two mutually exclusive tower rails, one of which is persistent; do **not** attach the same `GlobalKey` to both. `TowerBuildRail` is a lazy horizontal `ListView.separated`: derive scroll offsets from `_TowerBuildCard.baseWidth`, the same clamped text scaler, and shared rail gap/padding constants rather than duplicating literals.
-- `NextWaveScanner` has an anchor on its collapsed control only; `TowerRadialActions` already has an optional progression anchor. The scanner's existing boss-label predicate must move to one shared `WavePreview.bossGroups` getter consumed by both scanner and contextual resolver.
-- The stage briefing displays modifier title/effect; tips never introduce a second explanation sheet.
+The persistent idle rail sits **below** the bottom-right Wave pill; a 300×120 bubble anchored to this rail can flip upward over the pill on a 360-wide phone. **Never anchor unlock tips to the persistent rail.** Only the selected-cell rail (which replaces the idle bar) may carry the unlock-tip key. Also test radial targeting/specialization bubbles near bottom cells so their action areas do not overlap Wave controls.
 
-## Expected file shape
+## Expected files
 
 **Create**
-- `lib/game/onboarding/contextual_tips.dart` — closed IDs, concise copy and pure current-snapshot candidate selection (no mutable session state).
-- `test/onboarding/contextual_tips_test.dart` — trigger/order/guard tests.
-- `test/widget/contextual_tips_gates_test.dart` — integrated tip lifecycle, suppression, replay and persistence gates (do not grow the large root `test/widget_test.dart`).
+- `lib/game/onboarding/contextual_tips.dart` — closed enum, copy, `contextualTipFor`, `learnedTipsIn`.
+- `test/onboarding/contextual_tips_test.dart` — resolver, learned-action and shared boss-predicate tests.
+- `test/widget/contextual_tips_gates_test.dart` — focused end-to-end build/draft/inspector/briefing/replay tests.
 
 **Modify**
-- `lib/game/onboarding/first_mission_guide_store.dart` and `test/onboarding/first_mission_guide_store_test.dart` — load/save the seen-tip IDs under separate SharedPreferences key; keep existing tutorial flag.
-- `lib/game/ui/first_mission_guide_callout.dart` and `test/widget/first_mission_guide_callout_test.dart` — share renderer via copy/actions while preserving the current first-mission wrapper/API/copy/keys.
-- `lib/game/ui/mission_command_dock.dart` — optional tip-card key/type, one-time scroll-to-card in the active rail only; reuse card sizing, spacing and padding constants.
-- `lib/game/ui/mission_chrome.dart` — forward optional tip-card and radial-targeting anchors, reuse progression/scanner keys.
-- `lib/game/ui/stage_briefing_sheet.dart` — optional modifier anchor/callout inputs; no new modal.
-- `lib/game/models/game_models.dart` — one `WavePreview.bossGroups` read-only getter; **no added snapshot/gameplay state**.
-- `lib/game/ui/next_wave_scanner.dart` — replace its inline boss predicate with `preview.bossGroups`.
-- `lib/game/ui/orion_game_page.dart` — load seen flags, coordinate eligibility/one active tip, queue transient trigger facts, persist Got it and settings replay.
-- Narrow existing widget tests for the dock, radial, scanner, and briefing wherever those surfaces have dedicated fixtures. Keep `test/widget_test.dart` for existing shell/boot behavior; reuse available fixture helpers or create small local ones within `contextual_tips_gates_test.dart`.
+- `lib/game/onboarding/first_mission_guide_store.dart`, `test/onboarding/first_mission_guide_store_test.dart` — typed seen-tip read/write next to the existing boolean.
+- `test/widget_test.dart` — **only** update `_FailingFirstMissionGuideStore` interface methods (and any strictly required existing fixture compile errors). Put new integration tests in the focused file above.
+- `lib/game/models/game_models.dart`, `lib/game/ui/next_wave_scanner.dart` — one read-only boss-groups getter replacing the scanner's duplicated label predicate.
+- `lib/game/ui/first_mission_guide_callout.dart` and focused callout tests — generalize copy/actions while preserving original wrapper, semantics, keys and geometry.
+- `lib/game/ui/orion_game_page.dart` — load/ack/reset seen state, gating, board targets and briefing entry.
+- `lib/game/ui/mission_chrome.dart`, `lib/game/ui/mission_command_dock.dart` — generalize selected-cell Laser anchor to one tower type and wire new radial targeting anchor.
+- `lib/game/ui/stage_briefing_sheet.dart` — key the existing modifier tile and immediately dismiss the tip inside the active modal route.
+- Existing targeted rail, scanner, radial, stage sheet and settings tests as needed.
 
-Avoid editing `GameSession`, `OrionDefenseGame`, `FeedbackPreferences`, campaign save models, assets, or audio. In `game_models.dart`, limit work to the read-only `WavePreview.bossGroups` helper; do not change `GameSnapshot`, other model schemas, or gameplay state.
+Avoid touching the underlying gameplay mutation paths and art/audio assets.
 
 ---
 
-## Task 1: Pin and implement stable IDs, pure trigger logic, and the store contract
+## Slice 1 — Boss tip end to end: store, resolver, callout, page and replay
 
-**Files:** `contextual_tips.dart`, `contextual_tips_test.dart`, `first_mission_guide_store.dart`, `first_mission_guide_store_test.dart`, `game_models.dart`, `next_wave_scanner.dart` (plus existing scanner tests).
+**Goal:** Prove one contextual tip from real preview → on-screen scanner anchor → Got it → persistence → Replay Tutorial, while preserving the six-step HPA-412 guide. This vertical slice sets up the exact reusable seams for later tips.
 
-1. Add RED tests defining nine stable IDs: `railgun`, `ionChain`, `nanite`, `gravityWell`, `droneBay`, `specialization`, `bossWave`, `stageModifier`, `targeting`. Tip copy and ordering are fixed; only the five `GameBalance.towerUnlockWave > 1` families get tower-unlock tips.
-2. Extract the **existing scanner predicate** (`preview.groups.where((g) => GameBalance.bosses.any((b) => b.name == g.label))`) into the read-only `WavePreview.bossGroups` getter. Switch `WaveScannerScene` to `preview.bossGroups` and have the contextual resolver use the **same getter**; do not add `WavePreviewGroup.isBoss` or another schema field. Pin matching and nonmatching group tests and ensure scanner rendering still matches the tip.
-3. Cover snapshot facts: fresh build with no new tower -> none; Railgun appears at its actual unlock; subsequent types activate in their respective waves; level-2 unspecialized tower (`PlacedTower.canSpecialize`) -> specialization candidate; `nextWavePreview.bossGroups.isNotEmpty` -> boss candidate; ordinary preview -> no boss; selected tower in build -> targeting candidate. Preview and selected-tower conditions must not require reading the underlying `GameSession`.
-4. Pure trigger candidates must return none during `GamePhase.wave`, `won`, `lost`, or pending module offer. A pure resolver should return candidate IDs in deterministic priority, excluding seen IDs. Stage modifier is a separate `stage.modifiers.isNotEmpty` briefing fact.
-5. Extend `FirstMissionGuideStore` (and both current implementations) with `loadSeenTips()` and `setSeenTips(Set<String>)`; store a sorted string list at `orion.contextualTips`. Test missing/unreadable key => empty; persisted IDs round-trip and unknown values are filtered; the old nullable completion flag still has the same semantics; the two keys do not overwrite each other. Keep a typed enum-to-string mapping local to contextual tips.
-6. Run `flutter test test/onboarding/contextual_tips_test.dart test/onboarding/first_mission_guide_store_test.dart` and existing scanner tests.
+1. **RED tests: typed store.** Add `ContextualTip` enum declared in resolver priority order: `bossWave`, `railgun`, `ionChain`, `nanite`, `gravityWell`, `droneBay`, `specialization`, `targeting`, `stageModifier`. Extend `FirstMissionGuideStore` with `Future<Set<ContextualTip>> loadSeenTips()` and `Future<void> setSeenTips(Set<ContextualTip>)`; test missing/unreadable -> empty, `.name` sorted list round trip, unknown names dropped, in-memory implementation and original `loadCompleted()/setCompleted()` unaffected. Update the **third implementor** `_FailingFirstMissionGuideStore` in `test/widget_test.dart` to satisfy the interface.
+2. **RED tests: boss fact and gating.** Move the existing `WaveScannerScene` predicate `preview.groups.where((g) => GameBalance.bosses.any((b) => b.name == g.label))` into a read-only `WavePreview.bossGroups` getter. Both the scanner and `contextualTipFor` consume it, not separate copies. Test matching/nonmatching labels, no boss on ordinary preview, and no tip during wave, draft or ended session. Require **no selected cell or selected tower** so the collapsed scanner is usable. No `isBoss` model field.
+3. **RED tests: existing renderer contract.** Refactor `FirstMissionGuideCallout` into a thin adapter over the shared text/actions/anchor renderer. Contextual mode shows its copy and Got it without Skip tutorial. HPA-412 still renders its original six texts, Skip tutorial everywhere, Got it only on scanner, hit-transparent surfaces and reduced-motion geometry.
+4. **Wire page for boss only.** Load `_seenTips` before the loading gate clears, from the already-injected guide store. With HPA-412 active show only HPA-412. Otherwise build-phase, no-selection and real boss preview may show a boss tip on the **existing collapsed scanner key**. On Got it (or Start Wave while this tip is currently shown), mark boss seen in memory and write through best-effort; starting a wave is never blocked. Do not add a controller or pending queue.
+5. **Replay Tutorial.** The existing settings callback must await `setSeenTips({})` and `setCompleted(false)` before reporting success. Keep old error behavior if a write fails; Reset Campaign changes neither preference. Routine acknowledgements use HPA-412-style best-effort write-through; **do not prebuild a serialization framework**. Pass immutable set snapshots and add rapid-tap + replay tests; add minimal ordering coordination only if a focused test proves an actual overwrite race.
+6. Write focused widget gates for first boss display and scanner anchor, HPA-412 exclusivity, no boss during combat/draft/report/selection, once-seen after page remount, and replay reset.
 
-**Definition of done:** deterministic decisions with no new game-model fields; both stores round-trip state and existing guide-store tests still pass.
+**Verification:** `flutter test test/onboarding/contextual_tips_test.dart test/onboarding/first_mission_guide_store_test.dart test/widget/contextual_tips_gates_test.dart` plus existing callout/scanner/settings tests. End green before proceeding.
 
-**Suggested commit:** `HPA-413: define contextual tips and persist acknowledgements`
+Suggested commit: `HPA-413: deliver once-only boss tip and shared guidance store`
 
-## Task 2: Share the existing callout and anchor the real controls
+## Slice 2 — Unlock tips on selected-cell rail only
 
-**Files:** `first_mission_guide_callout.dart`, `mission_chrome.dart`, `mission_command_dock.dart`, `stage_briefing_sheet.dart`, relevant widget tests.
+**Goal:** Show five role hints on the actual selectable cards with zero Wave-pill obstruction.
 
-1. RED widget test: contextual variant shows exactly the provided copy and **Got it**, no `Skip tutorial`. HPA-412 variant still shows its original text, Skip tutorial everywhere, and scanner-only Got it. Preserve existing safe-area, semantics, pointer-pass-through, and reduced-motion expectations.
-2. Factor the existing widget's measured bubble/connector/button-row code into one shared presentation widget within the same UI file, with text and primary/optional secondary actions as inputs. Leave a thin `FirstMissionGuideCallout` adaptor matching current call sites/tests. No new generic tutorial controller; no second painter or duplicated 450-line widget.
-3. Expose one optional `tipTowerType` + `tipAnchorKey` through `MissionChrome` → `MissionCommandDock` → **visible** `TowerBuildRail`. Attach only to that type's existing `_TowerBuildCard`, wrapping its `ValueKey`. On a changed active tip, scroll once into view using **`_TowerBuildCard.baseWidth`**, the rail's same clamped `MediaQuery.textScalerOf(context)` scale factor, and **one shared rail-owned gap/horizontal-padding constant** used by `ListView.separated` too. Do not repeat magic scroll numbers; clamp to current scroll extent, schedule after layout, respect reduced motion, and do not scroll again on each snapshot. Once the card is built, the callout measures its actual anchor. Test Railgun and offscreen Drone Bay at 360×640 and 1.3x text scale, both dock branches, no duplicate keys, and user scroll after activation.
-4. For specialization reuse the existing radial progression anchor; when no suitable tower is selected, point to the actual board cell using `game.boardCellCenter`. For targeting, add an optional `targetingGuideAnchorKey` wrapping the radial targeting button and preserve its `ValueKey`/onPressed/tooltip.
-5. For boss reuse the scanner's collapsed anchor; do not attach an anchor to expanded scanner content. For stage modifier, accept optional copy, anchor and acknowledgement callback on `StageBriefingSheet`, wrap its existing modifier tile, and render the same contextual callout last in its `Stack`.
-6. Run focused callout, rail, scanner, radial and briefing widget tests (then `flutter analyze` before the next commit).
+1. **RED resolver tests:** When `selectedCellBuildable && selectedCell != null && selectedTower == null`, a currently unlocked unseen Railgun/Ion/Nanite/Gravity/Drone card is eligible in unlock order; otherwise none. Do not render in the persistent rail, a nonbuildable cell, an active wave, or while HPA-412 is eligible. A previously placed type counts as learned and suppresses its own hint.
+2. Generalize the existing HPA-412 **selected-cell Laser anchor** to an optional `TowerType` + `Key` for exactly one active card; no second parallel GlobalKey. Do not attach it to the persistent rail, including during `AnimatedSwitcher` transitions. Preserve card `ValueKey` and all drag/tap handling.
+3. Since there are only eight fixed cards, replace `TowerBuildRail`'s lazy `ListView.separated` with `SingleChildScrollView` + `Row`, preserving horizontal/vertical padding, separators, text scaling, card semantics and hit targets. All eight anchors are then built; use `Scrollable.ensureVisible` after layout (center, reduced-motion aware) once when target type activates or branch mounts. No manual card-width/index/gap arithmetic or repeated auto-scroll after the user scrolls.
+4. Wire the page's resolver to the card anchor in the selected-cell branch only, and add learned-action acknowledgement after placing any matching tower. The page should not need a pending event queue; the unlocked list remains a current fact across build phases.
+5. **Widget gates:** Railgun + offscreen Drone Bay on 360×640 at 1.3x text scale; both dock branches transition with no GlobalKey collision; Got it reachable; Wave pill does not share the bubble's tap rect; scroll occurs once without fighting user interaction; HPA-412 Laser plus long-press drag regression stays green.
 
-**Definition of done:** all five target types map to real controls; no dead anchor, click interception, re-scrolling loop, or overlay duplication.
+**Verification:** focused resolver and rail/chrome/widget gate tests, `flutter analyze`.
 
-**Suggested commit:** `HPA-413: reuse anchored callout across contextual surfaces`
+Suggested commit: `HPA-413: guide newly unlocked tower cards without obscuring Wave`
 
-## Task 3: Wire page eligibility, lifecycle, acknowledgments, and Settings replay
+## Slice 3 — Specialization and targeting on the radial
 
-**Files:** `orion_game_page.dart`, `test/widget/contextual_tips_gates_test.dart` (new), `test/widget/feedback_settings_sheet_test.dart` (when needed). Leave the large root `test/widget_test.dart` unchanged unless a pre-existing helper truly must be updated.
+**Goal:** Reuse real board/radial targets and automatically acknowledge observed gameplay actions.
 
-1. Load the seen-tip set through the **existing injected** `FirstMissionGuideStore`, together with `loadCompleted` before clearing the page loading gate. A default SharedPreferences instance must continue to be reused; no extra persistence injection/factory. Test no transient hint before the store resolves.
-2. In the stage scaffold, check the HPA-412 `guideEligible` result first. If it owns guidance, show only its original callout and do not queue later tips. Otherwise derive current snapshot candidate IDs, retaining only if needed **one pending fact per unseen, currently unactionable tip ID**, capped by the nine closed IDs (normally specialization/targeting only). Clear pending facts on Got it or when their originating condition no longer holds in a later build snapshot; never persist or grow a general queue. Choose one tip whose **actual target is attached and actionable**. Never show it during active wave, report, pending module draft, modal inspector, or detached/expanded scanner.
-3. For a tower unlock first detected during an active wave, do not show it until the following build phase. If the player starts another wave before acknowledging, keep the tip unseen and eligible on the next suitable build; do not interfere with auto-start. Tower unlocks already present when guidance completes remain eligible on a later build snapshot.
-4. A Got it callback adds the tip ID to in-memory seen state, removes it from the current pending list, and enqueues a write of an immutable seen-ID snapshot. Serialize writes so rapid acknowledgements cannot resurrect earlier states. Never mark as seen merely because a callout was mounted or its target disappeared; errors do not block gameplay.
-5. In `_showStageBriefing`, attach modifier guidance only if `stage.modifiers` is nonempty and the modifier ID is unseen. If the sheet closes without Got it, it is still unseen for a later briefing. Acknowledging modifier does not launch the stage.
-6. Extend the existing `onReplayTutorial` callback (not the Settings UI or feedback preferences) to **await pending tip writes**, persist an empty seen-tip set and tutorial completion `false`, then update in-memory state and report success. Keep the existing error propagation/disabled-while-in-flight behavior. `Reset Campaign` still leaves both keys untouched.
-7. Run `flutter test test/widget/contextual_tips_gates_test.dart` for integrated Alpha guide exclusivity, first later-wave unlock, level-2 selection, boss preview, modifier briefing, targeting radial, repeated stage navigation, restart, settings replay, and phase/draft/inspector suppression. Keep the existing root `test/widget_test.dart` as a regression suite, not the home for new integration tests.
+1. **RED resolver tests:** With nothing selected and a placed tower whose `canSpecialize` is true, aim at that real tower cell. With that very tower selected, aim at `upgradeGuideAnchorKey` only while `selectedTower.canSpecialize` (level 2). If a different level-1 tower is selected, **do not** aim at its Upgrade button; targeting may appear instead. A selected tower with an available radial targeting action may show targeting (unless specialization has priority for that tower). Suppress all during inspector/draft/combat.
+2. Add one optional `targetingGuideAnchorKey` wrapper around the existing radial targeting button; keep its tooltip, semantics, callback and test `ValueKey` stable. No new radial menu abstraction.
+3. `learnedTipsIn(snapshot)` returns specialization when any placed tower has `specialization != null` and targeting when any has `targetingMode != TowerTargetingMode.first`. Union newly learned facts into the page's seen set **after frame**, so an early upgrade/retarget action makes later tips unnecessary; do not mutate state in a build callback. The unlock learned-action logic shares this helper.
+4. **Widget gates:** specialization board/radial anchoring, wrong-tower selection yielding to targeting, targeting button tapped, automatic recognition of specialized/nondefault-targeting towers, once-only persistence across restart, and no coverage of the Wave pill even when selecting a tower near the bottom rows.
 
-**Definition of done:** all nine tips can be acknowledged exactly once, user actions remain authoritative and immediately usable, first-mission guidance stays unchanged.
+**Verification:** focused resolver/radial/widget tests, `flutter analyze`.
 
-**Suggested commit:** `HPA-413: show once-only tips and reset them with Replay Tutorial`
+Suggested commit: `HPA-413: add selection-safe specialization and targeting tips`
 
-## Task 4: Regression and device validation
+## Slice 4 — Modifier briefing tip and full regression
 
-**Files:** tests and any fixes **inside this same PR**.
+**Goal:** One once-only tip attached to the existing modifier tile, immediately removable inside the active modal sheet.
 
-- [ ] HPA-412 tutorial intact: brand-new Alpha guide still advances through six steps without contextual interruption; Skip, final Got it, and inferred completion still work.
-- [ ] Five unlock tips individually tested with a persisted seen set across a remount/new page; seeing one does not suppress the other four.
-- [ ] Specialization waits for Level 2 and can point at board or real radial action; targeting requires the visible radial button; no tip overlays tower inspector.
-- [ ] Boss tip depends on the **shared `WavePreview.bossGroups`** lookup consumed by the scanner; not every wave 8 merely because it is last; never mid-combat. Scanner expansion/detachment hides the tip rather than drawing at a false anchor.
-- [ ] Modifier tip appears on the first eligible stage briefing, not Alpha's Standard Conditions; dismissing/closing briefing without Got it does not persist it.
-- [ ] At most one tip rendered while multiple conditions are eligible; unseen tips remain eligible, with no forced replay steps.
-- [ ] 360×640 and text scale 1.3: Drone Bay card scrolls into view once, Got it reachable, no Wave button obstruction or overflow, transparent overlay taps reach game controls.
-- [ ] Rapid double Got it and Replay Tutorial cannot persist stale seen state; Reset Campaign does not clear onboarding tips.
-- [ ] No new assets, packages, gameplay-state writes or balance changes.
-
-Commands:
+1. **RED tests:** Stage with `modifiers.isNotEmpty` shows the tip when unseen; Alpha's Standard Conditions does not; close/start without Got it leaves it unseen; Got it hides immediately and persists across reopen/restart; more than one modifier still shows one tip only.
+2. In `OrionGamePage._showStageBriefing`, seed a route-local `tipVisible` bool from the page's seen set. Use a `StatefulBuilder` or a small stateful wrapper **inside that route** to clear the bool immediately on Got it before telling the page to persist it. The parent's `setState` alone will not rebuild this modal route. Wrap the existing `_BriefingModifierTile` with an optional anchor; keep its effect copy and real launch action unchanged.
+3. Check at-most-one visible tip; one true target per tip; no HPA-412 overlap; no gesture interception; no wave/draft/report/inspector hints. Run size regression at 360×640 and 1.3× and verify Wave and contextual Got it can both be tapped without intersection (including radial tips).
+4. Reuse `test/widget/contextual_tips_gates_test.dart` for cross-stage, remount, simultaneous-candidate, inferred-action, replay and reset coverage. Keep `test/widget_test.dart` unchanged except the failing-store interface implementation.
+5. Verify full repository before marking the **same** PR ready for review:
 
 ```bash
 dart format --output=none --set-exit-if-changed .
@@ -110,6 +99,12 @@ flutter test
 flutter build web --release
 ```
 
-Perform one human device smoke test with fresh Outpost Alpha onboarding, a later stage with a modifier, a specialization, boss scanner, and rail scroll at 3x. Record concrete failures and only fix in this PR if they affect HPA-413; unrelated improvements become later focused tickets.
+Device smoke test: fresh Alpha guide, later-stage modified briefing, five unlock milestones through Wave 6, level-2 radial, targeting, boss preview, normal 3x progression. Log and fix HPA-413 defects within PR #42; unrelated polish belongs to focused future tickets.
 
-**Final PR criteria:** both design/plan docs accurately describe the implementation, focused and full checks pass, one-screen-at-a-time usability validated. Convert this **same** PR from Draft only after code and test gates are complete; do not merge as part of planning.
+Suggested commit: `HPA-413: explain stage modifiers and finish regression gates`
+
+## Final acceptance
+
+Nine tips maximum, one displayed at a time, on true actionable anchors. Players can always build/start waves/select modules, and either Got it or the relevant learned gameplay action acknowledges a tip. All recognized tips persist across app restarts; Settings Replay Tutorial resets both guidance stores; Reset Campaign does not. Zero new packages, art/audio generation tasks, gameplay mutation paths or save schema changes.
+
+Keep draft PR #42 open until implementation, tests and the device UI overlap checks pass.
