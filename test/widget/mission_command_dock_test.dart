@@ -1297,11 +1297,16 @@ void main() {
 
       expect(find.byType(SingleChildScrollView), findsOneWidget);
       expect(find.byType(ListView), findsNothing);
-      // At 375 logical pixels the last card is offscreen — yet already
-      // built, so the guide can anchor and reveal it.
-      expect(find.byKey(const ValueKey('tower-card-droneBay')), findsOneWidget);
-      // Separators preserved between all eight cards.
-      expect(find.byKey(const ValueKey('tower-card-laser')), findsOneWidget);
+      // At 375 logical pixels the last card is offscreen — yet every one
+      // of the eight cards is already built, so the guide can anchor and
+      // reveal any of them.
+      for (final type in TowerType.values) {
+        expect(
+          find.byKey(ValueKey('tower-card-${type.name}')),
+          findsOneWidget,
+          reason: type.name,
+        );
+      }
     });
 
     testWidgets(

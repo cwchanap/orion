@@ -29,6 +29,20 @@ class _GameRef {
   OrionDefenseGame? game;
 }
 
+/// Counts write-throughs so a multi-fact snapshot can prove it issues
+/// exactly ONE setSeenTips call.
+class _CountingFirstMissionGuideStore extends InMemoryFirstMissionGuideStore {
+  _CountingFirstMissionGuideStore({required super.completed});
+
+  int setSeenTipsCalls = 0;
+
+  @override
+  Future<void> setSeenTips(Set<ContextualTip> tips) async {
+    setSeenTipsCalls++;
+    await super.setSeenTips(tips);
+  }
+}
+
 /// Pumps the page at the 360x640 viewport, starts Alpha from its briefing,
 /// and returns the captor holding the mounted game.
 Future<_GameRef> _pumpMission(
@@ -661,6 +675,48 @@ void main() {
       expect(find.text(targetingCopy), findsNothing);
     });
 
+    testWidgets('starting the wave with the targeting tip up acknowledges '
+        'nothing but the wave start', (tester) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      final ref = await _pumpMission(tester, guideStore: store);
+      final game = ref.game!;
+      final level1 = PlacedTower(
+        id: 8,
+        type: TowerType.laser,
+        position: const GridPosition(5, 8),
+      );
+      GameSnapshot withSelection() => commandDeckSnapshot(
+        placedTowers: [level1],
+        selectedTower: level1,
+        selectedTowerStats: GameBalance.towerStats(TowerType.laser, level: 1),
+      );
+
+      await _project(tester, game, withSelection());
+      expect(find.text(targetingCopy), findsOneWidget);
+      // The idle bar is live with the selection, so Wave is startable.
+      expect(find.byTooltip('Start Wave'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Start Wave'));
+      await tester.pump();
+      await tester.pump();
+
+      // The wave starts and the tip disappears for its duration — only the
+      // boss tip may ride the start-wave acknowledgement channel.
+      expect(game.snapshot.phase, GamePhase.wave);
+      expect(find.text(targetingCopy), findsNothing);
+      expect(
+        await store.loadSeenTips(),
+        isNot(contains(ContextualTip.targeting)),
+      );
+
+      // Back to a build snapshot with the same selection: the tip is still
+      // unseen, so it guides again.
+      game.stateNotifier.value = withSelection();
+      await tester.pump();
+      await tester.pump();
+      expect(find.text(targetingCopy), findsOneWidget);
+    });
+
     testWidgets('no contextual tip over the modal tower inspector', (
       tester,
     ) async {
@@ -748,6 +804,44 @@ void main() {
         );
       },
     );
+
+    testWidgets('a multi-fact snapshot acknowledges with one store write', (
+      tester,
+    ) async {
+      final store = _CountingFirstMissionGuideStore(completed: true);
+      final ref = await _pumpMission(tester, guideStore: store);
+
+      await _project(
+        tester,
+        ref.game!,
+        commandDeckSnapshot(
+          placedTowers: [
+            PlacedTower(
+              id: 7,
+              type: TowerType.laser,
+              position: const GridPosition(2, 2),
+              level: 2,
+              specialization: GameBalance.specializationsFor(
+                TowerType.laser,
+              ).first,
+            ),
+            PlacedTower(
+              id: 8,
+              type: TowerType.laser,
+              position: const GridPosition(3, 4),
+              targetingMode: TowerTargetingMode.strongest,
+            ),
+          ],
+        ),
+      );
+      await tester.pump();
+
+      expect(store.setSeenTipsCalls, 1);
+      expect(
+        await store.loadSeenTips(),
+        containsAll({ContextualTip.specialization, ContextualTip.targeting}),
+      );
+    });
   });
 
   group('stage-modifier briefing tip', () {
@@ -972,6 +1066,7 @@ void main() {
       final bubbleRect = tester.getRect(bubble);
       expect(bubbleRect.left, greaterThanOrEqualTo(0));
       expect(bubbleRect.right, lessThanOrEqualTo(360));
+      expect(bubbleRect.top, greaterThanOrEqualTo(0));
 
       // Both controls answer their own taps: Got it retires the tip and
       // the launch action still pops the sheet to start the mission.

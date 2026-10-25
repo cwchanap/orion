@@ -28,8 +28,7 @@ class StageBriefingSheet extends StatelessWidget {
     required this.result,
     required this.startingGold,
     required this.startingBaseHealth,
-    this.modifierTipAnchorKey,
-    this.onModifierTipDone,
+    this.modifierTip,
   });
 
   final StageDefinition stage;
@@ -42,15 +41,11 @@ class StageBriefingSheet extends StatelessWidget {
   /// stage-adjusted base health).
   final int startingBaseHealth;
 
-  /// Optional wrapper key for the modifier tile: the briefing route passes
-  /// its own GlobalKey (HPA-413) while the once-only stage-modifier tip is
-  /// unseen, so the shared callout can anchor on the real tile.
-  final GlobalKey? modifierTipAnchorKey;
-
-  /// Renders the once-only stage-modifier tip over this sheet when non-null
-  /// (with [modifierTipAnchorKey] set and real modifiers present). The
-  /// briefing route — not this sheet — owns the tip's visibility.
-  final VoidCallback? onModifierTipDone;
+  /// Renders the once-only stage-modifier tip over this sheet when set
+  /// (and real modifiers are present): the modifier tile's anchor key plus
+  /// its acknowledgement. The briefing route — not this sheet — owns the
+  /// tip's visibility, so the pair is always passed together or not at all.
+  final ({GlobalKey anchorKey, VoidCallback onDone})? modifierTip;
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +162,7 @@ class StageBriefingSheet extends StatelessWidget {
                                     const SizedBox(width: 8),
                                     Expanded(
                                       child: KeyedSubtree(
-                                        key: modifierTipAnchorKey,
+                                        key: modifierTip?.anchorKey,
                                         child: _BriefingModifierTile(
                                           key: const ValueKey(
                                             'briefing-modifier',
@@ -332,14 +327,12 @@ class StageBriefingSheet extends StatelessWidget {
             ),
             // Last so the shared, hit-transparent callout sits above the
             // sheet chrome; only its own Got it row intercepts taps.
-            if (stage.modifiers.isNotEmpty &&
-                modifierTipAnchorKey != null &&
-                onModifierTipDone != null)
+            if (stage.modifiers.isNotEmpty && modifierTip != null)
               Positioned.fill(
                 child: ContextualTipCallout(
                   tip: ContextualTip.stageModifier,
-                  anchorKey: modifierTipAnchorKey,
-                  onDone: onModifierTipDone!,
+                  anchorKey: modifierTip!.anchorKey,
+                  onDone: modifierTip!.onDone,
                 ),
               ),
           ],
