@@ -1309,6 +1309,56 @@ void main() {
       }
     });
 
+    testWidgets('each card restores indexed semantics and repaint '
+        'isolation', (tester) async {
+      await tester.pumpWidget(railHost());
+
+      // The eager Row replaced ListView for guide anchoring; these
+      // wrappers restore the per-card behavior it provided for free —
+      // "item N of 8" announcements and repaint isolation.
+      for (final (index, type) in TowerType.values.indexed) {
+        final indexed = find.byWidgetPredicate(
+          (widget) => widget is IndexedSemantics && widget.index == index,
+        );
+        expect(
+          find.ancestor(
+            of: find.byKey(ValueKey('tower-card-${type.name}')),
+            matching: indexed,
+          ),
+          findsOneWidget,
+          reason: type.name,
+        );
+        expect(
+          find
+              .ancestor(of: indexed, matching: find.byType(RepaintBoundary))
+              .first,
+          findsOneWidget,
+          reason: type.name,
+        );
+      }
+    });
+
+    testWidgets('a drag in the edge padding strip still scrolls the rail', (
+      tester,
+    ) async {
+      await tester.pumpWidget(railHost());
+
+      // The padding belongs to the scrollable, so its 14px lead-in is
+      // part of the gesture area — when it wrapped the scrollable the
+      // strip was a dead zone and the first card clipped.
+      final railOrigin = tester.getTopLeft(find.byType(TowerBuildRail));
+      await tester.dragFrom(
+        railOrigin + const Offset(7, 52),
+        const Offset(-160, 0),
+      );
+      await tester.pumpAndSettle();
+
+      final scrollable = tester.state<ScrollableState>(
+        find.byType(Scrollable).first,
+      );
+      expect(scrollable.position.pixels, greaterThan(0));
+    });
+
     testWidgets(
       'reveals the anchored offscreen card once and never fights the user',
       (tester) async {

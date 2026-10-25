@@ -318,7 +318,7 @@ void main() {
     expect(find.text(_bossCopy), findsNothing);
   });
 
-  testWidgets('an auto-started boss wave acknowledges the displayed tip', (
+  testWidgets('an auto-started boss wave leaves the displayed tip unseen', (
     tester,
   ) async {
     final store = InMemoryFirstMissionGuideStore(completed: true);
@@ -334,7 +334,8 @@ void main() {
 
     // The auto-start countdown calls game.startWave() directly, bypassing
     // the chrome's onStartWave — model its snapshot transition straight
-    // from the boss-preview build phase into the wave.
+    // from the boss-preview build phase into the wave. Only "Got it" or a
+    // PLAYER's wave start may acknowledge, so nothing was learned here.
     await _project(
       tester,
       game,
@@ -342,7 +343,16 @@ void main() {
     );
     await tester.pump();
 
-    expect(await store.loadSeenTips(), {ContextualTip.bossWave});
+    expect(await store.loadSeenTips(), isEmpty);
+
+    // The next eligible boss-preview build phase guides again: a player
+    // who looked away during the countdown still gets the tip.
+    await _project(
+      tester,
+      game,
+      commandDeckSnapshot(waveNumber: 8, nextWavePreview: _bossPreview()),
+    );
+    expect(find.text(_bossCopy), findsOneWidget);
   });
 
   testWidgets('a wave start never acknowledges non-boss tips', (tester) async {
@@ -730,7 +740,9 @@ void main() {
         await _project(
           tester,
           ref.game!,
-          commandDeckSnapshot(placedTowers: [levelTwoTower()]),
+          // Railgun specialization costs 210 — above the fixture's 150
+          // gold — so cover it for the tip to be eligible at all.
+          commandDeckSnapshot(gold: 300, placedTowers: [levelTwoTower()]),
         );
 
         expect(find.text(specCopy), findsOneWidget);
@@ -757,7 +769,10 @@ void main() {
         await _project(
           tester,
           ref.game!,
+          // Railgun specialization costs 210 — above the fixture's 150
+          // gold — so cover it for the tip to be eligible at all.
           commandDeckSnapshot(
+            gold: 300,
             placedTowers: [tower],
             selectedTower: tower,
             selectedTowerStats: GameBalance.towerStats(
@@ -828,6 +843,53 @@ void main() {
         );
       },
     );
+
+    testWidgets('the targeting bubble drops below the radial when room allows, '
+        'clearing Inspect and Salvage', (tester) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      final ref = await _pumpMission(tester, guideStore: store);
+      // A top-row tower: its radial anchors high, leaving the strip
+      // below the targeting button free — the bubble belongs there
+      // instead of over the Inspect/Salvage row above it.
+      final level1 = PlacedTower(
+        id: 8,
+        type: TowerType.laser,
+        position: const GridPosition(5, 1),
+      );
+
+      await _project(
+        tester,
+        ref.game!,
+        commandDeckSnapshot(
+          placedTowers: [level1],
+          selectedTower: level1,
+          selectedTowerStats: GameBalance.towerStats(TowerType.laser, level: 1),
+        ),
+      );
+
+      expect(find.text(targetingCopy), findsOneWidget);
+      final bubbleRect = tester.getRect(bubble);
+      final targeting = tester.getRect(
+        find.byTooltip('Targeting: First. Change targeting'),
+      );
+      expect(
+        bubbleRect.top,
+        greaterThanOrEqualTo(targeting.bottom),
+        reason:
+            'with room below the targeting row the bubble must not '
+            'sit over the Inspect/Salvage row above it',
+      );
+      expect(
+        bubbleRect.intersect(tester.getRect(find.byTooltip('Inspect tower'))),
+        isEmpty,
+      );
+      expect(
+        bubbleRect.intersect(
+          tester.getRect(find.byKey(const ValueKey('radial-salvage-8'))),
+        ),
+        isEmpty,
+      );
+    });
 
     testWidgets('targeting Got it persists across a page remount', (
       tester,

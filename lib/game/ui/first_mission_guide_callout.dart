@@ -90,6 +90,7 @@ class ContextualTipCallout extends StatelessWidget {
     this.targetPoint,
     required this.onDone,
     this.preferAbove = false,
+    this.boardViewport,
   });
 
   final ContextualTip tip;
@@ -103,20 +104,28 @@ class ContextualTipCallout extends StatelessWidget {
 
   final VoidCallback onDone;
 
-  /// Pins the bubble above radial anchors that sit just over the command
-  /// dock (specialization/targeting) so it never lands on its controls.
+  /// Pins the bubble above a radial anchor that tops its menu
+  /// (specialization) so it never lands on the Inspect/Salvage row.
   final bool preferAbove;
+
+  /// The free board space MissionChrome measures between the top chrome
+  /// and the command dock, in this callout's coordinate space. Bubble
+  /// placement clamps to it so a bubble can never land inside the idle
+  /// bar or dock beneath; the target ring still clamps to the SafeArea so
+  /// chrome-anchored targets (scanner) keep their exact marker.
+  final Rect? boardViewport;
 
   @override
   Widget build(BuildContext context) {
     return _GuideCallout(
-      copy: contextualTipCopy[tip]!,
+      copy: contextualTipCopy(tip),
       showSkip: false,
       anchorKey: anchorKey,
       targetPoint: targetPoint,
       onSkip: null,
       onDone: onDone,
       preferAbove: preferAbove,
+      boardViewport: boardViewport,
     );
   }
 }
@@ -134,6 +143,7 @@ class _GuideCallout extends StatefulWidget {
     required this.onSkip,
     this.onDone,
     this.preferAbove = false,
+    this.boardViewport,
   });
 
   final String copy;
@@ -152,6 +162,13 @@ class _GuideCallout extends StatefulWidget {
   /// below-first preference — for anchors that live just above the bottom
   /// command dock, where a below placement would land on its controls.
   final bool preferAbove;
+
+  /// Optional tighter placement bounds (the measured board viewport): when
+  /// set, the BUBBLE clamps to their intersection with the SafeArea instead
+  /// of the SafeArea alone. Only contextual tips supply it — the HPA-412
+  /// guide's draft anchor lives in a full-screen modal outside the board
+  /// viewport, so the guide keeps SafeArea clamping.
+  final Rect? boardViewport;
 
   @override
   State<_GuideCallout> createState() => _GuideCalloutState();
@@ -314,6 +331,18 @@ class _GuideCalloutState extends State<_GuideCallout> {
             canvas.height - padding.bottom - _margin,
           ),
         );
+        // The SafeArea reaches the canvas edges, but the command dock and
+        // top chrome overlay them: a bubble clamped only to the SafeArea
+        // can land inside the idle bar. Contextual tips clamp tighter, to
+        // the free board space MissionChrome already measures.
+        var placement = safe;
+        final boardViewport = widget.boardViewport;
+        if (boardViewport != null) {
+          final clamped = safe.intersect(boardViewport);
+          if (!clamped.isEmpty) {
+            placement = clamped;
+          }
+        }
         final anchor = _anchorRect;
         // An anchored callout with no measured anchor rect renders nothing:
         // the anchor is detached (its target surface is hidden this frame)
@@ -328,7 +357,7 @@ class _GuideCalloutState extends State<_GuideCallout> {
         final pointTarget =
             widget.targetPoint ?? Offset(canvas.width / 2, canvas.height / 3);
         final bubbleRect = _clampBubble(
-          safe,
+          placement,
           pointTarget,
           _bubbleSize ?? _estimatedBubbleSize,
           anchorRect: anchor,
@@ -356,7 +385,7 @@ class _GuideCalloutState extends State<_GuideCallout> {
                 key: firstMissionGuideBubbleKey,
                 child: ConstrainedBox(
                   constraints: BoxConstraints(
-                    maxWidth: math.max(0, safe.width),
+                    maxWidth: math.max(0, placement.width),
                   ),
                   child: OrionSurface(
                     key: _bubbleMeasureKey,

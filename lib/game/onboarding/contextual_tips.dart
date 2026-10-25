@@ -15,23 +15,24 @@ enum ContextualTip {
 
 /// Exact design copy per tip; exhaustive over the enum so adding a tip
 /// without copy is a compile error.
-const Map<ContextualTip, String> contextualTipCopy = {
-  ContextualTip.bossWave:
-      'Boss ahead. Check the scanner and prepare your defense.',
-  ContextualTip.railgun: 'Railgun unlocked. Pierces enemies in a line.',
-  ContextualTip.ionChain:
-      'Ion Chain unlocked. Lightning jumps between targets.',
-  ContextualTip.nanite: 'Nanite unlocked. Corrodes armor to help other towers.',
-  ContextualTip.gravityWell:
-      'Gravity Well unlocked. Damages enemies within its field.',
-  ContextualTip.droneBay:
-      'Drone Bay unlocked. Launches autonomous interceptors.',
-  ContextualTip.specialization:
-      'Specialization ready. Choose one of two ways to evolve this tower.',
-  ContextualTip.targeting:
-      'Targeting modes. Choose which enemies this tower attacks first.',
-  ContextualTip.stageModifier:
-      'Stage modifier. These conditions change how this mission plays.',
+String contextualTipCopy(ContextualTip tip) => switch (tip) {
+  ContextualTip.bossWave =>
+    'Boss ahead. Check the scanner and prepare your defense.',
+  ContextualTip.railgun => 'Railgun unlocked. Pierces enemies in a line.',
+  ContextualTip.ionChain =>
+    'Ion Chain unlocked. Lightning jumps between targets.',
+  ContextualTip.nanite =>
+    'Nanite unlocked. Corrodes armor to help other towers.',
+  ContextualTip.gravityWell =>
+    'Gravity Well unlocked. Damages enemies within its field.',
+  ContextualTip.droneBay =>
+    'Drone Bay unlocked. Launches autonomous interceptors.',
+  ContextualTip.specialization =>
+    'Specialization ready. Choose one of two ways to evolve this tower.',
+  ContextualTip.targeting =>
+    'Targeting modes. Choose which enemies this tower attacks first.',
+  ContextualTip.stageModifier =>
+    'Stage modifier. These conditions change how this mission plays.',
 };
 
 /// The tower-unlock tips, each mapped to the build-rail card it anchors on.
@@ -46,16 +47,25 @@ const Map<ContextualTip, TowerType> contextualTipTowerTypes = {
 };
 
 /// The placed tower the specialization tip points at while nothing is
-/// selected: the first level-2 unspecialized tower on the board. Shared by
-/// the resolver and the page so both agree on the same board-cell target.
+/// selected: the first level-2 unspecialized tower whose specialization
+/// the player can currently afford. Shared by the resolver and the page
+/// so both agree on the same board-cell target.
 PlacedTower? specializationCandidateIn(GameSnapshot snapshot) {
   for (final tower in snapshot.placedTowers) {
-    if (tower.canSpecialize) {
+    if (tower.canSpecialize && _canAffordSpecialization(snapshot, tower)) {
       return tower;
     }
   }
   return null;
 }
+
+/// Specialization costs are per-type constants — modifiers never adjust
+/// them, so the base level-2 lookup is authoritative for any tower that
+/// can specialize. Guides only toward an affordable action, mirroring the
+/// HPA-412 upgrade tip's gold check.
+bool _canAffordSpecialization(GameSnapshot snapshot, PlacedTower tower) =>
+    snapshot.gold >=
+    GameBalance.towerStats(tower.type, level: 2).specializationCost;
 
 /// Resolves the single current contextual tip from a snapshot alone.
 ///
@@ -93,11 +103,14 @@ ContextualTip? contextualTipFor(
   // tower's radial progression surface — a different selected tower must
   // never inherit another tower's Upgrade-button lesson — so otherwise the
   // radial targeting action is the candidate. Both actions live on the
-  // mounted radial, which the build-phase gate above keeps enabled.
+  // mounted radial, which the build-phase gate above keeps enabled. An
+  // unaffordable specialization opens an inspector whose options are all
+  // disabled — silence until gold covers it, exactly like the upgrade tip.
   final selectedTower = snapshot.selectedTower;
   if (selectedTower != null) {
     if (!seen.contains(ContextualTip.specialization) &&
-        selectedTower.canSpecialize) {
+        selectedTower.canSpecialize &&
+        _canAffordSpecialization(snapshot, selectedTower)) {
       return ContextualTip.specialization;
     }
     if (!seen.contains(ContextualTip.targeting)) {

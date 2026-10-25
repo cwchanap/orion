@@ -33,6 +33,7 @@ Widget _contextualHost(
   GlobalKey? anchorKey,
   Offset? targetPoint,
   VoidCallback? onDone,
+  Rect? boardViewport,
 }) {
   return MaterialApp(
     theme: orionThemeData,
@@ -49,6 +50,7 @@ Widget _contextualHost(
               anchorKey: anchorKey,
               targetPoint: targetPoint,
               onDone: onDone ?? () {},
+              boardViewport: boardViewport,
             ),
           ),
         ],
@@ -629,7 +631,7 @@ void main() {
         );
         await _settle(tester);
         expect(
-          find.text(contextualTipCopy[tip]!),
+          find.text(contextualTipCopy(tip)),
           findsOneWidget,
           reason: tip.name,
         );
@@ -670,6 +672,32 @@ void main() {
 
       _expectBubbleInsideSafeArea(tester);
       expect(find.byKey(_bubbleKey), findsOneWidget);
+    });
+
+    testWidgets('clamps the bubble to the measured board viewport, not the '
+        'screen bottom', (tester) async {
+      _setSize(tester);
+      // A dock-shaped bound: the free board space ends at y 500 even though
+      // the SafeArea reaches ~604. A target near that boundary must place
+      // its bubble inside the board — never over the dock strip below.
+      const boardViewport = Rect.fromLTRB(0, 80, 360, 500);
+      await tester.pumpWidget(
+        _contextualHost(
+          ContextualTip.bossWave,
+          targetPoint: const Offset(180, 470),
+          boardViewport: boardViewport,
+        ),
+      );
+      await _settle(tester);
+
+      final bubbleRect = tester.getRect(find.byKey(_bubbleKey));
+      expect(
+        bubbleRect.bottom,
+        lessThanOrEqualTo(boardViewport.bottom),
+        reason: 'a bubble must never land inside the dock strip',
+      );
+      expect(bubbleRect.top, greaterThanOrEqualTo(boardViewport.top));
+      _expectBubbleInsideSafeArea(tester);
     });
   });
 }
