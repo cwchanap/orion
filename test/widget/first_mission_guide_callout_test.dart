@@ -421,6 +421,50 @@ void main() {
   });
 
   testWidgets(
+    'an anchor too tall for either side pins the bubble to the bottom of '
+    'the SafeArea',
+    (tester) async {
+      _setSize(tester);
+      final anchorKey = GlobalKey();
+      // Nearly viewport-height: the bubble fits neither below (bottom edge
+      // + bubble height exceeds the SafeArea) nor above, so the degenerate
+      // clamp preference decides — the bubble must bottom out, not top out.
+      await tester.pumpWidget(
+        _host(
+          FirstMissionGuideStep.towerCard,
+          anchorKey: anchorKey,
+          beneath: [
+            Positioned(
+              left: 100,
+              top: 30,
+              child: SizedBox(key: anchorKey, width: 100, height: 580),
+            ),
+          ],
+        ),
+      );
+      await _settle(tester);
+
+      // The renderer's own SafeArea (padding 24 + margin 12) bottoms out
+      // at 604; allow the button-row height-correction slack, but the pin
+      // must be at the BOTTOM — the topped-out alternative sits at ~107.
+      final bubbleRect = tester.getRect(find.byKey(_bubbleKey));
+      expect(
+        bubbleRect.bottom,
+        greaterThanOrEqualTo(600),
+        reason:
+            'neither side fits: the below-first clamp pins the bubble '
+            'down, not up',
+      );
+      expect(
+        bubbleRect.top,
+        greaterThan(300),
+        reason: 'the bubble must not top out when neither side fits',
+      );
+      _expectBubbleInsideSafeArea(tester);
+    },
+  );
+
+  testWidgets(
     'a partially off-screen anchor still renders inside the SafeArea',
     (tester) async {
       _setSize(tester);

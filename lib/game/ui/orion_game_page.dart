@@ -417,8 +417,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   /// Marks a contextual tip seen: in-memory flip first, then the HPA-412
   /// fire-and-forget write-through. Play never waits on the write.
-  void _acknowledgeContextualTip(ContextualTip tip) {
-    final updated = Set.unmodifiable({..._seenTips, tip});
+  void _acknowledgeContextualTip(ContextualTip tip) =>
+      _acknowledgeContextualTips([tip]);
+
+  /// Marks several facts seen in ONE flip + ONE write: a multi-fact
+  /// snapshot (e.g. a specialized and a retargeted tower together) must
+  /// not issue N sequential store writes. Idempotent and best-effort,
+  /// exactly like the single-tip path.
+  void _acknowledgeContextualTips(Iterable<ContextualTip> tips) {
+    final updated = Set.unmodifiable({..._seenTips, ...tips});
     if (updated.length == _seenTips.length) {
       return; // already acknowledged
     }
@@ -572,9 +579,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
             // would float over dimmed controls (anchor detachment already
             // hides radial-anchored tips; this gate makes it explicit for
             // every anchor kind).
+            // Aligned exactly with the inspector overlay's render
+            // condition below (selected tower inspected, session live, no
+            // draft) so a stale _inspectedTowerId never suppresses tips
+            // beyond the modal's lifetime.
             final inspectorOpen =
-                _inspectedTowerId != null &&
-                _inspectedTowerId == snapshot.selectedTower?.id;
+                snapshot.selectedTower != null &&
+                snapshot.selectedTower!.id == _inspectedTowerId &&
+                !snapshot.isEnded &&
+                snapshot.pendingRunModuleOffer == null;
             final contextualTip = guideEligible || inspectorOpen
                 ? null
                 : contextualTipFor(snapshot, _seenTips);
@@ -587,9 +600,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
             if (learned.any((tip) => !_seenTips.contains(tip))) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (!mounted) return;
-                for (final tip in learned) {
-                  _acknowledgeContextualTip(tip);
-                }
+                _acknowledgeContextualTips(learned);
               });
             }
 
@@ -769,12 +780,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
                         _setFirstMissionGuideCompleted(true);
                       }
                       // Starting the wave while the boss tip is up
-                      // acknowledges it; both flips are synchronous and the
-                      // write-through is fire-and-forget, so game.startWave
-                      // below is never blocked or delayed.
-                      final tip = contextualTip;
-                      if (tip != null) {
-                        _acknowledgeContextualTip(tip);
+                      // acknowledges it — the spec sanctions this channel
+                      // for the boss tip ONLY, so any other visible tip
+                      // stays unseen and may re-guide later. Both flips are
+                      // synchronous and the write-through is fire-and-forget,
+                      // so game.startWave below is never blocked or delayed.
+                      if (contextualTip == ContextualTip.bossWave) {
+                        _acknowledgeContextualTip(contextualTip!);
                       }
                       game.startWave();
                     },
@@ -939,14 +951,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
             campaignAdjustedBaseHealth: modifiers.adjustedStartingBaseHealth,
             stageModifiers: stage.modifiers,
           ),
-          modifierTipAnchorKey: modifierTipVisible
-              ? modifierTipAnchorKey
-              : null,
-          onModifierTipDone: modifierTipVisible
-              ? () {
-                  setSheetState(() => modifierTipVisible = false);
-                  _acknowledgeContextualTip(ContextualTip.stageModifier);
-                }
+          modifierTip: modifierTipVisible
+              ? (
+                  anchorKey: modifierTipAnchorKey,
+                  onDone: () {
+                    setSheetState(() => modifierTipVisible = false);
+                    _acknowledgeContextualTip(ContextualTip.stageModifier);
+                  },
+                )
               : null,
         ),
       ),

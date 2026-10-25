@@ -271,7 +271,9 @@ class _GuideCalloutState extends State<_GuideCallout> {
             (anchorRect == null
                 ? safe.bottom - target.dy >= target.dy - safe.top
                 : !widget.preferAbove));
-    final top = below ? belowTop : aboveTop;
+    // Neither side fits (oversized anchor): keep the original
+    // below-first preference — clamp against the SafeArea bottom, not top.
+    final top = below || aboveTop < safe.top ? belowTop : aboveTop;
     return Rect.fromLTWH(
       (centerDx - width / 2).clamp(
         safe.left,
