@@ -106,6 +106,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // guide flag before the loading gate clears; acknowledged in memory first,
   // then written through best-effort.
   Set<ContextualTip> _seenTips = const {};
+  // The tip resolved in the latest build-phase snapshot — i.e. the one
+  // actually displayed. Auto-start calls game.startWave() directly,
+  // bypassing the chrome's onStartWave, so the build→wave transition
+  // itself acknowledges a displayed boss tip.
+  ContextualTip? _lastBuildContextualTip;
+  // Serializes seen-tip write-throughs: acknowledgements replace the whole
+  // set, so an older write landing after a newer one would forget tips.
+  Future<void> _seenTipsWrite = Future<void>.value();
   // Guide anchor keys wrap the existing gameplay surfaces (dock cards, wave
   // pill, radial Upgrade, collapsed scanner, draft frame) so the callout can
   // point at real widgets; they are only attached while their step is active.
@@ -432,7 +440,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
     setState(() {
       _seenTips = updated;
     });
-    _firstMissionGuideStore?.setSeenTips(updated).catchError((_) {});
+    _writeSeenTips(updated).catchError((_) {});
+  }
+
+  /// Serializes seen-tip write-throughs behind [_seenTipsWrite] so an
+  /// older replacement set can never land after a newer one. The chain
+  /// head always resolves — failures are swallowed there, never
+  /// propagated — so awaiting it in Replay Tutorial drains every pending
+  /// acknowledgement before the clear is issued.
+  Future<void> _writeSeenTips(Set<ContextualTip> tips) {
+    final store = _firstMissionGuideStore;
+    if (store == null) {
+      return _seenTipsWrite;
+    }
+    final write = _seenTipsWrite.then((_) => store.setSeenTips(tips));
+    _seenTipsWrite = write.catchError((_) {});
+    return write;
   }
 
   @override
@@ -602,6 +625,28 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 if (!mounted) return;
                 _acknowledgeContextualTips(learned);
               });
+            }
+
+            // Track the displayed build-phase tip so a build→wave
+            // transition can acknowledge bossWave: auto-start's countdown
+            // calls game.startWave() directly, bypassing onStartWave, and
+            // the wave leaving build while the tip showed is the taught
+            // action. Only bossWave uses this channel — other visible tips
+            // stay unseen and may re-guide later.
+            if (snapshot.phase == GamePhase.build) {
+              _lastBuildContextualTip = contextualTip;
+            } else if (_lastBuildContextualTip != null) {
+              final resolved = _lastBuildContextualTip;
+              _lastBuildContextualTip = null;
+              if (resolved == ContextualTip.bossWave &&
+                  snapshot.phase == GamePhase.wave &&
+                  !_seenTips.contains(ContextualTip.bossWave)) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    _acknowledgeContextualTip(ContextualTip.bossWave);
+                  }
+                });
+              }
             }
 
             // Completion is a snapshot fact, not only a button fact: the
@@ -993,8 +1038,21 @@ class _OrionGamePageState extends State<OrionGamePage> {
             throw StateError('First-mission guide store is unavailable.');
           }
           _firstMissionGuideStore = store;
-          await store.setSeenTips(const {});
-          await store.setCompleted(false);
+          // Chained so a still-in-flight acknowledgement lands BEFORE the
+          // clear — it can never repopulate the replayed set afterwards.
+          final previousTips = _seenTips;
+          await _writeSeenTips(const {});
+          try {
+            await store.setCompleted(false);
+          } catch (_) {
+            // The clear already persisted: restore the prior set so a
+            // reported failure leaves no partially-reset record. A failed
+            // restore is swallowed only to surface the original error.
+            try {
+              await _writeSeenTips(previousTips);
+            } catch (_) {}
+            rethrow;
+          }
           if (mounted) {
             setState(() {
               _seenTips = const {};
@@ -1105,6 +1163,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _mapFeedback = null;
       _game = game;
       _inspectedTowerId = null;
+      _lastBuildContextualTip = null;
       _activeView = _ShellView.stage;
     });
   }

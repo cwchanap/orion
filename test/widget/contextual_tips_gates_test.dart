@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
@@ -41,6 +43,33 @@ class _CountingFirstMissionGuideStore extends InMemoryFirstMissionGuideStore {
     setSeenTipsCalls++;
     await super.setSeenTips(tips);
   }
+}
+
+/// Holds each setSeenTips write until the test completes it, exposing both
+/// the issued order and the hazard of writes finishing out of order.
+class _GatedFirstMissionGuideStore extends InMemoryFirstMissionGuideStore {
+  _GatedFirstMissionGuideStore({required super.completed});
+
+  final pendingWrites = <Completer<void>>[];
+  final issuedWrites = <Set<ContextualTip>>[];
+
+  @override
+  Future<void> setSeenTips(Set<ContextualTip> tips) {
+    issuedWrites.add(Set.of(tips));
+    final gate = Completer<void>();
+    pendingWrites.add(gate);
+    return gate.future.then((_) => super.setSeenTips(tips));
+  }
+}
+
+/// setCompleted always rejects: a reported replay failure must not leave
+/// the cleared seen-tip set persisted behind it.
+class _FailingCompletionGuideStore extends InMemoryFirstMissionGuideStore {
+  _FailingCompletionGuideStore({required super.completed, super.seenTips});
+
+  @override
+  Future<void> setCompleted(bool completed) =>
+      Future.error(StateError('simulated persistence failure'));
 }
 
 /// Pumps the page at the 360x640 viewport, starts Alpha from its briefing,
@@ -289,6 +318,60 @@ void main() {
     expect(find.text(_bossCopy), findsNothing);
   });
 
+  testWidgets('an auto-started boss wave acknowledges the displayed tip', (
+    tester,
+  ) async {
+    final store = InMemoryFirstMissionGuideStore(completed: true);
+    final ref = await _pumpMission(tester, guideStore: store);
+    final game = ref.game!;
+
+    await _project(
+      tester,
+      game,
+      commandDeckSnapshot(nextWavePreview: _bossPreview()),
+    );
+    expect(find.text(_bossCopy), findsOneWidget);
+
+    // The auto-start countdown calls game.startWave() directly, bypassing
+    // the chrome's onStartWave — model its snapshot transition straight
+    // from the boss-preview build phase into the wave.
+    await _project(
+      tester,
+      game,
+      commandDeckSnapshot(phase: GamePhase.wave, waveNumber: 8),
+    );
+    await tester.pump();
+
+    expect(await store.loadSeenTips(), {ContextualTip.bossWave});
+  });
+
+  testWidgets('a wave start never acknowledges non-boss tips', (tester) async {
+    final store = InMemoryFirstMissionGuideStore(completed: true);
+    final ref = await _pumpMission(tester, guideStore: store);
+    final game = ref.game!;
+
+    // An unlock tip is displayed on the selected-cell rail when the wave
+    // begins — it must stay unseen for a later build phase.
+    await _project(
+      tester,
+      game,
+      commandDeckSnapshot(selectedCell: const GridPosition(2, 2)),
+    );
+    expect(
+      find.text('Railgun unlocked. Pierces enemies in a line.'),
+      findsOneWidget,
+    );
+
+    await _project(
+      tester,
+      game,
+      commandDeckSnapshot(phase: GamePhase.wave, waveNumber: 2),
+    );
+    await tester.pump();
+
+    expect(await store.loadSeenTips(), isEmpty);
+  });
+
   testWidgets('rapid Got it taps acknowledge exactly once', (tester) async {
     final store = InMemoryFirstMissionGuideStore(completed: true);
     final ref = await _pumpMission(tester, guideStore: store);
@@ -375,6 +458,108 @@ void main() {
       ),
     );
     expect(find.text(_bossCopy), findsOneWidget);
+  });
+
+  testWidgets('acknowledgement write-throughs stay ordered under overlap', (
+    tester,
+  ) async {
+    final store = _GatedFirstMissionGuideStore(completed: true);
+    final ref = await _pumpMission(tester, guideStore: store);
+    final game = ref.game!;
+    const cell = GridPosition(2, 2);
+    const ionCopy = 'Ion Chain unlocked. Lightning jumps between targets.';
+
+    await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+    await tester.tap(find.text('Got it'));
+    await tester.pump();
+    // The chained tip animates in — let the entrance finish or its Got it
+    // button is still inside an IgnorePointer.
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+    expect(find.text(ionCopy), findsOneWidget);
+    await tester.tap(find.text('Got it'));
+    await tester.pump();
+
+    // Releasing the gates newest-first must still leave both tips seen:
+    // an older write can never overwrite a newer one.
+    while (store.pendingWrites.isNotEmpty) {
+      store.pendingWrites.removeLast().complete();
+      await tester.pump();
+    }
+    expect(await store.loadSeenTips(), {
+      ContextualTip.railgun,
+      ContextualTip.ionChain,
+    });
+  });
+
+  testWidgets('Replay Tutorial waits for pending tip writes before clearing', (
+    tester,
+  ) async {
+    final store = _GatedFirstMissionGuideStore(completed: true);
+    final ref = await _pumpMission(tester, guideStore: store);
+
+    await _project(
+      tester,
+      ref.game!,
+      commandDeckSnapshot(nextWavePreview: _bossPreview()),
+    );
+    await tester.tap(find.text('Got it'));
+    await tester.pump();
+    expect(store.pendingWrites, hasLength(1));
+
+    // Open Settings → Replay Tutorial while the ack write is in flight.
+    await tester.tap(find.byKey(const ValueKey('world-map-action')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replay Tutorial'));
+    await tester.pump();
+
+    while (store.pendingWrites.isNotEmpty) {
+      store.pendingWrites.removeLast().complete();
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Tutorial will replay on your next Outpost Alpha run.'),
+      findsOneWidget,
+    );
+    // The clear landed after the in-flight ack — the acknowledged tip can
+    // never repopulate the replayed set.
+    expect(store.issuedWrites.last, isEmpty);
+    expect(await store.loadSeenTips(), isEmpty);
+    expect(await store.loadCompleted(), isFalse);
+  });
+
+  testWidgets('a failed Replay Tutorial restores acknowledged tips', (
+    tester,
+  ) async {
+    final store = _FailingCompletionGuideStore(
+      completed: true,
+      seenTips: const {ContextualTip.bossWave},
+    );
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      harness.testGamePage(firstMissionGuideStore: store),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Replay Tutorial'));
+    await tester.pumpAndSettle();
+
+    // The sheet never confirms, and the previously persisted seen set is
+    // restored rather than left cleared behind a reported failure.
+    expect(
+      find.text('Tutorial will replay on your next Outpost Alpha run.'),
+      findsNothing,
+    );
+    expect(await store.loadSeenTips(), {ContextualTip.bossWave});
+    expect(await store.loadCompleted(), isTrue);
   });
 
   group('unlock tips on the selected-cell rail', () {
