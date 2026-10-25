@@ -4,7 +4,7 @@
 
 **Linear:** https://linear.app/cwchanap/issue/HPA-413/orion-explain-new-systems-the-first-time-they-appear  
 **Spec:** `docs/superpowers/specs/2026-10-22-hpa-413-contextual-tips-design.md`  
-**Status:** Documentation plan, not yet implemented.
+**Status:** Implemented in PR #42 (slices 1–4); full validation and device smoke test pending.
 
 ## Architecture and reuse contract
 

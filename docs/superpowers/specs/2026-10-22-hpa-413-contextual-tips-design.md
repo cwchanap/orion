@@ -2,7 +2,7 @@
 
 **Linear:** [HPA-413](https://linear.app/cwchanap/issue/HPA-413/orion-explain-new-systems-the-first-time-they-appear)  
 **Parent:** HPA-303  
-**Status:** Proposed design; PR #42 remains documentation-only until implementation.
+**Status:** Accepted design; implemented in PR #42, validation pending.
 
 ## Outcome and scope
 
