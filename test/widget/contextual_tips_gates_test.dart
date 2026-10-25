@@ -660,6 +660,52 @@ void main() {
       expect(find.text(targetingCopy), findsNothing);
     });
 
+    testWidgets('no contextual tip over the modal tower inspector', (
+      tester,
+    ) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      final ref = await _pumpMission(tester, guideStore: store);
+      final level1 = PlacedTower(
+        id: 8,
+        type: TowerType.laser,
+        position: const GridPosition(5, 5),
+      );
+      Future<GameSnapshot> withSelection() async {
+        await _project(
+          tester,
+          ref.game!,
+          commandDeckSnapshot(
+            placedTowers: [level1],
+            selectedTower: level1,
+            selectedTowerStats: GameBalance.towerStats(
+              TowerType.laser,
+              level: 1,
+            ),
+          ),
+        );
+        return ref.game!.stateNotifier.value;
+      }
+
+      await withSelection();
+      expect(find.text(targetingCopy), findsOneWidget);
+
+      // Opening the inspector through the radial's Inspect action must
+      // yield the tip to the modal.
+      await tester.tap(find.byTooltip('Inspect tower'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      expect(find.text(targetingCopy), findsNothing);
+
+      // Dismissing the barrier restores selection: the still-unseen tip
+      // may guide again.
+      await tester.tapAt(const Offset(20, 20));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 260));
+      await tester.pump();
+      expect(find.text(targetingCopy), findsOneWidget);
+    });
+
     testWidgets(
       'specialized and retargeted towers auto-acknowledge their tips',
       (tester) async {

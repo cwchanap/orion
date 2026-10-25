@@ -567,8 +567,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
             // The old HPA-412 guide always wins: while it is eligible (a
             // not-yet-completed Alpha run) no contextual tip shows, even
-            // between guide lessons.
-            final contextualTip = guideEligible
+            // between guide lessons. The modal tower inspector suppresses
+            // too: its barrier covers the board, so a surviving bubble
+            // would float over dimmed controls (anchor detachment already
+            // hides radial-anchored tips; this gate makes it explicit for
+            // every anchor kind).
+            final inspectorOpen =
+                _inspectedTowerId != null &&
+                _inspectedTowerId == snapshot.selectedTower?.id;
+            final contextualTip = guideEligible || inspectorOpen
                 ? null
                 : contextualTipFor(snapshot, _seenTips);
 

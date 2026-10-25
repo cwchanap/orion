@@ -438,6 +438,7 @@ void main() {
   ) async {
     await loadRealFonts();
     const anchorKey = ValueKey('targeting-guide-anchor');
+    final calls = <TowerTargetingMode>[];
     await tester.pumpWidget(
       MaterialApp(
         theme: orionThemeData,
@@ -458,7 +459,7 @@ void main() {
               onUpgrade: () {},
               onInspect: () {},
               onSell: () {},
-              onTargetingChanged: (_) {},
+              onTargetingChanged: calls.add,
               upgradeGuideAnchorKey: const ValueKey('upgrade-guide-anchor'),
               targetingGuideAnchorKey: anchorKey,
             ),
@@ -491,6 +492,9 @@ void main() {
       ),
       findsOneWidget,
     );
+    // The wrapped action still works: a tap cycles the targeting mode.
+    await tester.tap(targetingButton);
+    expect(calls, [TowerTargetingMode.strongest]);
   });
 
   testWidgets(
