@@ -433,6 +433,66 @@ void main() {
     }
   });
 
+  testWidgets('optional targeting guide anchor wraps only the targeting action', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    const anchorKey = ValueKey('targeting-guide-anchor');
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: Scaffold(
+          body: Center(
+            child: TowerRadialActions(
+              snapshot: commandDeckSnapshot(
+                selectedTower: PlacedTower(
+                  id: 1,
+                  type: TowerType.laser,
+                  position: const GridPosition(4, 5),
+                ),
+                selectedTowerStats: GameBalance.towerStats(
+                  TowerType.laser,
+                  level: 1,
+                ),
+              ),
+              onUpgrade: () {},
+              onInspect: () {},
+              onSell: () {},
+              onTargetingChanged: (_) {},
+              upgradeGuideAnchorKey: const ValueKey('upgrade-guide-anchor'),
+              targetingGuideAnchorKey: anchorKey,
+            ),
+          ),
+        ),
+      ),
+    );
+    final targetingButton = find.byTooltip(
+      'Targeting: First. Change targeting',
+    );
+    expect(targetingButton, findsOneWidget);
+    // The anchor wraps exactly the targeting action…
+    expect(
+      find.ancestor(of: targetingButton, matching: find.byKey(anchorKey)),
+      findsOneWidget,
+    );
+    // …and never the upgrade surface or its own separate anchor.
+    final upgradeSurface = find.byTooltip(
+      'Upgrade ${GameBalance.towerStats(TowerType.laser, level: 1).upgradeCost}',
+    );
+    expect(upgradeSurface, findsOneWidget);
+    expect(
+      find.ancestor(of: upgradeSurface, matching: find.byKey(anchorKey)),
+      findsNothing,
+    );
+    expect(
+      find.ancestor(
+        of: upgradeSurface,
+        matching: find.byKey(const ValueKey('upgrade-guide-anchor')),
+      ),
+      findsOneWidget,
+    );
+  });
+
   testWidgets(
     'radial top action is a Max level badge, not Specialize, at level 3',
     (tester) async {

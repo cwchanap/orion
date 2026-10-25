@@ -251,6 +251,23 @@ void main() {
     });
 
     test('requires no selected tower so the collapsed scanner is usable', () {
+      // Slice 3: a selected level-1 tower now legitimately yields the
+      // targeting tip — but never the boss tip, whose scanner anchor is
+      // collapsed and tap-ignored while any selection is active.
+      expect(
+        contextualTipFor(
+          _snapshot(
+            nextWavePreview: _bossPreview(),
+            selectedTower: const PlacedTower(
+              id: 1,
+              type: TowerType.laser,
+              position: GridPosition(2, 2),
+            ),
+          ),
+          {ContextualTip.targeting},
+        ),
+        isNull,
+      );
       expect(
         contextualTipFor(
           _snapshot(
@@ -263,7 +280,7 @@ void main() {
           ),
           {},
         ),
-        isNull,
+        isNot(ContextualTip.bossWave),
       );
     });
 
@@ -326,6 +343,56 @@ void main() {
         ],
       );
       expect(learnedTipsIn(snapshot), isEmpty);
+    });
+
+    test('a specialized tower marks specialization learned', () {
+      final snapshot = _snapshot(
+        placedTowers: [
+          PlacedTower(
+            id: 1,
+            type: TowerType.laser,
+            position: const GridPosition(2, 5),
+            level: 3,
+            specialization: GameBalance.specializationsFor(
+              TowerType.laser,
+            ).first,
+          ),
+        ],
+      );
+      expect(learnedTipsIn(snapshot), {ContextualTip.specialization});
+    });
+
+    test('a nondefault targeting mode marks targeting learned', () {
+      final snapshot = _snapshot(
+        placedTowers: [
+          PlacedTower(
+            id: 1,
+            type: TowerType.laser,
+            position: const GridPosition(2, 5),
+            targetingMode: TowerTargetingMode.strongest,
+          ),
+        ],
+      );
+      expect(learnedTipsIn(snapshot), {ContextualTip.targeting});
+    });
+
+    test('default towers teach neither specialization nor targeting', () {
+      final snapshot = _snapshot(
+        placedTowers: [
+          _placed(TowerType.laser, 1),
+          PlacedTower(
+            id: 2,
+            type: TowerType.rocket,
+            position: const GridPosition(4, 5),
+            level: 2,
+          ),
+        ],
+      );
+      expect(
+        learnedTipsIn(snapshot),
+        isNot(contains(ContextualTip.specialization)),
+      );
+      expect(learnedTipsIn(snapshot), isNot(contains(ContextualTip.targeting)));
     });
   });
 
@@ -425,6 +492,9 @@ void main() {
     });
 
     test('stays silent while a tower is selected', () {
+      // A selected tower replaces the rail with its radial, so no unlock
+      // card can be the candidate. (Slice 3's targeting tip may resolve in
+      // that state; marking it seen isolates the unlock question here.)
       expect(
         contextualTipFor(
           _snapshot(
@@ -432,7 +502,7 @@ void main() {
             selectedCell: cell,
             selectedTower: _placed(TowerType.laser, 1),
           ),
-          {},
+          {ContextualTip.targeting},
         ),
         isNull,
       );
@@ -513,6 +583,304 @@ void main() {
         nextWavePreview: _bossPreview(),
       );
       expect(contextualTipFor(idle, {}), ContextualTip.bossWave);
+    });
+  });
+
+  group('specialization tip', () {
+    final level2 = PlacedTower(
+      id: 1,
+      type: TowerType.laser,
+      position: const GridPosition(2, 5),
+      level: 2,
+    );
+
+    test('nothing selected: aims at a placed level-2 unspecialized tower', () {
+      expect(
+        contextualTipFor(
+          _snapshot(placedTowers: [level2, _placed(TowerType.rocket, 2)]),
+          {},
+        ),
+        ContextualTip.specialization,
+      );
+    });
+
+    test('nothing selected: the boss still outranks specialization', () {
+      final snapshot = _snapshot(
+        nextWavePreview: _bossPreview(),
+        placedTowers: [level2],
+      );
+      expect(contextualTipFor(snapshot, {}), ContextualTip.bossWave);
+      // Once the boss lesson is seen, the same board yields specialization.
+      expect(
+        contextualTipFor(snapshot, {ContextualTip.bossWave}),
+        ContextualTip.specialization,
+      );
+    });
+
+    test('nothing selected: stays silent without a qualifying tower', () {
+      // Only level-1 and level-3 towers: nothing left to specialize.
+      final specialized = PlacedTower(
+        id: 3,
+        type: TowerType.laser,
+        position: const GridPosition(4, 5),
+        level: 3,
+        specialization: GameBalance.specializationsFor(TowerType.laser).first,
+      );
+      expect(
+        contextualTipFor(
+          _snapshot(placedTowers: [_placed(TowerType.laser, 1), specialized]),
+          {},
+        ),
+        isNull,
+      );
+    });
+
+    test('nothing selected: stays silent once specialization is seen', () {
+      expect(
+        contextualTipFor(_snapshot(placedTowers: [level2]), {
+          ContextualTip.specialization,
+        }),
+        isNull,
+      );
+    });
+
+    test('the selected tower itself eligible: resolves specialization', () {
+      // Selecting the level-2 tower keeps the tip, now anchored at its own
+      // radial progression button.
+      final snapshot = _snapshot(
+        placedTowers: [level2],
+        selectedCell: level2.position,
+        selectedTower: level2,
+      );
+      expect(contextualTipFor(snapshot, {}), ContextualTip.specialization);
+    });
+
+    test(
+      'a different level-1 tower selected never inherits specialization',
+      () {
+        // The board has a level-2 tower, but the SELECTED tower cannot
+        // specialize: aiming at its Upgrade button would teach the wrong
+        // control, so the resolver yields to targeting instead.
+        final other = _placed(TowerType.rocket, 2);
+        final snapshot = _snapshot(
+          placedTowers: [level2, other],
+          selectedCell: other.position,
+          selectedTower: other,
+        );
+        expect(contextualTipFor(snapshot, {}), ContextualTip.targeting);
+        // And once targeting is seen too, silence — still no specialization.
+        expect(contextualTipFor(snapshot, {ContextualTip.targeting}), isNull);
+      },
+    );
+
+    test('a nonbuildable path-cell selection stays silent', () {
+      expect(
+        contextualTipFor(
+          _snapshot(
+            placedTowers: [level2],
+            selectedCell: const GridPosition(2, 1),
+            selectedCellBuildable: false,
+          ),
+          {},
+        ),
+        isNull,
+      );
+    });
+
+    test('suppressed during combat, a draft, and ended sessions', () {
+      for (final (description, snapshot) in [
+        (
+          'wave',
+          _snapshot(
+            phase: GamePhase.wave,
+            placedTowers: [level2],
+            selectedCell: level2.position,
+            selectedTower: level2,
+          ),
+        ),
+        (
+          'draft',
+          _snapshot(
+            placedTowers: [level2],
+            selectedCell: level2.position,
+            selectedTower: level2,
+            pendingRunModuleOffer: RunModuleOffer(
+              offerId: 1,
+              draftNumber: 1,
+              draftTotal: 3,
+              moduleIds: const [RunModuleId.heavyCaliber],
+            ),
+          ),
+        ),
+        ('won', _snapshot(phase: GamePhase.won, placedTowers: [level2])),
+        ('lost', _snapshot(phase: GamePhase.lost, placedTowers: [level2])),
+      ]) {
+        expect(contextualTipFor(snapshot, {}), isNull, reason: description);
+      }
+    });
+  });
+
+  group('targeting tip', () {
+    test('a selected level-1 tower resolves targeting', () {
+      final tower = _placed(TowerType.laser, 1);
+      final snapshot = _snapshot(
+        placedTowers: [tower],
+        selectedCell: tower.position,
+        selectedTower: tower,
+      );
+      expect(contextualTipFor(snapshot, {}), ContextualTip.targeting);
+    });
+
+    test('a selected specialized (level-3) tower resolves targeting', () {
+      final tower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: const GridPosition(2, 5),
+        level: 3,
+        specialization: GameBalance.specializationsFor(TowerType.laser).first,
+      );
+      final snapshot = _snapshot(
+        placedTowers: [tower],
+        selectedCell: tower.position,
+        selectedTower: tower,
+      );
+      expect(contextualTipFor(snapshot, {}), ContextualTip.targeting);
+    });
+
+    test('a selected level-2 tower whose specialization was seen yields to '
+        'targeting', () {
+      final tower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: const GridPosition(2, 5),
+        level: 2,
+      );
+      final snapshot = _snapshot(
+        placedTowers: [tower],
+        selectedCell: tower.position,
+        selectedTower: tower,
+      );
+      expect(
+        contextualTipFor(snapshot, {ContextualTip.specialization}),
+        ContextualTip.targeting,
+      );
+    });
+
+    test('specialization keeps priority over targeting for its own tower', () {
+      final tower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: const GridPosition(2, 5),
+        level: 2,
+      );
+      final snapshot = _snapshot(
+        placedTowers: [tower],
+        selectedCell: tower.position,
+        selectedTower: tower,
+      );
+      expect(contextualTipFor(snapshot, {}), ContextualTip.specialization);
+    });
+
+    test('stays silent once targeting is seen', () {
+      final tower = _placed(TowerType.laser, 1);
+      final snapshot = _snapshot(
+        placedTowers: [tower],
+        selectedCell: tower.position,
+        selectedTower: tower,
+      );
+      expect(contextualTipFor(snapshot, {ContextualTip.targeting}), isNull);
+    });
+
+    test('suppressed during combat, a draft, and ended sessions', () {
+      final tower = _placed(TowerType.laser, 1);
+      for (final (description, snapshot) in [
+        (
+          'wave',
+          _snapshot(
+            phase: GamePhase.wave,
+            placedTowers: [tower],
+            selectedCell: tower.position,
+            selectedTower: tower,
+          ),
+        ),
+        (
+          'draft',
+          _snapshot(
+            placedTowers: [tower],
+            selectedCell: tower.position,
+            selectedTower: tower,
+            pendingRunModuleOffer: RunModuleOffer(
+              offerId: 1,
+              draftNumber: 1,
+              draftTotal: 3,
+              moduleIds: const [RunModuleId.heavyCaliber],
+            ),
+          ),
+        ),
+        (
+          'won',
+          _snapshot(
+            phase: GamePhase.won,
+            placedTowers: [tower],
+            selectedCell: tower.position,
+            selectedTower: tower,
+          ),
+        ),
+        (
+          'lost',
+          _snapshot(
+            phase: GamePhase.lost,
+            placedTowers: [tower],
+            selectedCell: tower.position,
+            selectedTower: tower,
+          ),
+        ),
+      ]) {
+        expect(contextualTipFor(snapshot, {}), isNull, reason: description);
+      }
+    });
+
+    test('nothing selected never resolves targeting', () {
+      // The radial targeting button only exists while a tower is selected.
+      final tower = _placed(TowerType.laser, 1);
+      expect(contextualTipFor(_snapshot(placedTowers: [tower]), {}), isNull);
+    });
+  });
+
+  group('specializationCandidateIn', () {
+    test('returns the first placed level-2 unspecialized tower', () {
+      final first = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: const GridPosition(2, 5),
+        level: 2,
+      );
+      final second = PlacedTower(
+        id: 2,
+        type: TowerType.rocket,
+        position: const GridPosition(4, 5),
+        level: 2,
+      );
+      final snapshot = _snapshot(
+        placedTowers: [_placed(TowerType.cryo, 3), first, second],
+      );
+      expect(specializationCandidateIn(snapshot), same(first));
+    });
+
+    test('is null when no placed tower can specialize', () {
+      final specialized = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: const GridPosition(2, 5),
+        level: 3,
+        specialization: GameBalance.specializationsFor(TowerType.laser).first,
+      );
+      expect(
+        specializationCandidateIn(
+          _snapshot(placedTowers: [_placed(TowerType.laser, 2), specialized]),
+        ),
+        isNull,
+      );
     });
   });
 }

@@ -89,6 +89,7 @@ class ContextualTipCallout extends StatelessWidget {
     this.anchorKey,
     this.targetPoint,
     required this.onDone,
+    this.preferAbove = false,
   });
 
   final ContextualTip tip;
@@ -102,6 +103,10 @@ class ContextualTipCallout extends StatelessWidget {
 
   final VoidCallback onDone;
 
+  /// Pins the bubble above radial anchors that sit just over the command
+  /// dock (specialization/targeting) so it never lands on its controls.
+  final bool preferAbove;
+
   @override
   Widget build(BuildContext context) {
     return _GuideCallout(
@@ -111,6 +116,7 @@ class ContextualTipCallout extends StatelessWidget {
       targetPoint: targetPoint,
       onSkip: null,
       onDone: onDone,
+      preferAbove: preferAbove,
     );
   }
 }
@@ -127,6 +133,7 @@ class _GuideCallout extends StatefulWidget {
     this.targetPoint,
     required this.onSkip,
     this.onDone,
+    this.preferAbove = false,
   });
 
   final String copy;
@@ -140,6 +147,11 @@ class _GuideCallout extends StatefulWidget {
 
   /// Final acknowledgement; rendered only when non-null.
   final VoidCallback? onDone;
+
+  /// Pins the bubble above its anchored target regardless of the default
+  /// below-first preference — for anchors that live just above the bottom
+  /// command dock, where a below placement would land on its controls.
+  final bool preferAbove;
 
   @override
   State<_GuideCallout> createState() => _GuideCalloutState();
@@ -249,9 +261,17 @@ class _GuideCalloutState extends State<_GuideCallout> {
     final belowTop = (anchorRect?.bottom ?? target.dy) + _targetGap;
     final aboveTop = (anchorRect?.top ?? target.dy) - _targetGap - height;
     final centerDx = anchorRect?.center.dx ?? target.dx;
-    final top = (belowTop + height <= safe.bottom || aboveTop < safe.top)
-        ? belowTop
-        : aboveTop;
+    // Anchored targets prefer below (falling back up only when below
+    // cannot fit), unless the caller pins the tip above for a bottom-dock
+    // neighbor. A bare point target takes the roomier side instead: a low
+    // board cell would otherwise drop its bubble onto the command deck.
+    final bool below =
+        belowTop + height <= safe.bottom &&
+        (aboveTop < safe.top ||
+            (anchorRect == null
+                ? safe.bottom - target.dy >= target.dy - safe.top
+                : !widget.preferAbove));
+    final top = below ? belowTop : aboveTop;
     return Rect.fromLTWH(
       (centerDx - width / 2).clamp(
         safe.left,

@@ -501,4 +501,205 @@ void main() {
       expect(find.text(ionChainCopy), findsOneWidget);
     });
   });
+
+  group('specialization and targeting tips', () {
+    const specCopy =
+        'Specialization ready. Choose one of two ways to evolve this tower.';
+    const targetingCopy =
+        'Targeting modes. Choose which enemies this tower attacks first.';
+    final bubble = find.byKey(
+      const ValueKey('first-mission-guide-callout-bubble'),
+    );
+
+    PlacedTower levelTwoTower({
+      GridPosition position = const GridPosition(2, 11),
+    }) => PlacedTower(
+      id: 7,
+      type: TowerType.railgun,
+      position: position,
+      level: 2,
+    );
+
+    testWidgets(
+      'nothing selected: specialization points at the qualifying tower cell '
+      'and never covers the Wave pill',
+      (tester) async {
+        final store = InMemoryFirstMissionGuideStore(completed: true);
+        final ref = await _pumpMission(tester, guideStore: store);
+
+        await _project(
+          tester,
+          ref.game!,
+          commandDeckSnapshot(placedTowers: [levelTwoTower()]),
+        );
+
+        expect(find.text(specCopy), findsOneWidget);
+        expect(find.text('Got it'), findsOneWidget);
+        // The idle dock is live with nothing selected, so the board-cell
+        // bubble must dodge the Wave pill.
+        expect(
+          tester
+              .getRect(bubble)
+              .intersect(tester.getRect(find.byTooltip('Start Wave'))),
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets(
+      'selecting the qualifying tower anchors specialization at its radial '
+      'progression button, clear of the Wave pill',
+      (tester) async {
+        final store = InMemoryFirstMissionGuideStore(completed: true);
+        final ref = await _pumpMission(tester, guideStore: store);
+        final tower = levelTwoTower();
+
+        await _project(
+          tester,
+          ref.game!,
+          commandDeckSnapshot(
+            placedTowers: [tower],
+            selectedTower: tower,
+            selectedTowerStats: GameBalance.towerStats(
+              TowerType.railgun,
+              level: 2,
+            ),
+          ),
+        );
+
+        expect(find.text(specCopy), findsOneWidget);
+        final specialize = find.byTooltip('Specialize tower');
+        expect(specialize, findsOneWidget);
+        expect(
+          tester.getRect(bubble).intersect(tester.getRect(specialize)),
+          isEmpty,
+          reason: 'the bubble must leave the progression button tappable',
+        );
+        expect(
+          tester
+              .getRect(bubble)
+              .intersect(tester.getRect(find.byTooltip('Start Wave'))),
+          isEmpty,
+          reason: 'a bottom-row radial tip must never cover the Wave pill',
+        );
+      },
+    );
+
+    testWidgets(
+      'a selected level-1 tower yields targeting at the real targeting '
+      'button, never another tower\u2019s Upgrade',
+      (tester) async {
+        final store = InMemoryFirstMissionGuideStore(completed: true);
+        final ref = await _pumpMission(tester, guideStore: store);
+        final qualifying = levelTwoTower(position: const GridPosition(2, 2));
+        final level1 = PlacedTower(
+          id: 8,
+          type: TowerType.laser,
+          position: const GridPosition(5, 8),
+        );
+
+        await _project(
+          tester,
+          ref.game!,
+          commandDeckSnapshot(
+            placedTowers: [qualifying, level1],
+            selectedTower: level1,
+            selectedTowerStats: GameBalance.towerStats(
+              TowerType.laser,
+              level: 1,
+            ),
+          ),
+        );
+
+        expect(find.text(specCopy), findsNothing);
+        expect(find.text(targetingCopy), findsOneWidget);
+        final button = find.byTooltip('Targeting: First. Change targeting');
+        expect(button, findsOneWidget);
+        expect(
+          tester.getRect(bubble).intersect(tester.getRect(button)),
+          isEmpty,
+          reason: 'the bubble must leave the targeting button tappable',
+        );
+        expect(
+          tester
+              .getRect(bubble)
+              .intersect(tester.getRect(find.byTooltip('Start Wave'))),
+          isEmpty,
+        );
+      },
+    );
+
+    testWidgets('targeting Got it persists across a page remount', (
+      tester,
+    ) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      final ref = await _pumpMission(tester, guideStore: store);
+      final level1 = PlacedTower(
+        id: 8,
+        type: TowerType.laser,
+        position: const GridPosition(5, 8),
+      );
+      GameSnapshot withSelection() => commandDeckSnapshot(
+        placedTowers: [level1],
+        selectedTower: level1,
+        selectedTowerStats: GameBalance.towerStats(TowerType.laser, level: 1),
+      );
+
+      await _project(tester, ref.game!, withSelection());
+      await tester.tap(find.text('Got it'));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text(targetingCopy), findsNothing);
+      expect(await store.loadSeenTips(), {ContextualTip.targeting});
+
+      // A fresh page mount reloads the persisted set before first build.
+      await retireMission(tester);
+      await _pumpMission(tester, guideStore: store, ref: ref);
+      await _project(tester, ref.game!, withSelection());
+      expect(find.text(targetingCopy), findsNothing);
+    });
+
+    testWidgets(
+      'specialized and retargeted towers auto-acknowledge their tips',
+      (tester) async {
+        final store = InMemoryFirstMissionGuideStore(completed: true);
+        final ref = await _pumpMission(tester, guideStore: store);
+
+        // Snapshot facts alone — the bubble never showed — retire both
+        // lessons post-frame.
+        await _project(
+          tester,
+          ref.game!,
+          commandDeckSnapshot(
+            placedTowers: [
+              PlacedTower(
+                id: 7,
+                type: TowerType.laser,
+                position: const GridPosition(2, 2),
+                level: 2,
+                specialization: GameBalance.specializationsFor(
+                  TowerType.laser,
+                ).first,
+              ),
+              PlacedTower(
+                id: 8,
+                type: TowerType.laser,
+                position: const GridPosition(3, 4),
+                targetingMode: TowerTargetingMode.strongest,
+              ),
+            ],
+          ),
+        );
+        await tester.pump();
+
+        expect(find.text(specCopy), findsNothing);
+        expect(find.text(targetingCopy), findsNothing);
+        expect(
+          await store.loadSeenTips(),
+          containsAll({ContextualTip.specialization, ContextualTip.targeting}),
+        );
+      },
+    );
+  });
 }

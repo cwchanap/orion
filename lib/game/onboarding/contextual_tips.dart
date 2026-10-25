@@ -45,6 +45,18 @@ const Map<ContextualTip, TowerType> contextualTipTowerTypes = {
   ContextualTip.droneBay: TowerType.droneBay,
 };
 
+/// The placed tower the specialization tip points at while nothing is
+/// selected: the first level-2 unspecialized tower on the board. Shared by
+/// the resolver and the page so both agree on the same board-cell target.
+PlacedTower? specializationCandidateIn(GameSnapshot snapshot) {
+  for (final tower in snapshot.placedTowers) {
+    if (tower.canSpecialize) {
+      return tower;
+    }
+  }
+  return null;
+}
+
 /// Resolves the single current contextual tip from a snapshot alone.
 ///
 /// Pure and stateless, mirroring `firstMissionGuideStepFor`: reads only
@@ -77,21 +89,45 @@ ContextualTip? contextualTipFor(
     return null;
   }
 
-  // Boss tip: the collapsed scanner collapses and ignores taps while any
-  // cell or tower is selected — require no selection so the anchor points
-  // at a usable control. The modifier tip belongs to the separate
-  // stage-briefing route and is never resolved here.
-  if (seen.contains(ContextualTip.bossWave)) {
+  // Tower selected: the specialization tip may point ONLY at this very
+  // tower's radial progression surface — a different selected tower must
+  // never inherit another tower's Upgrade-button lesson — so otherwise the
+  // radial targeting action is the candidate. Both actions live on the
+  // mounted radial, which the build-phase gate above keeps enabled.
+  final selectedTower = snapshot.selectedTower;
+  if (selectedTower != null) {
+    if (!seen.contains(ContextualTip.specialization) &&
+        selectedTower.canSpecialize) {
+      return ContextualTip.specialization;
+    }
+    if (!seen.contains(ContextualTip.targeting)) {
+      return ContextualTip.targeting;
+    }
     return null;
   }
-  if (snapshot.selectedCell != null || snapshot.selectedTower != null) {
+
+  // Any remaining selected cell is a nonbuildable path cell: the collapsed
+  // scanner ignores taps while selected, so it is no more a target than a
+  // tower selection — silence.
+  if (snapshot.selectedCell != null) {
     return null;
   }
-  final preview = snapshot.nextWavePreview;
-  if (preview == null || preview.bossGroups.isEmpty) {
-    return null;
+
+  // Nothing selected. Boss first (the collapsed scanner is usable only
+  // now), then specialization pointing at a qualifying placed tower's
+  // board cell. The modifier tip belongs to the separate stage-briefing
+  // route and is never resolved here.
+  if (!seen.contains(ContextualTip.bossWave)) {
+    final preview = snapshot.nextWavePreview;
+    if (preview != null && preview.bossGroups.isNotEmpty) {
+      return ContextualTip.bossWave;
+    }
   }
-  return ContextualTip.bossWave;
+  if (!seen.contains(ContextualTip.specialization) &&
+      specializationCandidateIn(snapshot) != null) {
+    return ContextualTip.specialization;
+  }
+  return null;
 }
 
 /// Tips already taught by the snapshot itself: placing a tower of a tip's
@@ -102,5 +138,13 @@ Set<ContextualTip> learnedTipsIn(GameSnapshot snapshot) {
     for (final entry in contextualTipTowerTypes.entries)
       if (snapshot.placedTowers.any((tower) => tower.type == entry.value))
         entry.key,
+    // Specializing any tower or changing any tower off the default
+    // targeting mode demonstrates those lessons for the whole run.
+    if (snapshot.placedTowers.any((tower) => tower.specialization != null))
+      ContextualTip.specialization,
+    if (snapshot.placedTowers.any(
+      (tower) => tower.targetingMode != TowerTargetingMode.first,
+    ))
+      ContextualTip.targeting,
   };
 }
