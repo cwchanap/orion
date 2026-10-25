@@ -911,23 +911,43 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // Run inputs derive from the last-known committed disk state, mirroring
     // what a stage launch would actually use; the sheet renders primitives.
     final modifiers = _committedCampaignModifiers();
+    // The once-only stage-modifier tip lives inside this modal route: a
+    // parent setState never rebuilds an open route, so the route's own
+    // StatefulBuilder owns visibility and clears it on Got it before the
+    // page persists the acknowledgement. Seeded once from the seen set —
+    // closing or launching the sheet without Got it leaves it unseen.
+    final modifierTipAnchorKey = GlobalKey();
+    var modifierTipVisible =
+        stage.modifiers.isNotEmpty &&
+        !_seenTips.contains(ContextualTip.stageModifier);
     final shouldStart = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: orionSheetAnimationStyle(context),
-      builder: (context) => StageBriefingSheet(
-        stage: stage,
-        // Aligned with the rest of the committed-state pattern: the briefing
-        // sheet's Start/Replay label, reward-earned flag, best-result line,
-        // and HPA-528 blueprint-recovered signal are all first-clear facts
-        // sourced from disk, not the optimistic `_progress` aggregate.
-        result: _committedProgress.resultFor(stage.id),
-        startingGold: modifiers.adjustedStartingGold,
-        startingBaseHealth: StageModifierRules.effectiveStartingBaseHealth(
-          campaignAdjustedBaseHealth: modifiers.adjustedStartingBaseHealth,
-          stageModifiers: stage.modifiers,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheetState) => StageBriefingSheet(
+          stage: stage,
+          // Aligned with the rest of the committed-state pattern: the briefing
+          // sheet's Start/Replay label, reward-earned flag, best-result line,
+          // and HPA-528 blueprint-recovered signal are all first-clear facts
+          // sourced from disk, not the optimistic `_progress` aggregate.
+          result: _committedProgress.resultFor(stage.id),
+          startingGold: modifiers.adjustedStartingGold,
+          startingBaseHealth: StageModifierRules.effectiveStartingBaseHealth(
+            campaignAdjustedBaseHealth: modifiers.adjustedStartingBaseHealth,
+            stageModifiers: stage.modifiers,
+          ),
+          modifierTipAnchorKey: modifierTipVisible
+              ? modifierTipAnchorKey
+              : null,
+          onModifierTipDone: modifierTipVisible
+              ? () {
+                  setSheetState(() => modifierTipVisible = false);
+                  _acknowledgeContextualTip(ContextualTip.stageModifier);
+                }
+              : null,
         ),
       ),
     );

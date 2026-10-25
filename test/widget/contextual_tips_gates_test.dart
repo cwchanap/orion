@@ -6,6 +6,7 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/onboarding/contextual_tips.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/orion_defense_game.dart';
+import 'package:orion/game/ui/first_mission_guide_callout.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/command_deck_fixtures.dart';
@@ -747,5 +748,245 @@ void main() {
         );
       },
     );
+  });
+
+  group('stage-modifier briefing tip', () {
+    const modifierCopy =
+        'Stage modifier. These conditions change how this mission plays.';
+    final bubble = find.byKey(
+      const ValueKey('first-mission-guide-callout-bubble'),
+    );
+
+    const goldResult = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+
+    /// Pumps the page onto the world map (no game started) with Relay
+    /// already unlocked via a committed Alpha gold result.
+    Future<void> pumpMap(
+      WidgetTester tester, {
+      required FirstMissionGuideStore guideStore,
+      Map<String, StageResult> results = const {'outpost-alpha': goldResult},
+      double textScaleFactor = 1,
+    }) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      if (textScaleFactor != 1) {
+        tester.platformDispatcher.textScaleFactorTestValue = textScaleFactor;
+        addTearDown(tester.platformDispatcher.clearAllTestValues);
+      }
+      final progressStore = await harness.storeWithResults(results);
+      await tester.pumpWidget(
+        harness.testGamePage(
+          progressStore: progressStore,
+          firstMissionGuideStore: guideStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> openBriefing(WidgetTester tester, String mapLabel) async {
+      await tester.ensureVisible(find.text(mapLabel));
+      await tester.tap(find.text(mapLabel));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Start Mission'), findsOneWidget);
+    }
+
+    Future<void> dismissBriefing(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Dismiss'));
+      await tester.pumpAndSettle();
+    }
+
+    /// The bubble must never sit over its own anchor's interior or the
+    /// sheet's launch action / dismiss control.
+    void expectBubbleClearOfControls(WidgetTester tester) {
+      final bubbleRect = tester.getRect(bubble);
+      final tile = tester.getRect(
+        find.byKey(const ValueKey('briefing-modifier')),
+      );
+      expect(
+        bubbleRect.top >= tile.bottom || bubbleRect.bottom <= tile.top,
+        isTrue,
+        reason: 'the bubble must place against the modifier tile\u2019s edges',
+      );
+      expect(
+        bubbleRect.intersect(tester.getRect(find.byTooltip('Start Mission'))),
+        isEmpty,
+        reason: 'the bubble must leave Start Mission tappable',
+      );
+      expect(
+        bubbleRect.intersect(tester.getRect(find.byTooltip('Dismiss'))),
+        isEmpty,
+        reason: 'the bubble must leave the dismiss control tappable',
+      );
+    }
+
+    testWidgets(
+      'a modified briefing shows the once-only tip anchored at the modifier '
+      'tile, exactly one callout overall',
+      (tester) async {
+        final store = InMemoryFirstMissionGuideStore(completed: true);
+        await pumpMap(tester, guideStore: store);
+        await openBriefing(tester, 'Relay');
+
+        expect(find.text(modifierCopy), findsOneWidget);
+        expect(find.text('Got it'), findsOneWidget);
+        // At most one visible tip overall: the briefing route owns the only
+        // candidate while it is open.
+        expect(find.byType(ContextualTipCallout), findsOneWidget);
+        expectBubbleClearOfControls(tester);
+        // The modifier tile's effect copy is untouched beneath the tip.
+        expect(find.byKey(const ValueKey('briefing-modifier')), findsOneWidget);
+      },
+    );
+
+    testWidgets("Alpha's Standard Conditions briefing shows no modifier tip", (
+      tester,
+    ) async {
+      // A fresh campaign: Alpha's briefing offers Start Mission.
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      await pumpMap(tester, guideStore: store, results: const {});
+      await openBriefing(tester, 'Alpha');
+
+      expect(find.text(modifierCopy), findsNothing);
+      expect(find.text('Got it'), findsNothing);
+      expect(find.byType(ContextualTipCallout), findsNothing);
+    });
+
+    testWidgets('leaving the briefing without Got it leaves the tip unseen '
+        '(reopen, launch and page remount all keep it)', (tester) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      await pumpMap(tester, guideStore: store);
+
+      // Dismiss without Got it.
+      await openBriefing(tester, 'Relay');
+      expect(find.text(modifierCopy), findsOneWidget);
+      await dismissBriefing(tester);
+      expect(await store.loadSeenTips(), isEmpty);
+
+      // Reopen: still unseen.
+      await openBriefing(tester, 'Relay');
+      expect(find.text(modifierCopy), findsOneWidget);
+
+      // Launch without Got it: starting the mission is not an
+      // acknowledgement either.
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pump();
+      await tester.pump();
+      expect(await store.loadSeenTips(), isEmpty);
+      await tester.tap(find.byKey(const ValueKey('world-map-action')));
+      await tester.pumpAndSettle();
+      await openBriefing(tester, 'Relay');
+      expect(find.text(modifierCopy), findsOneWidget);
+
+      // A full page remount ("restart") still shows it.
+      await dismissBriefing(tester);
+      await tester.pumpWidget(
+        harness.testGamePage(
+          firstMissionGuideStore: store,
+          progressStore: await harness.storeWithResults({
+            'outpost-alpha': goldResult,
+          }),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openBriefing(tester, 'Relay');
+      expect(find.text(modifierCopy), findsOneWidget);
+      expect(await store.loadSeenTips(), isEmpty);
+    });
+
+    testWidgets(
+      'Got it hides the tip immediately inside the open sheet and persists '
+      'across reopen and remount',
+      (tester) async {
+        final preferences = await SharedPreferences.getInstance();
+        final store = SharedPreferencesFirstMissionGuideStore(
+          preferences: preferences,
+        );
+        await store.setCompleted(true);
+        await pumpMap(tester, guideStore: store);
+        await openBriefing(tester, 'Relay');
+        expect(find.text(modifierCopy), findsOneWidget);
+
+        await tester.tap(find.text('Got it'));
+        await tester.pump();
+        await tester.pump();
+
+        // Gone immediately while the sheet is still open.
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(find.text(modifierCopy), findsNothing);
+        expect(await store.loadSeenTips(), {ContextualTip.stageModifier});
+
+        // Reopen: the acknowledged tip stays suppressed.
+        await dismissBriefing(tester);
+        await openBriefing(tester, 'Relay');
+        expect(find.text(modifierCopy), findsNothing);
+        expect(find.byType(ContextualTipCallout), findsNothing);
+
+        // And after a full page remount reading the persisted set.
+        await dismissBriefing(tester);
+        await tester.pumpWidget(
+          harness.testGamePage(
+            firstMissionGuideStore: store,
+            progressStore: await harness.storeWithResults({
+              'outpost-alpha': goldResult,
+            }),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await openBriefing(tester, 'Relay');
+        expect(find.text(modifierCopy), findsNothing);
+      },
+    );
+
+    testWidgets('a multi-modifier stage still shows exactly one tip', (
+      tester,
+    ) async {
+      // Void Bastion carries two modifiers; only ONE tip may render.
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      await pumpMap(
+        tester,
+        guideStore: store,
+        results: {
+          'outpost-alpha': goldResult,
+          'nebula-relay': goldResult,
+          'asteroid-foundry': goldResult,
+          'aurora-gate': goldResult,
+        },
+      );
+      await openBriefing(tester, 'Bastion');
+
+      expect(find.text(modifierCopy), findsOneWidget);
+      expect(find.text('Got it'), findsOneWidget);
+      expect(find.byType(ContextualTipCallout), findsOneWidget);
+      expectBubbleClearOfControls(tester);
+    });
+
+    testWidgets('360x640 at 1.3x text scale keeps the tip and launch action '
+        'independently tappable', (tester) async {
+      final store = InMemoryFirstMissionGuideStore(completed: true);
+      await pumpMap(tester, guideStore: store, textScaleFactor: 1.3);
+      await openBriefing(tester, 'Relay');
+
+      expect(find.text(modifierCopy), findsOneWidget);
+      expectBubbleClearOfControls(tester);
+      final bubbleRect = tester.getRect(bubble);
+      expect(bubbleRect.left, greaterThanOrEqualTo(0));
+      expect(bubbleRect.right, lessThanOrEqualTo(360));
+
+      // Both controls answer their own taps: Got it retires the tip and
+      // the launch action still pops the sheet to start the mission.
+      await tester.tap(find.text('Got it'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text(modifierCopy), findsNothing);
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+      expect(await store.loadSeenTips(), {ContextualTip.stageModifier});
+      // Retire the started mission's game loop.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 100));
+    });
   });
 }
