@@ -1295,7 +1295,14 @@ void main() {
     ) async {
       await tester.pumpWidget(railHost());
 
-      expect(find.byType(SingleChildScrollView), findsOneWidget);
+      // CustomScrollView carries the semanticChildCount the replaced
+      // ListView inferred, so screen readers still announce "of 8" — a
+      // bare SingleChildScrollView cannot report the collection size.
+      final scroll = tester.widget<CustomScrollView>(
+        find.byType(CustomScrollView),
+      );
+      expect(scroll.semanticChildCount, TowerType.values.length);
+      expect(find.byType(SingleChildScrollView), findsNothing);
       expect(find.byType(ListView), findsNothing);
       // At 375 logical pixels the last card is offscreen — yet every one
       // of the eight cards is already built, so the guide can anchor and
