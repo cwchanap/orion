@@ -46,6 +46,7 @@ class MissionChrome extends StatefulWidget {
     this.towerCardGuideAnchor,
     this.waveGuideAnchorKey,
     this.upgradeGuideAnchorKey,
+    this.targetingGuideAnchorKey,
     this.scannerGuideAnchorKey,
   });
 
@@ -78,6 +79,10 @@ class MissionChrome extends StatefulWidget {
   final TowerCardGuideAnchor? towerCardGuideAnchor;
   final Key? waveGuideAnchorKey;
   final Key? upgradeGuideAnchorKey;
+
+  /// Optional contextual-tip anchor on the radial targeting button, passed
+  /// through to [TowerRadialActions].
+  final Key? targetingGuideAnchorKey;
   final Key? scannerGuideAnchorKey;
 
   @override
@@ -266,6 +271,7 @@ class _MissionChromeState extends State<MissionChrome> {
                       onSell: widget.onSell,
                       onTargetingChanged: widget.onTargetingChanged,
                       upgradeGuideAnchorKey: widget.upgradeGuideAnchorKey,
+                      targetingGuideAnchorKey: widget.targetingGuideAnchorKey,
                     ),
                   ),
                 ),
@@ -418,6 +424,7 @@ class TowerRadialActions extends StatelessWidget {
     required this.onSell,
     required this.onTargetingChanged,
     this.upgradeGuideAnchorKey,
+    this.targetingGuideAnchorKey,
   });
   final GameSnapshot snapshot;
   final VoidCallback onUpgrade;
@@ -428,6 +435,10 @@ class TowerRadialActions extends StatelessWidget {
   /// Optional first-mission guide anchor wrapped around the top
   /// Upgrade/Specialize surface only.
   final Key? upgradeGuideAnchorKey;
+
+  /// Optional contextual-tip anchor wrapped around the bottom targeting
+  /// action only.
+  final Key? targetingGuideAnchorKey;
 
   @override
   Widget build(BuildContext context) {
@@ -481,32 +492,44 @@ class TowerRadialActions extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 2),
-            OrionSurface(
-              tier: OrionSurfaceTier.t1,
-              radius: 28,
-              padding: EdgeInsets.zero,
-              child: IconButton(
-                constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
-                tooltip:
-                    'Targeting: ${tower.targetingMode.label}. Change targeting',
-                onPressed: build
-                    ? () => onTargetingChanged(
-                        TowerTargetingMode.values[(tower.targetingMode.index +
-                                1) %
-                            TowerTargetingMode.values.length],
-                      )
-                    : null,
-                icon: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.my_location, color: t.systemCyan, size: 22),
-                    Text(
-                      tower.targetingMode.label.toUpperCase(),
-                      style: labelStyle.copyWith(color: t.systemCyan),
-                    ),
-                  ],
-                ),
-              ),
+            if (targetingGuideAnchorKey != null)
+              KeyedSubtree(
+                key: targetingGuideAnchorKey,
+                child: _targetingSurface(t, labelStyle),
+              )
+            else
+              _targetingSurface(t, labelStyle),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// The bottom targeting action, unchanged; split out only so the
+  /// optional contextual-tip anchor can wrap it.
+  Widget _targetingSurface(OrionUiTheme t, TextStyle labelStyle) {
+    final tower = snapshot.selectedTower!;
+    final build = snapshot.phase == GamePhase.build;
+    return OrionSurface(
+      tier: OrionSurfaceTier.t1,
+      radius: 28,
+      padding: EdgeInsets.zero,
+      child: IconButton(
+        constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
+        tooltip: 'Targeting: ${tower.targetingMode.label}. Change targeting',
+        onPressed: build
+            ? () => onTargetingChanged(
+                TowerTargetingMode.values[(tower.targetingMode.index + 1) %
+                    TowerTargetingMode.values.length],
+              )
+            : null,
+        icon: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.my_location, color: t.systemCyan, size: 22),
+            Text(
+              tower.targetingMode.label.toUpperCase(),
+              style: labelStyle.copyWith(color: t.systemCyan),
             ),
           ],
         ),

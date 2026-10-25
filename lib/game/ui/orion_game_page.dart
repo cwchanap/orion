@@ -116,6 +116,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   final GlobalKey _waveGuideAnchorKey = GlobalKey();
   final GlobalKey _upgradeGuideAnchorKey = GlobalKey();
   final GlobalKey _scannerGuideAnchorKey = GlobalKey();
+  final GlobalKey _targetingGuideAnchorKey = GlobalKey();
   final GlobalKey _moduleDraftGuideAnchorKey = GlobalKey();
   bool _isSavingFeedback = false;
   late final GameFeedback _gameFeedback;
@@ -642,6 +643,40 @@ class _OrionGamePageState extends State<OrionGamePage> {
               case FirstMissionGuideStep.scanner:
                 guideAnchorKey = _scannerGuideAnchorKey;
             }
+
+            // Contextual anchor targets: boss owns the collapsed scanner,
+            // unlock tips their rail card, targeting the radial targeting
+            // button, and specialization either the selected tower's radial
+            // progression surface or — while idle — the qualifying tower's
+            // board cell. The resolver guarantees a qualifying tower exists
+            // whenever it resolves specialization.
+            GlobalKey? contextualAnchorKey;
+            Offset? contextualTargetPoint;
+            switch (contextualTip) {
+              case null:
+                break;
+              case ContextualTip.bossWave:
+                contextualAnchorKey = _scannerGuideAnchorKey;
+              case ContextualTip.railgun ||
+                  ContextualTip.ionChain ||
+                  ContextualTip.nanite ||
+                  ContextualTip.gravityWell ||
+                  ContextualTip.droneBay:
+                contextualAnchorKey = _towerCardGuideAnchorKey;
+              case ContextualTip.specialization:
+                if (snapshot.selectedTower != null) {
+                  contextualAnchorKey = _upgradeGuideAnchorKey;
+                } else {
+                  contextualTargetPoint = game.boardCellCenter(
+                    specializationCandidateIn(snapshot)!.position,
+                  );
+                }
+              case ContextualTip.targeting:
+                contextualAnchorKey = _targetingGuideAnchorKey;
+              case ContextualTip.stageModifier:
+                // Never resolved here — the stage briefing owns it.
+                break;
+            }
             return Stack(
               children: [
                 // The GameWidget fills the entire SafeArea so the Flame
@@ -696,9 +731,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
                         ? _waveGuideAnchorKey
                         : null,
                     upgradeGuideAnchorKey:
-                        guideStep == FirstMissionGuideStep.upgrade &&
-                            snapshot.selectedTower != null
+                        snapshot.selectedTower != null &&
+                            (guideStep == FirstMissionGuideStep.upgrade ||
+                                contextualTip == ContextualTip.specialization)
                         ? _upgradeGuideAnchorKey
+                        : null,
+                    targetingGuideAnchorKey:
+                        contextualTip == ContextualTip.targeting
+                        ? _targetingGuideAnchorKey
                         : null,
                     scannerGuideAnchorKey:
                         guideStep == FirstMissionGuideStep.scanner ||
@@ -841,12 +881,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   Positioned.fill(
                     child: ContextualTipCallout(
                       tip: tip,
-                      // Boss anchors at the collapsed scanner; unlock tips
-                      // anchor at their build-rail card (attached above).
-                      anchorKey: tip == ContextualTip.bossWave
-                          ? _scannerGuideAnchorKey
-                          : _towerCardGuideAnchorKey,
+                      anchorKey: contextualAnchorKey,
+                      targetPoint: contextualTargetPoint,
                       onDone: () => _acknowledgeContextualTip(tip),
+                      // Radial anchors sit just above the bottom dock:
+                      // pin their bubbles up so they never cover the Wave
+                      // pill or pacing controls beneath.
+                      preferAbove:
+                          contextualAnchorKey == _upgradeGuideAnchorKey ||
+                          contextualAnchorKey == _targetingGuideAnchorKey,
                     ),
                   ),
               ],
