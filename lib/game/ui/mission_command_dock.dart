@@ -583,24 +583,36 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
             // stays INSIDE the scrollable: outside it clips cards 14px from
             // the screen edge and swallows drags that start in the strip.
             // Each card keeps what ListView supplied for free: an indexed
-            // semantics node ("item N of 8" announcements) and its own
-            // repaint boundary.
-            SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            // semantics node and its own repaint boundary, while
+            // semanticChildCount restores the "of 8" collection size a
+            // SingleChildScrollView cannot announce ("item N of 8").
+            CustomScrollView(
+              semanticChildCount: TowerType.values.length,
               scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  for (final (index, type) in TowerType.values.indexed) ...[
-                    if (index > 0) const SizedBox(width: 8),
-                    RepaintBoundary(
-                      child: IndexedSemantics(
-                        index: index,
-                        child: _buildCard(type),
-                      ),
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 6,
+                  ),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      children: [
+                        for (final (index, type)
+                            in TowerType.values.indexed) ...[
+                          if (index > 0) const SizedBox(width: 8),
+                          RepaintBoundary(
+                            child: IndexedSemantics(
+                              index: index,
+                              child: _buildCard(type),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
-                  ],
-                ],
-              ),
+                  ),
+                ),
+              ],
             ),
             // 1e treatment: the rail reads DROP TO BUILD while a long-press
             // drag is airborne. Overlay only — the rail's height never shifts.

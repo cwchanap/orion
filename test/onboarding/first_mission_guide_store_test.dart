@@ -156,13 +156,15 @@ void main() {
         ContextualTip.targeting,
       });
 
-      // …and even a replay clear only drops IDs THIS build knows.
+      // …but an explicit empty-set write is the Replay Tutorial reset: it
+      // clears the ENTIRE record, unknown IDs included — a reset that
+      // preserved them could never replay those tips.
       await store.setSeenTips(const {});
       expect(
         preferences.getStringList(
           SharedPreferencesFirstMissionGuideStore.tipsKey,
         ),
-        ['tipFromNewerBuild'],
+        isEmpty,
       );
     });
 

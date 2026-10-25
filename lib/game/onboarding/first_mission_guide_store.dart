@@ -21,8 +21,9 @@ class SharedPreferencesFirstMissionGuideStore
   static const key = 'orion.firstMissionGuide';
 
   /// Sorted `ContextualTip.name` strings; unknown IDs are dropped on read
-  /// but preserved on write (a newer build's IDs outlive this build's
-  /// acknowledgements — including an explicit replay clear).
+  /// but preserved on non-empty writes (a newer build's IDs outlive this
+  /// build's acknowledgements). An explicit empty-set write is a reset —
+  /// Replay Tutorial — and clears the record entirely.
   static const tipsKey = 'orion.contextualTips';
 
   final SharedPreferences preferences;
@@ -66,24 +67,30 @@ class SharedPreferencesFirstMissionGuideStore
 
   @override
   Future<void> setSeenTips(Set<ContextualTip> tips) async {
-    // Writes replace the whole record, so unrecognized names already on
-    // disk are re-emitted: an ID written by a NEWER build must survive
-    // this build's acknowledgements, or upgrading back re-teaches tips
-    // the player already dismissed. A value this build cannot even read
-    // as a string list has nothing preservable — the write self-heals it.
-    final known = ContextualTip.values.asNameMap();
-    List<String>? stored;
-    try {
-      stored = preferences.getStringList(tipsKey);
-    } on TypeError {
-      stored = null;
+    // Non-empty writes replace the whole record, so unrecognized names
+    // already on disk are re-emitted: an ID written by a NEWER build must
+    // survive this build's acknowledgements, or upgrading back re-teaches
+    // tips the player already dismissed. An EMPTY set is the explicit
+    // Replay Tutorial reset — it clears the entire record, unknown IDs
+    // included, or a "successful" reset could never replay them. A value
+    // this build cannot even read as a string list has nothing
+    // preservable — the write self-heals it.
+    final names = <String>{for (final tip in tips) tip.name};
+    if (tips.isNotEmpty) {
+      final known = ContextualTip.values.asNameMap();
+      List<String>? stored;
+      try {
+        stored = preferences.getStringList(tipsKey);
+      } on TypeError {
+        stored = null;
+      }
+      names.addAll([
+        for (final name in stored ?? const <String>[])
+          if (!known.containsKey(name)) name,
+      ]);
     }
-    final names = <String>{
-      for (final name in stored ?? const <String>[])
-        if (!known.containsKey(name)) name,
-      for (final tip in tips) tip.name,
-    }.toList()..sort();
-    final persisted = await preferences.setStringList(tipsKey, names);
+    final sorted = names.toList()..sort();
+    final persisted = await preferences.setStringList(tipsKey, sorted);
     if (!persisted) {
       throw StateError('Failed to save contextual tips.');
     }
