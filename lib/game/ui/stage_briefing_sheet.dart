@@ -7,7 +7,9 @@ import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_modifier_metadata.dart';
 import '../models/game_models.dart';
+import '../onboarding/contextual_tips.dart';
 import 'campaign_presentation.dart';
+import 'first_mission_guide_callout.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
@@ -26,6 +28,8 @@ class StageBriefingSheet extends StatelessWidget {
     required this.result,
     required this.startingGold,
     required this.startingBaseHealth,
+    this.modifierTipAnchorKey,
+    this.onModifierTipDone,
   });
 
   final StageDefinition stage;
@@ -37,6 +41,16 @@ class StageBriefingSheet extends StatelessWidget {
   /// Effective starting hull for the committed run (campaign- and
   /// stage-adjusted base health).
   final int startingBaseHealth;
+
+  /// Optional wrapper key for the modifier tile: the briefing route passes
+  /// its own GlobalKey (HPA-413) while the once-only stage-modifier tip is
+  /// unseen, so the shared callout can anchor on the real tile.
+  final GlobalKey? modifierTipAnchorKey;
+
+  /// Renders the once-only stage-modifier tip over this sheet when non-null
+  /// (with [modifierTipAnchorKey] set and real modifiers present). The
+  /// briefing route — not this sheet — owns the tip's visibility.
+  final VoidCallback? onModifierTipDone;
 
   @override
   Widget build(BuildContext context) {
@@ -152,11 +166,14 @@ class StageBriefingSheet extends StatelessWidget {
                                   if (metadata.isNotEmpty) ...[
                                     const SizedBox(width: 8),
                                     Expanded(
-                                      child: _BriefingModifierTile(
-                                        key: const ValueKey(
-                                          'briefing-modifier',
+                                      child: KeyedSubtree(
+                                        key: modifierTipAnchorKey,
+                                        child: _BriefingModifierTile(
+                                          key: const ValueKey(
+                                            'briefing-modifier',
+                                          ),
+                                          title: metadata.first.title,
                                         ),
-                                        title: metadata.first.title,
                                       ),
                                     ),
                                   ],
@@ -313,6 +330,18 @@ class StageBriefingSheet extends StatelessWidget {
                 ),
               ),
             ),
+            // Last so the shared, hit-transparent callout sits above the
+            // sheet chrome; only its own Got it row intercepts taps.
+            if (stage.modifiers.isNotEmpty &&
+                modifierTipAnchorKey != null &&
+                onModifierTipDone != null)
+              Positioned.fill(
+                child: ContextualTipCallout(
+                  tip: ContextualTip.stageModifier,
+                  anchorKey: modifierTipAnchorKey,
+                  onDone: onModifierTipDone!,
+                ),
+              ),
           ],
         ),
       ),
