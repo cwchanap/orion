@@ -30,6 +30,7 @@ WavePreview _bossPreview({int waveNumber = 8}) {
 GameSnapshot _snapshot({
   GamePhase phase = GamePhase.build,
   int waveNumber = 7,
+  int gold = 150,
   WavePreview? nextWavePreview,
   GridPosition? selectedCell,
   PlacedTower? selectedTower,
@@ -44,7 +45,7 @@ GameSnapshot _snapshot({
 }) {
   return GameSnapshot(
     phase: phase,
-    gold: 150,
+    gold: gold,
     baseHealth: 20,
     startingBaseHealth: 20,
     waveNumber: waveNumber,
@@ -89,48 +90,49 @@ void main() {
   });
 
   group('contextualTipCopy', () {
-    test('covers every tip exactly once', () {
-      expect(contextualTipCopy.length, ContextualTip.values.length);
+    test('returns copy for every tip', () {
+      // The function is an exhaustive switch over the enum: a tip without
+      // copy fails to compile, so this loop can only drift on a rename.
       for (final tip in ContextualTip.values) {
-        expect(contextualTipCopy[tip], isNotNull, reason: tip.name);
+        expect(contextualTipCopy(tip), isNotEmpty, reason: tip.name);
       }
     });
 
     test('carries the exact design copy verbatim', () {
       expect(
-        contextualTipCopy[ContextualTip.bossWave],
+        contextualTipCopy(ContextualTip.bossWave),
         'Boss ahead. Check the scanner and prepare your defense.',
       );
       expect(
-        contextualTipCopy[ContextualTip.railgun],
+        contextualTipCopy(ContextualTip.railgun),
         'Railgun unlocked. Pierces enemies in a line.',
       );
       expect(
-        contextualTipCopy[ContextualTip.ionChain],
+        contextualTipCopy(ContextualTip.ionChain),
         'Ion Chain unlocked. Lightning jumps between targets.',
       );
       expect(
-        contextualTipCopy[ContextualTip.nanite],
+        contextualTipCopy(ContextualTip.nanite),
         'Nanite unlocked. Corrodes armor to help other towers.',
       );
       expect(
-        contextualTipCopy[ContextualTip.gravityWell],
+        contextualTipCopy(ContextualTip.gravityWell),
         'Gravity Well unlocked. Damages enemies within its field.',
       );
       expect(
-        contextualTipCopy[ContextualTip.droneBay],
+        contextualTipCopy(ContextualTip.droneBay),
         'Drone Bay unlocked. Launches autonomous interceptors.',
       );
       expect(
-        contextualTipCopy[ContextualTip.specialization],
+        contextualTipCopy(ContextualTip.specialization),
         'Specialization ready. Choose one of two ways to evolve this tower.',
       );
       expect(
-        contextualTipCopy[ContextualTip.targeting],
+        contextualTipCopy(ContextualTip.targeting),
         'Targeting modes. Choose which enemies this tower attacks first.',
       );
       expect(
-        contextualTipCopy[ContextualTip.stageModifier],
+        contextualTipCopy(ContextualTip.stageModifier),
         'Stage modifier. These conditions change how this mission plays.',
       );
     });
@@ -641,6 +643,76 @@ void main() {
           ContextualTip.specialization,
         }),
         isNull,
+      );
+    });
+
+    test('nothing selected: an unaffordable level-2 tower is skipped', () {
+      // Railgun specialization costs 210 — more than the 150 gold on
+      // hand — so every inspector option would be disabled. The tip stays
+      // silent until the action is actually usable, exactly like the
+      // HPA-412 upgrade tip's gold check.
+      final pricey = PlacedTower(
+        id: 1,
+        type: TowerType.railgun,
+        position: const GridPosition(2, 5),
+        level: 2,
+      );
+      expect(contextualTipFor(_snapshot(placedTowers: [pricey]), {}), isNull);
+      expect(
+        contextualTipFor(_snapshot(gold: 300, placedTowers: [pricey]), {}),
+        ContextualTip.specialization,
+      );
+    });
+
+    test('nothing selected: the candidate is the first affordable tower', () {
+      // 150 covers laser's 120 but not railgun's 210: the board-cell
+      // anchor must aim at the laser — the tower the player can actually
+      // specialize — not the earlier railgun on the board.
+      final pricey = PlacedTower(
+        id: 1,
+        type: TowerType.railgun,
+        position: const GridPosition(2, 5),
+        level: 2,
+      );
+      final cheap = PlacedTower(
+        id: 2,
+        type: TowerType.laser,
+        position: const GridPosition(4, 5),
+        level: 2,
+      );
+      final candidate = specializationCandidateIn(
+        _snapshot(placedTowers: [pricey, cheap]),
+      );
+      expect(candidate?.id, cheap.id);
+    });
+
+    test('selected tower: unaffordable specialization yields to targeting', () {
+      // The radial's Specialize action would open a dead inspector, so
+      // the tip falls through to targeting for this snapshot and comes
+      // back once gold covers the cost.
+      final pricey = PlacedTower(
+        id: 1,
+        type: TowerType.railgun,
+        position: const GridPosition(2, 5),
+        level: 2,
+      );
+      final selected = _snapshot(
+        placedTowers: [pricey],
+        selectedCell: pricey.position,
+        selectedTower: pricey,
+      );
+      expect(contextualTipFor(selected, {}), ContextualTip.targeting);
+      expect(
+        contextualTipFor(
+          _snapshot(
+            gold: 300,
+            placedTowers: [pricey],
+            selectedCell: pricey.position,
+            selectedTower: pricey,
+          ),
+          {},
+        ),
+        ContextualTip.specialization,
       );
     });
 

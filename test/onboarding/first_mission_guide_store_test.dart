@@ -125,6 +125,63 @@ void main() {
       expect(await store.loadSeenTips(), {ContextualTip.bossWave});
     });
 
+    test('writes preserve unknown IDs already on disk', () async {
+      // A newer build's tip IDs must survive this build's
+      // acknowledgements: writes replace the whole record, so dropping
+      // them here would re-teach tips the player already dismissed.
+      final store = await _store({
+        SharedPreferencesFirstMissionGuideStore.tipsKey: <String>[
+          'bossWave',
+          'tipFromNewerBuild',
+        ],
+      });
+
+      // The real flow: the seen set loads typed ({bossWave}) and an
+      // acknowledgement writes its union — the unknown ID rides along.
+      await store.setSeenTips({
+        ContextualTip.bossWave,
+        ContextualTip.targeting,
+      });
+
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getStringList(
+          SharedPreferencesFirstMissionGuideStore.tipsKey,
+        ),
+        ['bossWave', 'targeting', 'tipFromNewerBuild'],
+      );
+      // The unknown ID still stays out of the typed read…
+      expect(await store.loadSeenTips(), {
+        ContextualTip.bossWave,
+        ContextualTip.targeting,
+      });
+
+      // …and even a replay clear only drops IDs THIS build knows.
+      await store.setSeenTips(const {});
+      expect(
+        preferences.getStringList(
+          SharedPreferencesFirstMissionGuideStore.tipsKey,
+        ),
+        ['tipFromNewerBuild'],
+      );
+    });
+
+    test('an unreadable stored record self-heals on write', () async {
+      final store = await _store(<String, Object>{
+        SharedPreferencesFirstMissionGuideStore.tipsKey: true,
+      });
+
+      await store.setSeenTips({ContextualTip.bossWave});
+
+      final preferences = await SharedPreferences.getInstance();
+      expect(
+        preferences.getStringList(
+          SharedPreferencesFirstMissionGuideStore.tipsKey,
+        ),
+        ['bossWave'],
+      );
+    });
+
     test('leaves the original guide flag record untouched', () async {
       final store = await _store({});
 

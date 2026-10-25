@@ -465,13 +465,13 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
           cardRect.right <= viewportRect.right &&
           cardRect.bottom <= viewportRect.bottom;
       if (fullyVisible) return;
-      final reducedMotion = MediaQuery.disableAnimationsOf(context);
       Scrollable.ensureVisible(
         context,
         alignment: 0.5,
-        duration: reducedMotion
-            ? Duration.zero
-            : const Duration(milliseconds: 240),
+        duration: orionMotionDuration(
+          context,
+          const Duration(milliseconds: 240),
+        ),
         curve: Curves.easeOut,
       );
     });
@@ -579,19 +579,27 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
           children: [
             // Eight fixed cards: one eager Row in a scroll view. Every card
             // is always built, so the guide can anchor and reveal any card
-            // (even offscreen) — lazy viewport items could not.
-            Padding(
+            // (even offscreen) — lazy viewport items could not. The padding
+            // stays INSIDE the scrollable: outside it clips cards 14px from
+            // the screen edge and swallows drags that start in the strip.
+            // Each card keeps what ListView supplied for free: an indexed
+            // semantics node ("item N of 8" announcements) and its own
+            // repaint boundary.
+            SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    for (final (index, type) in TowerType.values.indexed) ...[
-                      if (index > 0) const SizedBox(width: 8),
-                      _buildCard(type),
-                    ],
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final (index, type) in TowerType.values.indexed) ...[
+                    if (index > 0) const SizedBox(width: 8),
+                    RepaintBoundary(
+                      child: IndexedSemantics(
+                        index: index,
+                        child: _buildCard(type),
+                      ),
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
             // 1e treatment: the rail reads DROP TO BUILD while a long-press

@@ -106,11 +106,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // guide flag before the loading gate clears; acknowledged in memory first,
   // then written through best-effort.
   Set<ContextualTip> _seenTips = const {};
-  // The tip resolved in the latest build-phase snapshot — i.e. the one
-  // actually displayed. Auto-start calls game.startWave() directly,
-  // bypassing the chrome's onStartWave, so the build→wave transition
-  // itself acknowledges a displayed boss tip.
-  ContextualTip? _lastBuildContextualTip;
+  // The last board viewport MissionChrome measured — the free space between
+  // the top chrome and the dock, in this Stack's coordinates. Contextual-tip
+  // bubbles clamp to it so they can never land inside the idle bar.
+  Rect? _boardViewport;
   // Serializes seen-tip write-throughs: acknowledgements replace the whole
   // set, so an older write landing after a newer one would forget tips.
   Future<void> _seenTipsWrite = Future<void>.value();
@@ -602,10 +601,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
             // would float over dimmed controls (anchor detachment already
             // hides radial-anchored tips; this gate makes it explicit for
             // every anchor kind).
-            // Aligned exactly with the inspector overlay's render
-            // condition below (selected tower inspected, session live, no
-            // draft) so a stale _inspectedTowerId never suppresses tips
-            // beyond the modal's lifetime.
+            // The inspector overlay's exact render condition (selected
+            // tower inspected, session live, no draft) — shared by the
+            // overlay below so a stale _inspectedTowerId never suppresses
+            // tips beyond the modal's lifetime, and the two can never
+            // drift apart.
             final inspectorOpen =
                 snapshot.selectedTower != null &&
                 snapshot.selectedTower!.id == _inspectedTowerId &&
@@ -618,33 +618,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
             // Placing a tower of an unlock family demonstrates its lesson:
             // union the learned facts post-frame (setState is illegal
             // mid-build). Idempotent, so steady-state snapshots add no work;
-            // acknowledgements write through best-effort.
-            final learned = learnedTipsIn(snapshot);
-            if (learned.any((tip) => !_seenTips.contains(tip))) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                _acknowledgeContextualTips(learned);
-              });
-            }
-
-            // Track the displayed build-phase tip so a build→wave
-            // transition can acknowledge bossWave: auto-start's countdown
-            // calls game.startWave() directly, bypassing onStartWave, and
-            // the wave leaving build while the tip showed is the taught
-            // action. Only bossWave uses this channel — other visible tips
-            // stay unseen and may re-guide later.
+            // acknowledgements write through best-effort. Every learned
+            // action (placing, specializing, retargeting) is build-gated, so
+            // snapshots in other phases — including the countdown's
+            // once-per-frame publishes — skip the board scan entirely.
             if (snapshot.phase == GamePhase.build) {
-              _lastBuildContextualTip = contextualTip;
-            } else if (_lastBuildContextualTip != null) {
-              final resolved = _lastBuildContextualTip;
-              _lastBuildContextualTip = null;
-              if (resolved == ContextualTip.bossWave &&
-                  snapshot.phase == GamePhase.wave &&
-                  !_seenTips.contains(ContextualTip.bossWave)) {
+              final learned = learnedTipsIn(snapshot);
+              if (learned.any((tip) => !_seenTips.contains(tip))) {
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    _acknowledgeContextualTip(ContextualTip.bossWave);
-                  }
+                  if (!mounted) return;
+                  _acknowledgeContextualTips(learned);
                 });
               }
             }
@@ -772,7 +755,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   child: MissionChrome(
                     snapshot: snapshot,
                     onBoardViewportChanged: (viewport) {
-                      if (mounted && game.setBoardViewport(viewport)) {
+                      // The same rect bounds contextual-tip bubbles; an
+                      // empty report is meaningless to both consumers. The
+                      // game call must not hide behind || — short-circuit
+                      // would skip its board-transform update entirely.
+                      if (viewport.isEmpty) return;
+                      final gameChanged = game.setBoardViewport(viewport);
+                      final pageChanged = _boardViewport != viewport;
+                      _boardViewport = viewport;
+                      if (mounted && (pageChanged || gameChanged)) {
                         setState(() {});
                       }
                     },
@@ -824,12 +815,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       if (guideStep == FirstMissionGuideStep.scanner) {
                         _setFirstMissionGuideCompleted(true);
                       }
-                      // Starting the wave while the boss tip is up
-                      // acknowledges it — the spec sanctions this channel
-                      // for the boss tip ONLY, so any other visible tip
-                      // stays unseen and may re-guide later. Both flips are
-                      // synchronous and the write-through is fire-and-forget,
-                      // so game.startWave below is never blocked or delayed.
+                      // A PLAYER starting the wave while the boss tip is up
+                      // acknowledges it — the spec's only start-channel; the
+                      // auto-start countdown bypasses this callback and must
+                      // NOT acknowledge (a player who never saw the tip gets
+                      // it again on the next eligible boss preview). Other
+                      // visible tips always stay unseen and may re-guide.
+                      // Both flips are synchronous and the write-through is
+                      // fire-and-forget, so game.startWave below is never
+                      // blocked or delayed.
                       if (contextualTip == ContextualTip.bossWave) {
                         _acknowledgeContextualTip(contextualTip!);
                       }
@@ -846,10 +840,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     onPlacementPreviewEvent: _handlePlacementPreviewEvent,
                   ),
                 ),
-                if (snapshot.selectedTower != null &&
-                    snapshot.selectedTower!.id == _inspectedTowerId &&
-                    !snapshot.isEnded &&
-                    snapshot.pendingRunModuleOffer == null)
+                if (inspectorOpen)
                   Positioned.fill(
                     child: PopScope(
                       canPop: false,
@@ -947,13 +938,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       tip: tip,
                       anchorKey: contextualAnchorKey,
                       targetPoint: contextualTargetPoint,
+                      boardViewport: _boardViewport,
                       onDone: () => _acknowledgeContextualTip(tip),
-                      // Radial anchors sit just above the bottom dock:
-                      // pin their bubbles up so they never cover the Wave
-                      // pill or pacing controls beneath.
+                      // The radial progression surface tops the radial
+                      // menu: pin its bubble up so it never covers the
+                      // Inspect/Salvage row beneath. The targeting anchor
+                      // sits at the radial's bottom — below it is free
+                      // space down to the board viewport edge, so it keeps
+                      // the default below-first placement and only flips
+                      // up when the dock leaves no room.
                       preferAbove:
-                          contextualAnchorKey == _upgradeGuideAnchorKey ||
-                          contextualAnchorKey == _targetingGuideAnchorKey,
+                          contextualAnchorKey == _upgradeGuideAnchorKey,
                     ),
                   ),
               ],
@@ -1163,7 +1158,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _mapFeedback = null;
       _game = game;
       _inspectedTowerId = null;
-      _lastBuildContextualTip = null;
+      _boardViewport = null;
       _activeView = _ShellView.stage;
     });
   }
