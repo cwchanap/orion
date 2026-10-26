@@ -12,6 +12,26 @@ Future<SharedPreferencesFirstMissionGuideStore> _store(
   );
 }
 
+/// setCompleted always rejects so resetForReplay's rollback can be
+/// observed against the real SharedPreferences write path.
+class _FailingCompletionPrefsStore
+    extends SharedPreferencesFirstMissionGuideStore {
+  _FailingCompletionPrefsStore({required super.preferences});
+
+  @override
+  Future<void> setCompleted(bool completed) =>
+      Future.error(StateError('simulated persistence failure'));
+}
+
+/// The same failure against the in-memory implementation.
+class _FailingCompletionInMemoryStore extends InMemoryFirstMissionGuideStore {
+  _FailingCompletionInMemoryStore({super.completed, super.seenTips});
+
+  @override
+  Future<void> setCompleted(bool completed) =>
+      Future.error(StateError('simulated persistence failure'));
+}
+
 void main() {
   group('SharedPreferencesFirstMissionGuideStore', () {
     test('exposes the persistence key', () {
@@ -193,6 +213,75 @@ void main() {
       await store.setCompleted(true);
       expect(await store.loadCompleted(), isTrue);
       expect(await store.loadSeenTips(), {ContextualTip.bossWave});
+    });
+  });
+
+  group('resetForReplay', () {
+    test('clears the entire record and the guide flag on success', () async {
+      final store = await _store(<String, Object>{
+        SharedPreferencesFirstMissionGuideStore.key: true,
+        SharedPreferencesFirstMissionGuideStore.tipsKey: <String>[
+          'bossWave',
+          'tipFromNewerBuild',
+        ],
+      });
+
+      await store.resetForReplay();
+
+      final preferences = await SharedPreferences.getInstance();
+      // A successful reset clears EVERYTHING — unknown newer-build IDs
+      // included — or it could never replay those tips.
+      expect(
+        preferences.getStringList(
+          SharedPreferencesFirstMissionGuideStore.tipsKey,
+        ),
+        isEmpty,
+      );
+      expect(await store.loadSeenTips(), isEmpty);
+      expect(await store.loadCompleted(), isFalse);
+    });
+
+    test(
+      'a failed reset restores the raw record, unknown IDs included',
+      () async {
+        SharedPreferences.setMockInitialValues(<String, Object>{
+          SharedPreferencesFirstMissionGuideStore.key: true,
+          SharedPreferencesFirstMissionGuideStore.tipsKey: <String>[
+            'bossWave',
+            'tipFromNewerBuild',
+          ],
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = _FailingCompletionPrefsStore(preferences: preferences);
+
+        await expectLater(store.resetForReplay(), throwsStateError);
+
+        // The clear landed but setCompleted threw: the rollback must
+        // restore the record verbatim — a typed restore could re-emit
+        // bossWave but never tipFromNewerBuild.
+        expect(
+          preferences.getStringList(
+            SharedPreferencesFirstMissionGuideStore.tipsKey,
+          ),
+          ['bossWave', 'tipFromNewerBuild'],
+        );
+        expect(
+          preferences.getBool(SharedPreferencesFirstMissionGuideStore.key),
+          isTrue,
+        );
+      },
+    );
+
+    test('a failed in-memory reset restores the typed seen set', () async {
+      final store = _FailingCompletionInMemoryStore(
+        completed: true,
+        seenTips: const {ContextualTip.bossWave},
+      );
+
+      await expectLater(store.resetForReplay(), throwsStateError);
+
+      expect(await store.loadSeenTips(), {ContextualTip.bossWave});
+      expect(await store.loadCompleted(), isTrue);
     });
   });
 
