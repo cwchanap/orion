@@ -72,6 +72,18 @@ class _FailingCompletionGuideStore extends InMemoryFirstMissionGuideStore {
       Future.error(StateError('simulated persistence failure'));
 }
 
+/// The same completion failure against the real SharedPreferences
+/// implementation, so a rollback over the raw stored record — unknown
+/// newer-build IDs included — is observable end to end.
+class _FailingCompletionPrefsGuideStore
+    extends SharedPreferencesFirstMissionGuideStore {
+  _FailingCompletionPrefsGuideStore({required super.preferences});
+
+  @override
+  Future<void> setCompleted(bool completed) =>
+      Future.error(StateError('simulated persistence failure'));
+}
+
 /// Pumps the page at the 360x640 viewport, starts Alpha from its briefing,
 /// and returns the captor holding the mounted game.
 Future<_GameRef> _pumpMission(
@@ -571,6 +583,50 @@ void main() {
     expect(await store.loadSeenTips(), {ContextualTip.bossWave});
     expect(await store.loadCompleted(), isTrue);
   });
+
+  testWidgets(
+    'a failed Replay Tutorial restores the raw stored record, unknown '
+    'IDs included',
+    (tester) async {
+      // A downgraded client can hold tip IDs written by a newer build:
+      // the clear removes them, and a typed rollback could re-emit
+      // bossWave but never tipFromNewerBuild — the reset must restore
+      // the raw record verbatim.
+      SharedPreferences.setMockInitialValues(<String, Object>{
+        SharedPreferencesFirstMissionGuideStore.key: true,
+        SharedPreferencesFirstMissionGuideStore.tipsKey: <String>[
+          'bossWave',
+          'tipFromNewerBuild',
+        ],
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final store = _FailingCompletionPrefsGuideStore(preferences: preferences);
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        harness.testGamePage(firstMissionGuideStore: store),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Replay Tutorial'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Tutorial will replay on your next Outpost Alpha run.'),
+        findsNothing,
+      );
+      expect(
+        preferences.getStringList(
+          SharedPreferencesFirstMissionGuideStore.tipsKey,
+        ),
+        ['bossWave', 'tipFromNewerBuild'],
+      );
+      expect(await store.loadCompleted(), isTrue);
+    },
+  );
 
   group('unlock tips on the selected-cell rail', () {
     const railgunCopy = 'Railgun unlocked. Pierces enemies in a line.';

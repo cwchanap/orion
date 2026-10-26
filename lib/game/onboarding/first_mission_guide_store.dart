@@ -12,6 +12,14 @@ abstract interface class FirstMissionGuideStore {
   /// stored record is missing/unreadable.
   Future<Set<ContextualTip>> loadSeenTips();
   Future<void> setSeenTips(Set<ContextualTip> tips);
+
+  /// The Replay Tutorial reset as ONE operation: clears the seen-tip
+  /// record AND marks the guide incomplete. If the completion write
+  /// fails after the clear has landed, the prior tip record is restored
+  /// verbatim — unknown newer-build IDs included, which the typed
+  /// [setSeenTips] path could never write back — so a reported failure
+  /// never leaves a partial reset behind it.
+  Future<void> resetForReplay();
 }
 
 class SharedPreferencesFirstMissionGuideStore
@@ -95,6 +103,31 @@ class SharedPreferencesFirstMissionGuideStore
       throw StateError('Failed to save contextual tips.');
     }
   }
+
+  @override
+  Future<void> resetForReplay() async {
+    // Snapshot the RAW record before the clear: a downgraded build can
+    // hold IDs written by a newer build, and restoring through the typed
+    // setSeenTips path could never re-emit them.
+    List<String>? previous;
+    try {
+      previous = preferences.getStringList(tipsKey);
+    } on TypeError {
+      previous = null; // unreadable record — nothing preservable anyway
+    }
+    await setSeenTips(const {});
+    try {
+      await setCompleted(false);
+    } catch (_) {
+      // The clear already persisted: roll the prior record back so a
+      // reported failure leaves no partially-reset state. Best-effort —
+      // the original error must still surface to the sheet.
+      try {
+        await preferences.setStringList(tipsKey, previous ?? const []);
+      } catch (_) {}
+      rethrow;
+    }
+  }
 }
 
 class InMemoryFirstMissionGuideStore implements FirstMissionGuideStore {
@@ -123,5 +156,21 @@ class InMemoryFirstMissionGuideStore implements FirstMissionGuideStore {
   @override
   Future<void> setSeenTips(Set<ContextualTip> tips) async {
     seenTips = Set.unmodifiable(tips);
+  }
+
+  @override
+  Future<void> resetForReplay() async {
+    // Routed through the virtual methods so fakes that gate or fail
+    // setSeenTips/setCompleted observe the same two writes as the real
+    // store; the restore assigns directly so it can never hang behind a
+    // test's write gate.
+    final previous = seenTips;
+    await setSeenTips(const {});
+    try {
+      await setCompleted(false);
+    } catch (_) {
+      seenTips = previous;
+      rethrow;
+    }
   }
 }

@@ -445,8 +445,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// Serializes seen-tip write-throughs behind [_seenTipsWrite] so an
   /// older replacement set can never land after a newer one. The chain
   /// head always resolves — failures are swallowed there, never
-  /// propagated — so awaiting it in Replay Tutorial drains every pending
-  /// acknowledgement before the clear is issued.
+  /// propagated — so chaining the Replay Tutorial reset onto it drains
+  /// every pending acknowledgement before the clear is issued.
   Future<void> _writeSeenTips(Set<ContextualTip> tips) {
     final store = _firstMissionGuideStore;
     if (store == null) {
@@ -1033,21 +1033,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
             throw StateError('First-mission guide store is unavailable.');
           }
           _firstMissionGuideStore = store;
-          // Chained so a still-in-flight acknowledgement lands BEFORE the
-          // clear — it can never repopulate the replayed set afterwards.
-          final previousTips = _seenTips;
-          await _writeSeenTips(const {});
-          try {
-            await store.setCompleted(false);
-          } catch (_) {
-            // The clear already persisted: restore the prior set so a
-            // reported failure leaves no partially-reset record. A failed
-            // restore is swallowed only to surface the original error.
-            try {
-              await _writeSeenTips(previousTips);
-            } catch (_) {}
-            rethrow;
-          }
+          // Chained behind every pending acknowledgement like the other
+          // seen-tip writes — an in-flight ack lands BEFORE the reset and
+          // can never repopulate the replayed set. The store makes the
+          // pair transactional: if the completion write fails after the
+          // clear, the prior record is restored verbatim, so a reported
+          // failure persists nothing.
+          final guideStore = store;
+          final reset = _seenTipsWrite.then((_) => guideStore.resetForReplay());
+          _seenTipsWrite = reset.catchError((_) {});
+          await reset;
           if (mounted) {
             setState(() {
               _seenTips = const {};

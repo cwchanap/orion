@@ -5220,6 +5220,11 @@ class _FailingFirstMissionGuideStore implements FirstMissionGuideStore {
   Future<void> setSeenTips(Set<ContextualTip> tips) async {
     throw StateError('guide write failed');
   }
+
+  @override
+  Future<void> resetForReplay() async {
+    throw StateError('guide write failed');
+  }
 }
 
 class _FailingFeedbackPreferencesStore implements FeedbackPreferencesStore {
