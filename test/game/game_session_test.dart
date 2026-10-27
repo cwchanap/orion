@@ -173,6 +173,13 @@ void main() {
       expect(snapshot.autoStartCountdownRemaining, isNull);
     });
 
+    test('snapshot carries read-only boss presence input', () {
+      final session = GameSession.initial();
+
+      expect(session.snapshot().bossActive, isFalse);
+      expect(session.snapshot(bossActive: true).bossActive, isTrue);
+    });
+
     test('snapshot can carry mission pacing state from the game layer', () {
       final snapshot = GameSession.initial().snapshot(
         isPaused: true,

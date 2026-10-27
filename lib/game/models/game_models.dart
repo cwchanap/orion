@@ -570,6 +570,7 @@ class GameSnapshot {
     this.selectedCellBuildable = true,
     required this.feedback,
     required this.isPaused,
+    this.bossActive = false,
     required this.speedMultiplier,
     required this.autoStartEnabled,
     required this.autoStartCountdownRemaining,
@@ -615,6 +616,7 @@ class GameSnapshot {
   final bool selectedCellBuildable;
   final String? feedback;
   final bool isPaused;
+  final bool bossActive;
   final double speedMultiplier;
   final bool autoStartEnabled;
   final double? autoStartCountdownRemaining;
