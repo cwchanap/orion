@@ -1048,6 +1048,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     add(enemy);
     if (bossDef != null) {
       gameFeedback.bossArrived();
+      _publishSnapshot();
     }
   }
 
@@ -1300,6 +1301,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       selectedTower: _selectedTower,
       feedback: feedback,
       isPaused: _isPaused,
+      bossActive: _activeEnemyComponents.values.any(
+        (enemy) => enemy.stats is BossDefinition,
+      ),
       speedMultiplier: _speedMultiplier,
       autoStartEnabled: _autoStartEnabled,
       autoStartCountdownRemaining: _autoStartCountdownRemaining,

@@ -1,10 +1,13 @@
 import 'dart:async';
 
+import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/feedback/game_music.dart';
 import 'package:orion/game/models/game_models.dart';
+
+const _audioChannel = MethodChannel('xyz.luan/audioplayers');
 
 void main() {
   group('MusicTrack', () {
@@ -196,17 +199,16 @@ void main() {
     });
 
     test('default player constructs its Bgm only on first play', () async {
-      const audioChannel = MethodChannel('xyz.luan/audioplayers');
       final messenger =
           TestWidgetsFlutterBinding.instance.defaultBinaryMessenger;
       final methods = <String>[];
-      messenger.setMockMethodCallHandler(audioChannel, (call) async {
+      messenger.setMockMethodCallHandler(_audioChannel, (call) async {
         methods.add(call.method);
         throw Exception('audioplayers unavailable');
       });
       addTearDown(() {
         messenger.setMockMethodCallHandler(
-          audioChannel,
+          _audioChannel,
           (call) async => throw Exception('audioplayers unavailable'),
         );
       });
@@ -223,6 +225,58 @@ void main() {
         expect(messages, isNotEmpty);
         await controller.dispose();
       });
+    });
+
+    test('loads music from FlameAudio audio asset directory', () async {
+      final originalMusicCache = FlameAudio.audioCache;
+      final originalDefaultCache = AudioCache.instance;
+      final musicCache = _RecordingAudioCache(prefix: 'assets/audio/');
+      final defaultCache = _RecordingAudioCache(prefix: 'assets/');
+      final messenger =
+          TestWidgetsFlutterBinding.instance.defaultBinaryMessenger;
+      FlameAudio.audioCache = musicCache;
+      AudioCache.instance = defaultCache;
+      messenger.setMockMethodCallHandler(_audioChannel, (call) async {
+        if (call.method == 'create') {
+          final playerId = call.arguments['playerId'] as String;
+          messenger.setMockMethodCallHandler(
+            MethodChannel('xyz.luan/audioplayers/events/$playerId'),
+            (eventCall) async => null,
+          );
+        } else if (call.method == 'setSourceUrl') {
+          final playerId = call.arguments['playerId'] as String;
+          messenger.handlePlatformMessage(
+            'xyz.luan/audioplayers/events/$playerId',
+            const StandardMethodCodec().encodeSuccessEnvelope({
+              'event': 'audio.onPrepared',
+              'value': true,
+            }),
+            (reply) {},
+          );
+        } else if (call.method == 'dispose') {
+          final playerId = call.arguments['playerId'] as String;
+          messenger.setMockMethodCallHandler(
+            MethodChannel('xyz.luan/audioplayers/events/$playerId'),
+            null,
+          );
+        }
+        return null;
+      });
+      addTearDown(() {
+        FlameAudio.audioCache = originalMusicCache;
+        AudioCache.instance = originalDefaultCache;
+        messenger.setMockMethodCallHandler(
+          _audioChannel,
+          (call) async => throw Exception('audioplayers unavailable'),
+        );
+      });
+
+      final controller = GameMusicController();
+      await controller.set(MusicTrack.map);
+      await controller.dispose();
+
+      expect(musicCache.assetKeys, ['assets/audio/music_map.wav']);
+      expect(defaultCache.assetKeys, isEmpty);
     });
   });
 }
@@ -335,5 +389,18 @@ class _FakeMusicPlayer implements MusicPlayer {
       return Future<void>.error(disposeError!);
     }
     return Future<void>.value();
+  }
+}
+
+class _RecordingAudioCache extends AudioCache {
+  _RecordingAudioCache({required super.prefix});
+
+  final assetKeys = <String>[];
+
+  @override
+  Future<String> loadPath(String fileName) async {
+    final assetKey = '$prefix$fileName';
+    assetKeys.add(assetKey);
+    return assetKey;
   }
 }
