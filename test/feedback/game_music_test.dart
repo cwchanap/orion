@@ -136,6 +136,20 @@ void main() {
       },
     );
 
+    test('a repeated silence target retries a failed stop', () async {
+      final player = _FakeMusicPlayer(stopError: StateError('stop failed'));
+      final controller = GameMusicController(player: player);
+
+      await controller.set(MusicTrack.map);
+      await controller.set(null);
+
+      player.stopError = null;
+      await controller.set(null);
+
+      expect(player.calls, ['play:music_map.wav', 'stop', 'stop']);
+      await controller.dispose();
+    });
+
     test('disposal invalidates pending playback and is idempotent', () async {
       final player = _FakeMusicPlayer()..playGate = Completer<void>();
       final controller = GameMusicController(player: player);
@@ -354,7 +368,7 @@ class _FakeMusicPlayer implements MusicPlayer {
   final Completer<void> playStarted = Completer<void>();
   Completer<void>? playGate;
   final Object? playError;
-  final Object? stopError;
+  Object? stopError;
   final Object? disposeError;
   final bool throwPlaySynchronously;
 
