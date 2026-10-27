@@ -1,3 +1,4 @@
+import 'package:flame_audio/flame_audio.dart';
 import 'package:flame_audio/bgm.dart';
 import 'package:flutter/foundation.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -166,7 +167,7 @@ final class _BgmMusicPlayer implements MusicPlayer {
 
   @override
   Future<void> play(String filename) async {
-    final bgm = _bgm ??= Bgm();
+    final bgm = _bgm ??= Bgm(audioCache: FlameAudio.audioCache);
     await bgm.play(filename, volume: 0.18);
   }
 

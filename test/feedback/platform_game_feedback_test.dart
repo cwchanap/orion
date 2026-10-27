@@ -8,6 +8,7 @@ import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
+import 'package:orion/game/feedback/game_music.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
@@ -132,6 +133,17 @@ class _PoolChannelHarness {
           (reply) {},
         );
   }
+}
+
+final class _NoOpMusicPlayer implements MusicPlayer {
+  @override
+  Future<void> play(String filename) async {}
+
+  @override
+  Future<void> stop() async {}
+
+  @override
+  Future<void> dispose() async {}
 }
 
 void main() {
@@ -822,6 +834,8 @@ void main() {
       feedbackPreferencesStore: InMemoryFeedbackPreferencesStore(),
       firstMissionGuideStore: InMemoryFirstMissionGuideStore(completed: true),
       gameFeedback: gameFeedback,
+      // These cases measure SFX pool ownership on the shared audio channel.
+      gameMusicController: GameMusicController(player: _NoOpMusicPlayer()),
     ),
   );
 

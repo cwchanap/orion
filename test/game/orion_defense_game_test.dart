@@ -2421,6 +2421,7 @@ void main() {
 
         final boss = game.children.whereType<EnemyComponent>().single;
         expect(boss.stats, isA<BossDefinition>());
+        expect(game.snapshot.bossActive, isTrue);
 
         // Advance the boss directly past firstDelay to trigger the summon.
         game.update(0.5 + 0.01);
@@ -2448,6 +2449,7 @@ void main() {
           ),
           isNotEmpty,
         );
+        expect(game.snapshot.bossActive, isFalse);
         expect(game.snapshot.phase, GamePhase.wave);
 
         // Clearing the minions completes the wave.
@@ -3736,6 +3738,7 @@ void main() {
         game.processLifecycleEvents();
         final boss = game.children.whereType<EnemyComponent>().single;
         expect(boss.stats, isA<BossDefinition>());
+        expect(game.snapshot.bossActive, isTrue);
         expect(feedback.calls, [
           _RecordedFeedbackCall.waveStarted,
           _RecordedFeedbackCall.bossArrived,
@@ -3749,6 +3752,7 @@ void main() {
             .where((enemy) => enemy != boss)
             .toList();
         expect(minions, isNotEmpty);
+        expect(game.snapshot.bossActive, isTrue);
         expect(
           feedback.calls.where(
             (call) => call == _RecordedFeedbackCall.bossArrived,
@@ -3756,6 +3760,128 @@ void main() {
           hasLength(1),
         );
       });
+
+      test('boss snapshot clears on kill and preserves existing SFX', () async {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _bossSummonStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final boss = game.children.whereType<EnemyComponent>().single;
+        expect(game.snapshot.bossActive, isTrue);
+
+        boss.applyDamage(boss.maxHealth);
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.bossActive, isFalse);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.bossArrived,
+          _RecordedFeedbackCall.bossDefeated,
+        ]);
+      });
+
+      test('boss snapshot clears on a nonlethal base leak', () async {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          stage: _bossSummonStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+
+        game.startWave();
+        game.update(0.01);
+        game.processLifecycleEvents();
+        final boss = game.children.whereType<EnemyComponent>().single;
+        expect(game.snapshot.bossActive, isTrue);
+
+        boss.resolveReachedBase();
+        game.processLifecycleEvents();
+
+        expect(game.snapshot.bossActive, isFalse);
+        expect(game.snapshot.phase, GamePhase.wave);
+        expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth - 1);
+        expect(feedback.calls, [
+          _RecordedFeedbackCall.waveStarted,
+          _RecordedFeedbackCall.bossArrived,
+          _RecordedFeedbackCall.coreHit,
+        ]);
+      });
+
+      test(
+        'multiple live bosses keep the projection true until the last dies',
+        () async {
+          final feedback = _RecordingGameFeedback();
+          final game = OrionDefenseGame(
+            stage: _multipleBossStage(),
+            gameFeedback: feedback,
+          );
+          game.onGameResize(Vector2(800, 1200));
+          await game.onLoad();
+          // ignore: invalid_use_of_internal_member
+          game.setMounted();
+
+          game.startWave();
+          game.update(0.03);
+          game.processLifecycleEvents();
+          final bosses = game.children.whereType<EnemyComponent>().toList();
+          expect(bosses, hasLength(2));
+          expect(game.snapshot.bossActive, isTrue);
+
+          bosses.first.applyDamage(bosses.first.maxHealth);
+          game.processLifecycleEvents();
+          expect(game.snapshot.bossActive, isTrue);
+
+          bosses.last.applyDamage(bosses.last.maxHealth);
+          game.processLifecycleEvents();
+          expect(game.snapshot.bossActive, isFalse);
+          expect(
+            feedback.calls.where(
+              (call) => call == _RecordedFeedbackCall.bossArrived,
+            ),
+            hasLength(2),
+          );
+        },
+      );
+
+      test(
+        'restart clears live boss projection without extra feedback',
+        () async {
+          final feedback = _RecordingGameFeedback();
+          final game = OrionDefenseGame(
+            stage: _bossSummonStage(),
+            gameFeedback: feedback,
+          );
+          game.onGameResize(Vector2(800, 1200));
+          await game.onLoad();
+          // ignore: invalid_use_of_internal_member
+          game.setMounted();
+
+          game.startWave();
+          game.update(0.01);
+          game.processLifecycleEvents();
+          expect(game.snapshot.bossActive, isTrue);
+
+          game.restart();
+
+          expect(game.snapshot.bossActive, isFalse);
+          expect(feedback.calls, [
+            _RecordedFeedbackCall.waveStarted,
+            _RecordedFeedbackCall.bossArrived,
+          ]);
+        },
+      );
 
       test('towerSold fires on refund only; denied sale stays silent', () {
         final feedback = _RecordingGameFeedback();
@@ -3998,6 +4124,46 @@ StageDefinition _bossSummonStage() {
       WaveDefinition(groups: [], clearBonus: 0),
     ],
     unlockDependencies: const [],
+    isMainPath: true,
+    mainPathOrder: 1,
+    mapColumn: 0,
+    mapRow: 0,
+  );
+}
+
+StageDefinition _multipleBossStage() {
+  return StageDefinition(
+    id: 'multiple-boss-stage',
+    name: 'Multiple Boss Stage',
+    mapLabel: 'Bosses',
+    description: 'Two simultaneous bosses for snapshot projection tests',
+    pathCells: [
+      GridPosition(0, 0),
+      GridPosition(1, 0),
+      GridPosition(2, 0),
+      GridPosition(3, 0),
+      GridPosition(4, 0),
+    ],
+    waves: [
+      WaveDefinition(
+        groups: [
+          WaveGroup(
+            enemyCount: 2,
+            spawnInterval: 0.01,
+            enemyStats: BossDefinition(
+              health: 5000,
+              speed: 0,
+              baseDamage: 1,
+              goldReward: 0,
+              sprite: BossSprite.swarmQueen,
+              name: 'Test Boss',
+            ),
+          ),
+        ],
+        clearBonus: 0,
+      ),
+    ],
+    unlockDependencies: [],
     isMainPath: true,
     mainPathOrder: 1,
     mapColumn: 0,

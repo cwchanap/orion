@@ -13,6 +13,7 @@ import '../campaign/stage_definition.dart';
 import '../campaign/tech_tree.dart';
 import '../feedback/feedback_preferences.dart';
 import '../feedback/game_feedback.dart';
+import '../feedback/game_music.dart';
 import '../models/game_models.dart';
 import '../onboarding/contextual_tips.dart';
 import '../onboarding/first_mission_guide.dart';
@@ -58,6 +59,7 @@ class OrionGamePage extends StatefulWidget {
     this.firstMissionGuideStore,
     this.moduleOfferPicker,
     this.gameFeedback,
+    this.gameMusicController,
     this.onGameCreated,
   });
 
@@ -75,6 +77,11 @@ class OrionGamePage extends StatefulWidget {
   final ModuleOfferPicker? moduleOfferPicker;
 
   final GameFeedback? gameFeedback;
+
+  /// Optional music owner for tests or an embedding host. The page never
+  /// disposes an injected controller.
+  final GameMusicController? gameMusicController;
+
   final ValueChanged<OrionDefenseGame>? onGameCreated;
 
   @override
@@ -127,6 +134,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
   final GlobalKey _moduleDraftGuideAnchorKey = GlobalKey();
   bool _isSavingFeedback = false;
   late final GameFeedback _gameFeedback;
+  late final GameMusicController _gameMusicController;
+  GameMusicController? _ownedGameMusicController;
+  late final AppLifecycleListener _appLifecycleListener;
+  bool _appForeground = true;
+  VoidCallback? _gameSnapshotListener;
 
   /// The feedback this page created, if any. Non-null only when no
   /// [OrionGamePage.gameFeedback] was injected; disposed in [dispose] —
@@ -148,6 +160,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
   @override
   void initState() {
     super.initState();
+    final lifecycleState = WidgetsBinding.instance.lifecycleState;
+    _appForeground =
+        lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
+    _ownedGameMusicController = widget.gameMusicController == null
+        ? GameMusicController()
+        : null;
+    _gameMusicController =
+        widget.gameMusicController ?? _ownedGameMusicController!;
+    _appLifecycleListener = AppLifecycleListener(
+      onStateChange: _handleAppLifecycleStateChanged,
+    );
     _ownedGameFeedback = widget.gameFeedback == null
         ? PlatformGameFeedback(
             // Suppress both channels until the persisted preference store has
@@ -176,8 +199,56 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // teardown (widget unmount / app root disposal).
   @override
   void dispose() {
+    _appLifecycleListener.dispose();
+    final game = _game;
+    final listener = _gameSnapshotListener;
+    if (game != null && listener != null) {
+      game.stateNotifier.removeListener(listener);
+    }
+    _gameSnapshotListener = null;
+    _appForeground = false;
+    _syncMusic();
+    _ownedGameMusicController?.dispose().ignore();
     _ownedGameFeedback?.dispose();
     super.dispose();
+  }
+
+  void _handleAppLifecycleStateChanged(AppLifecycleState state) {
+    if (!mounted) return;
+    _appForeground = state == AppLifecycleState.resumed;
+    _syncMusic();
+  }
+
+  void _listenToGame(OrionDefenseGame? game) {
+    final previous = _game;
+    final previousListener = _gameSnapshotListener;
+    if (previous != null && previousListener != null) {
+      previous.stateNotifier.removeListener(previousListener);
+    }
+    _gameSnapshotListener = null;
+    _game = game;
+    if (game == null) return;
+
+    void listener() {
+      if (!mounted || !identical(_game, game)) return;
+      _syncMusic();
+    }
+
+    _gameSnapshotListener = listener;
+    game.stateNotifier.addListener(listener);
+  }
+
+  void _syncMusic() {
+    _gameMusicController
+        .set(
+          desiredMusicTrack(
+            prefsLoaded: _feedbackPreferencesLoaded,
+            musicOn: _feedbackPreferences.musicEnabled,
+            appForeground: _appForeground,
+            stage: _game?.snapshot,
+          ),
+        )
+        .ignore();
   }
 
   @override
@@ -333,6 +404,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         }
         _feedbackPreferencesLoaded = true;
       });
+      _syncMusic();
       return;
     }
 
@@ -351,6 +423,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _feedbackPreferencesStore = feedbackStore;
         _feedbackPreferencesLoaded = true;
       });
+      _syncMusic();
     } catch (_) {
       if (!mounted) {
         return;
@@ -362,6 +435,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _feedbackPreferencesStore = feedbackStore;
         _feedbackPreferencesLoaded = true;
       });
+      _syncMusic();
     }
   }
 
@@ -1090,6 +1164,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
           _mapFeedback = null;
         }
       });
+      _syncMusic();
     } catch (_) {
       // Keep the prior effective value; surface a breadcrumb like the
       // campaign persistence failure path.
@@ -1151,11 +1226,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     setState(() {
       _mapFeedback = null;
-      _game = game;
+      _listenToGame(game);
       _inspectedTowerId = null;
       _boardViewport = null;
       _activeView = _ShellView.stage;
     });
+    _syncMusic();
   }
 
   void _showLockedStageFeedback(StageDefinition stage) {
@@ -1399,9 +1475,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
     setState(() {
-      _game = null;
+      _listenToGame(null);
       _activeView = _ShellView.worldMap;
     });
+    _syncMusic();
   }
 
   void _returnFromMissionReport() {
@@ -1552,12 +1629,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _techTree = CampaignTechTree();
         _committedProgress = CampaignProgress();
         _committedTechTree = CampaignTechTree();
-        _game = null;
+        _listenToGame(null);
         _activeView = _ShellView.worldMap;
         _mapFeedback = 'Campaign reset.';
         _pendingSaves = 0;
         _isSavingProgress = false;
       });
+      _syncMusic();
     } catch (_) {
       if (!mounted) {
         return;
