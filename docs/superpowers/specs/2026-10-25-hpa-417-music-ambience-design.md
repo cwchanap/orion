@@ -3,7 +3,7 @@
 **Linear:** [HPA-417](https://linear.app/cwchanap/issue/HPA-417/orion-add-music-and-ambience-with-a-separate-music-setting)  
 **Separate music asset task:** [HPA-168](https://linear.app/cwchanap/issue/HPA-168/orion-produce-original-ambient-music-loops-for-hpa-417)  
 **Baseline:** `main` at `54ddbe82259b59b646ba24167937923b68449b99` (2026-10-25 local)  
-**Status:** proposed; this PR contains design and implementation plan, not runtime code or binary assets.
+**Status:** runtime behavior is implemented in this PR; HPA-168 assets and real-device acceptance remain pending.
 
 ## Player outcome
 
