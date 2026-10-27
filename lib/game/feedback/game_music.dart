@@ -54,7 +54,8 @@ final class GameMusicController {
   bool _disposed = false;
 
   Future<void> set(MusicTrack? track) {
-    if (_disposed || track == _desiredTrack) {
+    if (_disposed ||
+        (track == _desiredTrack && _playingTrack == _desiredTrack)) {
       return _commands;
     }
     _desiredTrack = track;
