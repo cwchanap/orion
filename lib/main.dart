@@ -1,12 +1,20 @@
+import 'package:flame_audio/flame_audio.dart' show AudioPlayer;
 import 'package:flutter/foundation.dart'
-    show LicenseEntryWithLineBreaks, LicenseRegistry;
+    show LicenseEntryWithLineBreaks, LicenseRegistry, debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import 'game/feedback/game_feedback.dart';
 import 'game/ui/orion_game_page.dart';
 import 'game/ui/orion_theme_data.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await AudioPlayer.global.setAudioContext(gameAudioContext);
+  } catch (error) {
+    debugPrint('Orion: failed to configure shared audio context: $error');
+  }
   _registerFontLicenses();
   runApp(const OrionApp());
 }

@@ -74,6 +74,7 @@ class _PoolChannelHarness {
   final createdPlayerIds = <String>[];
   final disposedPlayerIds = <String>[];
   final resumedPlayerIds = <String>[];
+  final audioContexts = <Map<String, dynamic>>[];
 
   /// When set, every 'create' parks until the gate completes, simulating
   /// pool initialization still in flight.
@@ -104,9 +105,13 @@ class _PoolChannelHarness {
       case 'setPlayerMode':
       case 'setReleaseMode':
       case 'setVolume':
-      case 'setAudioContext':
       case 'stop':
       case 'release':
+        return null;
+      case 'setAudioContext':
+        final arguments = Map<String, dynamic>.from(call.arguments as Map)
+          ..remove('playerId');
+        audioContexts.add(arguments);
         return null;
       case 'setSourceUrl':
         _emitPrepared(call.arguments['playerId'] as String);
@@ -146,6 +151,15 @@ final class _NoOpMusicPlayer implements MusicPlayer {
   Future<void> dispose() async {}
 }
 
+final _playerAudioContexts = <Map<String, dynamic>>[];
+final _expectedGameAudioContext = AudioContext(
+  iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
+  android: AudioContextAndroid(
+    usageType: AndroidUsageType.game,
+    audioFocus: AndroidAudioFocus.none,
+  ),
+);
+
 void main() {
   late AudioCache originalAudioCache;
   late _RecordingAudioCache recordingCache;
@@ -157,6 +171,7 @@ void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
     combatStarts.clear();
+    _playerAudioContexts.clear();
     clockMs = 0;
     originalAudioCache = FlameAudio.audioCache;
     recordingCache = _RecordingAudioCache();
@@ -262,6 +277,10 @@ void main() {
                   );
               return null;
             case 'setAudioContext':
+              final arguments = Map<String, dynamic>.from(call.arguments as Map)
+                ..remove('playerId');
+              _playerAudioContexts.add(arguments);
+              return null;
             case 'setReleaseMode':
             case 'setPlayerMode':
             case 'setVolume':
@@ -821,6 +840,27 @@ void main() {
     },
   );
 
+  testWidgets('one-shot SFX players receive the shared audio context', (
+    tester,
+  ) async {
+    allowOneShotSetupChain();
+    final feedback = starterFeedback(soundEffectsEnabled: () => true);
+
+    await fireOneShot(tester, feedback.missionVictory);
+
+    expect(_playerAudioContexts, [_expectedGameAudioContext.toJson()]);
+    expect(
+      _expectedGameAudioContext.iOS.category,
+      AVAudioSessionCategory.ambient,
+    );
+    expect(_expectedGameAudioContext.android.usageType, AndroidUsageType.game);
+    expect(
+      _expectedGameAudioContext.android.audioFocus,
+      AndroidAudioFocus.none,
+    );
+    expect(tester.takeException(), isNull);
+  }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
   // Minimal page harness for ownership tests: every store injected so the
   // page never touches SharedPreferences, and the first-mission guide
   // store pre-completed so no tutorial overlay interferes. MaterialApp is
@@ -840,6 +880,40 @@ void main() {
   );
 
   group('PlatformGameFeedback page ownership and disposal', () {
+    testWidgets('pooled SFX players receive the shared audio context', (
+      tester,
+    ) async {
+      FlameAudio.audioCache = _FakeReadyAudioCache();
+      final harness = _PoolChannelHarness()..install();
+      final feedback = PlatformGameFeedback(
+        soundEffectsEnabled: () => true,
+        hapticsEnabled: () => true,
+      );
+      await flushPools(tester, () => harness.createdPlayerIds.length == 13);
+
+      expect(harness.audioContexts, hasLength(13));
+      expect(
+        harness.audioContexts,
+        everyElement(_expectedGameAudioContext.toJson()),
+      );
+      expect(
+        _expectedGameAudioContext.iOS.category,
+        AVAudioSessionCategory.ambient,
+      );
+      expect(
+        _expectedGameAudioContext.android.usageType,
+        AndroidUsageType.game,
+      );
+      expect(
+        _expectedGameAudioContext.android.audioFocus,
+        AndroidAudioFocus.none,
+      );
+
+      feedback.dispose();
+      await flushPools(tester, () => harness.disposedPlayerIds.length == 13);
+      expect(tester.takeException(), isNull);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
     testWidgets('dispose releases every owned pool player and is idempotent', (
       tester,
     ) async {

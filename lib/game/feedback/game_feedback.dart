@@ -6,6 +6,14 @@ import 'package:flutter/services.dart';
 import 'package:orion/game/feedback/combat_sound_limiter.dart';
 import 'package:orion/game/models/game_models.dart';
 
+final AudioContext gameAudioContext = AudioContext(
+  iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
+  android: AudioContextAndroid(
+    usageType: AndroidUsageType.game,
+    audioFocus: AndroidAudioFocus.none,
+  ),
+);
+
 abstract interface class GameFeedback {
   void towerConfirmed();
   void waveCleared();
@@ -208,6 +216,7 @@ final class PlatformGameFeedback implements GameFeedback {
         pool = await FlameAudio.createPool(
           cue.filename,
           maxPlayers: _playersPerPool,
+          audioContext: gameAudioContext,
         );
       } catch (error) {
         debugPrint(
@@ -304,7 +313,7 @@ final class PlatformGameFeedback implements GameFeedback {
 
   Future<void> _playSound(String sound) async {
     try {
-      await FlameAudio.play(sound);
+      await FlameAudio.play(sound, audioContext: gameAudioContext);
     } catch (error) {
       debugPrint('PlatformGameFeedback: failed to play sound "$sound": $error');
     }
