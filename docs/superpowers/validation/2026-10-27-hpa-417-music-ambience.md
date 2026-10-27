@@ -1,4 +1,4 @@
-# HPA-417 music and ambience: native preflight
+# HPA-417 music and ambience: validation and acceptance
 
 Date: 2026-10-27
 
@@ -21,12 +21,32 @@ Date: 2026-10-27
 | `rtk flutter pub get --offline` (disposable spike) | Exit 0; resolved `flame_audio` 2.12.2 and `audioplayers` 6.8.1 from local cache. |
 | `rtk flutter run --no-pub --debug --device-id 00008120-000C1DE214B9A01E` | Exit 1 before install: Flutter requires Developer Mode to be enabled on the phone. |
 
+## Runtime implementation and review
+
+The runtime implementation is at `5dddd0b` (`fix(audio): preserve shared context for game SFX`). It adds the independent Music preference and settings switch, a pure track selector and serialized controller with a lazy page-owned `Bgm`, a live read-only boss projection, page lifecycle/navigation synchronization, and startup audio context shared by music and SFX. The code-only asset contract test is present and gated on HPA-168 files.
+
+The scoped diff from `54ddbe8` contains no music binaries, generator, `pubspec.yaml`/lockfile or dependency edits, and no gameplay or balance tuning. Boss activity is projected from live enemy components. Tasks 0–4 had separate implementation reviews and all passed; the Task 4 review reported no Critical or Important findings. Task 5 reviewed the exact source commit and found no code drift.
+
+## Automated validation
+
+| Check | Result |
+| --- | --- |
+| `rtk dart format --output=none --set-exit-if-changed lib/game/feedback lib/game/ui/orion_game_page.dart lib/game/orion_defense_game.dart lib/game/ui/feedback_settings_sheet.dart test` | Exit 0; 89 files checked, 0 changed. |
+| `rtk flutter test test/game/feedback_preferences_test.dart test/feedback/shared_preferences_feedback_store_test.dart test/widget/feedback_settings_sheet_test.dart test/feedback/game_music_test.dart test/feedback/audio_asset_contract_test.dart` | Exit 0; 43 passed, 1 skipped for the four absent HPA-168 WAVs. |
+| `rtk flutter analyze` | Reused Task 4 result at the exact same source commit: no issues found. |
+| `rtk flutter test` | Reused Task 4 captured result at the exact same source commit: exit 0, 1,281 passed, 1 HPA-168 asset skip. |
+| `rtk flutter test test/widget/mission_collapsible_test.dart` | Exit 0; 8 passed. It reproduces the probe tap warnings recorded in Task 4; the test and `MissionCollapsible` are unchanged from `54ddbe8`. |
+
+Full-suite and analyzer checks were not rerun because the checkout was clean at `5dddd0b` and Task 5 changes only validation/status documentation. Durable, ignored command logs are in `.superpowers/sdd/2026-10-25-hpa-417-music-ambience/scratch/`; the full-suite log is `task-4-full-test.log`. The test runner's throwing audio-channel stubs still produce caught/logged native-player failures in page smoke tests; these are visible in the captured full log and did not escape as test failures.
+
+The isolated mission-collapse test also passes while emitting Flutter's missed-hit-test warnings for its probe widgets. This test harness warning predates HPA-417; no unrelated component or input tests were changed.
+
 ## Acceptance gates — still pending
 
-- [ ] iOS loop seam listening on a physical device.
-- [ ] iOS Silent switch behavior.
-- [ ] iOS mixing with other-app music and interruption behavior during calls.
-- [ ] Android physical-device playback and interruption behavior.
-- [ ] HPA-168 music files, explicit asset declarations, and asset-loop acceptance.
+- [ ] HPA-168 merges all four music files and their explicit asset declarations; the asset-contract test runs without skipping and verifies format, duration, and size.
+- [ ] Real-device listening verifies each loop seam, audibility relative to SFX, and stop/restart behavior.
+- [ ] iOS Silent switch, external-audio mixing, and interruption behavior are verified on device.
+- [ ] Android physical playback, lifecycle behavior, and calls/other-app audio behavior are verified on device.
+- [ ] One documented iOS and Android listening pass completes the acceptance matrix.
 
-No audible behavior is inferred from package availability or device discovery. The spike did not instantiate `Bgm`, so there is no native constructor result to report.
+The gates remain unchecked: `music_{map,build,wave,boss}.wav` are absent, the paired iPhone cannot install while Developer Mode is disabled, and `adb` is unavailable. The early iOS spike stopped before installation and did not instantiate `Bgm`; no audible behavior has been verified.
