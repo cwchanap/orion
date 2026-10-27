@@ -35,6 +35,7 @@ void main() {
     expect(findOrionTitle('Settings'), findsOneWidget);
     expect(find.text('Sound Effects'), findsOneWidget);
     expect(find.text('Haptics'), findsOneWidget);
+    expect(find.text('Music'), findsOneWidget);
     expect(find.text('Reduced Motion'), findsOneWidget);
     expect(find.text('Replay Tutorial'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
@@ -108,6 +109,7 @@ void main() {
       initial: const FeedbackPreferences(
         soundEffectsEnabled: false,
         hapticsEnabled: true,
+        musicEnabled: false,
       ),
     );
     final soundSwitch = tester.widget<SwitchListTile>(
@@ -116,8 +118,12 @@ void main() {
     final hapticsSwitch = tester.widget<SwitchListTile>(
       find.widgetWithText(SwitchListTile, 'Haptics'),
     );
+    final musicSwitch = tester.widget<SwitchListTile>(
+      find.widgetWithText(SwitchListTile, 'Music'),
+    );
     expect(soundSwitch.value, isFalse);
     expect(hapticsSwitch.value, isTrue);
+    expect(musicSwitch.value, isFalse);
     expect(tester.takeException(), isNull);
   });
 
@@ -141,9 +147,10 @@ void main() {
       initial: const FeedbackPreferences(
         soundEffectsEnabled: true,
         hapticsEnabled: true,
+        musicEnabled: true,
       ),
     );
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Music'));
     await tester.pump();
 
     final soundSwitch = tester.widget<SwitchListTile>(
@@ -152,8 +159,12 @@ void main() {
     final hapticsSwitch = tester.widget<SwitchListTile>(
       find.widgetWithText(SwitchListTile, 'Haptics'),
     );
+    final musicSwitch = tester.widget<SwitchListTile>(
+      find.widgetWithText(SwitchListTile, 'Music'),
+    );
     expect(soundSwitch.value, isTrue);
-    expect(hapticsSwitch.value, isFalse);
+    expect(hapticsSwitch.value, isTrue);
+    expect(musicSwitch.value, isFalse);
     expect(tester.takeException(), isNull);
   });
 
@@ -184,17 +195,19 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
-    // Toggle Sound Effects off, then confirm Done pops the draft.
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+    // Toggle Music off, then confirm Done pops the independent draft value.
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Music'));
     await tester.pump();
+    await tester.ensureVisible(find.text('Done'));
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
     expect(
       popped,
       const FeedbackPreferences(
-        soundEffectsEnabled: false,
+        soundEffectsEnabled: true,
         hapticsEnabled: true,
+        musicEnabled: false,
       ),
     );
     expect(tester.takeException(), isNull);
@@ -229,8 +242,8 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
 
-    // Toggle Sound Effects off in the draft, then dismiss without Done.
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+    // Toggle Music off in the draft, then dismiss without Done.
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Music'));
     await tester.pump();
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
