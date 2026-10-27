@@ -4,7 +4,7 @@ import '../feedback/feedback_preferences.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-/// Self-contained settings sheet for the two persisted feedback toggles plus
+/// Self-contained settings sheet for the three persisted feedback toggles plus
 /// the first-mission tutorial replay action.
 ///
 /// Owns only a local draft of the preferences and pops the final value when
@@ -82,6 +82,15 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
                 onChanged: (enabled) {
                   setState(() {
                     _draft = _draft.copyWith(soundEffectsEnabled: enabled);
+                  });
+                },
+              ),
+              SwitchListTile(
+                title: const Text('Music'),
+                value: _draft.musicEnabled,
+                onChanged: (enabled) {
+                  setState(() {
+                    _draft = _draft.copyWith(musicEnabled: enabled);
                   });
                 },
               ),

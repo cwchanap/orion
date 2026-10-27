@@ -26,7 +26,7 @@ void main() {
       expect(await store.load(), const FeedbackPreferences());
     });
 
-    test('all four boolean combinations round-trip through one key', () async {
+    test('all eight boolean combinations round-trip through one key', () async {
       SharedPreferences.setMockInitialValues({});
       final preferences = await SharedPreferences.getInstance();
       final store = SharedPreferencesFeedbackPreferencesStore(
@@ -35,18 +35,61 @@ void main() {
 
       for (final soundEffectsEnabled in [false, true]) {
         for (final hapticsEnabled in [false, true]) {
-          final value = FeedbackPreferences(
-            soundEffectsEnabled: soundEffectsEnabled,
-            hapticsEnabled: hapticsEnabled,
-          );
-          await store.save(value);
-          expect(await store.load(), value);
+          for (final musicEnabled in [false, true]) {
+            final value = FeedbackPreferences(
+              soundEffectsEnabled: soundEffectsEnabled,
+              hapticsEnabled: hapticsEnabled,
+              musicEnabled: musicEnabled,
+            );
+            await store.save(value);
+            expect(await store.load(), value);
+          }
         }
       }
 
       expect(preferences.getKeys(), {
         SharedPreferencesFeedbackPreferencesStore.key,
       });
+    });
+
+    test('old JSON preserves existing toggles and defaults music on', () async {
+      SharedPreferences.setMockInitialValues({
+        SharedPreferencesFeedbackPreferencesStore.key:
+            '{"soundEffects":false,"haptics":false}',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final store = SharedPreferencesFeedbackPreferencesStore(
+        preferences: preferences,
+      );
+
+      expect(
+        await store.load(),
+        const FeedbackPreferences(
+          soundEffectsEnabled: false,
+          hapticsEnabled: false,
+          musicEnabled: true,
+        ),
+      );
+    });
+
+    test('invalid music field defaults only music on', () async {
+      SharedPreferences.setMockInitialValues({
+        SharedPreferencesFeedbackPreferencesStore.key:
+            '{"soundEffects":false,"haptics":true,"music":"off"}',
+      });
+      final preferences = await SharedPreferences.getInstance();
+      final store = SharedPreferencesFeedbackPreferencesStore(
+        preferences: preferences,
+      );
+
+      expect(
+        await store.load(),
+        const FeedbackPreferences(
+          soundEffectsEnabled: false,
+          hapticsEnabled: true,
+          musicEnabled: true,
+        ),
+      );
     });
 
     test('malformed persisted feedback falls back to defaults', () async {

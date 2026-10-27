@@ -6,18 +6,22 @@ class FeedbackPreferences {
   const FeedbackPreferences({
     this.soundEffectsEnabled = true,
     this.hapticsEnabled = true,
+    this.musicEnabled = true,
   });
 
   final bool soundEffectsEnabled;
   final bool hapticsEnabled;
+  final bool musicEnabled;
 
   FeedbackPreferences copyWith({
     bool? soundEffectsEnabled,
     bool? hapticsEnabled,
+    bool? musicEnabled,
   }) {
     return FeedbackPreferences(
       soundEffectsEnabled: soundEffectsEnabled ?? this.soundEffectsEnabled,
       hapticsEnabled: hapticsEnabled ?? this.hapticsEnabled,
+      musicEnabled: musicEnabled ?? this.musicEnabled,
     );
   }
 
@@ -26,10 +30,12 @@ class FeedbackPreferences {
       identical(this, other) ||
       other is FeedbackPreferences &&
           soundEffectsEnabled == other.soundEffectsEnabled &&
-          hapticsEnabled == other.hapticsEnabled;
+          hapticsEnabled == other.hapticsEnabled &&
+          musicEnabled == other.musicEnabled;
 
   @override
-  int get hashCode => Object.hash(soundEffectsEnabled, hapticsEnabled);
+  int get hashCode =>
+      Object.hash(soundEffectsEnabled, hapticsEnabled, musicEnabled);
 }
 
 abstract interface class FeedbackPreferencesStore {
@@ -63,6 +69,7 @@ class SharedPreferencesFeedbackPreferencesStore
       jsonEncode({
         'soundEffects': value.soundEffectsEnabled,
         'haptics': value.hapticsEnabled,
+        'music': value.musicEnabled,
       }),
     );
     if (!persisted) {
@@ -82,12 +89,14 @@ FeedbackPreferences _decode(String? source) {
     }
     final sound = decoded['soundEffects'];
     final haptics = decoded['haptics'];
+    final music = decoded['music'];
     if (sound is! bool || haptics is! bool) {
       return const FeedbackPreferences();
     }
     return FeedbackPreferences(
       soundEffectsEnabled: sound,
       hapticsEnabled: haptics,
+      musicEnabled: music is bool ? music : true,
     );
   } on FormatException {
     return const FeedbackPreferences();
