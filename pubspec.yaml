@@ -99,6 +99,10 @@ flutter:
     - assets/audio/boss_arrival.wav
     - assets/audio/boss_defeated.wav
     - assets/audio/tower_sold.wav
+    - assets/audio/music_map.wav
+    - assets/audio/music_build.wav
+    - assets/audio/music_wave.wav
+    - assets/audio/music_boss.wav
     - assets/fonts/OFL-Oxanium.txt
     - assets/fonts/OFL-ChakraPetch.txt
 

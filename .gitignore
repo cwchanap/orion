@@ -44,6 +44,7 @@ app.*.map.json
 
 # Raw ElevenLabs source takes are kept in private storage, not tracked publicly
 /assets/audio/sources/
+/assets/audio/music_sources/
 
 # Android Studio will place build artifacts here
 /android/app/debug

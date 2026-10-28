@@ -1,0 +1,42 @@
+{
+  "map": {
+    "prompt": "Quiet ambient electronic instrumental, warm sustained analog synth pads and sparse soft bell-like notes, unhurried and serene, minimal low-frequency movement. Consistent texture and harmony throughout, no intro, ending, vocals, percussion, or sharp transients, suitable for a repeating menu background.",
+    "generation_id": "jebaSc0brSr5nCpUEWRc",
+    "session_id": "xoQiDbSWQk1CQL62vu5x",
+    "model": "eleven_music_v2",
+    "source_sha256": "39ec2f2da6156f2cb8ff976b8da8976b55613cc1780fed04b043d4ea120e8435",
+    "download_sha256": "2150228d309bedb309d2c4c0880516bd7a697645140ddfebd04be2b6a96750a9",
+    "start_seconds": 4,
+    "flow_id": "1OOeM5yfuA8qnqZW7A6C"
+  },
+  "build": {
+    "prompt": "Thoughtful understated ambient electronic instrumental, soft warm synth chords and a gentle rounded arpeggio at a relaxed steady tempo, spacious and unobtrusive. Consistent repeating harmony and energy throughout, no intro, ending, vocals, heavy drums, or piercing high frequencies.",
+    "generation_id": "RPVUo6vbGwwUaeBagnYq",
+    "session_id": "ns1TUe4cR0BwSwTqvfF8",
+    "model": "eleven_music_v2",
+    "source_sha256": "0ad29b2e25c09029c649273bf50c61d0010d3156ff33522f9261a7031ac98994",
+    "download_sha256": "34abfdfd44391fdf99af61739a269c3af65269d6843ca6635b40d21c6c8f18ed",
+    "start_seconds": 4,
+    "flow_id": "1OOeM5yfuA8qnqZW7A6C"
+  },
+  "wave": {
+    "prompt": "Subtle electronic ambient instrumental with a restrained steady low synth pulse and soft atmospheric chords, moderate tempo, focused and lightly energetic. Keep percussion muted and leave room for foreground sound effects; consistent repeating groove, no intro, ending, vocals, or bright transients.",
+    "generation_id": "eaxMdn9vCi1hu975KLY2",
+    "session_id": "8CdNNwsA9ntipaAYz6e1",
+    "model": "eleven_music_v2",
+    "source_sha256": "2a14607eade80d90d59b2209bda065220f6a435527161204db9ca0063365a3d3",
+    "download_sha256": "54c3f5bb77ce4533eebcaf82719b21cf7765dcd278fd3d14ef142d3f1b7597a6",
+    "start_seconds": 4,
+    "flow_id": "1OOeM5yfuA8qnqZW7A6C"
+  },
+  "boss": {
+    "prompt": "Tense but restrained ambient electronic instrumental, dark warm synth pads with a measured low throbbing pulse and spare minor-key tones, moderate tempo and casual game intensity. Consistent energy and repeating harmony, no crescendo, intro, ending, vocals, harsh percussion, or piercing treble.",
+    "generation_id": "LztLwzmLY9v7GjFA3ovT",
+    "session_id": "vqwzI25TpqEoDH6eAaoA",
+    "model": "eleven_music_v2",
+    "source_sha256": "4c53707c5e774600304eca996ca62253089349e51862dfbf61b07b9e7bc2db90",
+    "download_sha256": "bb4d575f04dd6c0bfaa7770e973af5756af8263da0511549521b3a60e278919c",
+    "start_seconds": 4,
+    "flow_id": "1OOeM5yfuA8qnqZW7A6C"
+  }
+}
