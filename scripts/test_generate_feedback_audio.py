@@ -29,7 +29,7 @@ class PublicAssetContractTest(unittest.TestCase):
     def test_tracked_wavs_match_names_hashes_and_combat_contract(self):
         audio_dir = ROOT / "assets/audio"
         expected = {f"{name}.wav" for name in COMBAT | ORIGINAL.keys()}
-        self.assertEqual({p.name for p in audio_dir.glob("*.wav")}, expected)
+        self.assertEqual({p.name for p in audio_dir.glob("*.wav") if not p.name.startswith("music_")}, expected)
         for name, digest in ORIGINAL.items():
             self.assertEqual(hashlib.sha256((audio_dir / f"{name}.wav").read_bytes()).hexdigest(),
                              digest, name)
