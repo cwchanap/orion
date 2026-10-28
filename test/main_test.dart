@@ -85,9 +85,20 @@ void main() {
 
       await tester.runAsync(orion.main);
       await tester.pump();
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 5)),
-      );
+      // The warm-cache failure trails real rootBundle reads of the audio
+      // assets; CI disks can exceed the fixed 5 ms this test once allowed,
+      // so poll for the message instead of racing it.
+      final warmCacheDeadline = DateTime.now().add(const Duration(seconds: 2));
+      await tester.runAsync(() async {
+        while (!debugMessages.any(
+              (message) => message.startsWith(
+                'PlatformGameFeedback: failed to warm audio cache:',
+              ),
+            ) &&
+            DateTime.now().isBefore(warmCacheDeadline)) {
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      });
 
       expect(contextCalls, hasLength(1));
       expect(contextCalls.single.arguments, gameAudioContext.toJson());
