@@ -41,12 +41,13 @@ Full-suite and analyzer checks were not rerun because the checkout was clean at 
 
 The isolated mission-collapse test also passes while emitting Flutter's missed-hit-test warnings for its probe widgets. This test harness warning predates HPA-417; no unrelated component or input tests were changed.
 
-## Acceptance gates — still pending
+## Acceptance gates
 
-- [ ] HPA-168 merges all four music files and their explicit asset declarations; the asset-contract test runs without skipping and verifies format, duration, and size.
-- [ ] Real-device listening verifies each loop seam, audibility relative to SFX, and stop/restart behavior.
-- [ ] iOS Silent switch, external-audio mixing, and interruption behavior are verified on device.
-- [ ] Android physical playback, lifecycle behavior, and calls/other-app audio behavior are verified on device.
-- [ ] One documented iOS and Android listening pass completes the acceptance matrix.
+- [x] HPA-168 merges all four music files and their explicit asset declarations; the asset-contract test runs without skipping and verifies format, duration, and size. — Done 2026-10-28: HPA-168 merged to `main` and the branch was rebased onto it (head `4850ea6`). The contract test runs unskipped; `flutter test`: 1,286 passed, `flutter analyze`: no issues, `dart format`: 0 changed.
+- Device-acceptance checks — skipped by owner decision on 2026-10-28, not performed:
+  - Real-device listening verifies each loop seam, audibility relative to SFX, and stop/restart behavior.
+  - iOS Silent switch, external-audio mixing, and interruption behavior are verified on device.
+  - Android physical playback, lifecycle behavior, and calls/other-app audio behavior are verified on device.
+  - One documented iOS and Android listening pass completes the acceptance matrix.
 
-The gates remain unchecked: `music_{map,build,wave,boss}.wav` are absent, the paired iPhone cannot install while Developer Mode is disabled, and `adb` is unavailable. The early iOS spike stopped before installation and did not instantiate `Bgm`; no audible behavior has been verified.
+No physical-device listening was performed. At validation time the paired iPhone could not install while Developer Mode was disabled and `adb` was unavailable; the early iOS spike stopped before installation and did not instantiate `Bgm`. Native loop seams, 1×/3× balance, silent-mode/mixing, and interruption behavior remain unverified on hardware.
