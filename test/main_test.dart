@@ -1,25 +1,19 @@
 import 'dart:async';
 
-import 'package:flame_audio/flame_audio.dart';
 import 'package:flutter/foundation.dart' as foundation show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/main.dart' as orion;
 
 const _globalAudioChannel = MethodChannel('xyz.luan/audioplayers.global');
-final _expectedGameAudioContext = AudioContext(
-  iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
-  android: AudioContextAndroid(
-    usageType: AndroidUsageType.game,
-    audioFocus: AndroidAudioFocus.none,
-  ),
-);
 
 void main() {
   tearDown(() {
+    // Restore the permissive global stub installed by flutter_test_config.
     TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(_globalAudioChannel, null);
+        .setMockMethodCallHandler(_globalAudioChannel, (call) async => null);
   });
 
   testWidgets('waits for the shared audio context before booting the app', (
@@ -49,7 +43,7 @@ void main() {
       });
 
       expect(contextCalls, hasLength(1));
-      expect(contextCalls.single.arguments, _expectedGameAudioContext.toJson());
+      expect(contextCalls.single.arguments, gameAudioContext.toJson());
       expect(find.byType(orion.OrionApp), findsNothing);
 
       gate.complete();
@@ -96,7 +90,7 @@ void main() {
       );
 
       expect(contextCalls, hasLength(1));
-      expect(contextCalls.single.arguments, _expectedGameAudioContext.toJson());
+      expect(contextCalls.single.arguments, gameAudioContext.toJson());
       expect(find.byType(orion.OrionApp), findsOneWidget);
       expect(tester.takeException(), isNull);
       expect(

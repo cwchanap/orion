@@ -150,6 +150,85 @@ void main() {
       await controller.dispose();
     });
 
+    test('a failed play backs off before retrying the same target', () async {
+      var nowMs = 0;
+      final player = _FakeMusicPlayer(playError: StateError('play failed'));
+      final controller = GameMusicController(
+        player: player,
+        nowMs: () => nowMs,
+      );
+
+      await controller.set(MusicTrack.map);
+      await controller.set(MusicTrack.map);
+      await controller.set(MusicTrack.map);
+
+      expect(player.calls, ['play:music_map.wav', 'stop']);
+
+      nowMs += GameMusicController.playRetryDelayMs;
+      await controller.set(MusicTrack.map);
+
+      expect(player.calls, [
+        'play:music_map.wav',
+        'stop',
+        'play:music_map.wav',
+        'stop',
+      ]);
+      await controller.dispose();
+    });
+
+    test('a changed target retries immediately after a failed play', () async {
+      var nowMs = 0;
+      final player = _FakeMusicPlayer(playError: StateError('play failed'));
+      final controller = GameMusicController(
+        player: player,
+        nowMs: () => nowMs,
+      );
+
+      await controller.set(MusicTrack.map);
+      await controller.set(MusicTrack.wave);
+
+      expect(player.calls, [
+        'play:music_map.wav',
+        'stop',
+        'play:music_wave.wav',
+        'stop',
+      ]);
+      await controller.dispose();
+    });
+
+    test(
+      'a failed play and stop retries the stop instead of pinning the track',
+      () async {
+        var nowMs = 0;
+        final player = _FakeMusicPlayer(
+          playError: StateError('play failed'),
+          stopError: StateError('stop failed'),
+        );
+        final controller = GameMusicController(
+          player: player,
+          nowMs: () => nowMs,
+        );
+
+        await controller.set(MusicTrack.map);
+        await controller.set(MusicTrack.map);
+
+        expect(player.calls, ['play:music_map.wav', 'stop']);
+
+        player.playError = null;
+        player.stopError = null;
+        nowMs += GameMusicController.playRetryDelayMs;
+        await controller.set(MusicTrack.map);
+
+        expect(player.calls, [
+          'play:music_map.wav',
+          'stop',
+          'stop',
+          'play:music_map.wav',
+        ]);
+        await controller.dispose();
+      },
+    );
+
     test('disposal invalidates pending playback and is idempotent', () async {
       final player = _FakeMusicPlayer()..playGate = Completer<void>();
       final controller = GameMusicController(player: player);
@@ -367,7 +446,7 @@ class _FakeMusicPlayer implements MusicPlayer {
   final calls = <String>[];
   final Completer<void> playStarted = Completer<void>();
   Completer<void>? playGate;
-  final Object? playError;
+  Object? playError;
   Object? stopError;
   final Object? disposeError;
   final bool throwPlaySynchronously;

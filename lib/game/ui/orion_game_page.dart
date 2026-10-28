@@ -200,14 +200,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
   @override
   void dispose() {
     _appLifecycleListener.dispose();
-    final game = _game;
-    final listener = _gameSnapshotListener;
-    if (game != null && listener != null) {
-      game.stateNotifier.removeListener(listener);
-    }
-    _gameSnapshotListener = null;
     _appForeground = false;
-    _syncMusic();
+    _listenToGame(null);
     _ownedGameMusicController?.dispose().ignore();
     _ownedGameFeedback?.dispose();
     super.dispose();
@@ -227,15 +221,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
     _gameSnapshotListener = null;
     _game = game;
-    if (game == null) return;
+    if (game != null) {
+      void listener() {
+        if (!mounted || !identical(_game, game)) return;
+        _syncMusic();
+      }
 
-    void listener() {
-      if (!mounted || !identical(_game, game)) return;
-      _syncMusic();
+      _gameSnapshotListener = listener;
+      game.stateNotifier.addListener(listener);
     }
-
-    _gameSnapshotListener = listener;
-    game.stateNotifier.addListener(listener);
+    _syncMusic();
   }
 
   void _syncMusic() {
@@ -1231,7 +1226,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _boardViewport = null;
       _activeView = _ShellView.stage;
     });
-    _syncMusic();
   }
 
   void _showLockedStageFeedback(StageDefinition stage) {
@@ -1478,7 +1472,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _listenToGame(null);
       _activeView = _ShellView.worldMap;
     });
-    _syncMusic();
   }
 
   void _returnFromMissionReport() {
@@ -1635,7 +1628,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _pendingSaves = 0;
         _isSavingProgress = false;
       });
-      _syncMusic();
     } catch (_) {
       if (!mounted) {
         return;

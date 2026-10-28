@@ -152,13 +152,6 @@ final class _NoOpMusicPlayer implements MusicPlayer {
 }
 
 final _playerAudioContexts = <Map<String, dynamic>>[];
-final _expectedGameAudioContext = AudioContext(
-  iOS: AudioContextIOS(category: AVAudioSessionCategory.ambient),
-  android: AudioContextAndroid(
-    usageType: AndroidUsageType.game,
-    audioFocus: AndroidAudioFocus.none,
-  ),
-);
 
 void main() {
   late AudioCache originalAudioCache;
@@ -848,16 +841,10 @@ void main() {
 
     await fireOneShot(tester, feedback.missionVictory);
 
-    expect(_playerAudioContexts, [_expectedGameAudioContext.toJson()]);
-    expect(
-      _expectedGameAudioContext.iOS.category,
-      AVAudioSessionCategory.ambient,
-    );
-    expect(_expectedGameAudioContext.android.usageType, AndroidUsageType.game);
-    expect(
-      _expectedGameAudioContext.android.audioFocus,
-      AndroidAudioFocus.none,
-    );
+    expect(_playerAudioContexts, [gameAudioContext.toJson()]);
+    expect(gameAudioContext.iOS.category, AVAudioSessionCategory.ambient);
+    expect(gameAudioContext.android.usageType, AndroidUsageType.game);
+    expect(gameAudioContext.android.audioFocus, AndroidAudioFocus.none);
     expect(tester.takeException(), isNull);
   }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
@@ -892,22 +879,10 @@ void main() {
       await flushPools(tester, () => harness.createdPlayerIds.length == 13);
 
       expect(harness.audioContexts, hasLength(13));
-      expect(
-        harness.audioContexts,
-        everyElement(_expectedGameAudioContext.toJson()),
-      );
-      expect(
-        _expectedGameAudioContext.iOS.category,
-        AVAudioSessionCategory.ambient,
-      );
-      expect(
-        _expectedGameAudioContext.android.usageType,
-        AndroidUsageType.game,
-      );
-      expect(
-        _expectedGameAudioContext.android.audioFocus,
-        AndroidAudioFocus.none,
-      );
+      expect(harness.audioContexts, everyElement(gameAudioContext.toJson()));
+      expect(gameAudioContext.iOS.category, AVAudioSessionCategory.ambient);
+      expect(gameAudioContext.android.usageType, AndroidUsageType.game);
+      expect(gameAudioContext.android.audioFocus, AndroidAudioFocus.none);
 
       feedback.dispose();
       await flushPools(tester, () => harness.disposedPlayerIds.length == 13);
