@@ -30,9 +30,15 @@ python3 -m unittest discover -s scripts -p 'test_*.py'
 ```
 
 The generated tracks are subject to the generating account's
-[ElevenLabs Music Terms](https://elevenlabs.io/music-terms); the account's
-rights for public repository distribution and game release still need to be
-confirmed. Automated waveform checks do not establish musical quality,
+[ElevenLabs Music Terms](https://elevenlabs.io/music-terms). The generating
+account owner has confirmed that the account's agreement permits distributing
+the four mastered WAVs as tracked files in this public repository and
+embedding them in the game release: under the Music Commercial Rights Table,
+game use is covered while Orion qualifies as an Indie Game. Compiling or
+distributing a music library from generated output is prohibited on
+self-serve plans, so the decoded takes in `music_sources/` stay private, and
+inclusion in this repository does not grant unrestricted redistribution
+rights. Automated waveform checks do not establish musical quality,
 masking, or native-player gaplessness. Listen on representative iOS and Android
 devices in each context, with combat effects and across repeated loop seams,
 before accepting the tracks.
