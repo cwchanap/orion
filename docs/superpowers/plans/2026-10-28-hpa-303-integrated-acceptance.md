@@ -32,6 +32,7 @@ Record each command as Pass / Fail / Not run with reason. Avoid altering product
 
 ## 2. Human Alpha run — clean onboarding and rewards
 
+- [ ] **Restore physical-device access first:** enable iOS Developer Mode on the test iPhone, or install Android platform-tools (`adb`) for an available Android device; then confirm `flutter devices` lists a usable target and the app can launch. If neither path works, obtain and record the owner's explicit **waiver or blocked-status decision before proceeding with §§2–3**; never interpret an unavailable device as successful acceptance.
 - [ ] Make an expendable truly fresh app-data state (or a clean install). Prefer the physical device; avoid accidentally evaluating a previously acknowledged tutorial.
 - [ ] Enter Alpha from the world map, read briefing, tap a free board cell, select Laser, start Wave 1, upgrade between waves, pick one Salvage Module after Wave 2. Check skip independently in a fresh/replayed guide flow.
 - [ ] At a small portrait viewport check that Got it / Skip, tower cards, radial actions, scanner, module picker, and Start Wave can all be tapped; probe tap and drag paths. No permanent tutorial overlays after completion.
@@ -64,7 +65,7 @@ For each failure, note reproduction (stage, wave, settings, action), expected/ac
 ## 5. Completion gate
 
 - [ ] Final validation record truthfully separates observed, automated-only, blocked and owner-waived acceptance; list exact commit tested and any device limitations.
-- [ ] Re-run relevant checks if production code changed. If documents alone changed, disclose that no runtime tests were run for the docs commit.
+- [ ] If production code changed, re-run the **full §1 command block** plus the **manual acceptance row(s) affected by the fix**; record results against the updated commit. If documents alone changed, disclose that no runtime tests were run for the docs commit.
 - [ ] Keep the PR Draft while essential checks or owner decisions remain open. When complete, update this same PR with the evidence, request review, and link it to HPA-303 in Linear.
 - [ ] Mark HPA-303 Done only after its actual parent acceptance conditions are satisfied or an explicit owner-approved exception is recorded. A waiver is **not** proof the audio passed.
 
