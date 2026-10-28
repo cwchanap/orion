@@ -25,10 +25,14 @@ void main() {
       // restored after the test overwrites them with the disabled set.
       final originalPreferences = await store.load();
       addTearDown(() => store.save(originalPreferences));
+      // All three channels stay silent: music that actually plays leaves a
+      // ticking audioplayers position updater at tree teardown, which the
+      // integration binding reports as a still-running animation.
       await store.save(
         const FeedbackPreferences(
           soundEffectsEnabled: false,
           hapticsEnabled: false,
+          musicEnabled: false,
         ),
       );
       await tester.pumpWidget(const OrionApp());
