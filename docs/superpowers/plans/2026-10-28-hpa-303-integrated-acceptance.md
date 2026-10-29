@@ -1,72 +1,57 @@
 # HPA-303 — Integrated acceptance implementation plan
 
-> **One ticket, one PR.** Use `plan/hpa-303-integrated-acceptance` for the design, this plan, final validation record, and any tiny directly related corrections. Do not open a second PR for HPA-303. This initial draft contains plans only; no validation has been performed.
+> **One ticket / one PR:** keep the design, this plan, validation evidence and any narrow fixes on `plan/hpa-303-integrated-acceptance` / [PR #45](https://github.com/cwchanap/orion/pull/45). This revision documents the plan and a prefilled evidence skeleton; **no simulator or physical-device testing has been performed by this planning pass**.
 
-**Issue:** [HPA-303](https://linear.app/cwchanap/issue/HPA-303/product-make-orion-welcoming-worth-replaying-and-audible)  
-**Design:** [Integrated acceptance design](../specs/2026-10-28-hpa-303-integrated-acceptance-design.md)
+**Linear:** [HPA-303](https://linear.app/cwchanap/issue/HPA-303/product-make-orion-welcoming-worth-replaying-and-audible)  
+**Design:** [Integrated acceptance specification](../specs/2026-10-28-hpa-303-integrated-acceptance-design.md)  
+**Single source of results:** [Platform-specific validation record](../validation/2026-10-28-hpa-303-integrated-acceptance.md)
 
-## 0. Baseline before testing
+## 0. Reuse the existing implementation and CI
 
-- [x] Verify all five implementation tickets HPA-412/413/415/416/417 are Done and their feature PRs merged; HPA-168 music assets also merged.
-- [x] Identify the unresolved physical-device gap in [HPA-417's validation record](../validation/2026-10-27-hpa-417-music-ambience.md).
-- [x] Reuse existing docs and test suites, not a new validation framework.
-- [ ] Freeze current `main` commit SHA when executing, record device/build/platform and any active owner waivers.
-- [ ] Confirm existing automated coverage for seven boss-module mappings, duplicate first-clear prevention, failed saves, context tips, guide skip/replay and feedback/music preferences. Only add a focused regression test if a genuine gap is found.
+- [x] Verify HPA-412/413/415/416/417 feature PRs and HPA-168 music assets are merged; do not duplicate them.
+- [x] Confirm existing guide/tip stores, seven boss-blueprint rules/tests, independent Music/SFX toggles and audio contract.
+- [x] Identify the known HPA-417 real-device limitations: iOS Developer Mode disabled and Android `adb` absent.
+- [x] Create a criterion × platform validation table with **Not run** values, instead of scattering results across this plan and the PR checklist.
 
-**Evidence:** prior merge reports recorded a full 1,286-test pass after HPA-417/168 integration. This plan does not assert that the tests were rerun on the eventual validation commit.
+**Automated baseline:** reuse the existing [CI workflow](../../../.github/workflows/ci.yml) on PR pushes, which runs Dart formatting, `flutter analyze`, `flutter build web --release`, `flutter test --coverage`, Python audio contract tests and `flutter test integration_test` on an API 34 Android emulator. The emulator uses `-noaudio`, and the integration smoke test disables Music/SFX/Haptics, so **neither can establish audible acceptance**. Also reuse the existing [build-ios](../../../.github/workflows/build-ios.yml) and [build-android](../../../.github/workflows/build-android.yml) workflows.
 
-## 1. Run automated baseline (no code changes expected)
+- [ ] Record the **latest tested head SHA**, links and conclusions of **all three green workflows** in the validation record. Older successful runs (including `7648c2d`) are background only, not evidence for a new head.
+- [ ] If any required CI job is red/missing, investigate or rerun it before claiming a pass; don't add duplicate local invocations or a device-farm framework merely to restate CI.
+- [ ] Reuse existing blueprint isolation, committed/repeat-clear, guide/tips and preference tests. Add a focused regression test only if an actual uncovered defect is discovered.
 
-From an up-to-date checkout:
+## 1. Simulator-first Alpha walkthrough (independent of hardware access)
 
-```bash
-dart format --output=none --set-exit-if-changed .
-flutter analyze
-flutter test
-flutter build web --release
-```
+- [ ] Verify a bootable iOS Simulator with `xcrun simctl list devices available` and `flutter devices`; select a small portrait iPhone. The review previously reported booted iPhone 16/17 Simulators, but **re-enumerate** at execution rather than assuming availability. If no simulator can run, record the blocker and only then choose another available local target.
+- [ ] Start with **fresh app data**, not only Reset Campaign. Enter Alpha briefing, select a buildable cell, place Laser (tap/drag), start Wave 1, upgrade after a wave clear, and choose the first Salvage Module after Wave 2.
+- [ ] Continue to **Wave 3 build**, deselect tower/cell, find the accessible scanner callout and tap **Got it**. This is the guide's completion write; the module pick alone is **not** completion.
+- [ ] **Force-quit and relaunch before completing Alpha** (before any saved stage result can trigger inferred guide completion). Re-enter Alpha and verify the guided callout does not reappear. Separately test **Skip** from a fresh or deliberately replayed guide, then force-quit/relaunch **before Alpha has a result** and verify Skip persisted. Do not mistake a saved Alpha result for a successful tutorial-write test.
+- [ ] Check Skip/Got it, tower cards, radial controls, scanner, module draft and Wave button are tap-safe on a short portrait viewport. Reuse the existing automated small-viewport tests; no new harness.
+- [ ] Continue to waves 2–6 and the boss preview on Wave 8: inspect later tower-unlock, specialization, targeting and boss hints (one at a time, true target, no Wave obstruction). Replay Tutorial should restore the HPA-412 guide and HPA-413 tips; Reset Campaign alone should not.
 
-Run `flutter test integration_test/app_smoke_test.dart -d <connected-device>` where the local integration runner supports it. This smoke test forces sound effects, haptics, and music off; do **not** treat it as audio verification.
+## 2. Simulator-first rewards, modified stage, and audio
 
-Record each command as Pass / Fail / Not run with reason. Avoid altering production rules or slowing CI just to make a manual acceptance checklist automatic.
+- [ ] Clear Alpha's named boss. Verify Mission Report's blueprint reward, then **force-quit/relaunch and inspect the world map and Alpha briefing** to prove the committed unlock persisted. Replay Alpha and check there is no duplicate reward.
+- [ ] Enter a later modified stage (e.g. Nebula Relay), verify the first modifier-tip anchor, and if feasible clear its boss and repeat the report → **relaunch** → map/briefing check. Rely on `test/game/run_module_unlocks_test.dart` for the other five mappings, failed/uncommitted saves and repeated-clear union; do not manually clear all seven stages.
+- [ ] On the simulator, listen through the **Mac audio output** for map/build/wave/boss transitions and loop seams. Exercise Music × SFX combinations, settings persistence across relaunch, pause/resume, foreground/background, victory/defeat stops and SFX distinguishability at 1× and populated 3×. Note whether audio is actually audible; simulator playback is a useful iOS app-level observation **but is not physical-device proof**.
+- [ ] In the [validation record](../validation/2026-10-28-hpa-303-integrated-acceptance.md), mark each observed simulator criterion **Pass (iOS Simulator)** or **Fail (iOS Simulator)** and record build/OS, output device, tested SHA and reproduction details. Leave unobserved checks Not run/Blocked; don't infer real-world frame time, speaker balance or hardware audio mixing from simulator performance.
 
-## 2. Human Alpha run — clean onboarding and rewards
+## 3. Hardware-only gates and owner decision
 
-- [ ] **Restore physical-device access first:** enable iOS Developer Mode on the test iPhone, or install Android platform-tools (`adb`) for an available Android device; then confirm `flutter devices` lists a usable target and the app can launch. If neither path works, obtain and record the owner's explicit **waiver or blocked-status decision before proceeding with §§2–3**; never interpret an unavailable device as successful acceptance.
-- [ ] Make an expendable truly fresh app-data state (or a clean install). Prefer the physical device; avoid accidentally evaluating a previously acknowledged tutorial.
-- [ ] Enter Alpha from the world map, read briefing, tap a free board cell, select Laser, start Wave 1, upgrade between waves, pick one Salvage Module after Wave 2. Check skip independently in a fresh/replayed guide flow.
-- [ ] At a small portrait viewport check that Got it / Skip, tower cards, radial actions, scanner, module picker, and Start Wave can all be tapped; probe tap and drag paths. No permanent tutorial overlays after completion.
-- [ ] Continue to Wave 6: verify tower-unlock hints, specialization and targeting tips at the actual anchor. Check boss preview before Wave 8 without blocking Start Wave. Replay Tutorial should restore both layers of guidance, while Reset Campaign should not silently reset them.
-- [ ] Clear Alpha's named boss, observe module blueprint in Mission Report and world map/briefing, then replay to confirm no duplicate reward. Capture the post-save state (not an in-memory pre-commit impression).
+- [ ] **Prefer the already-paired iPhone first:** enable Developer Mode in Settings → Privacy & Security, restart as prompted, confirm `flutter devices` and successful launch. Then perform the parent's Alpha-first-run and one later modified-stage physical playthrough; verify 1×/3× balance and responsiveness, iOS silent switch, mixing and interruption behavior.
+- [ ] If an actual Android device is available and Android validation is desired, install Android platform-tools if needed, confirm `adb devices`, then check Android native playback/lifecycle separately. The no-audio CI emulator cannot replace this.
+- [ ] If the physical device remains blocked, obtain the **owner's explicit waiver or Blocked decision for these hardware-only rows**. This decision must not block the available simulator tasks above. The earlier HPA-417 listening waiver does **not** automatically waive HPA-303.
+- [ ] Record **Pass / Fail / Blocked / Skipped (owner decision)** independently for iOS Simulator, physical iPhone and physical Android. A simulator pass is **not** a physical-device pass, and a waiver never implies successful playback.
 
-## 3. Later-stage run and sound pass
+## 4. Evidence and defect triage
 
-- [ ] Enter a later stage with a modifier (e.g. Nebula Relay), verify a once-only modifier briefing hint and continued access to real controls. Clear the boss if feasible and verify its blueprint.
-- [ ] At 1×, with SFX on, listen for shots, impacts, kills, core leak, wave start, boss arrival and defeat. Raise to 3× on a reasonably populated board and check for distinguishability, excessive repeated sound, input lag, or perceptible stutter.
-- [ ] Listen separately for music on map, build, wave and boss; inspect loop boundaries and navigation/mission-result stops. Test pause/resume, app background/return, settings persistence across relaunch and all four Music × Sound Effects combinations. Verify Haptics as a separate toggle.
-- [ ] If possible check iOS silent mode/mixing and Android native playback independently. Never promote a desktop/browser or one-platform result to a second-platform claim.
-- [ ] If hardware cannot run the app (known HPA-417 iOS Developer Mode and missing Android `adb` blockers), do **not** mark audio/whole-playthrough checks passed. Record Blocked or owner-approved Skipped and move to the decision step.
+**Update the already-committed** [validation record](../validation/2026-10-28-hpa-303-integrated-acceptance.md); do **not** recreate or duplicate its results table here. Use the CI and environment sections plus one row per criterion, with separate iOS Simulator / iPhone / Android results and concrete observations.
 
-## 4. Record findings, triage only observed issues
-
-Create `docs/superpowers/validation/2026-10-28-hpa-303-integrated-acceptance.md` after executing checks. Suggested compact table:
-
-| Criterion | Result | Evidence | Follow-up |
-| --- | --- | --- | --- |
-| Fresh onboarding + skip | Not run | — | — |
-| Contextual tips | Not run | — | — |
-| Seven first-clear blueprints | Not run | — | — |
-| Combat SFX 1× / 3× | Not run | — | — |
-| Independent music and lifecycle | Not run | — | — |
-| Real-device Alpha + later stage | Not run | — | — |
-
-For each failure, note reproduction (stage, wave, settings, action), expected/actual, and severity. Repair only clearly scoped integration problems in this **same PR**, with an appropriate focused test. Put unrelated improvements into a focused Linear ticket and its own PR; never expand HPA-303 into a polish backlog. Any fresh images/SFX must be produced under a separate asset task.
+For any observed failure, log the stage/wave/setting, exact reproduction steps, expected/actual behavior and severity. Fix only a narrow defect belonging to HPA-303 **within this same PR**, with a focused regression test. Move unrelated polish into its own focused ticket/PR; fresh art or SFX must be a separate asset task.
 
 ## 5. Completion gate
 
-- [ ] Final validation record truthfully separates observed, automated-only, blocked and owner-waived acceptance; list exact commit tested and any device limitations.
-- [ ] If production code changed, re-run the **full §1 command block** plus the **manual acceptance row(s) affected by the fix**; record results against the updated commit. If documents alone changed, disclose that no runtime tests were run for the docs commit.
-- [ ] Keep the PR Draft while essential checks or owner decisions remain open. When complete, update this same PR with the evidence, request review, and link it to HPA-303 in Linear.
-- [ ] Mark HPA-303 Done only after its actual parent acceptance conditions are satisfied or an explicit owner-approved exception is recorded. A waiver is **not** proof the audio passed.
+- [ ] Verify **CI, build-ios and build-android green on the final head SHA**. If production code changes, wait for the newly triggered workflows to pass and **repeat the affected manual simulator/hardware rows**; record their actual updated-build outcome. Documentation-only changes likewise need the final CI confirmation, but do not pretend they were a manual run.
+- [ ] The evidence record accurately distinguishes simulator observations, physical results, blocked checks, owner waivers, and untouched rows.
+- [ ] Keep PR #45 Draft until the evidence and owner decisions justify review. Close HPA-303 only after its parent criteria actually pass or documented owner exceptions explicitly cover the unverified hardware cases.
 
-**Not in this plan:** additional implementation phases, arbitrary integration-test frameworks, new assets, music generation, gameplay tuning, broad cross-platform rewrites, or a second PR tied to HPA-303.
+**No new frameworks, CI jobs, feature development, new assets, save migrations, gameplay balance changes, or multiple PRs for HPA-303.**
