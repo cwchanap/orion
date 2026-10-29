@@ -42,7 +42,7 @@ The normal player path is the authority for experience checks, because unit test
 
 Use the committed [platform-specific validation record](../validation/2026-10-28-hpa-303-integrated-acceptance.md) during execution: each criterion has separate **iOS Simulator / iPhone / Android** results plus evidence and follow-up. Mark **Pass / Fail / Blocked / Skipped (owner decision) / Not run** and include exact head SHA plus CI/build-run links. Automated success cannot substitute for an unobserved human/audio result.
 
-Close HPA-303 only when parent requirements have been checked successfully **or the owner explicitly accepts documented unverified exceptions**. Even when waived, describe skipped device checks accurately; do not claim native audio or UX passed. For an observed defect, provide minimal reproduction steps and expected/actual behavior; decide whether it can be fixed narrowly in this PR or needs a new issue.
+Close HPA-303 only when parent requirements have been checked successfully **or the owner explicitly accepts the specific unverified exceptions documented in the validation record** — for this closure: the hardware-only physical-device checks, all audio-listening observations, and the non-audio simulator walkthrough rows. Any criterion outside that documented list must pass, or have its observed failure resolved, before the initiative is marked complete. Even when waived, describe skipped checks accurately; do not claim native audio, UX, or played experience passed. For an observed defect, provide minimal reproduction steps and expected/actual behavior; decide whether it can be fixed narrowly in this PR or needs a new issue.
 
 ## Out of scope
 

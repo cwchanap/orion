@@ -52,6 +52,6 @@ For any observed failure, log the stage/wave/setting, exact reproduction steps, 
 
 - [x] Verify **CI, build-ios and build-android green on the final head SHA**. If production code changes, wait for the newly triggered workflows to pass and **repeat the affected manual simulator/hardware rows**; record their actual updated-build outcome. Documentation-only changes likewise need the final CI confirmation, but do not pretend they were a manual run.
 - [x] The evidence record accurately distinguishes simulator observations, physical results, blocked checks, owner waivers, and untouched rows.
-- [x] Keep PR #45 Draft until the evidence and owner decisions justify review. Close HPA-303 only after its parent criteria actually pass or documented owner exceptions explicitly cover the unverified hardware cases.
+- [x] Keep PR #45 Draft until the evidence and owner decisions justify review. Close HPA-303 only after its parent criteria actually pass or documented owner exceptions explicitly cover the unverified cases enumerated in the validation record (hardware-only, audio-listening, and non-audio simulator walkthrough rows).
 
 **No new frameworks, CI jobs, feature development, new assets, save migrations, gameplay balance changes, or multiple PRs for HPA-303.**
