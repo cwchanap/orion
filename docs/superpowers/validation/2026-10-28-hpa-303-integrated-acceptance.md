@@ -29,12 +29,12 @@ Use **Pass / Fail / Blocked / Skipped (owner decision) / Not run** in each relev
 | Later hints (unlocks through Wave 6, specialization, targeting, boss preview, modifier); Replay Tutorial vs Reset Campaign | Not run | Not run | Not run | — |
 | Alpha boss first-committed-clear blueprint in report; **relaunch** then map/briefing; replay adds no duplicate | Not run | Not run | Not run | — |
 | Later-stage boss reward + modifier; seven mappings and failed-save case covered by unit tests | Not run | Not run | Not run | — |
-| Music transitions/seams and Music × SFX switches; pause/background/relaunch persistence | Not run | Not run | Not run | — |
-| Combat SFX recognizable at 1× / not overwhelming at populated 3× | Not run | Not run | Not run | Simulator listens through Mac, not device speakers |
-| Real hardware input responsiveness/frame stutter and native audio balance at 3× | Not run | Not run | Not run | Physical-device evidence required; simulator result is not representative |
-| iOS silent switch, external mixing and interruptions | Not run | Not run | Not run | iPhone-specific; do not infer from simulator |
-| Android native playback and audio/lifecycle behavior | Not run | Not run | Not run | Android-specific; CI emulator runs with audio disabled |
-| Physical-device Alpha fresh start **and** one modified later stage | Not run | Not run | Not run | At least one real device or explicit owner waiver required |
+| Music transitions/seams and Music × SFX switches; pause/background/relaunch persistence | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Audio listening waived by owner decision 2026-10-29; not verified. |
+| Combat SFX recognizable at 1× / not overwhelming at populated 3× | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Simulator listens through Mac, not device speakers. SFX listening waived by owner decision 2026-10-29; not verified. |
+| Real hardware input responsiveness/frame stutter and native audio balance at 3× | Not run | Skipped (owner decision) | Skipped (owner decision) | Physical-device evidence required; simulator result is not representative |
+| iOS silent switch, external mixing and interruptions | Not run | Skipped (owner decision) | Skipped (owner decision) | iPhone-specific; do not infer from simulator |
+| Android native playback and audio/lifecycle behavior | Not run | Skipped (owner decision) | Skipped (owner decision) | Android-specific; CI emulator runs with audio disabled |
+| Physical-device Alpha fresh start **and** one modified later stage | Not run | Skipped (owner decision) | Skipped (owner decision) | At least one real device or explicit owner waiver required |
 
 ## Environment, blockers, and decision
 
@@ -42,8 +42,8 @@ Use **Pass / Fail / Blocked / Skipped (owner decision) / Not run** in each relev
 - **Physical iPhone:** known prior blocker: Developer Mode disabled (HPA-417). Attempt enabling it and launching the app; document updated observation. `flutter devices` on 2026-10-29 also listed macOS, Chrome (web), and one physical iPhone (4), iOS 27.0.1, wireless — observed only; Developer Mode status unconfirmed and no install/run attempted, so this is not validation.
 - **Physical Android:** prior blocker: `adb` missing (HPA-417). Only install platform-tools if an Android device is available and needed.
 - **Actual simulator/hardware build, OS, sound outputs, levels, exact app SHA:** Not recorded.
-- **Owner decision if hardware is still blocked:** Not requested/not recorded. Prior HPA-417 waiver does **not** automatically waive HPA-303.
-- **Final disposition:** Pending. Never mark hardware-only checks Pass from automated tests or simulator playback.
+- **Owner decision (2026-10-29):** owner explicitly waived the hardware-only checks (physical iPhone and physical Android rows) and all audio-listening checks (simulator Mac-output music/SFX listening included). This waiver is an acceptance of unverified exceptions, **not** a pass: loop seams, 1×/3× balance, silent switch, external mixing/interruptions, and Android native playback remain unverified on real devices. Distinct from, and broader than scope-wise complementary to, the prior HPA-417 waiver, which never covered HPA-303.
+- **Final disposition:** Hardware and audio-listening checks closed as Skipped (owner decision, 2026-10-29). The non-audio simulator walkthrough rows (guide/Skip persistence, later hints, boss and modified-stage reward persistence) remain **Not run** and still gate plan §5 and HPA-303 closure. Never mark hardware-only checks Pass from automated tests or simulator playback.
 
 ## Observed defects / follow-ups
 
