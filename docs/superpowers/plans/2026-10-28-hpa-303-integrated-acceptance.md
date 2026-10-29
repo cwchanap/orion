@@ -15,13 +15,13 @@
 
 **Automated baseline:** reuse the existing [CI workflow](../../../.github/workflows/ci.yml) on PR pushes, which runs Dart formatting, `flutter analyze`, `flutter build web --release`, `flutter test --coverage`, Python audio contract tests and `flutter test integration_test` on an API 34 Android emulator. The emulator uses `-noaudio`, and the integration smoke test disables Music/SFX/Haptics, so **neither can establish audible acceptance**. Also reuse the existing [build-ios](../../../.github/workflows/build-ios.yml) and [build-android](../../../.github/workflows/build-android.yml) workflows.
 
-- [ ] Record the **latest tested head SHA**, links and conclusions of **all three green workflows** in the validation record. Older successful runs (including `7648c2d`) are background only, not evidence for a new head.
+- [x] Record the **latest tested head SHA**, links and conclusions of **all three green workflows** in the validation record. Older successful runs (including `7648c2d`) are background only, not evidence for a new head.
 - [ ] If any required CI job is red/missing, investigate or rerun it before claiming a pass; don't add duplicate local invocations or a device-farm framework merely to restate CI.
 - [ ] Reuse existing blueprint isolation, committed/repeat-clear, guide/tips and preference tests. Add a focused regression test only if an actual uncovered defect is discovered.
 
 ## 1. Simulator-first Alpha walkthrough (independent of hardware access)
 
-- [ ] Verify a bootable iOS Simulator with `xcrun simctl list devices available` and `flutter devices`; select a small portrait iPhone. The review previously reported booted iPhone 16/17 Simulators, but **re-enumerate** at execution rather than assuming availability. If no simulator can run, record the blocker and only then choose another available local target.
+- [x] Verify a bootable iOS Simulator with `xcrun simctl list devices available` and `flutter devices`; select a small portrait iPhone. The review previously reported booted iPhone 16/17 Simulators, but **re-enumerate** at execution rather than assuming availability. If no simulator can run, record the blocker and only then choose another available local target.
 - [ ] Start with **fresh app data**, not only Reset Campaign. Enter Alpha briefing, select a buildable cell, place Laser (tap/drag), start Wave 1, upgrade after a wave clear, and choose the first Salvage Module after Wave 2.
 - [ ] Continue to **Wave 3 build**, deselect tower/cell, find the accessible scanner callout and tap **Got it**. This is the guide's completion write; the module pick alone is **not** completion.
 - [ ] **Force-quit and relaunch before completing Alpha** (before any saved stage result can trigger inferred guide completion). Re-enter Alpha and verify the guided callout does not reappear. Separately test **Skip** from a fresh or deliberately replayed guide, then force-quit/relaunch **before Alpha has a result** and verify Skip persisted. Do not mistake a saved Alpha result for a successful tutorial-write test.
