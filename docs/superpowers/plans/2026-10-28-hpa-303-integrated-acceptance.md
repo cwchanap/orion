@@ -39,8 +39,8 @@
 
 - [ ] **Prefer the already-paired iPhone first:** enable Developer Mode in Settings → Privacy & Security, restart as prompted, confirm `flutter devices` and successful launch. Then perform the parent's Alpha-first-run and one later modified-stage physical playthrough; verify 1×/3× balance and responsiveness, iOS silent switch, mixing and interruption behavior.
 - [ ] If an actual Android device is available and Android validation is desired, install Android platform-tools if needed, confirm `adb devices`, then check Android native playback/lifecycle separately. The no-audio CI emulator cannot replace this.
-- [ ] If the physical device remains blocked, obtain the **owner's explicit waiver or Blocked decision for these hardware-only rows**. This decision must not block the available simulator tasks above. The earlier HPA-417 listening waiver does **not** automatically waive HPA-303.
-- [ ] Record **Pass / Fail / Blocked / Skipped (owner decision)** independently for iOS Simulator, physical iPhone and physical Android. A simulator pass is **not** a physical-device pass, and a waiver never implies successful playback.
+- [x] If the physical device remains blocked, obtain the **owner's explicit waiver or Blocked decision for these hardware-only rows**. This decision must not block the available simulator tasks above. The earlier HPA-417 listening waiver does **not** automatically waive HPA-303.
+- [x] Record **Pass / Fail / Blocked / Skipped (owner decision)** independently for iOS Simulator, physical iPhone and physical Android. A simulator pass is **not** a physical-device pass, and a waiver never implies successful playback.
 
 ## 4. Evidence and defect triage
 
