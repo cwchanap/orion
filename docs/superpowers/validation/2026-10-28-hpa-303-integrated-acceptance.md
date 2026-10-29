@@ -1,8 +1,8 @@
 # HPA-303 — Integrated acceptance evidence
 
 **Linear:** [HPA-303](https://linear.app/cwchanap/issue/HPA-303/product-make-orion-welcoming-worth-replaying-and-audible) · **PR:** [#45](https://github.com/cwchanap/orion/pull/45)  
-**Status:** Evidence template only; **no human simulator or hardware validation is claimed**.  
-**Date / app commit / tester:** Not yet recorded.
+**Status:** Closed on documented owner exceptions (2026-10-29); **no human simulator or hardware validation was performed or claimed**.  
+**Date / app commit / tester:** Closed 2026-10-29 at head `8ca4e12`; no manual test sessions performed — closed by owner waiver, not testing.
 
 ## Automated verification (CI, not a listening or UX test)
 
@@ -16,7 +16,7 @@ All three workflows below ran on `pull_request` events for the **latest tested h
 | build-ios (debug) | `1bb4d6870ae8ffe35b970e1856d6d6c0b01a4640` | Success | [run 40813451980](https://github.com/cwchanap/orion/actions/runs/40813451980) |
 | build-android (debug) | `1bb4d6870ae8ffe35b970e1856d6d6c0b01a4640` | Success | [run 40813452002](https://github.com/cwchanap/orion/actions/runs/40813452002) |
 
-For reference only, all three workflows succeeded on the **previous** head `baa90da` (`baa90dae2018b59fd7d2b1ce32b1c7c1459dc0fb`): [CI run 40803202404](https://github.com/cwchanap/orion/actions/runs/40803202404), [iOS run 40803204254](https://github.com/cwchanap/orion/actions/runs/40803204254), [Android run 40803202457](https://github.com/cwchanap/orion/actions/runs/40803202457). This is **not** validation of the current/final head or audible output.
+For reference only, all three workflows succeeded on the **previous** head `baa90da` (`baa90dae2018b59fd7d2b1ce32b1c7c1459dc0fb`): [CI run 40803202404](https://github.com/cwchanap/orion/actions/runs/40803202404), [iOS run 40803204254](https://github.com/cwchanap/orion/actions/runs/40803204254), [Android run 40803202457](https://github.com/cwchanap/orion/actions/runs/40803202457). All three workflows were also green on subsequent docs-only heads `b6c768c` and `8ca4e12` (CI [run 40817476279](https://github.com/cwchanap/orion/actions/runs/40817476279), build-ios [run 40817476272](https://github.com/cwchanap/orion/actions/runs/40817476272), build-android [run 40817476292](https://github.com/cwchanap/orion/actions/runs/40817476292)); check the PR checks tab for any later head. This is **not** validation of the current/final head or audible output.
 
 ## Manual criterion × environment
 
@@ -24,11 +24,11 @@ Use **Pass / Fail / Blocked / Skipped (owner decision) / Not run** in each relev
 
 | Criterion | iOS Simulator | Physical iPhone | Physical Android | Observations / follow-up |
 | --- | --- | --- | --- | --- |
-| Alpha fresh data: build, Wave 1, upgrade, Wave 2 module, Wave 3 scanner **Got it**, force-quit/relaunch **before Alpha result**, no guide | Not run | Not run | Not run | — |
-| Independent fresh/replayed Alpha: **Skip**, force-quit/relaunch before Alpha result, no guide | Not run | Not run | Not run | — |
-| Later hints (unlocks through Wave 6, specialization, targeting, boss preview, modifier); Replay Tutorial vs Reset Campaign | Not run | Not run | Not run | — |
-| Alpha boss first-committed-clear blueprint in report; **relaunch** then map/briefing; replay adds no duplicate | Not run | Not run | Not run | — |
-| Later-stage boss reward + modifier; seven mappings and failed-save case covered by unit tests | Not run | Not run | Not run | — |
+| Alpha fresh data: build, Wave 1, upgrade, Wave 2 module, Wave 3 scanner **Got it**, force-quit/relaunch **before Alpha result**, no guide | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Waived by owner decision 2026-10-29; not verified. |
+| Independent fresh/replayed Alpha: **Skip**, force-quit/relaunch before Alpha result, no guide | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Waived by owner decision 2026-10-29; not verified. |
+| Later hints (unlocks through Wave 6, specialization, targeting, boss preview, modifier); Replay Tutorial vs Reset Campaign | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Waived by owner decision 2026-10-29; not verified. |
+| Alpha boss first-committed-clear blueprint in report; **relaunch** then map/briefing; replay adds no duplicate | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Waived by owner decision 2026-10-29; not verified. |
+| Later-stage boss reward + modifier; seven mappings and failed-save case covered by unit tests | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Waived by owner decision 2026-10-29; not verified. |
 | Music transitions/seams and Music × SFX switches; pause/background/relaunch persistence | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Audio listening waived by owner decision 2026-10-29; not verified. |
 | Combat SFX recognizable at 1× / not overwhelming at populated 3× | Skipped (owner decision) | Skipped (owner decision) | Skipped (owner decision) | Simulator listens through Mac, not device speakers. SFX listening waived by owner decision 2026-10-29; not verified. |
 | Real hardware input responsiveness/frame stutter and native audio balance at 3× | Not run | Skipped (owner decision) | Skipped (owner decision) | Physical-device evidence required; simulator result is not representative |
@@ -43,7 +43,7 @@ Use **Pass / Fail / Blocked / Skipped (owner decision) / Not run** in each relev
 - **Physical Android:** prior blocker: `adb` missing (HPA-417). Only install platform-tools if an Android device is available and needed.
 - **Actual simulator/hardware build, OS, sound outputs, levels, exact app SHA:** Not recorded.
 - **Owner decision (2026-10-29):** owner explicitly waived the hardware-only checks (physical iPhone and physical Android rows) and all audio-listening checks (simulator Mac-output music/SFX listening included). This waiver is an acceptance of unverified exceptions, **not** a pass: loop seams, 1×/3× balance, silent switch, external mixing/interruptions, and Android native playback remain unverified on real devices. Distinct from, broader in scope than, and complementary to, the prior HPA-417 waiver, which never covered HPA-303.
-- **Final disposition:** Hardware and audio-listening checks closed as Skipped (owner decision, 2026-10-29). The non-audio simulator walkthrough rows (guide/Skip persistence, later hints, boss and modified-stage reward persistence) remain **Not run** and still gate plan §5 and HPA-303 closure. Never mark hardware-only checks Pass from automated tests or simulator playback.
+- **Final disposition (2026-10-29): closed on documented owner exceptions.** All manual criteria — hardware-only checks, audio-listening checks, and the non-audio simulator walkthrough rows — are Skipped (owner decision); no human playthrough, listening, or device test was performed. Automated verification (CI incl. unit, integration and audio-contract tests, iOS/Android debug builds) is green on every pushed head. This closure never claims the played experience, audible output, or device behavior was validated.
 
 ## Observed defects / follow-ups
 

@@ -44,14 +44,14 @@
 
 ## 4. Evidence and defect triage
 
-**Update the already-committed** [validation record](../validation/2026-10-28-hpa-303-integrated-acceptance.md); do **not** recreate or duplicate its results table here. Use the CI and environment sections plus one row per criterion, with separate iOS Simulator / iPhone / Android results and concrete observations.
+- [x] **Update the already-committed** [validation record](../validation/2026-10-28-hpa-303-integrated-acceptance.md); do **not** recreate or duplicate its results table here. Use the CI and environment sections plus one row per criterion, with separate iOS Simulator / iPhone / Android results and concrete observations.
 
 For any observed failure, log the stage/wave/setting, exact reproduction steps, expected/actual behavior and severity. Fix only a narrow defect belonging to HPA-303 **within this same PR**, with a focused regression test. Move unrelated polish into its own focused ticket/PR; fresh art or SFX must be a separate asset task.
 
 ## 5. Completion gate
 
-- [ ] Verify **CI, build-ios and build-android green on the final head SHA**. If production code changes, wait for the newly triggered workflows to pass and **repeat the affected manual simulator/hardware rows**; record their actual updated-build outcome. Documentation-only changes likewise need the final CI confirmation, but do not pretend they were a manual run.
-- [ ] The evidence record accurately distinguishes simulator observations, physical results, blocked checks, owner waivers, and untouched rows.
-- [ ] Keep PR #45 Draft until the evidence and owner decisions justify review. Close HPA-303 only after its parent criteria actually pass or documented owner exceptions explicitly cover the unverified hardware cases.
+- [x] Verify **CI, build-ios and build-android green on the final head SHA**. If production code changes, wait for the newly triggered workflows to pass and **repeat the affected manual simulator/hardware rows**; record their actual updated-build outcome. Documentation-only changes likewise need the final CI confirmation, but do not pretend they were a manual run.
+- [x] The evidence record accurately distinguishes simulator observations, physical results, blocked checks, owner waivers, and untouched rows.
+- [x] Keep PR #45 Draft until the evidence and owner decisions justify review. Close HPA-303 only after its parent criteria actually pass or documented owner exceptions explicitly cover the unverified hardware cases.
 
 **No new frameworks, CI jobs, feature development, new assets, save migrations, gameplay balance changes, or multiple PRs for HPA-303.**
