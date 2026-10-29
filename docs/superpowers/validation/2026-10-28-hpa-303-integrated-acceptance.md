@@ -8,15 +8,15 @@
 
 The [CI workflow](../../../.github/workflows/ci.yml) already checks formatting, analysis, web build, Flutter tests, the Python audio asset contract and an **Android API 34 emulator smoke test with `-noaudio`**. [iOS](../../../.github/workflows/build-ios.yml) and [Android](../../../.github/workflows/build-android.yml) build workflows run on PRs. Check their conclusions against the **latest tested PR head** after any subsequent commit; older green checks do not prove the new head.
 
-All three workflows below ran on `pull_request` events for the **final current head** `baa90da` (`baa90dae2018b59fd7d2b1c7c1459dc0fb`, branch `plan/hpa-303-integrated-acceptance`) and completed 2026-10-29T01:54Z with conclusion **success** (machine-verified, 2026-10-29).
+All three workflows below ran on `pull_request` events for the **latest tested head** `1bb4d68` (`1bb4d6870ae8ffe35b970e1856d6d6c0b01a4640`, branch `plan/hpa-303-integrated-acceptance`) and completed 2026-10-29 with conclusion **success** (machine-verified, 2026-10-29). The app under test is unchanged since the last code-bearing head: the commits on top are docs-only.
 
 | Required run | Latest head SHA | Result | GitHub Actions link |
 | --- | --- | --- | --- |
-| CI (build/lint, tests, audio asset contract, emulator integration) | `baa90dae2018b59fd7d2b1c7c1459dc0fb` | Success | [run 40803202404](https://github.com/cwchanap/orion/actions/runs/40803202404) |
-| build-ios (debug) | `baa90dae2018b59fd7d2b1c7c1459dc0fb` | Success | [run 40803204254](https://github.com/cwchanap/orion/actions/runs/40803204254) |
-| build-android (debug) | `baa90dae2018b59fd7d2b1c7c1459dc0fb` | Success | [run 40803202457](https://github.com/cwchanap/orion/actions/runs/40803202457) |
+| CI (build/lint, tests, audio asset contract, emulator integration) | `1bb4d6870ae8ffe35b970e1856d6d6c0b01a4640` | Success | [run 40813451997](https://github.com/cwchanap/orion/actions/runs/40813451997) |
+| build-ios (debug) | `1bb4d6870ae8ffe35b970e1856d6d6c0b01a4640` | Success | [run 40813451980](https://github.com/cwchanap/orion/actions/runs/40813451980) |
+| build-android (debug) | `1bb4d6870ae8ffe35b970e1856d6d6c0b01a4640` | Success | [run 40813452002](https://github.com/cwchanap/orion/actions/runs/40813452002) |
 
-For reference only, all three workflows succeeded on the **previous** head `7648c2d`: [CI run 40743300548](https://github.com/cwchanap/orion/actions/runs/40743300548), [iOS run 40743300875](https://github.com/cwchanap/orion/actions/runs/40743300875), [Android run 40743300719](https://github.com/cwchanap/orion/actions/runs/40743300719). This is **not** validation of the current/final head or audible output.
+For reference only, all three workflows succeeded on the **previous** head `baa90da` (`baa90dae2018b59fd7d2b1ce32b1c7c1459dc0fb`): [CI run 40803202404](https://github.com/cwchanap/orion/actions/runs/40803202404), [iOS run 40803204254](https://github.com/cwchanap/orion/actions/runs/40803204254), [Android run 40803202457](https://github.com/cwchanap/orion/actions/runs/40803202457). This is **not** validation of the current/final head or audible output.
 
 ## Manual criterion × environment
 
@@ -38,7 +38,7 @@ Use **Pass / Fail / Blocked / Skipped (owner decision) / Not run** in each relev
 
 ## Environment, blockers, and decision
 
-- **Simulator availability:** re-enumerated at execution on 2026-10-29 via `xcrun simctl list devices available` and `flutter devices` (iOS 26.5 runtime): iPhone 17 — booted, UDID `4553E2C4-0B9D-416F-A36C-2F99E9EA48C6`; iPhone 16 — booted, UDID `00CA5728-2DD8-4317-A6DA-8FF8B6D2D67D`; HPA475-iPad — booted, UDID `DE515BB3-47E9-451F-8D9F-9105A4FD3364`; HPA475-SE — shutdown, UDID `248B0BE8-7437-4B6E-BC6B-4384AC7699A6`. A small portrait iPhone target is available (iPhone 17 / iPhone 16). This is an availability check only — no app install/run has been performed yet.
+- **Simulator availability:** re-enumerated at execution on 2026-10-29 via `xcrun simctl list devices available` and `flutter devices` (iOS 26.5 runtime): iPhone 17 — booted, UDID `4553E2C4-0B9D-416F-A36C-2F99E9EA48C6`; iPhone 16 — booted, UDID `00CA5728-2DD8-4317-A6DA-8FF8B6D2D67D`; HPA475-iPad — booted, UDID `DE515BB3-47E9-451F-8D9F-9105A4FD3364`; HPA475-SE — shutdown, UDID `248B0BE8-7437-4B6E-BC6B-4384AC7699A6`. A small portrait iPhone target is available (iPhone 17 / iPhone 16); for the plan §1 tap-safety check the small/short-viewport option is HPA475-SE (currently shutdown; boot when needed). This is an availability check only — no app install/run has been performed yet.
 - **Physical iPhone:** known prior blocker: Developer Mode disabled (HPA-417). Attempt enabling it and launching the app; document updated observation. `flutter devices` on 2026-10-29 also listed macOS, Chrome (web), and one physical iPhone (4), iOS 27.0.1, wireless — observed only; Developer Mode status unconfirmed and no install/run attempted, so this is not validation.
 - **Physical Android:** prior blocker: `adb` missing (HPA-417). Only install platform-tools if an Android device is available and needed.
 - **Actual simulator/hardware build, OS, sound outputs, levels, exact app SHA:** Not recorded.
