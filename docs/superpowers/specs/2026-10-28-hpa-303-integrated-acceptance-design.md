@@ -1,7 +1,7 @@
 # HPA-303 — Integrated acceptance design
 
 **Linear:** [HPA-303](https://linear.app/cwchanap/issue/HPA-303/product-make-orion-welcoming-worth-replaying-and-audible)  
-**Status:** Proposed; no human cross-feature/device acceptance has been claimed.  
+**Status:** Closed on documented owner exceptions (2026-10-29); no human cross-feature/device acceptance was performed.  
 **Scope:** Final verification and handoff for the already-merged initiative; not another gameplay feature.
 
 ## Product question
@@ -33,7 +33,7 @@ The normal player path is the authority for experience checks, because unit test
 
 ## Setup and repeatability
 
-- Use an expendable local installation/save. For a truly new player use a clean install/app-data state. **Reset Campaign alone is not a tutorial reset**; for guidance replay use Settings → Replay Tutorial, which resets both the HPA-412 guide and HPA-413 tips. Tutorial persistence is written by Skip or by **Got it** on the Wave 3 scanner callout, *not* by choosing the Wave 2 module. Test relaunch **before any committed Alpha result**, because the app otherwise infers tutorial completion from campaign progress.
+- Use an expendable local installation/save. For a truly new player use a clean install/app-data state. **Reset Campaign alone is not a tutorial reset**; for guidance replay use Settings → Replay Tutorial, which resets both the HPA-412 guide and HPA-413 tips. Tutorial persistence is written by Skip, by **Got it** on the Wave 3 scanner callout, or by starting Wave 3 while that scanner lesson is active — *not* by choosing the Wave 2 module. Test relaunch **before any committed Alpha result**, because the app otherwise infers tutorial completion from campaign progress.
 - Capture the commit SHA, platform, OS, hardware class, speed, audio switches and volume, test date, and whether the stage is fresh or replayed. Avoid personal device identifiers in committed documentation.
 - Run the later-stage modifier and second boss in ordinary progression where practical; use existing tests for the five remaining blueprint mappings. Force-quit/relaunch after a committed boss clear and check map/briefing from persisted data. Never change balance/save code merely to make manual testing convenient.
 - A separate [integration smoke test](../../../integration_test/app_smoke_test.dart) verifies basic UI/gameplay wiring, but intentionally disables **all three** feedback channels to avoid player timers at teardown. It **cannot** substantiate audio acceptance.
