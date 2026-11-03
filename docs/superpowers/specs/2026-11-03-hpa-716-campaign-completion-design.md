@@ -57,7 +57,7 @@ This belongs next to CampaignProgress.isCampaignComplete and statusFor, and can 
 
 In _MissionDestination.build, call that query. Derive its display qualifier directly from returned stage and progress status: NEXT MAIN / OPTIONAL / REPLAY (no enum). **Append** the qualifier to the existing one-line SECTOR NN kicker, e.g. “SECTOR 03 / OPTIONAL”, with ellipsis rather than a new row.
 
-**Accessibility compatibility:** preserve the current Semantics label exactly as “Briefing for <stage name>” because test/widget/scene_parity_regression_test.dart looks it up. Put the new recommended-stage qualifier in Semantics.hint. Keep onStageSelected, its busy gating, artwork, tap target, and existing briefing navigation unchanged.
+**Accessibility compatibility:** preserve the current Semantics label exactly as “Briefing for [stage name]” because test/widget/scene_parity_regression_test.dart looks it up. Put the new recommended-stage qualifier in Semantics.hint. Keep onStageSelected, its busy gating, artwork, tap target, and existing briefing navigation unchanged.
 
 ## Files and exclusions
 
