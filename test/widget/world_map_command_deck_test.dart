@@ -24,6 +24,19 @@ CampaignProgress clearedCampaignProgress() => CampaignProgress(
   },
 );
 
+/// All five main stages cleared plus the supplied side stages, so main
+/// completion is unambiguous while optional progress stays parameterizable.
+CampaignProgress mainCompleteProgress({
+  Set<String> clearedSideStages = const {},
+}) => CampaignProgress(
+  bestResultsByStageId: {
+    for (final stage in OrionCampaign.stages.where((stage) => stage.isMainPath))
+      stage.id: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    for (final id in clearedSideStages)
+      id: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+  },
+);
+
 Widget buildMap({
   required CampaignProgress progress,
   List<StageDefinition>? stages,
@@ -464,15 +477,138 @@ void main() {
     );
   });
 
+  testWidgets('fresh header shows only a MAIN badge with main-only '
+      'progress semantics', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+
+      expect(find.text('MAIN 0/5'), findsOneWidget);
+      expect(find.textContaining('OPTIONAL'), findsNothing);
+      expect(find.text('CAMPAIGN COMPLETE'), findsNothing);
+      expect(find.text('ALL SECTORS SECURED'), findsNothing);
+      expect(
+        find.bySemanticsLabel('Main 0 of 5 stages cleared'),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('optional badge waits for main completion even with a '
+      'cleared side stage', (tester) async {
+    await tester.pumpWidget(
+      buildMap(
+        progress: CampaignProgress(
+          bestResultsByStageId: const {
+            'outpost-alpha': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'nebula-relay': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'salvage-rift': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
+        ),
+      ),
+    );
+
+    expect(find.text('MAIN 2/5'), findsOneWidget);
+    expect(find.textContaining('OPTIONAL'), findsNothing);
+  });
+
+  testWidgets('main-complete header shows both badges and a visual-only '
+      'completion line', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        buildMap(
+          progress: mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
+        ),
+      );
+
+      expect(find.text('MAIN 5/5'), findsOneWidget);
+      expect(find.text('OPTIONAL 1/2'), findsOneWidget);
+      expect(find.text('CAMPAIGN COMPLETE'), findsOneWidget);
+      expect(find.text('ALL SECTORS SECURED'), findsNothing);
+      expect(
+        find.bySemanticsLabel(
+          'Campaign complete. Main 5 of 5 stages, optional 1 of 2 stages.',
+        ),
+        findsOneWidget,
+      );
+      // The status line is decorative: its text must not echo the summary.
+      expect(find.bySemanticsLabel(RegExp(r'CAMPAIGN COMPLETE')), findsNothing);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('full clear reads ALL SECTORS SECURED, hides the redundant '
+      'optional badge yet still announces its count', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
+
+      expect(find.text('MAIN 5/5'), findsOneWidget);
+      expect(find.textContaining('OPTIONAL'), findsNothing);
+      expect(find.text('ALL SECTORS SECURED'), findsOneWidget);
+      expect(find.text('CAMPAIGN COMPLETE'), findsNothing);
+      expect(
+        find.bySemanticsLabel(
+          'Campaign complete. Main 5 of 5 stages, optional 2 of 2 stages.',
+        ),
+        findsOneWidget,
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('header badges clamp text scale to the 1.3x dense-map '
+      'precedent', (tester) async {
+    final host = buildMap(progress: clearedCampaignProgress()) as MaterialApp;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: host.theme,
+        home: host.home,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3)),
+          child: child!,
+        ),
+      ),
+    );
+
+    final badge = tester.widget<Text>(find.text('MAIN 5/5'));
+    expect(badge.textScaler!.scale(1), closeTo(1.3, 0.001));
+  });
+
   testWidgets('empty campaign preserves the existing empty state', (
     tester,
   ) async {
-    await tester.pumpWidget(
-      buildMap(progress: CampaignProgress(), stages: const []),
-    );
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        buildMap(progress: CampaignProgress(), stages: const []),
+      );
 
-    expect(find.text('No stages available'), findsOneWidget);
-    expect(find.byKey(const ValueKey('sector-route-layer')), findsNothing);
+      expect(find.text('No stages available'), findsOneWidget);
+      expect(find.byKey(const ValueKey('sector-route-layer')), findsNothing);
+      // Safe zeros: an empty list never claims completion.
+      expect(find.text('CAMPAIGN COMPLETE'), findsNothing);
+      expect(find.text('ALL SECTORS SECURED'), findsNothing);
+      expect(find.bySemanticsLabel(RegExp(r'Campaign complete')), findsNothing);
+    } finally {
+      semantics.dispose();
+    }
   });
 
   testWidgets(
