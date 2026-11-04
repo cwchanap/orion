@@ -428,6 +428,19 @@ void main() {
         expect(progress.recommendedStage(stages)?.id, 'stage-3');
       });
 
+      test('open main wins over an optional listed earlier in the list', () {
+        // Production mid-campaign order: clearing Nebula Relay unlocks both
+        // Salvage Rift (optional, listed third) and Asteroid Foundry (next
+        // main, listed fourth). A first-unlocked-in-list algorithm would
+        // wrongly recommend the optional stage here.
+        final progress = _progressWithClears(['outpost-alpha', 'nebula-relay']);
+
+        expect(
+          progress.recommendedStage(OrionCampaign.stages)?.id,
+          'asteroid-foundry',
+        );
+      });
+
       test('main-complete campaign recommends the first optional', () {
         final progress = _progressWithClears([
           'stage-1',

@@ -85,165 +85,170 @@ class _WorldMapViewState extends State<WorldMapView> {
         widget.stages.isNotEmpty &&
         mainCleared + optionalCleared == mainTotal + optionalTotal;
 
+    if (widget.stages.isEmpty) {
+      return SafeArea(
+        child: _EmptySectorMap(
+          uiTheme: uiTheme,
+          feedback: _effectiveFeedback,
+          hasChallengeBadge:
+              widget.campaignModifiers?.hasChallengeBadge == true,
+          isBusy: _isBusy,
+          isSavingFeedback: widget.isSavingFeedback,
+          onOpenCodex: widget.onOpenCodex,
+          onOpenTechTree: widget.onOpenTechTree,
+          onResetCampaign: widget.onResetCampaign,
+          onOpenSettings: widget.onOpenSettings,
+        ),
+      );
+    }
+
     return SafeArea(
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          if (widget.stages.isEmpty) {
-            return _EmptySectorMap(
-              uiTheme: uiTheme,
-              feedback: _effectiveFeedback,
-              hasChallengeBadge:
-                  widget.campaignModifiers?.hasChallengeBadge == true,
-              isBusy: _isBusy,
-              isSavingFeedback: widget.isSavingFeedback,
-              onOpenCodex: widget.onOpenCodex,
-              onOpenTechTree: widget.onOpenTechTree,
-              onResetCampaign: widget.onResetCampaign,
-              onOpenSettings: widget.onOpenSettings,
-            );
-          }
-
-          final sectorLayout = SectorMapLayout.fromStages(
-            stages: widget.stages,
-            size: constraints.biggest,
-          );
-          final nodeRects = {
-            for (final stage in widget.stages)
-              stage.id: sectorLayout.nodeRect(stage),
-          };
-
-          // At narrow widths the minimum non-overlapping column step makes the
-          // plot wider than the viewport; wrap routes + nodes in a horizontal
-          // scroll so adjacent targets stay tappable. Header, utility rail and
-          // medal legend remain fixed above the scrollable plot.
-          final contentWidth = sectorLayout.plotContentWidth;
-          final plotHeight =
-              nodeRects.values
-                  .map((rect) => rect.bottom)
-                  .reduce((a, b) => a > b ? a : b) +
-              12;
-          final plotLayers = Stack(
-            key: const ValueKey('world-map-plot'),
-            children: [
-              Positioned.fill(
-                child: CustomPaint(
-                  key: const ValueKey('sector-route-layer'),
-                  painter: SectorRoutePainter(
-                    routes: SectorMapLayout.routes(
-                      widget.stages,
-                      widget.progress,
-                    ),
-                    nodeRects: nodeRects,
-                    uiTheme: uiTheme,
+      child: Stack(
+        children: [
+          const Positioned.fill(
+            child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
+          ),
+          Positioned.fill(
+            child: Column(
+              children: [
+                // The header stack rides in the flow, not as a floating
+                // overlay: the vertically scrolling plot used to render
+                // visible node hit targets behind the overlay at compact
+                // heights and large text scales. In-flow, the plot starts
+                // below the rail, so no tappable node can sit under the
+                // header while still being visible.
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    SectorMapLayout.horizontalPadding,
+                    8,
+                    SectorMapLayout.horizontalPadding,
+                    0,
                   ),
-                ),
-              ),
-              for (final stage in widget.stages)
-                Positioned.fromRect(
-                  rect: nodeRects[stage.id]!,
-                  child: _IllustratedStageNode(
-                    key: ValueKey('sector-stage-${stage.id}'),
-                    stage: stage,
-                    status: widget.progress.statusFor(stage),
-                    result: widget.progress.resultFor(stage.id),
-                    isBusy: _isBusy,
-                    onStageSelected: widget.onStageSelected,
-                    onLockedStageSelected: widget.onLockedStageSelected,
-                  ),
-                ),
-            ],
-          );
-          return Stack(
-            children: [
-              const Positioned.fill(
-                child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
-              ),
-              Positioned.fill(
-                child: Column(
-                  children: [
-                    // The header stack rides in the flow, not as a floating
-                    // overlay: the vertically scrolling plot used to render
-                    // visible node hit targets behind the overlay at compact
-                    // heights and large text scales. In-flow, the plot starts
-                    // below the rail, so no tappable node can sit under the
-                    // header while still being visible.
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        SectorMapLayout.horizontalPadding,
-                        8,
-                        SectorMapLayout.horizontalPadding,
-                        0,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _SectorHeader(
+                        mainCleared: mainCleared,
+                        mainTotal: mainTotal,
+                        optionalCleared: optionalCleared,
+                        optionalTotal: optionalTotal,
+                        mainComplete: mainComplete,
+                        fullySecured: fullySecured,
+                        hasChallengeBadge:
+                            widget.campaignModifiers?.hasChallengeBadge == true,
+                        feedback: _effectiveFeedback,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _SectorHeader(
-                            mainCleared: mainCleared,
-                            mainTotal: mainTotal,
-                            optionalCleared: optionalCleared,
-                            optionalTotal: optionalTotal,
-                            mainComplete: mainComplete,
-                            fullySecured: fullySecured,
-                            hasChallengeBadge:
-                                widget.campaignModifiers?.hasChallengeBadge ==
-                                true,
-                            feedback: _effectiveFeedback,
-                          ),
-                          const SizedBox(height: 16),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: _UtilityRail(
-                              isBusy: _isBusy,
-                              isSavingFeedback: widget.isSavingFeedback,
-                              onOpenCodex: widget.onOpenCodex,
-                              onOpenTechTree: widget.onOpenTechTree,
-                              onResetCampaign: widget.onResetCampaign,
-                              onOpenSettings: widget.onOpenSettings,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, plotConstraints) => SizedBox.expand(
-                          key: const ValueKey('world-map-plot-viewport'),
-                          child:
-                              contentWidth > plotConstraints.maxWidth ||
-                                  plotHeight > plotConstraints.maxHeight
-                              ? SingleChildScrollView(
-                                  reverse: true,
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: SizedBox(
-                                      width: contentWidth,
-                                      height: plotHeight,
-                                      child: plotLayers,
-                                    ),
-                                  ),
-                                )
-                              : plotLayers,
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: _UtilityRail(
+                          isBusy: _isBusy,
+                          isSavingFeedback: widget.isSavingFeedback,
+                          onOpenCodex: widget.onOpenCodex,
+                          onOpenTechTree: widget.onOpenTechTree,
+                          onResetCampaign: widget.onResetCampaign,
+                          onOpenSettings: widget.onOpenSettings,
                         ),
                       ),
-                    ),
-                    Container(
-                      constraints: const BoxConstraints(minHeight: 150),
-                      alignment: Alignment.bottomCenter,
-                      padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
-                      child: _MissionDestination(
-                        stages: widget.stages,
-                        progress: widget.progress,
-                        onStageSelected: _isBusy
-                            ? null
-                            : widget.onStageSelected,
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          );
-        },
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, plotConstraints) {
+                      // Size the star chart to the viewport the in-flow
+                      // header and footer actually leave, not the whole
+                      // SafeArea: the old full-height frame kept the
+                      // overlay-era reservations, forcing needless
+                      // scrolling and clipping the top stages on first
+                      // view.
+                      final sectorLayout = SectorMapLayout.fromStages(
+                        stages: widget.stages,
+                        size: plotConstraints.biggest,
+                      );
+                      final nodeRects = {
+                        for (final stage in widget.stages)
+                          stage.id: sectorLayout.nodeRect(stage),
+                      };
+
+                      // At narrow widths the minimum non-overlapping
+                      // column step makes the plot wider than the
+                      // viewport; wrap routes + nodes in a horizontal
+                      // scroll so adjacent targets stay tappable. Header
+                      // and utility rail remain fixed above the plot.
+                      final contentWidth = sectorLayout.plotContentWidth;
+                      final plotHeight =
+                          nodeRects.values
+                              .map((rect) => rect.bottom)
+                              .reduce((a, b) => a > b ? a : b) +
+                          12;
+                      final plotLayers = Stack(
+                        key: const ValueKey('world-map-plot'),
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              key: const ValueKey('sector-route-layer'),
+                              painter: SectorRoutePainter(
+                                routes: SectorMapLayout.routes(
+                                  widget.stages,
+                                  widget.progress,
+                                ),
+                                nodeRects: nodeRects,
+                                uiTheme: uiTheme,
+                              ),
+                            ),
+                          ),
+                          for (final stage in widget.stages)
+                            Positioned.fromRect(
+                              rect: nodeRects[stage.id]!,
+                              child: _IllustratedStageNode(
+                                key: ValueKey('sector-stage-${stage.id}'),
+                                stage: stage,
+                                status: widget.progress.statusFor(stage),
+                                result: widget.progress.resultFor(stage.id),
+                                isBusy: _isBusy,
+                                onStageSelected: widget.onStageSelected,
+                                onLockedStageSelected:
+                                    widget.onLockedStageSelected,
+                              ),
+                            ),
+                        ],
+                      );
+                      return SizedBox.expand(
+                        key: const ValueKey('world-map-plot-viewport'),
+                        child:
+                            contentWidth > plotConstraints.maxWidth ||
+                                plotHeight > plotConstraints.maxHeight
+                            ? SingleChildScrollView(
+                                reverse: true,
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: SizedBox(
+                                    width: contentWidth,
+                                    height: plotHeight,
+                                    child: plotLayers,
+                                  ),
+                                ),
+                              )
+                            : plotLayers,
+                      );
+                    },
+                  ),
+                ),
+                Container(
+                  constraints: const BoxConstraints(minHeight: 150),
+                  alignment: Alignment.bottomCenter,
+                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
+                  child: _MissionDestination(
+                    stages: widget.stages,
+                    progress: widget.progress,
+                    onStageSelected: _isBusy ? null : widget.onStageSelected,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

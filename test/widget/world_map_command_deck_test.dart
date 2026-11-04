@@ -52,12 +52,19 @@ Widget buildMap({
   bool isSavingProgress = false,
   bool isResetting = false,
   bool isSavingFeedback = false,
+  TextScaler? textScaler,
 }) {
   return MaterialApp(
     // The product app hides this banner; a fixture host must too, or the
     // parity evidence carries a stripe the shipped game never shows.
     debugShowCheckedModeBanner: false,
     theme: orionThemeData,
+    builder: textScaler == null
+        ? null
+        : (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
     home: Scaffold(
       body: WorldMapView(
         stages: stages ?? OrionCampaign.stages,
@@ -95,22 +102,11 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       await tester.runAsync(loadRealFonts);
-      final host =
-          buildMap(
-                progress: CampaignProgress(),
-                feedback: 'Singularity Core is locked.',
-              )
-              as MaterialApp;
       await tester.pumpWidget(
-        MaterialApp(
-          theme: host.theme,
-          home: host.home,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(3)),
-            child: child!,
-          ),
+        buildMap(
+          progress: CampaignProgress(),
+          feedback: 'Singularity Core is locked.',
+          textScaler: const TextScaler.linear(3),
         ),
       );
       await tester.pump();
@@ -121,6 +117,52 @@ void main() {
       );
       expect(titleRect.overlaps(codexRect), isFalse);
       expect(feedbackRect.overlaps(codexRect), isFalse);
+    },
+  );
+
+  testWidgets(
+    'common portrait screens fit the whole star chart without scrolling',
+    (tester) async {
+      // Finding: the header moved into the flow, but the plot kept sizing
+      // itself to the full SafeArea, so common screens scrolled needlessly,
+      // showed a dead band above the top stage, and clipped it at first
+      // view. The plot must size itself to the viewport the in-flow header
+      // and footer actually leave.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(),
+          feedback: 'Singularity Core is locked.',
+        ),
+      );
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      // No vertical scrolling is needed on a common screen.
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable && widget.axisDirection == AxisDirection.up,
+        ),
+        findsNothing,
+      );
+
+      // Every stage node — the top row included — is fully on screen in the
+      // first view.
+      final viewport = tester.getRect(
+        find.byKey(const ValueKey('world-map-plot-viewport')),
+      );
+      for (final stage in OrionCampaign.stages) {
+        final rect = tester.getRect(
+          find.byKey(ValueKey('sector-stage-${stage.id}')),
+        );
+        expect(viewport.contains(rect.topLeft), isTrue, reason: stage.id);
+        expect(viewport.contains(rect.bottomRight), isTrue, reason: stage.id);
+      }
     },
   );
 
@@ -139,18 +181,11 @@ void main() {
         CampaignProgress progress, {
         String? feedback,
       }) async {
-        final host =
-            buildMap(progress: progress, feedback: feedback) as MaterialApp;
         await tester.pumpWidget(
-          MaterialApp(
-            theme: host.theme,
-            home: host.home,
-            builder: (context, child) => MediaQuery(
-              data: MediaQuery.of(
-                context,
-              ).copyWith(textScaler: const TextScaler.linear(3)),
-              child: child!,
-            ),
+          buildMap(
+            progress: progress,
+            feedback: feedback,
+            textScaler: const TextScaler.linear(3),
           ),
         );
         await tester.pump();
@@ -598,6 +633,12 @@ void main() {
   ) async {
     final handle = tester.ensureSemantics();
     try {
+      // A portrait surface large enough for the whole star chart, so every
+      // measured semantics rect is the node's full 72x94 target rather than
+      // the clipped portion of a scrolled-out node.
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
       await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
       for (final stage in OrionCampaign.stages) {
         final data = tester.getSemantics(
@@ -773,17 +814,10 @@ void main() {
 
   testWidgets('header badges clamp text scale to the 1.3x dense-map '
       'precedent', (tester) async {
-    final host = buildMap(progress: clearedCampaignProgress()) as MaterialApp;
     await tester.pumpWidget(
-      MaterialApp(
-        theme: host.theme,
-        home: host.home,
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(
-            context,
-          ).copyWith(textScaler: const TextScaler.linear(3)),
-          child: child!,
-        ),
+      buildMap(
+        progress: clearedCampaignProgress(),
+        textScaler: const TextScaler.linear(3),
       ),
     );
 
@@ -1400,27 +1434,14 @@ void main() {
       await tester.runAsync(loadRealFonts);
 
       final selected = <String>[];
-      final host =
-          buildMap(
-                // The tallest header (badges + completion + feedback rows) leaves
-                // the smallest viewport, so scrolling is unavoidable.
-                progress: mainCompleteProgress(
-                  clearedSideStages: {'salvage-rift'},
-                ),
-                feedback: 'Saving campaign progress…',
-                onStageSelected: (stage) => selected.add(stage.id),
-              )
-              as MaterialApp;
       await tester.pumpWidget(
-        MaterialApp(
-          theme: host.theme,
-          home: host.home,
-          builder: (context, child) => MediaQuery(
-            data: MediaQuery.of(
-              context,
-            ).copyWith(textScaler: const TextScaler.linear(3)),
-            child: child!,
-          ),
+        buildMap(
+          // The tallest header (badges + completion + feedback rows) leaves
+          // the smallest viewport, so scrolling is unavoidable.
+          progress: mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
+          feedback: 'Saving campaign progress…',
+          onStageSelected: (stage) => selected.add(stage.id),
+          textScaler: const TextScaler.linear(3),
         ),
       );
       await tester.pump();
@@ -1450,6 +1471,70 @@ void main() {
       expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
     },
   );
+
+  testWidgets('at 320x568 with 3x text a real drag scrolls the plot and taps a '
+      'revealed stage', (tester) async {
+    // ensureVisible alone does not prove the compact plot answers a real
+    // touch drag. Drag the reverse (bottom-anchored) scrollable up to the
+    // clipped top stages, then tap a node that only became tappable after
+    // the drag.
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(loadRealFonts);
+
+    final selected = <String>[];
+    await tester.pumpWidget(
+      buildMap(
+        progress: mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
+        feedback: 'Saving campaign progress…',
+        onStageSelected: (stage) => selected.add(stage.id),
+        textScaler: const TextScaler.linear(3),
+      ),
+    );
+    await tester.pump();
+
+    final verticalScroll = tester.state<ScrollableState>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Scrollable && widget.axisDirection == AxisDirection.up,
+      ),
+    );
+    // The reverse scrollable rests at the bottom of the plot.
+    expect(verticalScroll.position.pixels, 0);
+
+    // Drag with a real held gesture. Downward finger movement pushes a
+    // reverse (bottom-anchored) scrollable toward the top of its content;
+    // two legs carry the offset to the top extent in every geometry this
+    // test may run against.
+    final gesture = await tester.startGesture(
+      tester.getCenter(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      ),
+    );
+    await gesture.moveBy(const Offset(0, 600));
+    await tester.pump();
+    await gesture.moveBy(const Offset(0, 600));
+    await gesture.up();
+    await tester.pumpAndSettle();
+
+    // The real gesture moved the plot all the way to the top extent.
+    expect(verticalScroll.position.maxScrollExtent, greaterThan(0));
+    expect(
+      verticalScroll.position.pixels,
+      verticalScroll.position.maxScrollExtent,
+    );
+
+    // Singularity Core sits at the top of the plot, clipped out of the
+    // first view; after the drag its tap center is revealed and taps work.
+    final core = find.byKey(const ValueKey('sector-stage-singularity-core'));
+    final viewport = tester.getRect(
+      find.byKey(const ValueKey('world-map-plot-viewport')),
+    );
+    expect(viewport.contains(tester.getRect(core).center), isTrue);
+    await tester.tap(core);
+    expect(selected, ['singularity-core']);
+  });
 
   testWidgets(
     'below the minimum non-overlapping width the plot scrolls horizontally '
