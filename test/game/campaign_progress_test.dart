@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -415,6 +416,79 @@ void main() {
         );
       });
     });
+
+    group('recommendedStage', () {
+      test('fresh campaign recommends the first main stage', () {
+        expect(CampaignProgress().recommendedStage(stages)?.id, 'stage-1');
+      });
+
+      test('open main stage wins over an unlocked optional', () {
+        final progress = _progressWithClears(['stage-1', 'stage-2']);
+
+        expect(progress.recommendedStage(stages)?.id, 'stage-3');
+      });
+
+      test('main-complete campaign recommends the first optional', () {
+        final progress = _progressWithClears([
+          'stage-1',
+          'stage-2',
+          'stage-3',
+          'stage-4',
+          'stage-5',
+        ]);
+
+        expect(progress.recommendedStage(stages)?.id, 'side-a');
+      });
+
+      test('first cleared optional moves the recommendation to the second', () {
+        final progress = _progressWithClears([
+          'stage-1',
+          'stage-2',
+          'stage-3',
+          'stage-4',
+          'stage-5',
+          'side-a',
+        ]);
+
+        expect(progress.recommendedStage(stages)?.id, 'side-b');
+      });
+
+      test(
+        'fully cleared fixture replays the last non-locked stage in the list',
+        () {
+          final progress = _progressWithClears([
+            'stage-1',
+            'stage-2',
+            'stage-3',
+            'stage-4',
+            'stage-5',
+            'side-a',
+            'side-b',
+          ]);
+
+          expect(progress.recommendedStage(stages)?.id, 'side-b');
+        },
+      );
+
+      test('fully cleared production campaign replays singularity-core', () {
+        final progress = _progressWithClears(
+          OrionCampaign.stages.map((stage) => stage.id),
+        );
+
+        expect(
+          progress.recommendedStage(OrionCampaign.stages)?.id,
+          'singularity-core',
+        );
+      });
+
+      test('returns null for empty input or all-locked stages', () {
+        expect(CampaignProgress().recommendedStage(const []), isNull);
+        expect(
+          CampaignProgress().recommendedStage([stages[1], stages[6]]),
+          isNull,
+        );
+      });
+    });
   });
 
   group('StageDefinition', () {
@@ -739,6 +813,15 @@ void main() {
       },
     );
   });
+}
+
+CampaignProgress _progressWithClears(Iterable<String> stageIds) {
+  return CampaignProgress(
+    bestResultsByStageId: {
+      for (final id in stageIds)
+        id: const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+    },
+  );
 }
 
 StageDefinition _stage({
