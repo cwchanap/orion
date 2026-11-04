@@ -1388,6 +1388,70 @@ void main() {
   );
 
   testWidgets(
+    'at 320x568 with 3x system text the plot scrolls and every stage stays '
+    'selectable',
+    (tester) async {
+      // Task-4 moved the header into the flow, so compact viewports scroll
+      // the plot vertically. This guards that scrolling still exposes every
+      // stage node as a working tap target at the cramped extreme.
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+
+      final selected = <String>[];
+      final host =
+          buildMap(
+                // The tallest header (badges + completion + feedback rows) leaves
+                // the smallest viewport, so scrolling is unavoidable.
+                progress: mainCompleteProgress(
+                  clearedSideStages: {'salvage-rift'},
+                ),
+                feedback: 'Saving campaign progress…',
+                onStageSelected: (stage) => selected.add(stage.id),
+              )
+              as MaterialApp;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: host.theme,
+          home: host.home,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3)),
+            child: child!,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // The in-flow header leaves a viewport short enough to require the
+      // vertical scroll (the reverse scrollable reports axisDirection up).
+      final verticalScroll = tester.state<ScrollableState>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Scrollable && widget.axisDirection == AxisDirection.up,
+        ),
+      );
+      expect(verticalScroll.position.maxScrollExtent, greaterThan(0));
+
+      var scrolled = false;
+      for (final stage in OrionCampaign.stages) {
+        final node = find.byKey(ValueKey('sector-stage-${stage.id}'));
+        final before = verticalScroll.position.pixels;
+        await tester.ensureVisible(node);
+        await tester.pump();
+        scrolled = scrolled || verticalScroll.position.pixels != before;
+        await tester.tap(node);
+        expect(tester.takeException(), isNull, reason: stage.id);
+      }
+      // Selection genuinely happened while scrolled, not at offset zero.
+      expect(scrolled, isTrue);
+      expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
+    },
+  );
+
+  testWidgets(
     'below the minimum non-overlapping width the plot scrolls horizontally '
     'and stage selection still works',
     (tester) async {
