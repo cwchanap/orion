@@ -31,7 +31,7 @@ Use **OPTIONAL** consistently on the world-map badge, footer qualifier, and exis
 Use the existing _SectorHeader and _HeaderBadge in lib/game/ui/world_map_view.dart:
 
 1. **Title row:** globe icon, flexible/ellipsized ORION SECTOR title, gold/cyan **MAIN x/5** badge (reusing the existing campaign-complete icon), and violet **OPTIONAL y/2** _HeaderBadge only when the main campaign is complete **and** optional stages remain. Keep the existing earned Challenge Badge star in its current conditional position.
-2. **Micro status line below that row:** CAMPAIGN COMPLETE or ALL SECTORS SECURED when appropriate, using the existing feedback-line layout approach. No completion line for a fresh/partial campaign.
+2. **Micro status line below that row:** CAMPAIGN COMPLETE or ALL SECTORS SECURED when appropriate, using the existing feedback-line layout approach. Wrap this decorative status row in `ExcludeSemantics` so a screen reader does not hear the completion announcement twice; only the unified progress `Semantics` summary on the title-row badges announces it. No completion line for a fresh/partial campaign.
 3. **Existing feedback line** below the status line when present. The utility rail follows the header in the existing Column, so it is permitted to move down as header lines appear. Do not add a new overlay or move the utility rail to a different parent.
 4. **Text fitting:** clamp badge text scaling to the existing 1.3x precedent used for dense map labels, while the title is already flexible and ellipsized. Keep each status line short and ensure the title/badges/star do not overflow at 320 logical pixels with system text scale 3x. Prefer an in-place compact layout adjustment over new layout machinery if a test exposes an overlap.
 
@@ -39,7 +39,7 @@ The optional badge is hidden at full clear: ALL SECTORS SECURED and the existing
 
 Derive main/optional totals and clear counts from the **supplied stages** and CampaignProgress.isCleared. Keep CampaignProgress.isCampaignComplete(stages) as the authoritative main completion rule. Derive fully secured from a nonempty supplied list with every stage cleared; do not reuse hasChallengeBadge as a proxy because that flag only requires optional stages.
 
-Keep the Challenge Badge icon and tooltip driven by the existing CampaignModifiers value (not by the new header counters). Example semantics for main-complete but optional-incomplete: “Campaign complete. Main 5 of 5 stages, optional 1 of 2 stages.” Make the corresponding non-complete/full-clear summaries accurate without duplicate accessibility announcements.
+Keep the Challenge Badge icon and tooltip driven by the existing CampaignModifiers value (not by the new header counters). Wrap the main and optional progress badges in **one** `Semantics` node with a single summary, e.g. “Campaign complete. Main 5 of 5 stages, optional 1 of 2 stages.” Suppress the new micro-status line's default text semantics with `ExcludeSemantics` (but leave the existing feedback message independently accessible). Make non-complete/full-clear summaries accurate, including optional 2 of 2 at full clear; the completion text must not create a second announcement.
 
 **Layout acceptance:** at 320x568 and text scale 3x, the title/header badges, completion status, and utility rail must avoid Flutter overflow and must not overlap visible tappable stage-node rectangles. A header may grow vertically; “never move the rail” is **not** a valid requirement.
 
@@ -55,7 +55,7 @@ Add one small, deterministic query to lib/game/campaign/campaign_progress.dart:
 
 This belongs next to CampaignProgress.isCampaignComplete and statusFor, and can be unit-tested without rendering a whole map. It is a simple query, **not** a new routing service or mutable campaign state.
 
-In _MissionDestination.build, call that query. Derive its display qualifier directly from returned stage and progress status: NEXT MAIN / OPTIONAL / REPLAY (no enum). **Append** the qualifier to the existing one-line SECTOR NN kicker, e.g. “SECTOR 03 / OPTIONAL”, with ellipsis rather than a new row.
+In _MissionDestination.build, call that query. Derive its display qualifier directly from returned stage and progress status: NEXT MAIN / OPTIONAL / REPLAY (no enum). **Append** the qualifier to the existing one-line SECTOR NN kicker, e.g. “SECTOR 03 / OPTIONAL”, using `' / '` as a separator. The current `OrionText.micro` does **not** expose `maxLines` or `overflow`; render this kicker as ordinary `Text` with `style: OrionTypography.microLabel(color: theme.systemCyan)`, `maxLines: 1`, and `overflow: TextOverflow.ellipsis`. Do not modify the shared typography component just for this usage. This is important because the footer can otherwise grow and obscure the first stage on small screens.
 
 **Accessibility compatibility:** preserve the current Semantics label exactly as “Briefing for [stage name]” because test/widget/scene_parity_regression_test.dart looks it up. Put the new recommended-stage qualifier in Semantics.hint. Keep onStageSelected, its busy gating, artwork, tap target, and existing briefing navigation unchanged.
 
@@ -66,7 +66,7 @@ Planned implementation changes:
 - lib/game/campaign/campaign_progress.dart — pure recommendation query only; no progress-state or save changes
 - lib/game/ui/world_map_view.dart — derived counters, header/status UI, qualifier/hint, call to query
 - test/game/campaign_progress_test.dart — small scenario table for the recommendation query
-- test/widget/world_map_command_deck_test.dart — visible copy, semantics, busy and compact layout regressions
+- test/widget/world_map_command_deck_test.dart — visible copy, semantics, busy and compact layout regressions with realistic derived modifiers, non-null feedback, and real fonts
 
 **Read but preserve:** test/widget/scene_parity_regression_test.dart. It relies on the exact existing destination Semantics.label; no change is expected if the label stays stable.
 
@@ -76,10 +76,10 @@ Do not change OrionDefenseGame, GameSession, the save codec, stage definitions, 
 
 ## Acceptance and regression checks
 
-1. Table-test the read-only recommendation query for fresh, mid-campaign with an optional stage open, main complete with zero/one optional clears, all cleared, and no playable stages.
-2. Widget-test each qualifier (NEXT MAIN, OPTIONAL, REPLAY), accessible hint, and the unchanged Briefing for <stage name> label.
+1. Table-test the read-only recommendation query for fresh, mid-campaign with an optional stage open, main complete with zero/one optional clears, all cleared, and no playable stages. The existing synthetic seven-stage list ends in `side-b`, so its all-clear replay fallback must return `side-b`; add a separate real `OrionCampaign.stages` assertion for `singularity-core` (the production list's final stage).
+2. Widget-test each qualifier (NEXT MAIN, OPTIONAL, REPLAY), accessible hint, the unchanged `Briefing for [stage name]` label, and a single non-duplicated campaign-progress announcement.
 3. Widget-test main/optional status, header semantics, Challenge Badge presence, and empty-stage behavior.
-4. Add an automated **320x568 / 3x** widget layout test using **real derived CampaignModifiers.fromProgress** (not a null fixture). Pump both near-full (two header badges) and full-clear (Challenge Badge) states. Assert no Flutter layout errors and that the header and rail do not overlap visible stage-node rectangles. Reuse the current rect/semantics test patterns.
+4. Add an automated **320x568 / 3x** widget layout test. **Load actual fonts first** with `await tester.runAsync(loadRealFonts)` and pass **production-like `CampaignModifiers.fromProgress`** (not a null fixture). Pump both near-full (two header badges) and full-clear (Challenge Badge) states, including **non-null feedback** in at least the longest header scenario so the layout has title, completion-status and feedback rows. Assert no Flutter layout errors and that the header and rail do not overlap visible stage-node rectangles; the footer must not obscure Outpost Alpha's hit target. Reuse current rect/semantics test patterns.
 5. Verify saving/resetting still disables the footer and stage-node interactions. Existing scene-parity, compact-screen, and accessibility tests must still pass.
 6. Complete dart format, flutter analyze, flutter test --coverage (Codecov >=90%) and flutter build web --release before marking this single PR ready.
 
