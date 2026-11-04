@@ -62,9 +62,28 @@ class _WorldMapViewState extends State<WorldMapView> {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final cleared = widget.stages
-        .where((stage) => widget.progress.isCleared(stage.id))
-        .length;
+    var mainTotal = 0;
+    var mainCleared = 0;
+    var optionalTotal = 0;
+    var optionalCleared = 0;
+    for (final stage in widget.stages) {
+      final cleared = widget.progress.isCleared(stage.id);
+      if (stage.isMainPath) {
+        mainTotal += 1;
+        if (cleared) {
+          mainCleared += 1;
+        }
+      } else {
+        optionalTotal += 1;
+        if (cleared) {
+          optionalCleared += 1;
+        }
+      }
+    }
+    final mainComplete = widget.progress.isCampaignComplete(widget.stages);
+    final fullySecured =
+        widget.stages.isNotEmpty &&
+        mainCleared + optionalCleared == mainTotal + optionalTotal;
 
     return SafeArea(
       child: LayoutBuilder(
@@ -187,11 +206,12 @@ class _WorldMapViewState extends State<WorldMapView> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _SectorHeader(
-                      cleared: cleared,
-                      total: widget.stages.length,
-                      isCampaignComplete: widget.progress.isCampaignComplete(
-                        widget.stages,
-                      ),
+                      mainCleared: mainCleared,
+                      mainTotal: mainTotal,
+                      optionalCleared: optionalCleared,
+                      optionalTotal: optionalTotal,
+                      mainComplete: mainComplete,
+                      fullySecured: fullySecured,
                       hasChallengeBadge:
                           widget.campaignModifiers?.hasChallengeBadge == true,
                       feedback: _effectiveFeedback,
@@ -325,9 +345,12 @@ class _EmptySectorMap extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _SectorHeader(
-                cleared: 0,
-                total: 0,
-                isCampaignComplete: false,
+                mainCleared: 0,
+                mainTotal: 0,
+                optionalCleared: 0,
+                optionalTotal: 0,
+                mainComplete: false,
+                fullySecured: false,
                 hasChallengeBadge: hasChallengeBadge,
                 feedback: feedback,
               ),
@@ -353,22 +376,36 @@ class _EmptySectorMap extends StatelessWidget {
 
 class _SectorHeader extends StatelessWidget {
   const _SectorHeader({
-    required this.cleared,
-    required this.total,
-    required this.isCampaignComplete,
+    required this.mainCleared,
+    required this.mainTotal,
+    required this.optionalCleared,
+    required this.optionalTotal,
+    required this.mainComplete,
+    required this.fullySecured,
     required this.hasChallengeBadge,
     required this.feedback,
   });
 
-  final int cleared;
-  final int total;
-  final bool isCampaignComplete;
+  final int mainCleared;
+  final int mainTotal;
+  final int optionalCleared;
+  final int optionalTotal;
+  final bool mainComplete;
+  final bool fullySecured;
   final bool hasChallengeBadge;
   final String? feedback;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final summary = mainComplete
+        ? 'Campaign complete. Main $mainCleared of $mainTotal stages, '
+              'optional $optionalCleared of $optionalTotal stages.'
+        : 'Main $mainCleared of $mainTotal stages cleared';
+    // The visible OPTIONAL badge is redundant at full clear (ALL SECTORS
+    // SECURED + Challenge Badge already say so), but the summary still
+    // reports its count.
+    final showOptionalBadge = mainComplete && optionalCleared < optionalTotal;
     // Lower-noise chrome: an unboxed floating title row over the backdrop
     // instead of a framed command plate (artboard 1f).
     return Column(
@@ -393,18 +430,29 @@ class _SectorHeader extends StatelessWidget {
               ),
             ),
             Semantics(
-              label: isCampaignComplete
-                  ? 'Campaign Complete • $cleared/$total stages cleared'
-                  : '$cleared of $total stages cleared',
+              label: summary,
               child: ExcludeSemantics(
-                child: _HeaderBadge(
-                  icon: isCampaignComplete
-                      ? Icons.workspace_premium
-                      : Icons.radar,
-                  label: '$cleared/$total',
-                  color: isCampaignComplete
-                      ? uiTheme.creditGold
-                      : uiTheme.systemCyan,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _HeaderBadge(
+                      icon: mainComplete
+                          ? Icons.workspace_premium
+                          : Icons.radar,
+                      label: 'MAIN $mainCleared/$mainTotal',
+                      color: mainComplete
+                          ? uiTheme.creditGold
+                          : uiTheme.systemCyan,
+                    ),
+                    if (showOptionalBadge) ...[
+                      const SizedBox(width: 5),
+                      _HeaderBadge(
+                        icon: Icons.alt_route_rounded,
+                        label: 'OPTIONAL $optionalCleared/$optionalTotal',
+                        color: uiTheme.systemViolet,
+                      ),
+                    ],
+                  ],
                 ),
               ),
             ),
@@ -426,6 +474,34 @@ class _SectorHeader extends StatelessWidget {
             ],
           ],
         ),
+        if (mainComplete) ...[
+          const SizedBox(height: 4),
+          // Decorative completion line: the badge-group Semantics already
+          // announces completion, so this row is excluded from semantics.
+          ExcludeSemantics(
+            child: Row(
+              children: [
+                Icon(
+                  Icons.workspace_premium,
+                  size: 13,
+                  color: uiTheme.creditGold,
+                  shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+                ),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    fullySecured ? 'ALL SECTORS SECURED' : 'CAMPAIGN COMPLETE',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OrionTypography.microLabel(
+                      color: uiTheme.creditGold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
         if (feedback != null) ...[
           const SizedBox(height: 4),
           Row(
@@ -479,7 +555,13 @@ class _HeaderBadge extends StatelessWidget {
           children: [
             Icon(icon, size: 12, color: color),
             const SizedBox(width: 3),
-            Text(label, style: OrionTypography.readout(size: 11, color: color)),
+            Text(
+              label,
+              textScaler: MediaQuery.textScalerOf(
+                context,
+              ).clamp(maxScaleFactor: 1.3),
+              style: OrionTypography.readout(size: 11, color: color),
+            ),
           ],
         ),
       ),
