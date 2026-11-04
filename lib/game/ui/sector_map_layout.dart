@@ -64,7 +64,11 @@ final class SectorMapLayout {
     'singularity-core': Offset(232 / 393, 240 / 852),
   };
 
-  double get plotContentHeight => _size.height.clamp(740, double.infinity);
+  /// Vertical frame the anchor positions spread over. Floors at the
+  /// smallest height that keeps the closest anchor rows (130/852 of the
+  /// frame ≈ 104px at 680) a full 94px node apart, so compact viewports
+  /// scroll vertically instead of overlapping nodes.
+  double get plotContentHeight => _size.height.clamp(680, double.infinity);
 
   Rect nodeRect(StageDefinition stage) {
     final anchor = _anchors[stage.id];
@@ -72,7 +76,10 @@ final class SectorMapLayout {
       return Rect.fromLTWH(
         anchor.dx * _size.width.clamp(360, double.infinity) -
             nodeSize.width / 2,
-        anchor.dy * plotContentHeight - 52,
+        // 184 trims the frame so the top stage starts ~8px below the plot
+        // top; the old -52 clearance reserved space for the floating header
+        // overlay, which moved into the layout flow above the plot.
+        anchor.dy * plotContentHeight - 184,
         nodeSize.width,
         nodeSize.height,
       );

@@ -117,7 +117,15 @@ void main() {
       );
       final rects = OrionCampaign.stages.map(layout.nodeRect).toList();
       expect(layout.plotContentWidth, 360);
-      expect(layout.plotContentHeight, 740);
+      // The header is in the flow above the plot now, so the anchor frame
+      // floors at the anti-overlap minimum (680) instead of the overlay-era
+      // 740, and the reserved top band is trimmed to a small breathing gap
+      // above the first stage instead of the old floating-header clearance.
+      expect(layout.plotContentHeight, 680);
+      expect(
+        layout.nodeRect(OrionCampaign.stages.last).top,
+        lessThanOrEqualTo(16),
+      );
       for (var i = 0; i < rects.length; i++) {
         for (var j = i + 1; j < rects.length; j++) {
           expect(rects[i].overlaps(rects[j]), isFalse);
