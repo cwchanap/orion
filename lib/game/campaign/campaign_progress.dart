@@ -157,6 +157,28 @@ class CampaignProgress {
     return StageProgressStatus.locked;
   }
 
+  /// The stage a "continue" tap should target: the first unfinished
+  /// unlocked main stage, else the first such optional stage, else the last
+  /// non-locked stage in [stages] for replay. Null when nothing is playable.
+  StageDefinition? recommendedStage(Iterable<StageDefinition> stages) {
+    StageDefinition? firstOpenOptional;
+    StageDefinition? lastPlayable;
+    for (final stage in stages) {
+      final status = statusFor(stage);
+      if (status == StageProgressStatus.locked) {
+        continue;
+      }
+      lastPlayable = stage;
+      if (status == StageProgressStatus.unlocked) {
+        if (stage.isMainPath) {
+          return stage;
+        }
+        firstOpenOptional ??= stage;
+      }
+    }
+    return firstOpenOptional ?? lastPlayable;
+  }
+
   bool isCampaignComplete(Iterable<StageDefinition> stages) {
     final mainPathStages = stages.where((stage) => stage.isMainPath).toList();
 
