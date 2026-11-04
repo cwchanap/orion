@@ -11,6 +11,11 @@ import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'sector_map_layout.dart';
 
+/// The smallest star-chart viewport that stays usable when the header,
+/// footer, and plot cannot share a short window. Roughly two stage-node
+/// rows; the plot's own scrolling still reaches everything below it.
+const double _minPlotViewportHeight = 200;
+
 class WorldMapView extends StatefulWidget {
   const WorldMapView({
     super.key,
@@ -109,140 +114,176 @@ class _WorldMapViewState extends State<WorldMapView> {
             child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
           ),
           Positioned.fill(
-            child: Column(
-              children: [
-                // The header stack rides in the flow, not as a floating
-                // overlay: the vertically scrolling plot used to render
-                // visible node hit targets behind the overlay at compact
-                // heights and large text scales. In-flow, the plot starts
-                // below the rail, so no tappable node can sit under the
-                // header while still being visible.
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    SectorMapLayout.horizontalPadding,
-                    8,
-                    SectorMapLayout.horizontalPadding,
-                    0,
+            // The header stack rides in the scrollable flow, not as a
+            // floating overlay: the vertically scrolling plot used to
+            // render visible node hit targets behind the overlay at
+            // compact heights and large text scales. In-flow, the plot
+            // starts below the rail, so no tappable node can sit under
+            // the header while still being visible.
+            //
+            // The whole sheet scrolls as one when the header, the
+            // footer, and a usable plot cannot share the viewport —
+            // short landscape windows (the platforms allow landscape)
+            // or very large text would otherwise overflow the Column
+            // and clip the destination footer entirely.
+            // SliverFillRemaining keeps today's layout when everything
+            // fits (its child fills the space the header leaves) and
+            // defers to the child's intrinsic extent when it does not.
+            child: CustomScrollView(
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      SectorMapLayout.horizontalPadding,
+                      8,
+                      SectorMapLayout.horizontalPadding,
+                      0,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _SectorHeader(
+                          mainCleared: mainCleared,
+                          mainTotal: mainTotal,
+                          optionalCleared: optionalCleared,
+                          optionalTotal: optionalTotal,
+                          mainComplete: mainComplete,
+                          fullySecured: fullySecured,
+                          hasChallengeBadge:
+                              widget.campaignModifiers?.hasChallengeBadge ==
+                              true,
+                          feedback: _effectiveFeedback,
+                        ),
+                        const SizedBox(height: 16),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: _UtilityRail(
+                            isBusy: _isBusy,
+                            isSavingFeedback: widget.isSavingFeedback,
+                            onOpenCodex: widget.onOpenCodex,
+                            onOpenTechTree: widget.onOpenTechTree,
+                            onResetCampaign: widget.onResetCampaign,
+                            onOpenSettings: widget.onOpenSettings,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
+                ),
+                SliverFillRemaining(
+                  hasScrollBody: false,
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _SectorHeader(
-                        mainCleared: mainCleared,
-                        mainTotal: mainTotal,
-                        optionalCleared: optionalCleared,
-                        optionalTotal: optionalTotal,
-                        mainComplete: mainComplete,
-                        fullySecured: fullySecured,
-                        hasChallengeBadge:
-                            widget.campaignModifiers?.hasChallengeBadge == true,
-                        feedback: _effectiveFeedback,
+                      Expanded(
+                        // Intrinsic-only floor: the tight Expanded
+                        // constraint wins at layout time, but the
+                        // sliver reads this height through the
+                        // Column's intrinsic extent so a usable plot
+                        // survives when the sheet must scroll.
+                        child: SizedBox(
+                          height: _minPlotViewportHeight,
+                          child: LayoutBuilder(
+                            builder: (context, plotConstraints) {
+                              // Size the star chart to the viewport the in-flow
+                              // header and footer actually leave, not the whole
+                              // SafeArea: the old full-height frame kept the
+                              // overlay-era reservations, forcing needless
+                              // scrolling and clipping the top stages on first
+                              // view.
+                              final sectorLayout = SectorMapLayout.fromStages(
+                                stages: widget.stages,
+                                size: plotConstraints.biggest,
+                              );
+                              final nodeRects = {
+                                for (final stage in widget.stages)
+                                  stage.id: sectorLayout.nodeRect(stage),
+                              };
+
+                              // At narrow widths the minimum non-overlapping
+                              // column step makes the plot wider than the
+                              // viewport; wrap routes + nodes in a horizontal
+                              // scroll so adjacent targets stay tappable. Header
+                              // and utility rail remain fixed above the plot.
+                              final contentWidth =
+                                  sectorLayout.plotContentWidth;
+                              final plotHeight =
+                                  nodeRects.values
+                                      .map((rect) => rect.bottom)
+                                      .reduce((a, b) => a > b ? a : b) +
+                                  12;
+                              final plotLayers = Stack(
+                                key: const ValueKey('world-map-plot'),
+                                children: [
+                                  Positioned.fill(
+                                    child: CustomPaint(
+                                      key: const ValueKey('sector-route-layer'),
+                                      painter: SectorRoutePainter(
+                                        routes: SectorMapLayout.routes(
+                                          widget.stages,
+                                          widget.progress,
+                                        ),
+                                        nodeRects: nodeRects,
+                                        uiTheme: uiTheme,
+                                      ),
+                                    ),
+                                  ),
+                                  for (final stage in widget.stages)
+                                    Positioned.fromRect(
+                                      rect: nodeRects[stage.id]!,
+                                      child: _IllustratedStageNode(
+                                        key: ValueKey(
+                                          'sector-stage-${stage.id}',
+                                        ),
+                                        stage: stage,
+                                        status: widget.progress.statusFor(
+                                          stage,
+                                        ),
+                                        result: widget.progress.resultFor(
+                                          stage.id,
+                                        ),
+                                        isBusy: _isBusy,
+                                        onStageSelected: widget.onStageSelected,
+                                        onLockedStageSelected:
+                                            widget.onLockedStageSelected,
+                                      ),
+                                    ),
+                                ],
+                              );
+                              return SizedBox.expand(
+                                key: const ValueKey('world-map-plot-viewport'),
+                                child:
+                                    contentWidth > plotConstraints.maxWidth ||
+                                        plotHeight > plotConstraints.maxHeight
+                                    ? SingleChildScrollView(
+                                        reverse: true,
+                                        child: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: SizedBox(
+                                            width: contentWidth,
+                                            height: plotHeight,
+                                            child: plotLayers,
+                                          ),
+                                        ),
+                                      )
+                                    : plotLayers,
+                              );
+                            },
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: _UtilityRail(
-                          isBusy: _isBusy,
-                          isSavingFeedback: widget.isSavingFeedback,
-                          onOpenCodex: widget.onOpenCodex,
-                          onOpenTechTree: widget.onOpenTechTree,
-                          onResetCampaign: widget.onResetCampaign,
-                          onOpenSettings: widget.onOpenSettings,
+                      Container(
+                        constraints: const BoxConstraints(minHeight: 150),
+                        alignment: Alignment.bottomCenter,
+                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
+                        child: _MissionDestination(
+                          stages: widget.stages,
+                          progress: widget.progress,
+                          onStageSelected: _isBusy
+                              ? null
+                              : widget.onStageSelected,
                         ),
                       ),
                     ],
-                  ),
-                ),
-                Expanded(
-                  child: LayoutBuilder(
-                    builder: (context, plotConstraints) {
-                      // Size the star chart to the viewport the in-flow
-                      // header and footer actually leave, not the whole
-                      // SafeArea: the old full-height frame kept the
-                      // overlay-era reservations, forcing needless
-                      // scrolling and clipping the top stages on first
-                      // view.
-                      final sectorLayout = SectorMapLayout.fromStages(
-                        stages: widget.stages,
-                        size: plotConstraints.biggest,
-                      );
-                      final nodeRects = {
-                        for (final stage in widget.stages)
-                          stage.id: sectorLayout.nodeRect(stage),
-                      };
-
-                      // At narrow widths the minimum non-overlapping
-                      // column step makes the plot wider than the
-                      // viewport; wrap routes + nodes in a horizontal
-                      // scroll so adjacent targets stay tappable. Header
-                      // and utility rail remain fixed above the plot.
-                      final contentWidth = sectorLayout.plotContentWidth;
-                      final plotHeight =
-                          nodeRects.values
-                              .map((rect) => rect.bottom)
-                              .reduce((a, b) => a > b ? a : b) +
-                          12;
-                      final plotLayers = Stack(
-                        key: const ValueKey('world-map-plot'),
-                        children: [
-                          Positioned.fill(
-                            child: CustomPaint(
-                              key: const ValueKey('sector-route-layer'),
-                              painter: SectorRoutePainter(
-                                routes: SectorMapLayout.routes(
-                                  widget.stages,
-                                  widget.progress,
-                                ),
-                                nodeRects: nodeRects,
-                                uiTheme: uiTheme,
-                              ),
-                            ),
-                          ),
-                          for (final stage in widget.stages)
-                            Positioned.fromRect(
-                              rect: nodeRects[stage.id]!,
-                              child: _IllustratedStageNode(
-                                key: ValueKey('sector-stage-${stage.id}'),
-                                stage: stage,
-                                status: widget.progress.statusFor(stage),
-                                result: widget.progress.resultFor(stage.id),
-                                isBusy: _isBusy,
-                                onStageSelected: widget.onStageSelected,
-                                onLockedStageSelected:
-                                    widget.onLockedStageSelected,
-                              ),
-                            ),
-                        ],
-                      );
-                      return SizedBox.expand(
-                        key: const ValueKey('world-map-plot-viewport'),
-                        child:
-                            contentWidth > plotConstraints.maxWidth ||
-                                plotHeight > plotConstraints.maxHeight
-                            ? SingleChildScrollView(
-                                reverse: true,
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: SizedBox(
-                                    width: contentWidth,
-                                    height: plotHeight,
-                                    child: plotLayers,
-                                  ),
-                                ),
-                              )
-                            : plotLayers,
-                      );
-                    },
-                  ),
-                ),
-                Container(
-                  constraints: const BoxConstraints(minHeight: 150),
-                  alignment: Alignment.bottomCenter,
-                  padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
-                  child: _MissionDestination(
-                    stages: widget.stages,
-                    progress: widget.progress,
-                    onStageSelected: _isBusy ? null : widget.onStageSelected,
                   ),
                 ),
               ],
@@ -1094,8 +1135,14 @@ class _MissionDestination extends StatelessWidget {
                   children: [
                     Text(
                       'SECTOR ${(stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
-                      maxLines: 1,
+                      // Two clamped lines, not one unclamped: at 3x system
+                      // text the single line ellipsized the qualifier (the
+                      // informative part) inside the ~110px column.
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
+                      textScaler: MediaQuery.textScalerOf(
+                        context,
+                      ).clamp(maxScaleFactor: 1.3),
                       style: OrionTypography.microLabel(
                         color: theme.systemCyan,
                       ),

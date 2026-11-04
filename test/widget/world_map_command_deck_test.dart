@@ -1,7 +1,6 @@
-import 'dart:ui' show SemanticsAction;
-
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
@@ -166,183 +165,211 @@ void main() {
     },
   );
 
-  testWidgets(
-    'compact 320x568 map at 3x system text keeps header, rail, nodes and '
-    'footer clear of each other',
-    (tester) async {
-      tester.view.physicalSize = const Size(320, 568);
-      tester.view.devicePixelRatio = 1;
-      addTearDown(tester.view.reset);
-      // Real Oxanium/Chakra Petch metrics: the Ahem fallback would hide the
-      // actual row heights this regression exists to guard.
-      await tester.runAsync(loadRealFonts);
+  for (final size in const [Size(320, 568), Size(568, 320)]) {
+    testWidgets(
+      'compact ${size.width.toInt()}x${size.height.toInt()} map at 3x '
+      'system text keeps header, rail, nodes and footer clear of each '
+      'other',
+      (tester) async {
+        tester.view.physicalSize = size;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        // Real Oxanium/Chakra Petch metrics: the Ahem fallback would hide the
+        // actual row heights this regression exists to guard.
+        await tester.runAsync(loadRealFonts);
 
-      Future<void> pumpCompactMap(
-        CampaignProgress progress, {
-        String? feedback,
-      }) async {
-        await tester.pumpWidget(
-          buildMap(
-            progress: progress,
-            feedback: feedback,
-            textScaler: const TextScaler.linear(3),
-          ),
-        );
-        await tester.pump();
-      }
-
-      void expectCompactLayoutClear() {
-        expect(tester.takeException(), isNull);
-
-        final railControls = <Rect>[
-          for (final tooltip in [
-            'Codex',
-            'Tech Tree',
-            'Reset Campaign',
-            'Settings',
-          ])
-            tester.getRect(find.byTooltip(tooltip)),
-        ];
-
-        // Every header element rendered in the current state: the title,
-        // its badges, the completion status line, the feedback line and the
-        // Challenge Badge.
-        final headerRows = <Rect>[
-          tester.getRect(find.text('ORION SECTOR')),
-          tester.getRect(find.text('MAIN 5/5')),
-          if (find.text('OPTIONAL 1/2').evaluate().isNotEmpty)
-            tester.getRect(find.text('OPTIONAL 1/2')),
-          if (find.text('CAMPAIGN COMPLETE').evaluate().isNotEmpty)
-            tester.getRect(find.text('CAMPAIGN COMPLETE')),
-          if (find.text('ALL SECTORS SECURED').evaluate().isNotEmpty)
-            tester.getRect(find.text('ALL SECTORS SECURED')),
-          if (find.text('Saving campaign progress…').evaluate().isNotEmpty)
-            tester.getRect(find.text('Saving campaign progress…')),
-          if (find
-              .byTooltip('Challenge Badge Earned - All side stages cleared')
-              .evaluate()
-              .isNotEmpty)
-            tester.getRect(
-              find.byTooltip(
-                'Challenge Badge Earned - All side stages cleared',
-              ),
+        Future<void> pumpCompactMap(
+          CampaignProgress progress, {
+          String? feedback,
+        }) async {
+          await tester.pumpWidget(
+            buildMap(
+              progress: progress,
+              feedback: feedback,
+              textScaler: const TextScaler.linear(3),
             ),
-        ];
-
-        // Header rows may never sit on the utility controls.
-        for (final row in headerRows) {
-          for (final control in railControls) {
-            expect(row.overlaps(control), isFalse, reason: '$row vs $control');
-          }
-        }
-
-        // Neither the header rows nor the utility controls may cover a
-        // visible stage-node hit target. "Visible" means the portion of the
-        // node actually on screen inside the scrolling plot viewport — nodes
-        // scrolled out of the viewport keep geometric rects that must not
-        // count.
-        final viewportRect = tester.getRect(
-          find.byKey(const ValueKey('world-map-plot-viewport')),
-        );
-        final visibleNodes = <Rect>[];
-        for (final stage in OrionCampaign.stages) {
-          final rect = tester.getRect(
-            find.byKey(ValueKey('sector-stage-${stage.id}')),
           );
-          final visiblePortion = rect.intersect(viewportRect);
-          if (!visiblePortion.isEmpty) visibleNodes.add(visiblePortion);
+          await tester.pump();
         }
-        expect(visibleNodes, isNotEmpty);
-        for (final node in visibleNodes) {
-          for (final overlay in [...headerRows, ...railControls]) {
-            expect(
-              node.overlaps(overlay),
-              isFalse,
-              reason: '$node vs $overlay',
-            );
+
+        void expectCompactLayoutClear() {
+          expect(tester.takeException(), isNull);
+
+          final railControls = <Rect>[
+            for (final tooltip in [
+              'Codex',
+              'Tech Tree',
+              'Reset Campaign',
+              'Settings',
+            ])
+              tester.getRect(find.byTooltip(tooltip)),
+          ];
+
+          // Every header element rendered in the current state: the title,
+          // its badges, the completion status line, the feedback line and the
+          // Challenge Badge.
+          final headerRows = <Rect>[
+            tester.getRect(find.text('ORION SECTOR')),
+            tester.getRect(find.text('MAIN 5/5')),
+            if (find.text('OPTIONAL 1/2').evaluate().isNotEmpty)
+              tester.getRect(find.text('OPTIONAL 1/2')),
+            if (find.text('CAMPAIGN COMPLETE').evaluate().isNotEmpty)
+              tester.getRect(find.text('CAMPAIGN COMPLETE')),
+            if (find.text('ALL SECTORS SECURED').evaluate().isNotEmpty)
+              tester.getRect(find.text('ALL SECTORS SECURED')),
+            if (find.text('Saving campaign progress…').evaluate().isNotEmpty)
+              tester.getRect(find.text('Saving campaign progress…')),
+            if (find
+                .byTooltip('Challenge Badge Earned - All side stages cleared')
+                .evaluate()
+                .isNotEmpty)
+              tester.getRect(
+                find.byTooltip(
+                  'Challenge Badge Earned - All side stages cleared',
+                ),
+              ),
+          ];
+
+          // Header rows may never sit on the utility controls.
+          for (final row in headerRows) {
+            for (final control in railControls) {
+              expect(
+                row.overlaps(control),
+                isFalse,
+                reason: '$row vs $control',
+              );
+            }
           }
+
+          // Neither the header rows nor the utility controls may cover a
+          // visible stage-node hit target. "Visible" means the portion of the
+          // node actually on screen inside the scrolling plot viewport — nodes
+          // scrolled out of the viewport keep geometric rects that must not
+          // count.
+          final viewportRect = tester.getRect(
+            find.byKey(const ValueKey('world-map-plot-viewport')),
+          );
+          final visibleNodes = <Rect>[];
+          for (final stage in OrionCampaign.stages) {
+            final rect = tester.getRect(
+              find.byKey(ValueKey('sector-stage-${stage.id}')),
+            );
+            final visiblePortion = rect.intersect(viewportRect);
+            if (!visiblePortion.isEmpty) visibleNodes.add(visiblePortion);
+          }
+          expect(visibleNodes, isNotEmpty);
+          for (final node in visibleNodes) {
+            for (final overlay in [...headerRows, ...railControls]) {
+              expect(
+                node.overlaps(overlay),
+                isFalse,
+                reason: '$node vs $overlay',
+              );
+            }
+          }
+
+          // The destination footer must not cover the Outpost Alpha hit
+          // target (scene-parity pattern).
+          final destination = find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics &&
+                (widget.properties.label ?? '').startsWith('Briefing for '),
+          );
+          final footerRect = tester.getRect(
+            find.ancestor(of: destination, matching: find.byType(OrionSurface)),
+          );
+          final alphaRect = tester.getRect(
+            find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+          );
+          expect(footerRect.overlaps(alphaRect), isFalse);
+
+          // find.text only matches the widget's data string, not what the
+          // paragraph painted; an ellipsized kicker would still pass. Prove
+          // the full 'SECTOR NN / QUALIFIER' fits its maxLines at the
+          // rendered width and scale, so the qualifier itself paints.
+          final kickerFinder = find.textContaining(' / ');
+          final kicker = tester.widget<Text>(kickerFinder);
+          final kickerParagraph = tester.renderObject<RenderParagraph>(
+            kickerFinder,
+          );
+          final kickerPainter = TextPainter(
+            text: kickerParagraph.text,
+            textDirection: TextDirection.ltr,
+            textScaler: kicker.textScaler ?? TextScaler.noScaling,
+            maxLines: kicker.maxLines,
+          )..layout(maxWidth: kickerParagraph.size.width);
+          expect(
+            kickerPainter.didExceedMaxLines,
+            isFalse,
+            reason: 'destination kicker must paint its qualifier in full',
+          );
         }
 
-        // The destination footer must not cover the Outpost Alpha hit
-        // target (scene-parity pattern).
-        final destination = find.byWidgetPredicate(
-          (widget) =>
-              widget is Semantics &&
-              (widget.properties.label ?? '').startsWith('Briefing for '),
-        );
-        final footerRect = tester.getRect(
-          find.ancestor(of: destination, matching: find.byType(OrionSurface)),
-        );
-        final alphaRect = tester.getRect(
-          find.byKey(const ValueKey('sector-stage-outpost-alpha')),
-        );
-        expect(footerRect.overlaps(alphaRect), isFalse);
-      }
+        final semantics = tester.ensureSemantics();
+        try {
+          // State 1 — main 5/5 with optional 1/2: the longest badge row without
+          // the Challenge Badge, plus a plain feedback line so all three
+          // stacked header rows render (busy mode stays off).
+          await pumpCompactMap(
+            mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
+            feedback: 'Saving campaign progress…',
+          );
 
-      final semantics = tester.ensureSemantics();
-      try {
-        // State 1 — main 5/5 with optional 1/2: the longest badge row without
-        // the Challenge Badge, plus a plain feedback line so all three
-        // stacked header rows render (busy mode stays off).
-        await pumpCompactMap(
-          mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
-          feedback: 'Saving campaign progress…',
-        );
+          expect(find.text('MAIN 5/5'), findsOneWidget);
+          expect(find.text('OPTIONAL 1/2'), findsOneWidget);
+          expect(find.text('CAMPAIGN COMPLETE'), findsOneWidget);
+          expect(find.text('Saving campaign progress…'), findsOneWidget);
+          expect(
+            find.byTooltip('Challenge Badge Earned - All side stages cleared'),
+            findsNothing,
+          );
+          expect(
+            find.bySemanticsLabel(
+              'Campaign complete. Main 5 of 5 stages, optional 1 of 2 stages.',
+            ),
+            findsOneWidget,
+          );
+          // The visible completion line is decorative; it must not echo the
+          // summary as a second announcement.
+          expect(
+            find.bySemanticsLabel(RegExp(r'CAMPAIGN COMPLETE')),
+            findsNothing,
+          );
+          expectCompactLayoutClear();
 
-        expect(find.text('MAIN 5/5'), findsOneWidget);
-        expect(find.text('OPTIONAL 1/2'), findsOneWidget);
-        expect(find.text('CAMPAIGN COMPLETE'), findsOneWidget);
-        expect(find.text('Saving campaign progress…'), findsOneWidget);
-        expect(
-          find.byTooltip('Challenge Badge Earned - All side stages cleared'),
-          findsNothing,
-        );
-        expect(
-          find.bySemanticsLabel(
-            'Campaign complete. Main 5 of 5 stages, optional 1 of 2 stages.',
-          ),
-          findsOneWidget,
-        );
-        // The visible completion line is decorative; it must not echo the
-        // summary as a second announcement.
-        expect(
-          find.bySemanticsLabel(RegExp(r'CAMPAIGN COMPLETE')),
-          findsNothing,
-        );
-        expectCompactLayoutClear();
+          // State 2 — all seven stages cleared: ALL SECTORS SECURED with the
+          // Challenge Badge; the redundant visible OPTIONAL badge is absent.
+          await pumpCompactMap(clearedCampaignProgress());
 
-        // State 2 — all seven stages cleared: ALL SECTORS SECURED with the
-        // Challenge Badge; the redundant visible OPTIONAL badge is absent.
-        await pumpCompactMap(clearedCampaignProgress());
-
-        expect(find.text('ALL SECTORS SECURED'), findsOneWidget);
-        expect(find.textContaining('OPTIONAL'), findsNothing);
-        expect(
-          find.byTooltip('Challenge Badge Earned - All side stages cleared'),
-          findsOneWidget,
-        );
-        expect(
-          find.bySemanticsLabel(
-            'Campaign complete. Main 5 of 5 stages, optional 2 of 2 stages.',
-          ),
-          findsOneWidget,
-        );
-        expect(
-          find.bySemanticsLabel(RegExp(r'ALL SECTORS SECURED')),
-          findsNothing,
-        );
-        expect(
-          find.bySemanticsLabel(
-            'Challenge Badge Earned - All side stages cleared',
-          ),
-          findsOneWidget,
-        );
-        expectCompactLayoutClear();
-      } finally {
-        semantics.dispose();
-      }
-    },
-  );
+          expect(find.text('ALL SECTORS SECURED'), findsOneWidget);
+          expect(find.textContaining('OPTIONAL'), findsNothing);
+          expect(
+            find.byTooltip('Challenge Badge Earned - All side stages cleared'),
+            findsOneWidget,
+          );
+          expect(
+            find.bySemanticsLabel(
+              'Campaign complete. Main 5 of 5 stages, optional 2 of 2 stages.',
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.bySemanticsLabel(RegExp(r'ALL SECTORS SECURED')),
+            findsNothing,
+          );
+          expect(
+            find.bySemanticsLabel(
+              'Challenge Badge Earned - All side stages cleared',
+            ),
+            findsOneWidget,
+          );
+          expectCompactLayoutClear();
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+  }
 
   testWidgets(
     'compact map exposes seven art-led stage targets without overlap',
