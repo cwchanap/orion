@@ -161,6 +161,49 @@ class _WorldMapViewState extends State<WorldMapView> {
               Positioned.fill(
                 child: Column(
                   children: [
+                    // The header stack rides in the flow, not as a floating
+                    // overlay: the vertically scrolling plot used to render
+                    // visible node hit targets behind the overlay at compact
+                    // heights and large text scales. In-flow, the plot starts
+                    // below the rail, so no tappable node can sit under the
+                    // header while still being visible.
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        SectorMapLayout.horizontalPadding,
+                        8,
+                        SectorMapLayout.horizontalPadding,
+                        0,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          _SectorHeader(
+                            mainCleared: mainCleared,
+                            mainTotal: mainTotal,
+                            optionalCleared: optionalCleared,
+                            optionalTotal: optionalTotal,
+                            mainComplete: mainComplete,
+                            fullySecured: fullySecured,
+                            hasChallengeBadge:
+                                widget.campaignModifiers?.hasChallengeBadge ==
+                                true,
+                            feedback: _effectiveFeedback,
+                          ),
+                          const SizedBox(height: 16),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: _UtilityRail(
+                              isBusy: _isBusy,
+                              isSavingFeedback: widget.isSavingFeedback,
+                              onOpenCodex: widget.onOpenCodex,
+                              onOpenTechTree: widget.onOpenTechTree,
+                              onResetCampaign: widget.onResetCampaign,
+                              onOpenSettings: widget.onOpenSettings,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                     Expanded(
                       child: LayoutBuilder(
                         builder: (context, plotConstraints) => SizedBox.expand(
@@ -193,39 +236,6 @@ class _WorldMapViewState extends State<WorldMapView> {
                         onStageSelected: _isBusy
                             ? null
                             : widget.onStageSelected,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Positioned(
-                left: SectorMapLayout.horizontalPadding,
-                top: 8,
-                right: SectorMapLayout.horizontalPadding,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    _SectorHeader(
-                      mainCleared: mainCleared,
-                      mainTotal: mainTotal,
-                      optionalCleared: optionalCleared,
-                      optionalTotal: optionalTotal,
-                      mainComplete: mainComplete,
-                      fullySecured: fullySecured,
-                      hasChallengeBadge:
-                          widget.campaignModifiers?.hasChallengeBadge == true,
-                      feedback: _effectiveFeedback,
-                    ),
-                    const SizedBox(height: 16),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: _UtilityRail(
-                        isBusy: _isBusy,
-                        isSavingFeedback: widget.isSavingFeedback,
-                        onOpenCodex: widget.onOpenCodex,
-                        onOpenTechTree: widget.onOpenTechTree,
-                        onResetCampaign: widget.onResetCampaign,
-                        onOpenSettings: widget.onOpenSettings,
                       ),
                     ),
                   ],
