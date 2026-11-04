@@ -1042,19 +1042,13 @@ class _MissionDestination extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stage =
-        stages
-            .where(
-              (s) =>
-                  s.isMainPath &&
-                  progress.statusFor(s) == StageProgressStatus.unlocked,
-            )
-            .firstOrNull ??
-        stages
-            .where((s) => progress.statusFor(s) != StageProgressStatus.locked)
-            .lastOrNull;
+    final stage = progress.recommendedStage(stages);
     if (stage == null) return const SizedBox.shrink();
     final theme = OrionUiTheme.of(context);
+    final status = progress.statusFor(stage);
+    final qualifier = status == StageProgressStatus.unlocked
+        ? (stage.isMainPath ? 'NEXT MAIN' : 'OPTIONAL')
+        : 'REPLAY';
     return OrionSurface(
       tier: OrionSurfaceTier.t3,
       padding: const EdgeInsets.all(14),
@@ -1062,6 +1056,7 @@ class _MissionDestination extends StatelessWidget {
       child: Semantics(
         button: true,
         label: 'Briefing for ${stage.name}',
+        hint: qualifier,
         enabled: onStageSelected != null,
         excludeSemantics: true,
         onTap: onStageSelected == null ? null : () => onStageSelected!(stage),
@@ -1082,9 +1077,13 @@ class _MissionDestination extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    OrionText.micro(
-                      'SECTOR ${(stages.indexOf(stage) + 1).toString().padLeft(2, '0')}',
-                      color: theme.systemCyan,
+                    Text(
+                      'SECTOR ${(stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OrionTypography.microLabel(
+                        color: theme.systemCyan,
+                      ),
                     ),
                     const SizedBox(height: 5),
                     Text(

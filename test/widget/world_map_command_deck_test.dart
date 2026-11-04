@@ -611,6 +611,102 @@ void main() {
     }
   });
 
+  testWidgets('footer recommends the next main stage', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final selected = <String>[];
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(),
+          onStageSelected: (stage) => selected.add(stage.id),
+        ),
+      );
+
+      expect(find.text('SECTOR 01 / NEXT MAIN'), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Briefing for Outpost Alpha'))
+            .hint,
+        'NEXT MAIN',
+      );
+
+      await tester.tap(find.text('SECTOR 01 / NEXT MAIN'));
+      expect(selected, [OrionCampaign.stageOneId]);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('footer steers to the first open optional stage once the main '
+      'route is cleared', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final selected = <String>[];
+      await tester.pumpWidget(
+        buildMap(
+          progress: mainCompleteProgress(),
+          onStageSelected: (stage) => selected.add(stage.id),
+        ),
+      );
+
+      expect(find.text('SECTOR 03 / OPTIONAL'), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(find.bySemanticsLabel('Briefing for Salvage Rift'))
+            .hint,
+        'OPTIONAL',
+      );
+
+      await tester.tap(find.text('SECTOR 03 / OPTIONAL'));
+      expect(selected, ['salvage-rift']);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('footer replays the final sector at full clear', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final selected = <String>[];
+      await tester.pumpWidget(
+        buildMap(
+          progress: clearedCampaignProgress(),
+          onStageSelected: (stage) => selected.add(stage.id),
+        ),
+      );
+
+      expect(find.text('SECTOR 07 / REPLAY'), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(
+              find.bySemanticsLabel('Briefing for Singularity Core'),
+            )
+            .hint,
+        'REPLAY',
+      );
+
+      await tester.tap(find.text('SECTOR 07 / REPLAY'));
+      expect(selected, ['singularity-core']);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
+  testWidgets('busy footer stays inert while an optional stage is '
+      'recommended', (tester) async {
+    var selected = 0;
+    await tester.pumpWidget(
+      buildMap(
+        progress: mainCompleteProgress(),
+        isSavingProgress: true,
+        onStageSelected: (_) => selected += 1,
+      ),
+    );
+
+    await tester.tap(find.text('SECTOR 03 / OPTIONAL'));
+    expect(selected, 0);
+  });
+
   testWidgets(
     'blueprint semantics follow committed progress on every stage node',
     (tester) async {
