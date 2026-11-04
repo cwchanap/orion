@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
+import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/campaign_presentation.dart';
@@ -61,7 +62,16 @@ Widget buildMap({
       body: WorldMapView(
         stages: stages ?? OrionCampaign.stages,
         progress: progress,
-        campaignModifiers: campaignModifiers,
+        // Production always derives modifiers from progress; default to the
+        // same derivation so fixture headers (e.g. the Challenge Badge) match
+        // what players see. Explicit modifiers still override this default.
+        campaignModifiers:
+            campaignModifiers ??
+            CampaignModifiers.fromProgress(
+              progress,
+              stages ?? OrionCampaign.stages,
+              CampaignTechTree(),
+            ),
         feedback: feedback,
         isSavingProgress: isSavingProgress,
         isResetting: isResetting,
@@ -115,6 +125,191 @@ void main() {
   );
 
   testWidgets(
+    'compact 320x568 map at 3x system text keeps header, rail, nodes and '
+    'footer clear of each other',
+    (tester) async {
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      // Real Oxanium/Chakra Petch metrics: the Ahem fallback would hide the
+      // actual row heights this regression exists to guard.
+      await tester.runAsync(loadRealFonts);
+
+      Future<void> pumpCompactMap(
+        CampaignProgress progress, {
+        String? feedback,
+      }) async {
+        final host =
+            buildMap(progress: progress, feedback: feedback) as MaterialApp;
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: host.theme,
+            home: host.home,
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(3)),
+              child: child!,
+            ),
+          ),
+        );
+        await tester.pump();
+      }
+
+      void expectCompactLayoutClear() {
+        expect(tester.takeException(), isNull);
+
+        final railControls = <Rect>[
+          for (final tooltip in [
+            'Codex',
+            'Tech Tree',
+            'Reset Campaign',
+            'Settings',
+          ])
+            tester.getRect(find.byTooltip(tooltip)),
+        ];
+
+        // Every header element rendered in the current state: the title,
+        // its badges, the completion status line, the feedback line and the
+        // Challenge Badge.
+        final headerRows = <Rect>[
+          tester.getRect(find.text('ORION SECTOR')),
+          tester.getRect(find.text('MAIN 5/5')),
+          if (find.text('OPTIONAL 1/2').evaluate().isNotEmpty)
+            tester.getRect(find.text('OPTIONAL 1/2')),
+          if (find.text('CAMPAIGN COMPLETE').evaluate().isNotEmpty)
+            tester.getRect(find.text('CAMPAIGN COMPLETE')),
+          if (find.text('ALL SECTORS SECURED').evaluate().isNotEmpty)
+            tester.getRect(find.text('ALL SECTORS SECURED')),
+          if (find.text('Saving campaign progress…').evaluate().isNotEmpty)
+            tester.getRect(find.text('Saving campaign progress…')),
+          if (find
+              .byTooltip('Challenge Badge Earned - All side stages cleared')
+              .evaluate()
+              .isNotEmpty)
+            tester.getRect(
+              find.byTooltip(
+                'Challenge Badge Earned - All side stages cleared',
+              ),
+            ),
+        ];
+
+        // Header rows may never sit on the utility controls.
+        for (final row in headerRows) {
+          for (final control in railControls) {
+            expect(row.overlaps(control), isFalse, reason: '$row vs $control');
+          }
+        }
+
+        // Neither the header rows nor the utility controls may cover a
+        // visible stage-node hit target. "Visible" means the portion of the
+        // node actually on screen inside the scrolling plot viewport — nodes
+        // scrolled out of the viewport keep geometric rects that must not
+        // count.
+        final viewportRect = tester.getRect(
+          find.byKey(const ValueKey('world-map-plot-viewport')),
+        );
+        final visibleNodes = <Rect>[];
+        for (final stage in OrionCampaign.stages) {
+          final rect = tester.getRect(
+            find.byKey(ValueKey('sector-stage-${stage.id}')),
+          );
+          final visiblePortion = rect.intersect(viewportRect);
+          if (!visiblePortion.isEmpty) visibleNodes.add(visiblePortion);
+        }
+        expect(visibleNodes, isNotEmpty);
+        for (final node in visibleNodes) {
+          for (final overlay in [...headerRows, ...railControls]) {
+            expect(
+              node.overlaps(overlay),
+              isFalse,
+              reason: '$node vs $overlay',
+            );
+          }
+        }
+
+        // The destination footer must not cover the Outpost Alpha hit
+        // target (scene-parity pattern).
+        final destination = find.byWidgetPredicate(
+          (widget) =>
+              widget is Semantics &&
+              (widget.properties.label ?? '').startsWith('Briefing for '),
+        );
+        final footerRect = tester.getRect(
+          find.ancestor(of: destination, matching: find.byType(OrionSurface)),
+        );
+        final alphaRect = tester.getRect(
+          find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+        );
+        expect(footerRect.overlaps(alphaRect), isFalse);
+      }
+
+      final semantics = tester.ensureSemantics();
+      try {
+        // State 1 — main 5/5 with optional 1/2: the longest badge row without
+        // the Challenge Badge, plus a plain feedback line so all three
+        // stacked header rows render (busy mode stays off).
+        await pumpCompactMap(
+          mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
+          feedback: 'Saving campaign progress…',
+        );
+
+        expect(find.text('MAIN 5/5'), findsOneWidget);
+        expect(find.text('OPTIONAL 1/2'), findsOneWidget);
+        expect(find.text('CAMPAIGN COMPLETE'), findsOneWidget);
+        expect(find.text('Saving campaign progress…'), findsOneWidget);
+        expect(
+          find.byTooltip('Challenge Badge Earned - All side stages cleared'),
+          findsNothing,
+        );
+        expect(
+          find.bySemanticsLabel(
+            'Campaign complete. Main 5 of 5 stages, optional 1 of 2 stages.',
+          ),
+          findsOneWidget,
+        );
+        // The visible completion line is decorative; it must not echo the
+        // summary as a second announcement.
+        expect(
+          find.bySemanticsLabel(RegExp(r'CAMPAIGN COMPLETE')),
+          findsNothing,
+        );
+        expectCompactLayoutClear();
+
+        // State 2 — all seven stages cleared: ALL SECTORS SECURED with the
+        // Challenge Badge; the redundant visible OPTIONAL badge is absent.
+        await pumpCompactMap(clearedCampaignProgress());
+
+        expect(find.text('ALL SECTORS SECURED'), findsOneWidget);
+        expect(find.textContaining('OPTIONAL'), findsNothing);
+        expect(
+          find.byTooltip('Challenge Badge Earned - All side stages cleared'),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsLabel(
+            'Campaign complete. Main 5 of 5 stages, optional 2 of 2 stages.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsLabel(RegExp(r'ALL SECTORS SECURED')),
+          findsNothing,
+        );
+        expect(
+          find.bySemanticsLabel(
+            'Challenge Badge Earned - All side stages cleared',
+          ),
+          findsOneWidget,
+        );
+        expectCompactLayoutClear();
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+
+  testWidgets(
     'compact map exposes seven art-led stage targets without overlap',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(375, 812));
@@ -129,6 +324,8 @@ void main() {
       );
 
       expect(find.text('ORION SECTOR'), findsOneWidget);
+      // Capture every rect in one frame before any ensureVisible scroll
+      // shifts the coordinate frame between captures.
       final rects = <Rect>[];
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
@@ -136,14 +333,17 @@ void main() {
         expect(tester.getSize(finder).width, closeTo(72, 0.001));
         expect(tester.getSize(finder).height, closeTo(94, 0.001));
         rects.add(tester.getRect(finder));
-        await tester.ensureVisible(finder);
-        await tester.pump();
-        await tester.tap(finder);
       }
       for (var left = 0; left < rects.length; left += 1) {
         for (var right = left + 1; right < rects.length; right += 1) {
           expect(rects[left].overlaps(rects[right]), isFalse);
         }
+      }
+      for (final stage in OrionCampaign.stages) {
+        final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
+        await tester.ensureVisible(finder);
+        await tester.pump();
+        await tester.tap(finder);
       }
       expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
     },
@@ -904,6 +1104,12 @@ void main() {
     );
 
     await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
+    // The in-flow header keeps locked top nodes out from under it, so
+    // scroll the locked node into the viewport before tapping it.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('sector-stage-singularity-core')),
+    );
+    await tester.pump();
     await tester.tap(
       find.byKey(const ValueKey('sector-stage-singularity-core')),
     );
