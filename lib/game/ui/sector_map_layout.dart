@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui';
 
 import '../campaign/campaign_progress.dart';
@@ -24,17 +25,28 @@ final class SectorMapLayout {
     this._size, {
     required this.maxColumn,
     required this.maxRow,
+    required this._hasUnanchoredStages,
   });
 
   static const railWidth = 52.0;
   static const horizontalPadding = 12.0;
   static const nodeSize = Size(72, 94);
-  static const plotTop = 76.0;
-  static const plotBottomInset = 40.0;
+
+  /// Vertical insets the node field keeps inside its own box. Anchored and
+  /// grid-placed nodes share this frame, so both baselines agree.
+  static const plotTopInset = 8.0;
+  static const plotBottomInset = 8.0;
+
+  /// Smallest node-top spread that keeps the tightest anchor pair a full
+  /// node apart. The closest pair (singularity-core/aurora-gate and
+  /// nebula-relay/asteroid-foundry) spans ~0.325 of the anchor dy range, so
+  /// 300 guarantees ~97px between node tops at the minimum content height.
+  static const minNodeSpan = 300.0;
 
   final Size _size;
   final int maxColumn;
   final int maxRow;
+  final bool _hasUnanchoredStages;
 
   factory SectorMapLayout.fromStages({
     required List<StageDefinition> stages,
@@ -51,6 +63,9 @@ final class SectorMapLayout {
       maxRow: stages
           .map((stage) => stage.mapRow)
           .reduce((left, right) => left > right ? left : right),
+      hasUnanchoredStages: stages.any(
+        (stage) => !_anchors.containsKey(stage.id),
+      ),
     );
   }
 
@@ -64,36 +79,57 @@ final class SectorMapLayout {
     'singularity-core': Offset(232 / 393, 240 / 852),
   };
 
-  /// Vertical frame the anchor positions spread over. Floors at the
-  /// smallest height that keeps the closest anchor rows (130/852 of the
-  /// frame ≈ 104px at 680) a full 94px node apart, so compact viewports
-  /// scroll vertically instead of overlapping nodes.
-  double get plotContentHeight => _size.height.clamp(680, double.infinity);
+  static final double _anchorMinDy = _anchors.values
+      .map((anchor) => anchor.dy)
+      .reduce(math.min);
+  static final double _anchorMaxDy = _anchors.values
+      .map((anchor) => anchor.dy)
+      .reduce(math.max);
+
+  /// Vertical distance node tops can spread over inside the plot box.
+  double get _nodeSpan =>
+      (_size.height - plotTopInset - plotBottomInset - nodeSize.height).clamp(
+        0.0,
+        double.infinity,
+      );
+
+  /// Smallest plot height that keeps every node a full node apart: the
+  /// anchor fit needs [minNodeSpan]; unanchored grid rows need one node
+  /// height per row step. The caller should grow the plot (and scroll)
+  /// rather than let nodes overlap below this height.
+  double get minContentHeight {
+    final gridSpan = _hasUnanchoredStages ? maxRow * nodeSize.height : 0.0;
+    return plotTopInset +
+        plotBottomInset +
+        nodeSize.height +
+        math.max(minNodeSpan, gridSpan);
+  }
 
   Rect nodeRect(StageDefinition stage) {
     final anchor = _anchors[stage.id];
     if (anchor != null) {
+      // Fit the anchor dy range into the plot's own top/bottom insets: the
+      // chart fills whatever height it is given instead of floating inside
+      // a fixed 680px frame with a hand-tuned vertical offset.
+      final t = (anchor.dy - _anchorMinDy) / (_anchorMaxDy - _anchorMinDy);
       return Rect.fromLTWH(
         anchor.dx * _size.width.clamp(360, double.infinity) -
             nodeSize.width / 2,
-        // 184 trims the frame so the top stage starts ~8px below the plot
-        // top; the old -52 clearance reserved space for the floating header
-        // overlay, which moved into the layout flow above the plot.
-        anchor.dy * plotContentHeight - 184,
+        plotTopInset + t * _nodeSpan,
         nodeSize.width,
         nodeSize.height,
       );
     }
     final xStep = _horizontalStep;
-    final availableHeight =
-        (_size.height - plotTop - plotBottomInset - nodeSize.height).clamp(
-          0.0,
-          double.infinity,
-        );
-    final yStep = maxRow == 0 ? 0.0 : availableHeight / maxRow;
+    // Grid-placed stages share the anchored nodes' top baseline and spread;
+    // the row step floors at a full node height so compact boxes scroll
+    // instead of stacking every stage on one spot.
+    final yStep = maxRow == 0
+        ? 0.0
+        : math.max(_nodeSpan / maxRow, nodeSize.height);
     return Rect.fromLTWH(
       horizontalPadding + (stage.mapColumn * xStep),
-      plotTop + (stage.mapRow * yStep),
+      plotTopInset + (stage.mapRow * yStep),
       nodeSize.width,
       nodeSize.height,
     );

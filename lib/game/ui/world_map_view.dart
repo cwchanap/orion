@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -11,10 +13,25 @@ import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'sector_map_layout.dart';
 
-/// The smallest star-chart viewport that stays usable when the header,
-/// footer, and plot cannot share a short window. Roughly two stage-node
-/// rows; the plot's own scrolling still reaches everything below it.
-const double _minPlotViewportHeight = 200;
+/// Headroom the chart reserves for the destination footer when deciding
+/// how tall the plot can be. The footer's own text clamps at 1.3x so it
+/// stays under this; if it ever grew past it the region would simply
+/// scroll a little further — the reserve is a sizing heuristic, not a cap.
+const double _footerReserveExtent = 200;
+
+/// A star chart that bounces (iOS) or stretches (Android) reads as broken
+/// chrome when nothing overflows — and even when it does, the clipped
+/// nodes already signal "there is more". Edge drags stay inert.
+class _NoOverscrollBehavior extends ScrollBehavior {
+  const _NoOverscrollBehavior();
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
+}
 
 class WorldMapView extends StatefulWidget {
   const WorldMapView({
@@ -86,8 +103,11 @@ class _WorldMapViewState extends State<WorldMapView> {
       }
     }
     final mainComplete = widget.progress.isCampaignComplete(widget.stages);
+    // ALL SECTORS SECURED only makes sense when the campaign actually has
+    // optional sectors to secure; a main-only campaign tops out at
+    // CAMPAIGN COMPLETE.
     final fullySecured =
-        widget.stages.isNotEmpty &&
+        optionalTotal > 0 &&
         mainCleared + optionalCleared == mainTotal + optionalTotal;
 
     if (widget.stages.isEmpty) {
@@ -114,176 +134,173 @@ class _WorldMapViewState extends State<WorldMapView> {
             child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
           ),
           Positioned.fill(
-            // The header stack rides in the scrollable flow, not as a
-            // floating overlay: the vertically scrolling plot used to
-            // render visible node hit targets behind the overlay at
-            // compact heights and large text scales. In-flow, the plot
-            // starts below the rail, so no tappable node can sit under
-            // the header while still being visible.
+            // The header and utility rail stay fixed above the scrolling
+            // region — they must never scroll away, because the transient
+            // feedback line and the Codex/Tech Tree/Reset/Settings controls
+            // have to be reachable at every scroll offset. (An earlier
+            // revision put the header inside the scrollable flow, which
+            // also let the feedback line resize the chart each time it
+            // appeared.)
             //
-            // The whole sheet scrolls as one when the header, the
-            // footer, and a usable plot cannot share the viewport —
-            // short landscape windows (the platforms allow landscape)
-            // or very large text would otherwise overflow the Column
-            // and clip the destination footer entirely.
-            // SliverFillRemaining keeps today's layout when everything
-            // fits (its child fills the space the header leaves) and
-            // defers to the child's intrinsic extent when it does not.
-            child: CustomScrollView(
-              slivers: [
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      SectorMapLayout.horizontalPadding,
-                      8,
-                      SectorMapLayout.horizontalPadding,
-                      0,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _SectorHeader(
-                          mainCleared: mainCleared,
-                          mainTotal: mainTotal,
-                          optionalCleared: optionalCleared,
-                          optionalTotal: optionalTotal,
-                          mainComplete: mainComplete,
-                          fullySecured: fullySecured,
-                          hasChallengeBadge:
-                              widget.campaignModifiers?.hasChallengeBadge ==
-                              true,
-                          feedback: _effectiveFeedback,
+            // The chart and the destination footer share ONE vertical
+            // scroll region. The plot is sized to the space the footer
+            // actually leaves — never less than SectorMapLayout's minimum
+            // content height — so the single scroll offset carries the
+            // player from the top stages all the way to the footer. There
+            // is deliberately no second, nested vertical scrollable for
+            // drags to get captured by.
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    SectorMapLayout.horizontalPadding,
+                    8,
+                    SectorMapLayout.horizontalPadding,
+                    0,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _SectorHeader(
+                        mainCleared: mainCleared,
+                        mainTotal: mainTotal,
+                        optionalCleared: optionalCleared,
+                        optionalTotal: optionalTotal,
+                        mainComplete: mainComplete,
+                        fullySecured: fullySecured,
+                        hasChallengeBadge:
+                            widget.campaignModifiers?.hasChallengeBadge == true,
+                        feedback: _effectiveFeedback,
+                      ),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: _UtilityRail(
+                          isBusy: _isBusy,
+                          isSavingFeedback: widget.isSavingFeedback,
+                          onOpenCodex: widget.onOpenCodex,
+                          onOpenTechTree: widget.onOpenTechTree,
+                          onResetCampaign: widget.onResetCampaign,
+                          onOpenSettings: widget.onOpenSettings,
                         ),
-                        const SizedBox(height: 16),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: _UtilityRail(
-                            isBusy: _isBusy,
-                            isSavingFeedback: widget.isSavingFeedback,
-                            onOpenCodex: widget.onOpenCodex,
-                            onOpenTechTree: widget.onOpenTechTree,
-                            onResetCampaign: widget.onResetCampaign,
-                            onOpenSettings: widget.onOpenSettings,
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ),
-                SliverFillRemaining(
-                  hasScrollBody: false,
-                  child: Column(
-                    children: [
-                      Expanded(
-                        // Intrinsic-only floor: the tight Expanded
-                        // constraint wins at layout time, but the
-                        // sliver reads this height through the
-                        // Column's intrinsic extent so a usable plot
-                        // survives when the sheet must scroll.
-                        child: SizedBox(
-                          height: _minPlotViewportHeight,
-                          child: LayoutBuilder(
-                            builder: (context, plotConstraints) {
-                              // Size the star chart to the viewport the in-flow
-                              // header and footer actually leave, not the whole
-                              // SafeArea: the old full-height frame kept the
-                              // overlay-era reservations, forcing needless
-                              // scrolling and clipping the top stages on first
-                              // view.
-                              final sectorLayout = SectorMapLayout.fromStages(
-                                stages: widget.stages,
-                                size: plotConstraints.biggest,
-                              );
-                              final nodeRects = {
-                                for (final stage in widget.stages)
-                                  stage.id: sectorLayout.nodeRect(stage),
-                              };
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, region) {
+                      final regionSize = region.biggest;
+                      final plotHeight = math.max(
+                        regionSize.height - _footerReserveExtent,
+                        SectorMapLayout.fromStages(
+                          stages: widget.stages,
+                          size: Size(regionSize.width, 0),
+                        ).minContentHeight,
+                      );
+                      final sectorLayout = SectorMapLayout.fromStages(
+                        stages: widget.stages,
+                        size: Size(regionSize.width, plotHeight),
+                      );
+                      final nodeRects = {
+                        for (final stage in widget.stages)
+                          stage.id: sectorLayout.nodeRect(stage),
+                      };
 
-                              // At narrow widths the minimum non-overlapping
-                              // column step makes the plot wider than the
-                              // viewport; wrap routes + nodes in a horizontal
-                              // scroll so adjacent targets stay tappable. Header
-                              // and utility rail remain fixed above the plot.
-                              final contentWidth =
-                                  sectorLayout.plotContentWidth;
-                              final plotHeight =
-                                  nodeRects.values
-                                      .map((rect) => rect.bottom)
-                                      .reduce((a, b) => a > b ? a : b) +
-                                  12;
-                              final plotLayers = Stack(
-                                key: const ValueKey('world-map-plot'),
-                                children: [
-                                  Positioned.fill(
-                                    child: CustomPaint(
-                                      key: const ValueKey('sector-route-layer'),
-                                      painter: SectorRoutePainter(
-                                        routes: SectorMapLayout.routes(
-                                          widget.stages,
-                                          widget.progress,
-                                        ),
-                                        nodeRects: nodeRects,
-                                        uiTheme: uiTheme,
-                                      ),
-                                    ),
-                                  ),
-                                  for (final stage in widget.stages)
-                                    Positioned.fromRect(
-                                      rect: nodeRects[stage.id]!,
-                                      child: _IllustratedStageNode(
-                                        key: ValueKey(
-                                          'sector-stage-${stage.id}',
-                                        ),
-                                        stage: stage,
-                                        status: widget.progress.statusFor(
-                                          stage,
-                                        ),
-                                        result: widget.progress.resultFor(
-                                          stage.id,
-                                        ),
-                                        isBusy: _isBusy,
-                                        onStageSelected: widget.onStageSelected,
-                                        onLockedStageSelected:
-                                            widget.onLockedStageSelected,
-                                      ),
-                                    ),
-                                ],
-                              );
-                              return SizedBox.expand(
-                                key: const ValueKey('world-map-plot-viewport'),
-                                child:
-                                    contentWidth > plotConstraints.maxWidth ||
-                                        plotHeight > plotConstraints.maxHeight
-                                    ? SingleChildScrollView(
-                                        reverse: true,
-                                        child: SingleChildScrollView(
+                      // At narrow widths the minimum non-overlapping column
+                      // step makes the plot wider than the viewport; wrap
+                      // routes + nodes in a horizontal scroll so adjacent
+                      // targets stay tappable. Vertical overflow is handled
+                      // by the region's own scroll instead.
+                      final contentWidth = sectorLayout.plotContentWidth;
+                      final plotLayers = Stack(
+                        key: const ValueKey('world-map-plot'),
+                        children: [
+                          Positioned.fill(
+                            child: CustomPaint(
+                              key: const ValueKey('sector-route-layer'),
+                              painter: SectorRoutePainter(
+                                routes: SectorMapLayout.routes(
+                                  widget.stages,
+                                  widget.progress,
+                                ),
+                                nodeRects: nodeRects,
+                                uiTheme: uiTheme,
+                              ),
+                            ),
+                          ),
+                          for (final stage in widget.stages)
+                            Positioned.fromRect(
+                              rect: nodeRects[stage.id]!,
+                              child: _IllustratedStageNode(
+                                key: ValueKey('sector-stage-${stage.id}'),
+                                stage: stage,
+                                status: widget.progress.statusFor(stage),
+                                result: widget.progress.resultFor(stage.id),
+                                isBusy: _isBusy,
+                                onStageSelected: widget.onStageSelected,
+                                onLockedStageSelected:
+                                    widget.onLockedStageSelected,
+                              ),
+                            ),
+                        ],
+                      );
+                      return ScrollConfiguration(
+                        behavior: const _NoOverscrollBehavior(),
+                        child: SingleChildScrollView(
+                          key: const ValueKey('world-map-plot-viewport'),
+                          primary: false,
+                          physics: const ClampingScrollPhysics(),
+                          child: ConstrainedBox(
+                            constraints: BoxConstraints(
+                              minHeight: regionSize.height,
+                            ),
+                            child: Column(
+                              // Slack between plot and footer is invisible
+                              // over the backdrop; pinning them apart keeps
+                              // the footer at the region's bottom edge when
+                              // nothing scrolls, and at the end of the
+                              // scrollable content when it does.
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                SizedBox(
+                                  height: plotHeight,
+                                  child: contentWidth > regionSize.width
+                                      ? SingleChildScrollView(
                                           scrollDirection: Axis.horizontal,
                                           child: SizedBox(
                                             width: contentWidth,
                                             height: plotHeight,
                                             child: plotLayers,
                                           ),
-                                        ),
-                                      )
-                                    : plotLayers,
-                              );
-                            },
+                                        )
+                                      : plotLayers,
+                                ),
+                                Container(
+                                  constraints: const BoxConstraints(
+                                    minHeight: 150,
+                                  ),
+                                  alignment: Alignment.bottomCenter,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    14,
+                                    12,
+                                    14,
+                                    18,
+                                  ),
+                                  child: _MissionDestination(
+                                    stages: widget.stages,
+                                    progress: widget.progress,
+                                    onStageSelected: _isBusy
+                                        ? null
+                                        : widget.onStageSelected,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      Container(
-                        constraints: const BoxConstraints(minHeight: 150),
-                        alignment: Alignment.bottomCenter,
-                        padding: const EdgeInsets.fromLTRB(14, 12, 14, 18),
-                        child: _MissionDestination(
-                          stages: widget.stages,
-                          progress: widget.progress,
-                          onStageSelected: _isBusy
-                              ? null
-                              : widget.onStageSelected,
-                        ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
                 ),
               ],
@@ -454,9 +471,14 @@ class _SectorHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    // No "optional 0 of 0": campaigns without optional stages report only
+    // their main progress.
+    final optionalClause = optionalTotal > 0
+        ? ', optional $optionalCleared of $optionalTotal stages'
+        : '';
     final summary = mainComplete
-        ? 'Campaign complete. Main $mainCleared of $mainTotal stages, '
-              'optional $optionalCleared of $optionalTotal stages.'
+        ? 'Campaign complete. Main $mainCleared of $mainTotal stages'
+              '$optionalClause.'
         : 'Main $mainCleared of $mainTotal stages cleared';
     // The visible OPTIONAL badge is redundant at full clear (ALL SECTORS
     // SECURED + Challenge Badge already say so), but the summary still
@@ -558,28 +580,44 @@ class _SectorHeader extends StatelessWidget {
             ),
           ),
         ],
-        if (feedback != null) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Icon(
-                Icons.sensors,
-                size: 13,
-                color: uiTheme.warningOrange,
-                shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
-              ),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  feedback!,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: OrionTypography.microLabel(color: uiTheme.textMuted),
+        // The feedback row occupies a fixed-height slot whether or not a
+        // message is showing: a transient line used to resize the header —
+        // and therefore shift every stage node and reset the chart's scroll
+        // offset — each time it appeared or cleared.
+        const SizedBox(height: 4),
+        SizedBox(
+          height: 16,
+          child: feedback == null
+              ? null
+              : Row(
+                  children: [
+                    Icon(
+                      Icons.sensors,
+                      size: 13,
+                      color: uiTheme.warningOrange,
+                      shadows: const [
+                        Shadow(color: Colors.black, blurRadius: 6),
+                      ],
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        feedback!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        // Same 1.3x dense-map clamp as the badges so the slot
+                        // stays a fixed height at any system text scale.
+                        textScaler: MediaQuery.textScalerOf(
+                          context,
+                        ).clamp(maxScaleFactor: 1.3),
+                        style: OrionTypography.microLabel(
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ],
     );
   }
