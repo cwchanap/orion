@@ -122,11 +122,10 @@ void main() {
   testWidgets(
     'common portrait screens fit the whole star chart without scrolling',
     (tester) async {
-      // Finding: the header moved into the flow, but the plot kept sizing
-      // itself to the full SafeArea, so common screens scrolled needlessly,
-      // showed a dead band above the top stage, and clipped it at first
-      // view. The plot must size itself to the viewport the in-flow header
-      // and footer actually leave.
+      // Finding: the chart+footer region is the only scrollable; on a
+      // common screen it must report zero scroll extent and ignore a
+      // whole-map drag — the old nested scrollables stretched/bounced even
+      // when nothing overflowed.
       tester.view.physicalSize = const Size(390, 844);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -141,14 +140,25 @@ void main() {
       await tester.pump();
       expect(tester.takeException(), isNull);
 
-      // No vertical scrolling is needed on a common screen.
-      expect(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is Scrollable && widget.axisDirection == AxisDirection.up,
-        ),
-        findsNothing,
+      // Exactly one vertical scrollable exists (the chart+footer region),
+      // and it has nothing to scroll.
+      final scrollableFinder = find.byWidgetPredicate(
+        (widget) =>
+            widget is Scrollable && widget.axisDirection == AxisDirection.down,
       );
+      expect(scrollableFinder, findsOneWidget);
+      final scrollable = tester.state<ScrollableState>(scrollableFinder);
+      expect(scrollable.position.maxScrollExtent, 0);
+
+      // A real drag on the chart is inert at zero extent — no pull, no
+      // bounce, no stretch.
+      await tester.drag(
+        find.byKey(const ValueKey('sector-route-layer')),
+        const Offset(0, -160),
+        warnIfMissed: false,
+      );
+      await tester.pumpAndSettle();
+      expect(scrollable.position.pixels, 0);
 
       // Every stage node — the top row included — is fully on screen in the
       // first view.
@@ -165,6 +175,36 @@ void main() {
     },
   );
 
+  testWidgets('transient feedback never moves the stage nodes', (tester) async {
+    // Regression: the feedback line used to sit in the layout flow, so a
+    // message appearing or clearing resized the header and shifted every
+    // node by the line's height. Its slot is now a fixed height.
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(loadRealFonts);
+
+    Rect nodeRect(String stageId) =>
+        tester.getRect(find.byKey(ValueKey('sector-stage-$stageId')));
+
+    await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+    await tester.pump();
+    final settled = nodeRect('nebula-relay');
+
+    await tester.pumpWidget(
+      buildMap(
+        progress: CampaignProgress(),
+        feedback: 'Singularity Core is locked.',
+      ),
+    );
+    await tester.pump();
+    expect(nodeRect('nebula-relay'), settled);
+
+    await tester.pumpWidget(buildMap(progress: CampaignProgress()));
+    await tester.pump();
+    expect(nodeRect('nebula-relay'), settled);
+  });
+
   for (final size in const [Size(320, 568), Size(568, 320)]) {
     testWidgets(
       'compact ${size.width.toInt()}x${size.height.toInt()} map at 3x '
@@ -178,6 +218,7 @@ void main() {
         // actual row heights this regression exists to guard.
         await tester.runAsync(loadRealFonts);
 
+        final selected = <String>[];
         Future<void> pumpCompactMap(
           CampaignProgress progress, {
           String? feedback,
@@ -187,12 +228,13 @@ void main() {
               progress: progress,
               feedback: feedback,
               textScaler: const TextScaler.linear(3),
+              onStageSelected: (stage) => selected.add(stage.id),
             ),
           );
           await tester.pump();
         }
 
-        void expectCompactLayoutClear() {
+        Future<void> expectCompactLayoutClear() async {
           expect(tester.takeException(), isNull);
 
           final railControls = <Rect>[
@@ -243,9 +285,21 @@ void main() {
 
           // Neither the header rows nor the utility controls may cover a
           // visible stage-node hit target. "Visible" means the portion of the
-          // node actually on screen inside the scrolling plot viewport — nodes
+          // node actually on screen inside the scroll viewport — nodes
           // scrolled out of the viewport keep geometric rects that must not
-          // count.
+          // count. ScrollableState survives pumpWidget, so a prior call's
+          // footer check may have left the region scrolled to the bottom
+          // (where only the footer shows); pin it to the top for a
+          // deterministic geometry check.
+          final scrollable = tester.state<ScrollableState>(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is Scrollable &&
+                  widget.axisDirection == AxisDirection.down,
+            ),
+          );
+          scrollable.position.jumpTo(0);
+          await tester.pump();
           final viewportRect = tester.getRect(
             find.byKey(const ValueKey('world-map-plot-viewport')),
           );
@@ -268,8 +322,35 @@ void main() {
             }
           }
 
-          // The destination footer must not cover the Outpost Alpha hit
-          // target (scene-parity pattern).
+          // The footer starts below the fold at these sizes, and there is
+          // only ONE scrollable to reach it: a real upward drag on the chart
+          // must carry the destination card on screen (the old nested plot
+          // scroll swallowed this gesture).
+          expect(scrollable.position.maxScrollExtent, greaterThan(0));
+
+          // Drag from the scroll viewport's own center — unlike a node, it
+          // stays on screen as the content scrolls, so every leg lands.
+          final plotViewport = find.byKey(
+            const ValueKey('world-map-plot-viewport'),
+          );
+          for (
+            var leg = 0;
+            leg < 4 &&
+                scrollable.position.pixels <
+                    scrollable.position.maxScrollExtent;
+            leg++
+          ) {
+            await tester.drag(plotViewport, const Offset(0, -600));
+            await tester.pump();
+          }
+          await tester.pumpAndSettle();
+          expect(
+            scrollable.position.pixels,
+            scrollable.position.maxScrollExtent,
+          );
+
+          // At the bottom extent the footer is on screen and leaves Outpost
+          // Alpha's hit target clear; the fixed header controls never moved.
           final destination = find.byWidgetPredicate(
             (widget) =>
                 widget is Semantics &&
@@ -278,10 +359,41 @@ void main() {
           final footerRect = tester.getRect(
             find.ancestor(of: destination, matching: find.byType(OrionSurface)),
           );
+          expect(viewportRect.overlaps(footerRect), isTrue);
           final alphaRect = tester.getRect(
             find.byKey(const ValueKey('sector-stage-outpost-alpha')),
           );
           expect(footerRect.overlaps(alphaRect), isFalse);
+          final screenRect = Offset.zero & size;
+          for (final tooltip in [
+            'Codex',
+            'Tech Tree',
+            'Reset Campaign',
+            'Settings',
+          ]) {
+            final controlRect = tester.getRect(find.byTooltip(tooltip));
+            expect(
+              screenRect.contains(controlRect.topLeft),
+              isTrue,
+              reason: '$tooltip must stay on screen while scrolled',
+            );
+            expect(
+              screenRect.contains(controlRect.bottomRight),
+              isTrue,
+              reason: '$tooltip must stay on screen while scrolled',
+            );
+          }
+
+          // The reached footer is functional, not merely painted.
+          final briefingLabel = tester
+              .widget<Semantics>(destination)
+              .properties
+              .label!;
+          final expected = OrionCampaign.stages.firstWhere(
+            (candidate) => briefingLabel.endsWith(candidate.name),
+          );
+          await tester.tap(destination);
+          expect(selected.last, expected.id);
 
           // find.text only matches the widget's data string, not what the
           // paragraph painted; an ellipsized kicker would still pass. Prove
@@ -335,7 +447,7 @@ void main() {
             find.bySemanticsLabel(RegExp(r'CAMPAIGN COMPLETE')),
             findsNothing,
           );
-          expectCompactLayoutClear();
+          await expectCompactLayoutClear();
 
           // State 2 — all seven stages cleared: ALL SECTORS SECURED with the
           // Challenge Badge; the redundant visible OPTIONAL badge is absent.
@@ -363,7 +475,7 @@ void main() {
             ),
             findsOneWidget,
           );
-          expectCompactLayoutClear();
+          await expectCompactLayoutClear();
         } finally {
           semantics.dispose();
         }
@@ -705,6 +817,12 @@ void main() {
         onStageSelected: (stage) => selections++,
       ),
     );
+    // Outpost Alpha anchors the bottom of the chart; scroll it into the
+    // region's viewport before tapping.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+    );
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
     expect(selections, 1);
     // No persistent selected-stage detail/launch bar may exist on the map:
@@ -872,6 +990,43 @@ void main() {
     }
   });
 
+  testWidgets('a campaign without optional stages reads campaign complete '
+      'without inventing optional progress', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final mainStages = OrionCampaign.stages
+          .where((stage) => stage.isMainPath)
+          .toList();
+      await tester.pumpWidget(
+        buildMap(
+          stages: mainStages,
+          progress: CampaignProgress(
+            bestResultsByStageId: {
+              for (final stage in mainStages)
+                stage.id: const StageResult(
+                  medal: StageMedal.gold,
+                  bestBaseHealth: 20,
+                ),
+            },
+          ),
+        ),
+      );
+
+      expect(find.text('MAIN 5/5'), findsOneWidget);
+      expect(find.text('CAMPAIGN COMPLETE'), findsOneWidget);
+      // ALL SECTORS SECURED and any optional count are only meaningful when
+      // optional stages exist: "optional 0 of 0" is nonsense copy.
+      expect(find.text('ALL SECTORS SECURED'), findsNothing);
+      expect(
+        find.bySemanticsLabel('Campaign complete. Main 5 of 5 stages.'),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel(RegExp(r'optional 0 of 0')), findsNothing);
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('footer recommends the next main stage', (tester) async {
     final semantics = tester.ensureSemantics();
     try {
@@ -891,6 +1046,8 @@ void main() {
         'NEXT MAIN',
       );
 
+      await tester.ensureVisible(find.text('SECTOR 01 / NEXT MAIN'));
+      await tester.pump();
       await tester.tap(find.text('SECTOR 01 / NEXT MAIN'));
       expect(selected, [OrionCampaign.stageOneId]);
     } finally {
@@ -918,6 +1075,8 @@ void main() {
         'OPTIONAL',
       );
 
+      await tester.ensureVisible(find.text('SECTOR 03 / OPTIONAL'));
+      await tester.pump();
       await tester.tap(find.text('SECTOR 03 / OPTIONAL'));
       expect(selected, ['salvage-rift']);
     } finally {
@@ -946,6 +1105,8 @@ void main() {
         'REPLAY',
       );
 
+      await tester.ensureVisible(find.text('SECTOR 07 / REPLAY'));
+      await tester.pump();
       await tester.tap(find.text('SECTOR 07 / REPLAY'));
       expect(selected, ['singularity-core']);
     } finally {
@@ -964,6 +1125,8 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(find.text('SECTOR 03 / OPTIONAL'));
+    await tester.pump();
     await tester.tap(find.text('SECTOR 03 / OPTIONAL'));
     expect(selected, 0);
   });
@@ -1164,9 +1327,14 @@ void main() {
       ),
     );
 
+    // Outpost Alpha anchors the bottom of the chart; scroll it into view.
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+    );
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
-    // The in-flow header keeps locked top nodes out from under it, so
-    // scroll the locked node into the viewport before tapping it.
+    // The fixed header keeps locked nodes out from under it, so scroll the
+    // locked node into the viewport before tapping it.
     await tester.ensureVisible(
       find.byKey(const ValueKey('sector-stage-singularity-core')),
     );
@@ -1320,6 +1488,10 @@ void main() {
       ),
     );
 
+    await tester.ensureVisible(
+      find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+    );
+    await tester.pump();
     await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
     await tester.tap(find.byTooltip('Codex'));
     await tester.tap(find.byTooltip('Tech Tree'));
@@ -1452,9 +1624,10 @@ void main() {
     'at 320x568 with 3x system text the plot scrolls and every stage stays '
     'selectable',
     (tester) async {
-      // Task-4 moved the header into the flow, so compact viewports scroll
-      // the plot vertically. This guards that scrolling still exposes every
-      // stage node as a working tap target at the cramped extreme.
+      // The chart+footer region is one scrollable under the fixed header;
+      // compact viewports scroll it vertically. This guards that scrolling
+      // still exposes every stage node as a working tap target at the
+      // cramped extreme.
       tester.view.physicalSize = const Size(320, 568);
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -1464,7 +1637,7 @@ void main() {
       await tester.pumpWidget(
         buildMap(
           // The tallest header (badges + completion + feedback rows) leaves
-          // the smallest viewport, so scrolling is unavoidable.
+          // the smallest region, so scrolling is unavoidable.
           progress: mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
           feedback: 'Saving campaign progress…',
           onStageSelected: (stage) => selected.add(stage.id),
@@ -1473,12 +1646,13 @@ void main() {
       );
       await tester.pump();
 
-      // The in-flow header leaves a viewport short enough to require the
-      // vertical scroll (the reverse scrollable reports axisDirection up).
+      // The region below the fixed header is too short for the chart plus
+      // footer, so its single vertical scrollable must have real extent.
       final verticalScroll = tester.state<ScrollableState>(
         find.byWidgetPredicate(
           (widget) =>
-              widget is Scrollable && widget.axisDirection == AxisDirection.up,
+              widget is Scrollable &&
+              widget.axisDirection == AxisDirection.down,
         ),
       );
       expect(verticalScroll.position.maxScrollExtent, greaterThan(0));
@@ -1499,12 +1673,12 @@ void main() {
     },
   );
 
-  testWidgets('at 320x568 with 3x text a real drag scrolls the plot and taps a '
-      'revealed stage', (tester) async {
-    // ensureVisible alone does not prove the compact plot answers a real
-    // touch drag. Drag the reverse (bottom-anchored) scrollable up to the
-    // clipped top stages, then tap a node that only became tappable after
-    // the drag.
+  testWidgets('at 320x568 with 3x text a real drag scrolls the region and '
+      'taps a revealed stage', (tester) async {
+    // ensureVisible alone does not prove the compact region answers a real
+    // touch drag. The scroll is top-anchored: an upward drag carries the
+    // bottom-most stage (and the footer) into view, where its tap target
+    // then works.
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -1524,43 +1698,42 @@ void main() {
     final verticalScroll = tester.state<ScrollableState>(
       find.byWidgetPredicate(
         (widget) =>
-            widget is Scrollable && widget.axisDirection == AxisDirection.up,
+            widget is Scrollable && widget.axisDirection == AxisDirection.down,
       ),
     );
-    // The reverse scrollable rests at the bottom of the plot.
+    // The scrollable rests at the top of the chart.
     expect(verticalScroll.position.pixels, 0);
 
-    // Drag with a real held gesture. Downward finger movement pushes a
-    // reverse (bottom-anchored) scrollable toward the top of its content;
-    // two legs carry the offset to the top extent in every geometry this
-    // test may run against.
+    // Drag with a real held gesture, starting on the top stage so the
+    // gesture point is guaranteed on screen; two legs carry the offset to
+    // the bottom extent in every geometry this test may run against.
     final gesture = await tester.startGesture(
       tester.getCenter(
-        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+        find.byKey(const ValueKey('sector-stage-singularity-core')),
       ),
     );
-    await gesture.moveBy(const Offset(0, 600));
+    await gesture.moveBy(const Offset(0, -600));
     await tester.pump();
-    await gesture.moveBy(const Offset(0, 600));
+    await gesture.moveBy(const Offset(0, -600));
     await gesture.up();
     await tester.pumpAndSettle();
 
-    // The real gesture moved the plot all the way to the top extent.
+    // The real gesture moved the region all the way to the bottom extent.
     expect(verticalScroll.position.maxScrollExtent, greaterThan(0));
     expect(
       verticalScroll.position.pixels,
       verticalScroll.position.maxScrollExtent,
     );
 
-    // Singularity Core sits at the top of the plot, clipped out of the
+    // Outpost Alpha sits at the bottom of the chart, clipped out of the
     // first view; after the drag its tap center is revealed and taps work.
-    final core = find.byKey(const ValueKey('sector-stage-singularity-core'));
+    final alpha = find.byKey(const ValueKey('sector-stage-outpost-alpha'));
     final viewport = tester.getRect(
       find.byKey(const ValueKey('world-map-plot-viewport')),
     );
-    expect(viewport.contains(tester.getRect(core).center), isTrue);
-    await tester.tap(core);
-    expect(selected, ['singularity-core']);
+    expect(viewport.contains(tester.getRect(alpha).center), isTrue);
+    await tester.tap(alpha);
+    expect(selected, ['outpost-alpha']);
   });
 
   testWidgets(

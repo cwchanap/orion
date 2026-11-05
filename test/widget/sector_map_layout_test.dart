@@ -117,11 +117,16 @@ void main() {
       );
       final rects = OrionCampaign.stages.map(layout.nodeRect).toList();
       expect(layout.plotContentWidth, 360);
-      // The header is in the flow above the plot now, so the anchor frame
-      // floors at the anti-overlap minimum (680) instead of the overlay-era
-      // 740, and the reserved top band is trimmed to a small breathing gap
-      // above the first stage instead of the old floating-header clearance.
-      expect(layout.plotContentHeight, 680);
+      // The layout no longer sizes the plot itself — the view grows it to
+      // at least minContentHeight (insets + one node + the 300px anchor
+      // spread floor) so compact boxes scroll instead of overlapping nodes.
+      expect(
+        layout.minContentHeight,
+        SectorMapLayout.plotTopInset +
+            SectorMapLayout.plotBottomInset +
+            SectorMapLayout.nodeSize.height +
+            SectorMapLayout.minNodeSpan,
+      );
       expect(
         layout.nodeRect(OrionCampaign.stages.last).top,
         lessThanOrEqualTo(16),
