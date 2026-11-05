@@ -1,7 +1,7 @@
 # HPA-753 — Search the Codex without scrolling
 
 **Linear:** [HPA-753](https://linear.app/cwchanap/issue/HPA-753/orion-find-codex-entries-without-scrolling)  
-**Status:** Revised after owner review (November 4); design-only draft PR  
+**Status:** Revised after owner review (November 4, revision 2); design-only draft PR  
 **Scope:** Flutter Codex UI; independent from HPA-715 Endless Mode
 
 ## Problem and player value
@@ -21,8 +21,8 @@ This design keeps the existing four-section interaction, Codex cards, and status
 1. Opening Codex still defaults to Towers with every tower card visible, with an empty field labelled **Search towers**.
 2. Typing a query filters the active tab immediately. Normalize with `trim().toLowerCase()`. Match the **whole resulting string** as one substring, including spaces (no token ranking).
 3. Whitespace-only input is equivalent to no query: all items remain. A clear icon is available when the input is nonempty and restores the full current section with one tap.
-4. Switching a chip clears the query and dismisses the keyboard, so the newly selected tab shows its full list. With a section-specific `PageStorageKey<int>(_section)`, switching **without** a query preserves each section's scroll offset (fixing current behavior); applying or clearing search scrolls only the active section to the top. This deliberately keeps search local to the active section instead of silently carrying an old filter to a new tab.
-5. When there are no matches, replace the list body with a short, readable **No matches in [section]** state. The persistent search field and clear icon remain accessible.
+4. Switching to a **different** chip clears the query and dismisses the keyboard, so the newly selected tab shows its full list. Re-tapping the currently selected chip is a no-op: preserve the active query, focus, and scroll position. With a section-specific `PageStorageKey<int>(_section)`, switching **without** a query preserves each section's scroll offset (fixing current behavior); applying or clearing search scrolls only the active section to the top. This deliberately keeps search local to the active section instead of silently carrying an old filter to a new tab.
+5. When there are no matches, render the short, readable **No matches in [section]** message as the **sole child of the active keyed `ListView`**, not a standalone replacement widget. Keep the controller attached, keyboard drag dismissal available, and the search field and Clear control accessible.
 6. Keep the current `Card` rendering and authored stats unchanged. This is a discoverability improvement, not a redesign.
 
 ### Search fields by section
@@ -40,7 +40,7 @@ Search authored entry labels, roles, and descriptions shown on the cards, includ
 
 - Reuse the existing Codex column: header → four wrapping section chips → compact search field → `Expanded` scrolling content. No fixed-height card area or new overlay.
 - Use standard Material `TextField`/`InputDecoration` with search icon, context-specific accessible label, clear icon with a tooltip/semantic label, and a touch-sized target. Match existing `OrionUiTheme` colors and `OrionTypography` roles; do not add a typography size.
-- Do not hide section chips while the keyboard is up. At 320×568 with a 260px keyboard inset, 2×/3× text scaling currently overflows the top chrome even before search. Wrap **only** the header, chips and new field with `MediaQuery.withClampedTextScaling(maxScaleFactor: 1.15, child: ...)`, using the repo's existing compact-chrome pattern; keep `Expanded(child: _body())` **outside** that wrapper so Codex cards retain the user's full text scale. Optional: dismiss the keyboard on list drag (`keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag`). Test the actual keyboard inset, not just a small surface.
+- Do not hide section chips while the keyboard is up. At 320×568 with a 260px keyboard inset, 2×/3× text scaling currently overflows the top chrome even before search. Wrap **only** the header, chips and new field with `MediaQuery.withClampedTextScaling(maxScaleFactor: 1.15, child: ...)`, using the repo's existing compact-chrome pattern; keep `Expanded(child: _body())` **outside** that wrapper so Codex cards retain the user's full text scale. Require `keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag` on **all four** section `ListView`s. For the empty-results case, keep the keyed list mounted and use `const AlwaysScrollableScrollPhysics()` so a drag is recognized even when the one child is shorter than the viewport. Test the actual keyboard inset, including dragging the zero-results list to dismiss the keyboard, not just a small surface.
 - Do not announce duplicate search labels through nested `Semantics`; a single readable field label is enough. Empty state should be discoverable by screen reader.
 - The current four scroll controllers remain owned/disposed by `_CodexViewState`; dispose the new text controller too.
 
@@ -52,8 +52,11 @@ The small implementation spans two existing production files:
 - **`codex_view.dart` (Flutter):** first key each section's existing `ListView` with `PageStorageKey<int>(_section)` to repair per-tab scrolling; keep `int _section` and the current four controllers.
 - Add one `TextEditingController _searchController` and dispose it. Derive the active query from the controller; use the five `searchTerms` getters and `codexMatches` to filter small view-local lists in `_body()`, without caching or altering the card builders.
 - Clamp text scaling to 1.15 **only for the header/chips/search field** using `MediaQuery.withClampedTextScaling`; the scrolling cards stay outside this wrapper at full text scale. Keep compact layouts keyboard-safe.
-- `onChanged` and the clear icon use one helper that rebuilds the Codex view and resets the **active** controller to zero when attached. Programmatic `clear()` does not trigger `onChanged`.
-- Chip selection clears the query and unfocuses the input without resetting other sections' controllers. Switching without a search preserves independent offsets with the new list keys.
+- `onChanged` and the clear icon use one helper that rebuilds the Codex view and resets the **active** controller to zero **only if `controller.hasClients`**, so a transient detachment never causes a `jumpTo` assertion. Programmatic `clear()` does not trigger `onChanged`.
+- Chip selection first checks `if (_section == index) return;` (re-tapping the selected chip does not clear search). A genuine section change clears the query and unfocuses the input without resetting other sections' controllers. Switching without a search preserves independent offsets with the new list keys.
+
+- The active section keeps the same `ListView` with `PageStorageKey<int>(_section)` and its `ScrollController` whether results are nonempty or empty. Empty results are just a padded centered child, with `AlwaysScrollableScrollPhysics` to support drag-to-dismiss; all four lists set `keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag`.
+- The scroll regression test reads the **specific keyed `ListView`'s `controller!.offset`**, never `find.byType(Scrollable)` (an added `TextField` has its own `Scrollable`).
 
 Keep `_towerCard`, `_enemyCard`, `_stageCard`, the effect card, and the data contents unchanged.
 
@@ -73,8 +76,8 @@ No external service, dependencies, save fields, database, new game mode, art, or
 2. Towers: typing a specialization name (e.g. "pulse laser") finds its parent tower; case and surrounding whitespace do not matter. Negative assertions must name an **unfiltered, initially built** item (e.g. a search for "gravity" removes the first Laser card), not an offscreen lazy-list item whose absence proves nothing. Use a tall surface or scroll for distant positive matches.
 3. Enemies: typing a trait (e.g. "shielded") finds the glossary description and corresponding enemy; the separator appears only when both groups match.
 4. Effects and Stages: matches include related specialization names and stage/modifier **titles and descriptions** respectively. Pure unit tests exercise each top-level entry type's terms and the matcher, including that "locked" does not accidentally match dynamic stage status.
-5. Unmatched text renders the empty state; Clear restores all entries. Verify that scroll positions are **broken on current unkeyed lists** and fixed by keying them: scroll Towers down, switch to Enemies (begins at zero), then return to Towers (previous offset retained). Switching tabs clears active search without destroying unrelated offsets.
-6. Search field, clear action, and no-results state have usable semantics and no overflow at **320×568**, both **2× and 3× text scaling**, and `tester.view.viewInsets = const FakeViewPadding(bottom: 260)` simulating the open keyboard. Keep card text at full scale.
+5. Unmatched text renders a one-child empty state **inside the active keyed `ListView`**, with drag-to-dismiss still working; Clear restores entries without detached-controller errors. Verify that scroll positions are **broken on current unkeyed lists** and fixed by keying them: scroll Towers down, switch to Enemies (begins at zero), then return to Towers (previous offset retained). Assert the keyed `ListView.controller!.offset`, not a global `Scrollable` finder. Switching tabs clears the query without destroying unrelated offsets; re-tapping the active chip does **not** clear the filter.
+6. Search field, clear action, and no-results state have usable semantics and no overflow at **320×568**, both **2× and 3× text scaling**, and `tester.view.viewInsets = const FakeViewPadding(bottom: 260)` simulating the open keyboard. Test that dragging both a populated and an empty results list dismisses focus/keyboard, even when the content is shorter than the viewport. Keep card text at full scale.
 7. `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, `flutter test --coverage` (90% Codecov gate), and `flutter build web --release` pass after implementation.
 
 ## Explicit non-goals
