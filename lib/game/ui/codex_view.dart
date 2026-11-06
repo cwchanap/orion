@@ -27,6 +27,12 @@ class _CodexViewState extends State<CodexView> {
   late final List<ScrollController> _scrollControllers;
   final _searchController = TextEditingController();
 
+  // The shell hosts the Codex by in-place view swap (no route of its own), so
+  // the section lists must not store offsets in the app-long root route
+  // bucket: a bucket scoped to this State keeps offsets across chip switches
+  // within a visit but resets them when the Codex is reopened.
+  final PageStorageBucket _pageStorageBucket = PageStorageBucket();
+
   @override
   void initState() {
     super.initState();
@@ -93,18 +99,24 @@ class _CodexViewState extends State<CodexView> {
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                    child: Wrap(
-                      spacing: 8,
-                      children: [
-                        for (var i = 0; i < _sections.length; i++)
-                          ChoiceChip(
-                            label: Text(_sections[i]),
-                            selected: _section == i,
-                            onSelected: (_) => _selectSection(i),
-                          ),
-                      ],
+                  // The chips join the field's tap region: mouse/stylus (and
+                  // web touch) taps outside a TextField unfocus it on
+                  // pointer-down, which would run before _selectSection's
+                  // re-tap guard and steal focus from a no-op chip re-tap.
+                  TextFieldTapRegion(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Wrap(
+                        spacing: 8,
+                        children: [
+                          for (var i = 0; i < _sections.length; i++)
+                            ChoiceChip(
+                              label: Text(_sections[i]),
+                              selected: _section == i,
+                              onSelected: (_) => _selectSection(i),
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   Padding(
@@ -137,14 +149,17 @@ class _CodexViewState extends State<CodexView> {
               // A user drag (dragDetails != null) unfocuses the search field
               // immediately — on a clamping list with zero scroll extent the
               // built-in onDrag dismissal never sees a scroll update.
-              child: NotificationListener<ScrollStartNotification>(
-                onNotification: (notification) {
-                  if (notification.dragDetails != null) {
-                    FocusScope.of(context).unfocus();
-                  }
-                  return false;
-                },
-                child: _body(),
+              child: PageStorage(
+                bucket: _pageStorageBucket,
+                child: NotificationListener<ScrollStartNotification>(
+                  onNotification: (notification) {
+                    if (notification.dragDetails != null) {
+                      FocusScope.of(context).unfocus();
+                    }
+                    return false;
+                  },
+                  child: _body(),
+                ),
               ),
             ),
           ],
@@ -243,9 +258,12 @@ class _CodexViewState extends State<CodexView> {
     final uiTheme = OrionUiTheme.of(context);
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Text(
-        'No matches in ${_sections[_section]}',
-        style: OrionTypography.microLabel(color: uiTheme.textMuted),
+      // Padded centered child, per spec: the message is not a list row.
+      child: Center(
+        child: Text(
+          'No matches in ${_sections[_section]}',
+          style: OrionTypography.microLabel(color: uiTheme.textMuted),
+        ),
       ),
     );
   }
