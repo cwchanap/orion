@@ -580,6 +580,11 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     addTearDown(tester.view.reset);
+    // Widget finders cannot see the semantics tree: assert the search label
+    // and the no-results message are actually exposed (exactly once) to
+    // assistive technology, not merely rendered. Disposed in the body: the
+    // binding verifies handles before addTearDown callbacks run.
+    final semantics = tester.ensureSemantics();
 
     for (final scaler in const [TextScaler.linear(2), TextScaler.linear(3)]) {
       // The previous iteration ended on another chip; state survives the
@@ -592,12 +597,12 @@ void main() {
       await tester.pump();
 
       // Exactly one accessible search label, reflecting the section.
-      expect(find.text('Search towers'), findsOneWidget);
+      expect(find.bySemanticsLabel('Search towers'), findsOneWidget);
 
-      // No-results message renders while the keyboard is up.
+      // No-results message is announced while the keyboard is up.
       await tester.enterText(searchField, 'zzzz');
       await tester.pump();
-      expect(find.text('No matches in Towers'), findsOneWidget);
+      expect(find.bySemanticsLabel('No matches in Towers'), findsOneWidget);
 
       // The Clear tooltip is usable and restores the list.
       await tester.tap(find.byTooltip('Clear'));
@@ -607,9 +612,10 @@ void main() {
       // Switching tabs keeps the compact chrome overflow-free.
       await tester.tap(find.text('Enemies'));
       await tester.pump();
-      expect(find.text('Search enemies'), findsOneWidget);
+      expect(find.bySemanticsLabel('Search enemies'), findsOneWidget);
       expect(tester.takeException(), isNull);
     }
+    semantics.dispose();
   });
 
   // A user drag on the results must dismiss the keyboard even when the list
@@ -618,6 +624,8 @@ void main() {
   Future<void> dragDismissScenarios(WidgetTester tester) async {
     tester.view.physicalSize = const Size(320, 568);
     tester.view.devicePixelRatio = 1.0;
+    // The faked keyboard stays up for every populated drag below: unfocus
+    // must not depend on the (never-shrinking) fake viewInsets.
     tester.view.viewInsets = const FakeViewPadding(bottom: 260);
     addTearDown(tester.view.reset);
 
@@ -631,20 +639,19 @@ void main() {
     await dragResultList(tester, 0);
     expect(searchFocused(tester), isFalse);
 
-    // Short populated result list that still cannot scroll. The drag start
-    // dismissed the (faked) keyboard above, so this run uses the un-inset
-    // short surface — the unfocus mechanics do not depend on the inset.
-    tester.view.viewInsets = FakeViewPadding.zero;
+    // Short populated result list on the keyboard-open surface. The single
+    // 'pierce' card may overflow the inset viewport — only the user-drag
+    // unfocus matters here, not the scroll extent.
     await tester.tap(find.text('Effects'));
     await tester.pump();
     await tester.enterText(searchField, 'pierce');
     await tester.pump();
-    expect(maxExtent(tester, 2), 0); // precondition: single short card
+    expect(find.text('Pierce'), findsOneWidget); // precondition: one card
     expect(searchFocused(tester), isTrue);
     await dragResultList(tester, 2);
     expect(searchFocused(tester), isFalse);
 
-    // Ordinary scrollable result list.
+    // Ordinary scrollable result list, still with the keyboard up.
     await tester.tap(find.byTooltip('Clear'));
     await tester.pump();
     expect(maxExtent(tester, 2), greaterThan(0));
@@ -662,16 +669,39 @@ void main() {
     await tester.pump();
     expect(searchFocused(tester), isTrue);
 
-    // Same zero-extent regression under a large text scale, where the tiny
-    // inset viewport would even scroll the no-matches message itself.
-    tester.view.viewInsets = FakeViewPadding.zero;
+    // Empty-list drag also unfocuses at a large text scale, where the tiny
+    // inset viewport may even scroll the no-matches message itself.
     await tester.pumpWidget(codexHost(textScaler: const TextScaler.linear(3)));
     await tester.pump();
     await tester.tap(find.text('Towers'));
     await tester.pump();
     await tester.enterText(searchField, 'zzzz');
     await tester.pump();
-    expect(maxExtent(tester, 0), 0);
+    expect(searchFocused(tester), isTrue);
+    await dragResultList(tester, 0);
+    expect(searchFocused(tester), isFalse);
+
+    // Additional coverage without the fake inset: a short populated list and
+    // an empty no-matches list that genuinely cannot scroll, at 1x and 3x.
+    tester.view.viewInsets = FakeViewPadding.zero;
+    await tester.pumpWidget(codexHost());
+    await tester.pump();
+    await tester.tap(find.text('Effects'));
+    await tester.pump();
+    await tester.enterText(searchField, 'pierce');
+    await tester.pump();
+    expect(maxExtent(tester, 2), 0); // precondition: single short card
+    expect(searchFocused(tester), isTrue);
+    await dragResultList(tester, 2);
+    expect(searchFocused(tester), isFalse);
+
+    await tester.tap(find.text('Towers'));
+    await tester.pump();
+    await tester.pumpWidget(codexHost(textScaler: const TextScaler.linear(3)));
+    await tester.pump();
+    await tester.enterText(searchField, 'zzzz');
+    await tester.pump();
+    expect(maxExtent(tester, 0), 0); // precondition: cannot scroll
     expect(searchFocused(tester), isTrue);
     await dragResultList(tester, 0);
     expect(searchFocused(tester), isFalse);
