@@ -1,7 +1,7 @@
 # HPA-753 — Search the Codex without scrolling
 
 **Linear:** [HPA-753](https://linear.app/cwchanap/issue/HPA-753/orion-find-codex-entries-without-scrolling)  
-**Status:** Revised after owner review (November 4, revision 2); design-only draft PR  
+**Status:** Revised after owner review (November 5, revision 3); design-only draft PR  
 **Scope:** Flutter Codex UI; independent from HPA-715 Endless Mode
 
 ## Problem and player value
@@ -40,7 +40,7 @@ Search authored entry labels, roles, and descriptions shown on the cards, includ
 
 - Reuse the existing Codex column: header → four wrapping section chips → compact search field → `Expanded` scrolling content. No fixed-height card area or new overlay.
 - Use standard Material `TextField`/`InputDecoration` with search icon, context-specific accessible label, clear icon with a tooltip/semantic label, and a touch-sized target. Match existing `OrionUiTheme` colors and `OrionTypography` roles; do not add a typography size.
-- Do not hide section chips while the keyboard is up. At 320×568 with a 260px keyboard inset, 2×/3× text scaling currently overflows the top chrome even before search. Wrap **only** the header, chips and new field with `MediaQuery.withClampedTextScaling(maxScaleFactor: 1.15, child: ...)`, using the repo's existing compact-chrome pattern; keep `Expanded(child: _body())` **outside** that wrapper so Codex cards retain the user's full text scale. Require `keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag` on **all four** section `ListView`s. For the empty-results case, keep the keyed list mounted and use `const AlwaysScrollableScrollPhysics()` so a drag is recognized even when the one child is shorter than the viewport. Test the actual keyboard inset, including dragging the zero-results list to dismiss the keyboard, not just a small surface.
+- Do not hide section chips while the keyboard is up. At 320×568 with a 260px keyboard inset, 2×/3× text scaling currently overflows the top chrome even before search. Wrap **only** the header, chips and new field with `MediaQuery.withClampedTextScaling(maxScaleFactor: 1.15, child: ...)`, using the repo's existing compact-chrome pattern; keep `Expanded(child: _body())` **outside** that wrapper so Codex cards retain the user's full text scale. Use `const AlwaysScrollableScrollPhysics()` and `keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag` on **all four** section `ListView`s, whether they have many results, a few, or none. **Do not rely on this combination alone for keyboard dismissal:** on Android with clamping physics and zero scroll extent, an accepted drag can produce overscroll without a `ScrollUpdateNotification`, leaving focus in the search field. Wrap the **results area only**, not the search field, in one `NotificationListener<ScrollStartNotification>` that calls `FocusScope.of(context).unfocus()` for **user drag** starts (`notification.dragDetails != null`) and returns `false`. Keep keyed lists mounted even for empty results. Test the actual keyboard inset and drag dismissal on Android/clamping and iOS/bouncing, not just a small surface.
 - Do not announce duplicate search labels through nested `Semantics`; a single readable field label is enough. Empty state should be discoverable by screen reader.
 - The current four scroll controllers remain owned/disposed by `_CodexViewState`; dispose the new text controller too.
 
@@ -55,7 +55,22 @@ The small implementation spans two existing production files:
 - `onChanged` and the clear icon use one helper that rebuilds the Codex view and resets the **active** controller to zero **only if `controller.hasClients`**, so a transient detachment never causes a `jumpTo` assertion. Programmatic `clear()` does not trigger `onChanged`.
 - Chip selection first checks `if (_section == index) return;` (re-tapping the selected chip does not clear search). A genuine section change clears the query and unfocuses the input without resetting other sections' controllers. Switching without a search preserves independent offsets with the new list keys.
 
-- The active section keeps the same `ListView` with `PageStorageKey<int>(_section)` and its `ScrollController` whether results are nonempty or empty. Empty results are just a padded centered child, with `AlwaysScrollableScrollPhysics` to support drag-to-dismiss; all four lists set `keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag`.
+- The active section keeps the same `ListView` with `PageStorageKey<int>(_section)` and its `ScrollController` whether results are nonempty or empty. Empty results are just a padded centered child; **every** section list uses `const AlwaysScrollableScrollPhysics()` to recognize drags even with zero scroll extent, and retains `keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag` for ordinary scrolling.
+- Keep one local drag-start listener around the scrolling **result body** (inside `Expanded`, outside `_body()`):
+
+  ```dart
+  NotificationListener<ScrollStartNotification>(
+    onNotification: (notification) {
+      if (notification.dragDetails != null) {
+        FocusScope.of(context).unfocus();
+      }
+      return false; // Allow the scroll notification to continue bubbling.
+    },
+    child: _body(),
+  )
+  ```
+
+  This is independent of scroll pixel updates, and only dismisses for user-initiated drags; avoid reacting to ballistic/programmatic scroll starts. Do not add a keyboard service or another controller.
 - The scroll regression test reads the **specific keyed `ListView`'s `controller!.offset`**, never `find.byType(Scrollable)` (an added `TextField` has its own `Scrollable`).
 
 Keep `_towerCard`, `_enemyCard`, `_stageCard`, the effect card, and the data contents unchanged.
@@ -77,7 +92,7 @@ No external service, dependencies, save fields, database, new game mode, art, or
 3. Enemies: typing a trait (e.g. "shielded") finds the glossary description and corresponding enemy; the separator appears only when both groups match.
 4. Effects and Stages: matches include related specialization names and stage/modifier **titles and descriptions** respectively. Pure unit tests exercise each top-level entry type's terms and the matcher, including that "locked" does not accidentally match dynamic stage status.
 5. Unmatched text renders a one-child empty state **inside the active keyed `ListView`**, with drag-to-dismiss still working; Clear restores entries without detached-controller errors. Verify that scroll positions are **broken on current unkeyed lists** and fixed by keying them: scroll Towers down, switch to Enemies (begins at zero), then return to Towers (previous offset retained). Assert the keyed `ListView.controller!.offset`, not a global `Scrollable` finder. Switching tabs clears the query without destroying unrelated offsets; re-tapping the active chip does **not** clear the filter.
-6. Search field, clear action, and no-results state have usable semantics and no overflow at **320×568**, both **2× and 3× text scaling**, and `tester.view.viewInsets = const FakeViewPadding(bottom: 260)` simulating the open keyboard. Test that dragging both a populated and an empty results list dismisses focus/keyboard, even when the content is shorter than the viewport. Keep card text at full scale.
+6. Search field, clear action, and no-results state have usable semantics and no overflow at **320×568**, both **2× and 3× text scaling**, and `tester.view.viewInsets = const FakeViewPadding(bottom: 260)` simulating the open keyboard. Test **Android/clamping and iOS/bouncing** with both zero-extent and ordinary scrollable results: verify the search field is focused **before** a user drag and **unfocused afterwards**, even with empty or short lists. The fixed injected `viewInsets` need not shrink when focus clears; assert focus, not inset height. Verify a programmatic scroll start does **not** unfocus. Keep card text at full scale.
 7. `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, `flutter test --coverage` (90% Codecov gate), and `flutter build web --release` pass after implementation.
 
 ## Explicit non-goals
