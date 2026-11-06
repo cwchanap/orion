@@ -91,10 +91,12 @@ class _CodexViewState extends State<CodexView> {
     final controller = _scrollControllers[_section];
     return switch (_section) {
       0 => ListView(
+        key: PageStorageKey<int>(_section),
         controller: controller,
         children: [for (final t in CodexData.towers) _towerCard(t)],
       ),
       1 => ListView(
+        key: PageStorageKey<int>(_section),
         controller: controller,
         children: [
           for (final tr in CodexData.traits) _line(tr.label, tr.effect),
@@ -103,6 +105,7 @@ class _CodexViewState extends State<CodexView> {
         ],
       ),
       2 => ListView(
+        key: PageStorageKey<int>(_section),
         controller: controller,
         children: [
           for (final ef in CodexData.effects)
@@ -143,6 +146,7 @@ class _CodexViewState extends State<CodexView> {
         ],
       ),
       _ => ListView(
+        key: PageStorageKey<int>(_section),
         controller: controller,
         children: [
           for (final s in CodexData.stagesFor(widget.progress)) _stageCard(s),
