@@ -67,6 +67,60 @@ void main() {
     expect(find.textContaining('Outpost Alpha'), findsOneWidget);
   });
 
+  // Regression: switching chips must not carry one section's scroll offset
+  // into another, and returning to a section must restore its prior offset.
+  // The offset is read via the section ListView's own controller, looked up
+  // by PageStorageKey (never find.byType(Scrollable) — once search lands, the
+  // TextField's EditableText adds another Scrollable).
+  testWidgets('retains each section scroll offset when switching chips', (
+    tester,
+  ) async {
+    // Short viewport so the Towers list overflows and can actually scroll.
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: CodexView(progress: CampaignProgress(), onBack: () {}),
+      ),
+    );
+
+    // Scroll Towers (section 0) to a nonzero offset.
+    await tester.drag(
+      find.byKey(const PageStorageKey<int>(0)),
+      const Offset(0, -300),
+    );
+    await tester.pumpAndSettle();
+    final towersOffset = tester
+        .widget<ListView>(find.byKey(const PageStorageKey<int>(0)))
+        .controller!
+        .offset;
+    expect(towersOffset, greaterThan(0));
+
+    // Enemies (section 1) begins at zero despite Towers' nonzero offset.
+    await tester.tap(find.text('Enemies'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ListView>(find.byKey(const PageStorageKey<int>(1)))
+          .controller!
+          .offset,
+      0,
+    );
+
+    // Returning to Towers restores its prior offset.
+    await tester.tap(find.text('Towers'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<ListView>(find.byKey(const PageStorageKey<int>(0)))
+          .controller!
+          .offset,
+      towersOffset,
+    );
+  });
+
   testWidgets('back button invokes onBack', (tester) async {
     var pressed = false;
     await tester.pumpWidget(
