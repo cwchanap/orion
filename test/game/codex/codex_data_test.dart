@@ -209,6 +209,10 @@ void main() {
           .searchTerms;
       expect(codexMatches('PULSE LASER', laser), isTrue);
       expect(codexMatches('  pulse laser  ', laser), isTrue);
+      // A mid-term fragment matches: substring, not exact equality.
+      expect(codexMatches('ulse las', laser), isTrue);
+      // The query must occur contiguously; token matching is not allowed.
+      expect(codexMatches('laser pulse', laser), isFalse);
       // The whole query must occur inside a term; extra characters break it.
       expect(codexMatches('pulse laserz', laser), isFalse);
       expect(codexMatches('intergalactic toaster', laser), isFalse);
