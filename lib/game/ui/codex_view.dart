@@ -25,6 +25,7 @@ class _CodexViewState extends State<CodexView> {
   // One ScrollController per section so each section's scroll offset is
   // preserved independently when the player switches chips.
   late final List<ScrollController> _scrollControllers;
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -39,7 +40,28 @@ class _CodexViewState extends State<CodexView> {
     for (final controller in _scrollControllers) {
       controller.dispose();
     }
+    _searchController.dispose();
     super.dispose();
+  }
+
+  // Only a different section clears the search: re-tapping the selected
+  // chip keeps the query (and focus) so accidental taps lose nothing.
+  void _selectSection(int index) {
+    if (_section == index) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _section = index;
+      _searchController.clear();
+    });
+  }
+
+  // One path for typed input and programmatic Clear (clear() never calls
+  // onChanged): re-filter and reset the active section's scroll, guarding
+  // against jumpTo while the controller has no clients.
+  void _applySearchUpdate() {
+    setState(() {});
+    final controller = _scrollControllers[_section];
+    if (controller.hasClients) controller.jumpTo(0);
   }
 
   @override
@@ -50,36 +72,81 @@ class _CodexViewState extends State<CodexView> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Padding(
-              padding: const EdgeInsets.all(8),
-              child: Row(
+            // Compact chrome follows the app convention of clamping text
+            // scale; result cards below keep scaling fully.
+            MediaQuery.withClampedTextScaling(
+              maxScaleFactor: 1.15,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  IconButton(
-                    tooltip: 'Back',
-                    onPressed: widget.onBack,
-                    icon: const Icon(Icons.arrow_back),
-                  ),
-                  const SizedBox(width: 8),
-                  OrionTitle('Codex', color: uiTheme.textPrimary),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Wrap(
-                spacing: 8,
-                children: [
-                  for (var i = 0; i < _sections.length; i++)
-                    ChoiceChip(
-                      label: Text(_sections[i]),
-                      selected: _section == i,
-                      onSelected: (_) => setState(() => _section = i),
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Back',
+                          onPressed: widget.onBack,
+                          icon: const Icon(Icons.arrow_back),
+                        ),
+                        const SizedBox(width: 8),
+                        OrionTitle('Codex', color: uiTheme.textPrimary),
+                      ],
                     ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Wrap(
+                      spacing: 8,
+                      children: [
+                        for (var i = 0; i < _sections.length; i++)
+                          ChoiceChip(
+                            label: Text(_sections[i]),
+                            selected: _section == i,
+                            onSelected: (_) => _selectSection(i),
+                          ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (_) => _applySearchUpdate(),
+                      decoration: InputDecoration(
+                        prefixIcon: const Icon(Icons.search),
+                        labelText:
+                            'Search ${_sections[_section].toLowerCase()}',
+                        suffixIcon: _searchController.text.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear',
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _applySearchUpdate();
+                                },
+                                icon: const Icon(Icons.clear),
+                              ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 8),
-            Expanded(child: _body()),
+            Expanded(
+              // A user drag (dragDetails != null) unfocuses the search field
+              // immediately — on a clamping list with zero scroll extent the
+              // built-in onDrag dismissal never sees a scroll update.
+              child: NotificationListener<ScrollStartNotification>(
+                onNotification: (notification) {
+                  if (notification.dragDetails != null) {
+                    FocusScope.of(context).unfocus();
+                  }
+                  return false;
+                },
+                child: _body(),
+              ),
+            ),
           ],
         ),
       ),
@@ -89,26 +156,34 @@ class _CodexViewState extends State<CodexView> {
   Widget _body() {
     final uiTheme = OrionUiTheme.of(context);
     final controller = _scrollControllers[_section];
-    return switch (_section) {
-      0 => ListView(
-        key: PageStorageKey<int>(_section),
-        controller: controller,
-        children: [for (final t in CodexData.towers) _towerCard(t)],
-      ),
-      1 => ListView(
-        key: PageStorageKey<int>(_section),
-        controller: controller,
-        children: [
-          for (final tr in CodexData.traits) _line(tr.label, tr.effect),
-          const Divider(),
-          for (final e in CodexData.enemies) _enemyCard(e),
-        ],
-      ),
-      2 => ListView(
-        key: PageStorageKey<int>(_section),
-        controller: controller,
-        children: [
-          for (final ef in CodexData.effects)
+    final query = _searchController.text;
+    List<Widget> children;
+    switch (_section) {
+      case 0:
+        children = [
+          for (final t in CodexData.towers.where(
+            (t) => codexMatches(query, t.searchTerms),
+          ))
+            _towerCard(t),
+        ];
+      case 1:
+        final traits = CodexData.traits
+            .where((tr) => codexMatches(query, tr.searchTerms))
+            .toList();
+        final enemies = CodexData.enemies
+            .where((e) => codexMatches(query, e.searchTerms))
+            .toList();
+        children = [
+          for (final tr in traits) _line(tr.label, tr.effect),
+          // The divider only makes sense between the two groups.
+          if (traits.isNotEmpty && enemies.isNotEmpty) const Divider(),
+          for (final e in enemies) _enemyCard(e),
+        ];
+      case 2:
+        children = [
+          for (final ef in CodexData.effects.where(
+            (ef) => codexMatches(query, ef.searchTerms),
+          ))
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -143,16 +218,36 @@ class _CodexViewState extends State<CodexView> {
                 ),
               ),
             ),
-        ],
+        ];
+      default:
+        children = [
+          for (final s in CodexData.stagesFor(
+            widget.progress,
+          ).where((s) => codexMatches(query, s.searchTerms)))
+            _stageCard(s),
+        ];
+    }
+    // Zero results stay inside the same ListView (same key, controller and
+    // always-scrollable drag behavior) rather than swapping in a Center.
+    if (children.isEmpty) children = [_noMatches()];
+    return ListView(
+      key: PageStorageKey<int>(_section),
+      controller: controller,
+      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: children,
+    );
+  }
+
+  Widget _noMatches() {
+    final uiTheme = OrionUiTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Text(
+        'No matches in ${_sections[_section]}',
+        style: OrionTypography.microLabel(color: uiTheme.textMuted),
       ),
-      _ => ListView(
-        key: PageStorageKey<int>(_section),
-        controller: controller,
-        children: [
-          for (final s in CodexData.stagesFor(widget.progress)) _stageCard(s),
-        ],
-      ),
-    };
+    );
   }
 
   Widget _towerCard(CodexTowerEntry t) {
