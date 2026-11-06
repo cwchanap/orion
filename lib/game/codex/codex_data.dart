@@ -23,6 +23,13 @@ class CodexTowerEntry {
   final int upgradeCost;
   final int specializationCost;
   final List<CodexSpecializationEntry> specializations;
+
+  /// Authored text a search can hit: the tower label plus each
+  /// specialization's name and role sentence.
+  Iterable<String> get searchTerms => [
+    label,
+    for (final s in specializations) ...[s.label, s.description],
+  ];
 }
 
 class CodexSpecializationEntry {
@@ -53,6 +60,13 @@ class CodexEnemyEntry {
   final EnemyStats stats;
   final List<EnemyTrait> traits;
   final String roleDescription;
+
+  /// Authored text a search can hit: label, role sentence, trait labels.
+  Iterable<String> get searchTerms => [
+    label,
+    roleDescription,
+    ...traits.map((t) => t.label),
+  ];
 }
 
 class CodexTraitEntry {
@@ -65,6 +79,9 @@ class CodexTraitEntry {
   final EnemyTrait trait;
   final String label;
   final String effect;
+
+  /// Authored text a search can hit.
+  Iterable<String> get searchTerms => [label, effect];
 }
 
 class CodexEffectEntry {
@@ -79,6 +96,13 @@ class CodexEffectEntry {
   final String title;
   final String description;
   final List<TowerSpecialization> relatedSpecializations;
+
+  /// Authored text a search can hit: title, description, related labels.
+  Iterable<String> get searchTerms => [
+    title,
+    description,
+    ...relatedSpecializations.map((s) => s.label),
+  ];
 }
 
 class CodexStageEntry {
@@ -95,6 +119,15 @@ class CodexStageEntry {
   final List<StageModifierMetadata> modifiers;
   final int waveCount;
   final String? rewardLabel;
+
+  /// Authored text a search can hit. Dynamic data — status, wave count,
+  /// reward label — deliberately stays out of search terms.
+  Iterable<String> get searchTerms => [
+    stage.name,
+    stage.mapLabel,
+    stage.description,
+    for (final m in modifiers) ...[m.title, m.description],
+  ];
 }
 
 class CodexData {
@@ -298,4 +331,13 @@ class CodexData {
         'A heavy frame that regenerates health.',
     };
   }
+}
+
+/// Pure codex search predicate: an empty (or whitespace-only) query matches
+/// everything; otherwise the whole query must occur inside one of [terms],
+/// case-insensitively.
+bool codexMatches(String query, Iterable<String> terms) {
+  final q = query.trim().toLowerCase();
+  if (q.isEmpty) return true;
+  return terms.any((t) => t.trim().toLowerCase().contains(q));
 }

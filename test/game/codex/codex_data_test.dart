@@ -187,4 +187,119 @@ void main() {
       }
     });
   });
+
+  group('codexMatches', () {
+    test('empty or whitespace query matches entries in every category', () {
+      final samples = <Iterable<String>>[
+        CodexData.towers.first.searchTerms,
+        CodexData.enemies.first.searchTerms,
+        CodexData.traits.first.searchTerms,
+        CodexData.effects.first.searchTerms,
+        CodexData.stagesFor(CampaignProgress()).first.searchTerms,
+      ];
+      for (final terms in samples) {
+        expect(codexMatches('', terms), isTrue);
+        expect(codexMatches(' \t ', terms), isTrue);
+      }
+    });
+
+    test('normalizes case and whitespace around the whole query string', () {
+      final laser = CodexData.towers
+          .firstWhere((t) => t.type == TowerType.laser)
+          .searchTerms;
+      expect(codexMatches('PULSE LASER', laser), isTrue);
+      expect(codexMatches('  pulse laser  ', laser), isTrue);
+      // The whole query must occur inside a term; extra characters break it.
+      expect(codexMatches('pulse laserz', laser), isFalse);
+      expect(codexMatches('intergalactic toaster', laser), isFalse);
+    });
+
+    test(
+      'each specialization name or role description finds its parent tower',
+      () {
+        for (final tower in CodexData.towers) {
+          for (final spec in tower.specializations) {
+            expect(codexMatches(spec.label, tower.searchTerms), isTrue);
+            expect(codexMatches(spec.description, tower.searchTerms), isTrue);
+          }
+        }
+      },
+    );
+
+    test('querying "Pulse Laser" finds exactly the Laser tower', () {
+      final hits = CodexData.towers
+          .where((t) => codexMatches('Pulse Laser', t.searchTerms))
+          .toList();
+      expect(hits, hasLength(1));
+      expect(hits.single.type, TowerType.laser);
+    });
+
+    test('label, authored role, or trait label finds each enemy', () {
+      for (final enemy in CodexData.enemies) {
+        expect(codexMatches(enemy.label, enemy.searchTerms), isTrue);
+        expect(codexMatches(enemy.roleDescription, enemy.searchTerms), isTrue);
+        for (final trait in enemy.traits) {
+          expect(codexMatches(trait.label, enemy.searchTerms), isTrue);
+        }
+      }
+    });
+
+    test('glossary trait entries match their label and effect description', () {
+      for (final trait in CodexData.traits) {
+        expect(codexMatches(trait.label, trait.searchTerms), isTrue);
+        expect(codexMatches(trait.effect, trait.searchTerms), isTrue);
+      }
+    });
+
+    test(
+      'effect titles, descriptions, and related specialization labels match',
+      () {
+        for (final effect in CodexData.effects) {
+          expect(codexMatches(effect.title, effect.searchTerms), isTrue);
+          expect(codexMatches(effect.description, effect.searchTerms), isTrue);
+          for (final spec in effect.relatedSpecializations) {
+            expect(codexMatches(spec.label, effect.searchTerms), isTrue);
+          }
+        }
+      },
+    );
+
+    test('stage name, map label, description, and modifier text match', () {
+      for (final entry in CodexData.stagesFor(CampaignProgress())) {
+        expect(codexMatches(entry.stage.name, entry.searchTerms), isTrue);
+        expect(codexMatches(entry.stage.mapLabel, entry.searchTerms), isTrue);
+        expect(
+          codexMatches(entry.stage.description, entry.searchTerms),
+          isTrue,
+        );
+        for (final modifier in entry.modifiers) {
+          expect(codexMatches(modifier.title, entry.searchTerms), isTrue);
+          expect(codexMatches(modifier.description, entry.searchTerms), isTrue);
+        }
+      }
+    });
+
+    test('"locked" does not match a dynamic stage status', () {
+      final locked = CodexData.stagesFor(
+        CampaignProgress(),
+      ).where((e) => e.status == StageProgressStatus.locked);
+      expect(locked, isNotEmpty);
+      for (final entry in locked) {
+        expect(codexMatches('locked', entry.searchTerms), isFalse);
+      }
+    });
+
+    test('numeric stats and rewards are not stage search terms', () {
+      final entries = CodexData.stagesFor(CampaignProgress());
+      final alpha = entries.firstWhere(
+        (e) => e.stage.id == OrionCampaign.stageOneId,
+      );
+      // Alpha's authored prose and standard-conditions text contain no
+      // digits, so any hit could only come from the wave count.
+      expect(codexMatches('${alpha.waveCount}', alpha.searchTerms), isFalse);
+
+      final rewarded = entries.firstWhere((e) => e.rewardLabel != null);
+      expect(codexMatches('reward:', rewarded.searchTerms), isFalse);
+    });
+  });
 }
