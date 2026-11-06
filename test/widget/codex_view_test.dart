@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
@@ -502,6 +503,24 @@ void main() {
     expect(find.text('No matches in Effects'), findsOneWidget);
   });
 
+  testWidgets('no-matches message is centered in the results area', (
+    tester,
+  ) async {
+    await pumpCodex(tester);
+    await tester.enterText(searchField, 'zzzz');
+    await tester.pump();
+
+    // Centered, the message shrink-wraps its glyphs inside the list slot;
+    // left-aligned, its Text box is stretched to the full slot width.
+    final messageWidth = tester
+        .getSize(find.text('No matches in Towers'))
+        .width;
+    final listWidth = tester
+        .getSize(find.byKey(const PageStorageKey<int>(0)))
+        .width;
+    expect(messageWidth, lessThan(listWidth / 2));
+  });
+
   testWidgets('clear action restores the full list', (tester) async {
     await pumpCodex(tester);
     await tester.enterText(searchField, 'gravity');
@@ -533,6 +552,81 @@ void main() {
 
     expect(sectionController(tester, 0).offset, 0);
   });
+
+  // The shell hosts the Codex by in-place view swap (no Navigator), so a
+  // bare PageStorageKey would park offsets in the app-long root route bucket.
+  // Reopening the Codex must start each section from the top again, like the
+  // pre-search view did, while offsets still survive chip switches within a
+  // visit (previous test).
+  testWidgets('reopening the codex resets section scroll offsets', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    var showCodex = true;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: StatefulBuilder(
+          builder: (context, setState) => showCodex
+              ? CodexView(
+                  progress: CampaignProgress(),
+                  onBack: () => setState(() => showCodex = false),
+                )
+              : TextButton(
+                  onPressed: () => setState(() => showCodex = true),
+                  child: const Text('Open Codex'),
+                ),
+        ),
+      ),
+    );
+
+    // Scroll Towers (section 0) down, then leave and reopen the Codex.
+    await tester.drag(
+      find.byKey(const PageStorageKey<int>(0)),
+      const Offset(0, -300),
+    );
+    await tester.pumpAndSettle();
+    expect(sectionController(tester, 0).offset, greaterThan(0));
+
+    await tester.tap(find.byTooltip('Back'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open Codex'));
+    await tester.pumpAndSettle();
+
+    // A fresh visit begins at the top, not at the stored route-bucket offset.
+    expect(sectionController(tester, 0).offset, 0);
+  });
+
+  testWidgets(
+    "switching tabs with an active query keeps other sections' offsets",
+    (tester) async {
+      await pumpCodex(tester, size: const Size(800, 600));
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+      await tester.drag(
+        find.byKey(const PageStorageKey<int>(1)),
+        const Offset(0, -300),
+      );
+      await tester.pumpAndSettle();
+      final enemiesOffset = sectionController(tester, 1).offset;
+      expect(enemiesOffset, greaterThan(0));
+
+      // Filtering on Towers resets only Towers' scroll.
+      await tester.tap(find.text('Towers'));
+      await tester.pumpAndSettle();
+      await tester.enterText(searchField, 'gravity');
+      await tester.pump();
+      expect(sectionController(tester, 0).offset, 0);
+
+      // Returning to Enemies clears the query but restores its prior offset.
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+      expect(queryText(tester), '');
+      expect(sectionController(tester, 1).offset, enemiesOffset);
+    },
+  );
 
   testWidgets(
     're-tapping the selected chip keeps the query; a different chip clears it',
@@ -571,7 +665,43 @@ void main() {
     },
   );
 
-  // Short surface (spec §10.3) with a faked software keyboard: the search
+  // Mouse (and web touch) taps outside the field unfocus it on pointer-down
+  // through EditableText's tap-outside default action, before _selectSection's
+  // re-tap guard runs. The chips must sit inside the field's tap region so a
+  // re-tap of the selected chip cannot steal focus on those devices.
+  testWidgets('mouse re-tap of the selected chip keeps query and focus', (
+    tester,
+  ) async {
+    await pumpCodex(tester);
+    await tester.tap(searchField);
+    await tester.pump();
+    await tester.enterText(searchField, 'gravity');
+    await tester.pump();
+    expect(searchFocused(tester), isTrue);
+
+    // One long-lived mouse pointer for every tap below (a fresh pointer with
+    // the same id trips MouseTracker while the previous one is connected).
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    await mouse.addPointer();
+    addTearDown(mouse.removePointer);
+    Future<void> mouseTap(Finder target) async {
+      await mouse.down(tester.getCenter(target));
+      await mouse.up();
+      await tester.pump();
+    }
+
+    // Re-tap the already-selected Towers chip: query and focus survive.
+    await mouseTap(find.text('Towers'));
+    expect(queryText(tester), 'gravity');
+    expect(searchFocused(tester), isTrue);
+
+    // A different chip still clears the query and drops focus explicitly.
+    await mouseTap(find.text('Enemies'));
+    expect(queryText(tester), '');
+    expect(searchFocused(tester), isFalse);
+  });
+
+  // Short surface with a faked software keyboard: the search
   // chrome must stay clamped and usable at large text scales.
   testWidgets('keyboard-open short surface stays usable at 2x and 3x text', (
     tester,
@@ -616,6 +746,32 @@ void main() {
       expect(tester.takeException(), isNull);
     }
     semantics.dispose();
+  });
+
+  testWidgets('result cards keep full text scale outside the clamped chrome', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(800, 600);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final cardLabel = find.text(TowerType.laser.label);
+    final chromeLabel = find.text('Search towers');
+
+    await tester.pumpWidget(codexHost());
+    await tester.pump();
+    final cardAt1x = tester.getSize(cardLabel).height;
+    final chromeAt1x = tester.getSize(chromeLabel).height;
+
+    await tester.pumpWidget(codexHost(textScaler: const TextScaler.linear(3)));
+    await tester.pump();
+    final cardAt3x = tester.getSize(cardLabel).height;
+    final chromeAt3x = tester.getSize(chromeLabel).height;
+
+    // The scrolling card body scales fully (3x)...
+    expect(cardAt3x, greaterThan(cardAt1x * 2.5));
+    // ...while the header/chips/search chrome stays clamped near 1.15x.
+    expect(chromeAt3x, lessThan(chromeAt1x * 1.35));
   });
 
   // A user drag on the results must dismiss the keyboard even when the list

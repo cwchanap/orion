@@ -1,7 +1,7 @@
 # HPA-753 — Search the Codex without scrolling
 
 **Linear:** [HPA-753](https://linear.app/cwchanap/issue/HPA-753/orion-find-codex-entries-without-scrolling)  
-**Status:** Revised after owner review (November 5, revision 3); design-only draft PR  
+**Status:** Revised after owner review (November 5, revision 3); implemented — implementation and tests are on this same PR  
 **Scope:** Flutter Codex UI; independent from HPA-715 Endless Mode
 
 ## Problem and player value
