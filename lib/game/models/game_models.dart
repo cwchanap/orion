@@ -849,6 +849,9 @@ class GameBalance {
   static const double amplifiedGravityWellRadiusMultiplier = 1.20;
   static const double amplifiedGravityWellDurationMultiplier = 1.25;
 
+  // Per-loop endless health/shield/regen multiplier on enemy stats.
+  static const double endlessLoopHealthGrowth = 1.6;
+
   // Campaign tech-tree upgrade costs. Total is 20 (intentional 1-pt slack
   // below the 21-pt max medal rank: 7 stages × 3 rank). Tests assert this.
   static const int solarCapacitorsCost = 3;

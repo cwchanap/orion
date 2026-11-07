@@ -26,6 +26,10 @@ void main() {
       expect(GameBalance.amplifiedGravityWellDurationMultiplier, 1.25);
     });
 
+    test('endless loop health growth matches the approved design', () {
+      expect(GameBalance.endlessLoopHealthGrowth, 1.6);
+    });
+
     test('defines tower order and unlock waves', () {
       expect(TowerType.values, [
         TowerType.laser,
