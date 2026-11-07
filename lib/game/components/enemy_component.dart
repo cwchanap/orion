@@ -56,6 +56,7 @@ class EnemyComponent extends CircleComponent {
   double get health => logic.health;
   double get shield => logic.shield;
   double get maxHealth => logic.maxHealth;
+  double get maxShield => logic.maxShield;
   bool get isAlive => logic.isAlive;
   bool get isResolved => logic.isResolved;
   bool get isInspected => _isInspected;
@@ -76,7 +77,7 @@ class EnemyComponent extends CircleComponent {
         health: health,
         maxHealth: maxHealth,
         shield: shield,
-        maxShield: stats.shieldHealth,
+        maxShield: maxShield,
         traits: stats.traits,
         isSlowed: isSlowed,
         isCorroded: isCorroded,

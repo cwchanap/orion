@@ -9,6 +9,7 @@ import 'package:orion/game/components/enemy_overlay.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/enemy_logic.dart';
 import 'package:orion/game/rules/enemy_overlay_state.dart';
+import 'package:orion/game/rules/stage_modifier_rules.dart';
 
 void main() {
   group('EnemyComponent', () {
@@ -71,6 +72,34 @@ void main() {
         expect(layout.slowedRingRadius, greaterThan(1.2 * enemy.radius));
       },
     );
+
+    test('component overlay shield bar uses the scaled maxShield', () {
+      const stats = EnemyStats(
+        health: 100,
+        speed: 10,
+        baseDamage: 1,
+        goldReward: 1,
+        shieldHealth: 40,
+        traits: {EnemyTrait.shielded},
+      );
+      final enemy = EnemyComponent(
+        enemyId: 1,
+        stats: stats,
+        logic: EnemyLogic(
+          enemyId: 1,
+          stats: stats,
+          modifierProfile: const EnemyModifierProfile(healthMultiplier: 2),
+          waypoints: const [Offset(0, 0), Offset(1000, 0)],
+        ),
+        onKilled: (_) {},
+        onReachedBase: (_) {},
+      );
+
+      expect(enemy.maxShield, 80);
+      enemy.applyDamage(60);
+      expect(enemy.shield, 20);
+      expect(enemy.overlayState.shieldRatio, 0.25);
+    });
 
     test('component inspection expands the overlay state', () {
       const stats = EnemyStats(
