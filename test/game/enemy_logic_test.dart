@@ -356,6 +356,104 @@ void main() {
     );
   });
 
+  group('EnemyLogic health multiplier', () {
+    EnemyLogic scaled({
+      double health = 100,
+      double shieldHealth = 0,
+      double armorReduction = 0,
+      double regenPerSecond = 0,
+      Set<EnemyTrait> traits = const {},
+      EnemyModifierProfile profile = const EnemyModifierProfile(
+        healthMultiplier: 2,
+      ),
+    }) => EnemyLogic(
+      enemyId: 1,
+      stats: EnemyStats(
+        health: health,
+        speed: 10,
+        baseDamage: 1,
+        goldReward: 1,
+        shieldHealth: shieldHealth,
+        armorReduction: armorReduction,
+        regenPerSecond: regenPerSecond,
+        traits: traits,
+      ),
+      modifierProfile: profile,
+      waypoints: const [Offset(0, 0), Offset(1000, 0)],
+    );
+
+    test('scales health and shield pools at construction', () {
+      final logic = scaled(health: 100, shieldHealth: 40);
+      expect(logic.maxHealth, 200);
+      expect(logic.health, 200);
+      expect(logic.maxShield, 80);
+      expect(logic.shield, 80);
+    });
+
+    test('identity profile leaves health and shield unscaled', () {
+      const stats = EnemyStats(
+        health: 100,
+        speed: 10,
+        baseDamage: 1,
+        goldReward: 1,
+        shieldHealth: 40,
+      );
+      final logic = EnemyLogic(
+        enemyId: 1,
+        stats: stats,
+        waypoints: const [Offset(0, 0), Offset(1000, 0)],
+      );
+      expect(logic.maxHealth, 100);
+      expect(logic.health, 100);
+      expect(logic.maxShield, 40);
+      expect(logic.shield, 40);
+      expect(EnemyModifierProfile.identity.healthMultiplier, 1);
+    });
+
+    test('regen heals at the scaled rate and caps at scaled maxHealth', () {
+      final logic = scaled(
+        health: 100,
+        regenPerSecond: 10,
+        traits: const {EnemyTrait.regen},
+      );
+      logic.applyDamage(60);
+      expect(logic.health, 140);
+      logic.tick(1);
+      expect(logic.health, closeTo(160, 0.001)); // 10 * 2 per second
+      logic.tick(3);
+      expect(logic.health, 200); // capped at scaled maxHealth
+    });
+
+    test('shield recharge rate and cap read the scaled maxShield', () {
+      final logic = scaled(
+        shieldHealth: 100,
+        traits: const {EnemyTrait.shielded},
+        profile: const EnemyModifierProfile(
+          healthMultiplier: 2,
+          shieldRecharge: ShieldRechargePolicy(delay: 3, ratePerSecond: 0.10),
+        ),
+      );
+      expect(logic.maxShield, 200);
+      logic.applyDamage(110);
+      expect(logic.shield, 90);
+
+      logic.tick(6); // 3s of recharge at 20/s: 90 + 60 = 150
+      expect(logic.shield, closeTo(150, 0.001));
+
+      logic.tick(10); // 10s more would add 200; clamped at scaled maxShield
+      expect(logic.shield, 200);
+    });
+
+    test('armor and speed are unaffected by the health multiplier', () {
+      final logic = scaled(health: 100, armorReduction: 0.5);
+      expect(logic.armorReduction, 0.5);
+      logic.applyDamage(100);
+      expect(logic.health, 150); // 200 - 100 * (1 - 0.5)
+      logic.tick(1);
+      expect(logic.position.dx, closeTo(10, 0.001));
+    });
+  });
+
   group('EnemyLogic summon', () {
     test('summonsDue fires after firstDelay then every interval', () {
       final boss = EnemyLogic(

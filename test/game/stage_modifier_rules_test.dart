@@ -45,6 +45,32 @@ void main() {
     expect(profile.speedMultiplier, 1);
     expect(profile.armorReductionBonus, 0);
     expect(profile.shieldRecharge, isNull);
+    expect(profile.healthMultiplier, 1);
+    expect(EnemyModifierProfile.identity.healthMultiplier, 1);
+  });
+
+  test('enemy profile passes the health multiplier through', () {
+    const stats = EnemyStats(
+      health: 10,
+      speed: 10,
+      baseDamage: 1,
+      goldReward: 1,
+      traits: {EnemyTrait.armored},
+      armorReduction: 0.7,
+    );
+    final profile = StageModifierRules.enemyProfile(
+      stats: stats,
+      stageModifiers: const [
+        StageModifier.reinforcedArmor,
+        StageModifier.enemySpeedSurge,
+      ],
+      healthMultiplier: 1.6,
+    );
+
+    expect(profile.healthMultiplier, 1.6);
+    expect(profile.speedMultiplier, 1.15);
+    expect(profile.armorReductionBonus, 0.10);
+    expect(profile.shieldRecharge, isNull);
   });
 
   test('swarm bounty rounds 5 gold to 8 and filters by trait', () {

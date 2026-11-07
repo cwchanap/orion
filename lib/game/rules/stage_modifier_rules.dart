@@ -15,6 +15,7 @@ class ShieldRechargePolicy {
 class EnemyModifierProfile {
   const EnemyModifierProfile({
     this.speedMultiplier = 1,
+    this.healthMultiplier = 1,
     this.armorReductionBonus = 0,
     this.shieldRecharge,
   });
@@ -22,6 +23,7 @@ class EnemyModifierProfile {
   static const identity = EnemyModifierProfile();
 
   final double speedMultiplier;
+  final double healthMultiplier;
   final double armorReductionBonus;
   final ShieldRechargePolicy? shieldRecharge;
 }
@@ -56,6 +58,7 @@ class StageModifierRules {
   static EnemyModifierProfile enemyProfile({
     required EnemyStats stats,
     required Iterable<StageModifier> stageModifiers,
+    double healthMultiplier = 1,
   }) {
     final shieldRecharge =
         stageModifiers.contains(StageModifier.shieldRecharge) &&
@@ -69,6 +72,7 @@ class StageModifierRules {
       speedMultiplier: stageModifiers.contains(StageModifier.enemySpeedSurge)
           ? GameBalance.enemySpeedSurgeMultiplier
           : 1,
+      healthMultiplier: healthMultiplier,
       armorReductionBonus:
           stageModifiers.contains(StageModifier.reinforcedArmor) &&
               stats.hasTrait(EnemyTrait.armored)

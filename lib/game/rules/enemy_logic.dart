@@ -14,9 +14,10 @@ class EnemyLogic {
     double initialCompletedDistance = 0,
   }) : waypoints = List<Offset>.unmodifiable(waypoints),
        position = waypoints.first,
-       health = stats.health,
-       maxHealth = stats.health,
-       shield = stats.shieldHealth,
+       health = stats.health * modifierProfile.healthMultiplier,
+       maxHealth = stats.health * modifierProfile.healthMultiplier,
+       shield = stats.shieldHealth * modifierProfile.healthMultiplier,
+       maxShield = stats.shieldHealth * modifierProfile.healthMultiplier,
        _completedDistance = initialCompletedDistance,
        _summonRemaining = _initialSummonDelay(stats),
        assert(
@@ -33,6 +34,7 @@ class EnemyLogic {
   double health;
   final double maxHealth;
   double shield;
+  final double maxShield;
 
   // additional combat state (health/shield/maxHealth/isResolved come from Task 1)
   double armorShred = 0;
@@ -199,24 +201,22 @@ class EnemyLogic {
     health = CombatEffects.applyRegen(
       health: health,
       maxHealth: maxHealth,
-      regenPerSecond: stats.regenPerSecond,
+      regenPerSecond: stats.regenPerSecond * modifierProfile.healthMultiplier,
       dt: dt,
       isCorroded: wasCorrodedAtTickStart,
     );
     if (health != previousHealth) overlayDirty = true;
 
     final policy = modifierProfile.shieldRecharge;
-    if (policy != null &&
-        !corrosionChangedState &&
-        shield < stats.shieldHealth) {
+    if (policy != null && !corrosionChangedState && shield < maxShield) {
       final rechargeDuration =
           math.max(0, _timeSinceDamage - policy.delay) -
           math.max(0, elapsedBeforeTick - policy.delay);
       if (rechargeDuration > 0) {
         final previousShield = shield;
         shield = math.min(
-          stats.shieldHealth,
-          shield + stats.shieldHealth * policy.ratePerSecond * rechargeDuration,
+          maxShield,
+          shield + maxShield * policy.ratePerSecond * rechargeDuration,
         );
         if (shield != previousShield) {
           overlayDirty = true;
