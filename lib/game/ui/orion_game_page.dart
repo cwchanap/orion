@@ -1485,6 +1485,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   void _retryEndlessBestSave() {
+    if (_missionSaveState != MissionSaveState.failed) {
+      return;
+    }
     final wavesCleared = _game?.snapshot.wavesCleared;
     if (wavesCleared == null) {
       return;
