@@ -155,6 +155,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
   StageResult? _missionVictoryResult;
   String? _missionStageId;
   MissionSaveState? _missionSaveState;
+  RunMode _runMode = RunMode.mission;
+  int? _endlessPriorBest;
   bool _didPrecacheCommandDeckAssets = false;
 
   @override
@@ -647,6 +649,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
             // and stage choose eligibility. Never a lock.
             final guideEligible =
                 snapshot.stageId == OrionCampaign.stageOneId &&
+                !snapshot.isEndless &&
                 !_firstMissionGuideCompleted;
             final resolvedGuideStep = guideEligible
                 ? firstMissionGuideStepFor(snapshot)
@@ -955,11 +958,32 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   ),
                 if (snapshot.phase == GamePhase.lost)
                   Positioned.fill(
-                    child: MissionReportPanel(
-                      content: projectLossReport(snapshot: snapshot),
-                      onReplay: _restartFromMissionReport,
-                      onReturnToMap: _returnFromMissionReport,
-                    ),
+                    child: snapshot.isEndless
+                        ? MissionReportPanel(
+                            content: projectEndlessReport(
+                              snapshot: snapshot,
+                              priorBest: _endlessPriorBest,
+                              saveState:
+                                  _missionSaveState ?? MissionSaveState.saved,
+                            ),
+                            onReplay:
+                                _missionSaveState == MissionSaveState.saved
+                                ? _restartFromMissionReport
+                                : null,
+                            onReturnToMap:
+                                _missionSaveState == MissionSaveState.saving
+                                ? null
+                                : _returnFromMissionReport,
+                            onRetrySave:
+                                _missionSaveState == MissionSaveState.failed
+                                ? _retryEndlessBestSave
+                                : null,
+                          )
+                        : MissionReportPanel(
+                            content: projectLossReport(snapshot: snapshot),
+                            onReplay: _restartFromMissionReport,
+                            onReturnToMap: _returnFromMissionReport,
+                          ),
                   ),
                 if (snapshot.phase == GamePhase.won &&
                     _missionVictoryResult != null &&
@@ -1055,6 +1079,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
           // and HPA-528 blueprint-recovered signal are all first-clear facts
           // sourced from disk, not the optimistic `_progress` aggregate.
           result: _committedProgress.resultFor(stage.id),
+          endlessBest: _committedProgress.endlessBestFor(stage.id),
           startingGold: modifiers.adjustedStartingGold,
           startingBaseHealth: StageModifierRules.effectiveStartingBaseHealth(
             campaignAdjustedBaseHealth: modifiers.adjustedStartingBaseHealth,
@@ -1073,8 +1098,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
       ),
     );
 
-    if (mode == RunMode.mission && mounted) {
-      _startStage(stage);
+    if (mode != null && mounted) {
+      _startStage(stage, mode);
     }
   }
 
@@ -1188,7 +1213,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committedTechTree,
       );
 
-  void _startStage(StageDefinition stage) {
+  void _startStage(StageDefinition stage, RunMode mode) {
     if (_isSavingProgress || _isResetting) {
       setState(() {
         _mapFeedback = _isResetting
@@ -1203,17 +1228,27 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    if (mode == RunMode.endless && !_committedProgress.isCleared(stage.id)) {
+      return;
+    }
+
     final campaignModifiers = _committedCampaignModifiers();
+    _runMode = mode;
     _missionPriorResult = _committedProgress.resultFor(stage.id);
     _missionVictoryResult = null;
     _missionStageId = stage.id;
-    _missionSaveState = null;
+    _missionSaveState = mode == RunMode.endless ? MissionSaveState.saved : null;
+    _endlessPriorBest = mode == RunMode.endless
+        ? _committedProgress.endlessBestFor(stage.id)
+        : null;
     final game = OrionDefenseGame(
       stage: stage,
+      mode: mode,
       campaignModifiers: campaignModifiers,
       availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
       moduleOfferPicker: widget.moduleOfferPicker,
       onStageWon: _handleStageWon,
+      onEndlessWaveCleared: _saveEndlessBest,
       onReturnToMap: _returnFromMissionReport,
       gameFeedback: _gameFeedback,
     );
@@ -1420,6 +1455,43 @@ class _OrionGamePageState extends State<OrionGamePage> {
     );
   }
 
+  void _saveEndlessBest(int wavesCleared) {
+    final stageId = _missionStageId;
+    if (stageId == null || wavesCleared <= (_endlessPriorBest ?? 0)) {
+      return;
+    }
+
+    _setMissionSaveState(MissionSaveState.saving);
+    _persistSave(
+      buildSave: (committed) => CampaignSave(
+        progress: committed.progress.recordEndlessBest(stageId, wavesCleared),
+        techTree: committed.techTree,
+      ),
+      onCommitted: (payload) {
+        _progress = payload.progress;
+        if (_pendingSaves == 1) {
+          _setMissionSaveState(MissionSaveState.saved);
+        }
+      },
+      onFailed: () {
+        if (_pendingSaves == 1) {
+          _setMissionSaveState(MissionSaveState.failed);
+        }
+        if (mounted && _game?.snapshot.isEnded == false) {
+          _showCampaignPersistenceFailure();
+        }
+      },
+    );
+  }
+
+  void _retryEndlessBestSave() {
+    final wavesCleared = _game?.snapshot.wavesCleared;
+    if (wavesCleared == null) {
+      return;
+    }
+    _saveEndlessBest(wavesCleared);
+  }
+
   void _setMissionSaveState(MissionSaveState state) {
     _missionSaveState = state;
     if (mounted) {
@@ -1479,7 +1551,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
     if (_missionSaveState == MissionSaveState.failed) {
-      _mapFeedback = 'Mission result was not saved.';
+      _mapFeedback = _runMode == RunMode.endless
+          ? 'Endless best was not saved.'
+          : 'Mission result was not saved.';
     }
     _returnToMap();
   }
@@ -1488,7 +1562,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final game = _game;
     if (game == null) return;
 
-    if (_missionVictoryResult != null &&
+    final isEndless = _runMode == RunMode.endless;
+    if (isEndless) {
+      if (_missionSaveState != MissionSaveState.saved) {
+        return;
+      }
+    } else if (_missionVictoryResult != null &&
         _missionSaveState != MissionSaveState.saved) {
       return;
     }
@@ -1496,7 +1575,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _inspectedTowerId = null;
     _missionPriorResult = _committedProgress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
-    _missionSaveState = null;
+    _missionSaveState = isEndless ? MissionSaveState.saved : null;
+    if (isEndless) {
+      _endlessPriorBest = _committedProgress.endlessBestFor(_missionStageId!);
+    }
     // _missionStageId represents the currently running stage, not per-attempt
     // terminal state, so it stays valid across restart() of the same stage.
     // Clearing it broke loss → Retry → loss → Retry: a loss never calls

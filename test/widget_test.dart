@@ -2383,6 +2383,491 @@ void main() {
     );
   });
 
+  testWidgets('Endless launch is offered only after a committed clear', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(endlessBest: 3),
+    );
+
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+
+    // Unlocked but uncleared: Nebula Relay opens on the Alpha clear yet has
+    // no committed result, so the sheet keeps the single mission launch.
+    await tester.ensureVisible(find.text('Relay'));
+    await tester.tap(find.text('Relay'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Start Mission'), findsOneWidget);
+    expect(find.byTooltip('Endless'), findsNothing);
+    expect(find.text('No endless run yet'), findsNothing);
+    expect(find.textContaining('Endless best:'), findsNothing);
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+
+    // The committed Alpha clear offers Endless and surfaces the saved best.
+    await tester.ensureVisible(find.text('Alpha'));
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Replay Mission'), findsOneWidget);
+    expect(find.byTooltip('Endless'), findsOneWidget);
+    expect(find.text('Endless best: 3 waves'), findsOneWidget);
+  });
+
+  testWidgets('Endless launch mounts an endless run with the endless HUD', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+    await tester.pumpAndSettle();
+
+    expect(game, isNotNull);
+    expect(game!.mode, RunMode.endless);
+    expect(game!.snapshot.isEndless, isTrue);
+    expect(game!.snapshot.missionWaveTotal, isNull);
+    expectSemanticsLabel(
+      tester,
+      'Outpost Alpha. Endless. Wave 1, Build',
+      findsOneWidget,
+    );
+    expect(find.text('Wave 1 of 8'), findsNothing);
+  });
+
+  testWidgets('Endless wave clears save the best and lower runs keep it', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    await publishEndlessWaveClear(tester, game!, 4);
+    await tester.pumpAndSettle();
+    expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+
+    await publishEndlessWaveClear(tester, game!, 7);
+    await tester.pumpAndSettle();
+    expect(store.progress.endlessBestFor('outpost-alpha'), 7);
+    expect(store.saveCalls, 2);
+    // Endless writes never touch the mission result or award rewards.
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+    );
+
+    await publishLoss(tester, game!);
+    await tester.pump();
+    expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
+    expectSemanticsLabel(tester, 'Endless Run Over', findsOneWidget);
+    expect(find.text('New best!'), findsOneWidget);
+    expect(find.text('Saved.'), findsOneWidget);
+    expect(find.text('R&D'), findsNothing);
+    await tester.ensureVisible(find.text('MISSION DETAILS'));
+    await tester.tap(find.text('MISSION DETAILS'));
+    await tester.pump();
+    expect(find.text('Survived 7 waves'), findsOneWidget);
+
+    // Replay keeps the endless mode and recaptures the committed best.
+    await tester.tap(find.byTooltip('Replay Mission'));
+    await tester.pumpAndSettle();
+    expect(game!.mode, RunMode.endless);
+    expect(game!.snapshot.phase, GamePhase.build);
+    expect(game!.snapshot.isEndless, isTrue);
+
+    // A run that does not beat the saved best never queues a write.
+    await publishEndlessWaveClear(tester, game!, 3);
+    await tester.pumpAndSettle();
+    expect(store.saveCalls, 2);
+    expect(store.progress.endlessBestFor('outpost-alpha'), 7);
+
+    await publishLoss(tester, game!);
+    await tester.pump();
+    expect(find.text('Best: 7 waves'), findsOneWidget);
+    expect(find.text('Best result already saved.'), findsOneWidget);
+    await tester.ensureVisible(find.text('MISSION DETAILS'));
+    await tester.tap(find.text('MISSION DETAILS'));
+    await tester.pump();
+    expect(find.text('Survived 3 waves'), findsOneWidget);
+  });
+
+  testWidgets('Endless run never shows the first-mission guide', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        firstMissionGuideStore: InMemoryFirstMissionGuideStore(
+          completed: false,
+        ),
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Control: the same Alpha under the mission mode is guide-eligible.
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    expect(find.byType(FirstMissionGuideCallout), findsOneWidget);
+    game!.returnToMap();
+    await tester.pumpAndSettle();
+
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+    expect(game!.mode, RunMode.endless);
+    expect(game!.snapshot.isEndless, isTrue);
+    expect(find.byType(FirstMissionGuideCallout), findsNothing);
+  });
+
+  testWidgets('Endless best is cleared by reset campaign', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(endlessBest: 6),
+    );
+
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Reset Campaign'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(store.progress.endlessBestFor('outpost-alpha'), isNull);
+    expect(store.progress.isCleared('outpost-alpha'), isFalse);
+
+    // Without the committed clear the briefing no longer offers Endless.
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Start Mission'), findsOneWidget);
+    expect(find.byTooltip('Endless'), findsNothing);
+    expect(find.textContaining('Endless best:'), findsNothing);
+  });
+
+  testWidgets(
+    'Endless defeat waits on the pending best write before enabling exits',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      await publishEndlessWaveClear(tester, game!, 5);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      await publishLoss(tester, game!);
+      await tester.pump();
+      expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
+      expect(find.text('Saving result…'), findsOneWidget);
+      // Both report exits stay disabled while the best write is in flight.
+      expect(reportActionOnPressed(tester, 'Replay Mission'), isNull);
+      expect(reportActionOnPressed(tester, 'World Map'), isNull);
+
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Saved.'), findsOneWidget);
+      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      expect(reportActionOnPressed(tester, 'World Map'), isNotNull);
+
+      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.pumpAndSettle();
+      expect(game!.snapshot.phase, GamePhase.build);
+      expect(game!.snapshot.isEndless, isTrue);
+
+      // The replayed run sees the committed best: clearing the same count is
+      // a no-op while the next higher count queues a fresh write.
+      await publishEndlessWaveClear(tester, game!, 5);
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 1);
+      await publishEndlessWaveClear(tester, game!, 6);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+      expect(store.progress.endlessBestFor('outpost-alpha'), 6);
+    },
+  );
+
+  testWidgets(
+    'Endless failed final write offers Retry Save that commits the run score',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      await publishEndlessWaveClear(tester, game!, 4);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      await publishLoss(tester, game!);
+      await tester.pump();
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+      expect(find.byTooltip('Retry Save'), findsOneWidget);
+      expect(find.byTooltip('World Map (Unsaved)'), findsOneWidget);
+      expect(store.progress.endlessBestFor('outpost-alpha'), isNull);
+
+      await tester.tap(find.byTooltip('Retry Save'));
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saved.'), findsOneWidget);
+      expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+    },
+  );
+
+  testWidgets('Endless failed final write still allows an unsaved exit', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(),
+      delaySaves: true,
+      failOnSaveIndices: {0},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    await publishEndlessWaveClear(tester, game!, 4);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+    await publishLoss(tester, game!);
+    await tester.pump();
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+    await tester.tap(find.byTooltip('World Map (Unsaved)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('Endless best was not saved.'), findsOneWidget);
+    expect(store.progress.endlessBestFor('outpost-alpha'), isNull);
+  });
+
+  testWidgets(
+    'Endless queued writes keep the report saving until the last settles',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      await publishEndlessWaveClear(tester, game!, 4);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      // The second clear queues behind the in-flight write — the serialized
+      // queue has not reached the store for it yet.
+      await publishEndlessWaveClear(tester, game!, 7);
+      await tester.pump();
+      expect(store.saveCalls, 1);
+
+      await publishLoss(tester, game!);
+      await tester.pump();
+      expect(find.text('Saving result…'), findsOneWidget);
+
+      // The first commit's callback ran while the second write still counted
+      // in _pendingSaves, so it must not unblock the report actions.
+      store.saveCompletions[0].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      await tester.pump();
+      expect(find.text('Saving result…'), findsOneWidget);
+      expect(reportActionOnPressed(tester, 'Replay Mission'), isNull);
+      expect(reportActionOnPressed(tester, 'World Map'), isNull);
+
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+      expect(find.text('Saved.'), findsOneWidget);
+      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      // The larger queued score is what disk keeps.
+      expect(store.progress.endlessBestFor('outpost-alpha'), 7);
+    },
+  );
+
+  testWidgets(
+    'Endless zero-wave and non-improving losses report saved with no write',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(endlessBest: 5),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await tester.pumpAndSettle();
+
+      // Wave-1 defeat clears nothing: the seeded saved state writes nothing
+      // and both exit actions work immediately.
+      await publishLoss(tester, game!);
+      await tester.pump();
+      expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
+      expect(find.text('Best: 5 waves'), findsOneWidget);
+      expect(find.text('Best result already saved.'), findsOneWidget);
+      expect(store.saveCalls, 0);
+      await tester.ensureVisible(find.text('MISSION DETAILS'));
+      await tester.tap(find.text('MISSION DETAILS'));
+      await tester.pump();
+      expect(find.text('Survived 0 waves'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.pumpAndSettle();
+      expect(game!.snapshot.phase, GamePhase.build);
+      expect(game!.snapshot.isEndless, isTrue);
+
+      // A run that does not beat the saved best never queues a write.
+      await publishEndlessWaveClear(tester, game!, 3);
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 0);
+
+      await publishLoss(tester, game!);
+      await tester.pump();
+      expect(find.text('Best: 5 waves'), findsOneWidget);
+      expect(find.text('Best result already saved.'), findsOneWidget);
+      expect(reportActionOnPressed(tester, 'World Map'), isNotNull);
+      await tester.tap(find.text('World Map'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'Endless save failure during an active run surfaces feedback and recovers',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      await publishEndlessWaveClear(tester, game!, 2);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions.single.complete();
+      await tester.pump();
+      await tester.pump();
+
+      // The run is still active, so the suppressed default toast is re-raised
+      // through the game feedback channel instead of the report.
+      expect(game!.snapshot.isEnded, isFalse);
+      expect(game!.snapshot.feedback, 'Could not save campaign progress.');
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+
+      // The next improving wave recovers: a fresh write commits the best.
+      await publishEndlessWaveClear(tester, game!, 3);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+      expect(store.progress.endlessBestFor('outpost-alpha'), 3);
+
+      await publishLoss(tester, game!);
+      await tester.pump();
+      expect(find.text('Saved.'), findsOneWidget);
+      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+    },
+  );
+
+  testWidgets('ordinary mission loss keeps the plain retry actions', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(),
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishLoss(tester, game!);
+    await tester.pump();
+    expect(find.text('MISSION FAILED'), findsOneWidget);
+    expect(find.byTooltip('Retry'), findsOneWidget);
+    expect(find.text('World Map'), findsOneWidget);
+    expect(find.byTooltip('Retry Save'), findsNothing);
+    expect(find.text('Saved.'), findsNothing);
+    expect(find.text('Best result already saved.'), findsNothing);
+  });
+
   testWidgets('blocks stage launch while a tech-tree save is in flight', (
     tester,
   ) async {
@@ -5111,6 +5596,65 @@ Future<void> publishLoss(WidgetTester tester, OrionDefenseGame game) async {
   await tester.pump();
 }
 
+/// Endless counterpart to publishLoss for a finished wave: the game publishes
+/// the build-phase snapshot carrying the new cleared count before it invokes
+/// onEndlessWaveCleared, so the helper does the same.
+Future<void> publishEndlessWaveClear(
+  WidgetTester tester,
+  OrionDefenseGame game,
+  int wavesCleared,
+) async {
+  final snapshot = game.stateNotifier.value;
+  game.stateNotifier.value = GameSnapshot(
+    phase: GamePhase.build,
+    gold: snapshot.gold,
+    baseHealth: snapshot.baseHealth,
+    startingBaseHealth: snapshot.startingBaseHealth,
+    waveNumber: wavesCleared + 1,
+    missionWaveTotal: null,
+    wavesCleared: wavesCleared,
+    stageId: snapshot.stageId,
+    stageName: snapshot.stageName,
+    stageLabel: snapshot.stageLabel,
+    unlockedTowerTypes: snapshot.unlockedTowerTypes,
+    stageModifiers: snapshot.stageModifiers,
+    nextWavePreview: null,
+    selectedCell: null,
+    selectedTower: null,
+    feedback: null,
+    isPaused: false,
+    speedMultiplier: 1,
+    autoStartEnabled: false,
+    autoStartCountdownRemaining: null,
+    acquiredRunModules: snapshot.acquiredRunModules,
+  );
+  game.onEndlessWaveCleared?.call(wavesCleared);
+  await tester.pump();
+}
+
+/// The onPressed backing a mission-report action label, or null when the
+/// report does not render that action or the action is disabled. Non-tonal
+/// actions are IconButtons; the tonal exit is a TextButton inside
+/// OrionPrimaryButton — disabled actions keep their label, so onPressed is
+/// the enabled-state authority.
+VoidCallback? reportActionOnPressed(WidgetTester tester, String label) {
+  final iconButton = find.ancestor(
+    of: find.text(label),
+    matching: find.byType(IconButton),
+  );
+  if (iconButton.evaluate().isNotEmpty) {
+    return tester.widget<IconButton>(iconButton).onPressed;
+  }
+  final textButton = find.ancestor(
+    of: find.text(label),
+    matching: find.byType(TextButton),
+  );
+  if (textButton.evaluate().isNotEmpty) {
+    return tester.widget<TextButton>(textButton).onPressed;
+  }
+  return null;
+}
+
 Finder _activeIgnorePointerAncestorsOf(Finder finder) {
   return find.ancestor(
     of: finder,
@@ -5127,6 +5671,17 @@ CampaignProgress _progressWithResults(Iterable<String> stageIds) {
       for (final stageId in stageIds)
         stageId: const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
     },
+  );
+}
+
+/// Committed Alpha clear with an optional saved endless best — the launch
+/// gate and the briefing best line both read committed progress.
+CampaignProgress _progressWithAlphaCleared({int? endlessBest}) {
+  return CampaignProgress(
+    bestResultsByStageId: const {
+      'outpost-alpha': StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
+    },
+    endlessBestByStageId: {'outpost-alpha': ?endlessBest},
   );
 }
 
