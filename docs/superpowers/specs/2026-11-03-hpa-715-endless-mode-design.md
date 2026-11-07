@@ -36,7 +36,7 @@ Existing code already gives us:
 
 A loop boundary is a deliberate breather (boss → wave 1 at the next multiplier). No smoothing within a loop: the script already ramps.
 
-**Waves cleared** is the score. On defeat during wave `n` (1-based), the run cleared `n - 1` waves. The loss snapshot still identifies active wave `n`, so use `max(0, snapshot.waveNumber - 1)` in both the endless report copy and its WAVES stat; never display the attempted wave as cleared.
+**Waves cleared** is the score. `GameSession.clearedWaveCount` is the one authority, published as `GameSnapshot.wavesCleared` and passed unchanged to the per-wave save callback. On defeat during 1-based wave 1, that value is **0**; on defeat during wave 9, it is **8**. Both report copy and the WAVES stat read `snapshot.wavesCleared` directly, never infer a score from the attempted wave number.
 
 ## Pure rules
 
@@ -69,12 +69,12 @@ Add `enum RunMode { mission, endless }` beside `GamePhase` in `game_models.dart`
 - `finishActiveWave` never sets `GamePhase.won` in endless.
 - `_effectiveClearBonus` applies the final-wave-is-zero rule only in mission.
 - `_openModuleDraftIfDue` unchanged: `moduleDraftWaves` contains 2, 4, 6, so drafts naturally stop after loop 0.
-- `snapshot()`: `waveNumber` is `_waveIndex + 1` unclamped in endless; `waveTotal` becomes **`int?`**, `null` in endless. `GameSnapshot` gains `bool get isEndless => waveTotal == null`.
-- `WavePreview.waveTotal` becomes `int?`; `WavePreview` gains `double enemyHealthMultiplier` (default 1), passed by the session.
+- `snapshot()`: `waveNumber` is `_waveIndex + 1` unclamped in endless; rename `GameSnapshot.waveTotal` to **`int? missionWaveTotal`**, null in endless, and add required `int wavesCleared` from `clearedWaveCount`. `GameSnapshot.isEndless` is `missionWaveTotal == null`.
+- Rename `WavePreview.waveTotal` to nullable **`missionWaveTotal`**; also add `double enemyHealthMultiplier` (default 1), passed by the session.
 
-Making `waveTotal` nullable is the deliberate breaking change: the compiler flags every "of 8" site, so none is missed.
+**The rename is intentional.** Dart accepts `int?` in string interpolation (`'Wave ${snapshot.waveTotal}'` compiles and prints `null`), so merely changing its type provides no compile-time audit. Removing the old name forces all model constructors, test fixtures, and HUD/dock/scanner/report reads to fail compilation until explicitly migrated; verify the rendered text and accessibility semantics in widget tests as well.
 
-`GameBalance.wavePreview(...)` must also accept nullable `waveTotal` and forward `enemyHealthMultiplier` into `WavePreview`; changing only the `WavePreview` field types is insufficient because this factory is the session's preview construction path.
+`GameBalance.wavePreview(...)` must rename its parameter to nullable `missionWaveTotal` and forward it along with `enemyHealthMultiplier` into `WavePreview`; changing only the model fields is insufficient because this factory is the session's preview construction path.
 
 ## Enemy scaling seam
 
@@ -96,24 +96,26 @@ Making `waveTotal` nullable is the deliberate breaking change: the compiler flag
 `CampaignProgress` gains `Map<String, int> endlessBestByStageId` (waves cleared, > 0):
 - `int? endlessBestFor(String stageId)`
 - `CampaignProgress recordEndlessBest(String stageId, int wavesCleared)` returns `this` unless it beats the saved value.
-- Every method that rebuilds `CampaignProgress` (`recordResult`, `withResult`, `withoutUnknownStages`) carries the map; `withoutUnknownStages` filters it too.
+- `recordResult` carries the map unchanged; `CampaignProgressCodec.decode` reads and filters `endlessBest` against known stage IDs. Remove the unused `CampaignProgress.withResult` and `withoutUnknownStages` helpers **and their helper-only tests**: they have no production callers, and fewer rebuild paths reduce the risk of dropping the new map. No replacement helper is needed.
 
 `CampaignProgressCodec` writes an extra `endlessBest` object (sorted keys) into the **existing version 3** payload and reads it back when present; a missing key decodes to empty, and unknown stage ids or non-positive values are dropped. No version bump: the field is additive. Reset Campaign already removes the whole key, so endless bests reset with the campaign.
 
-**Save timing.** `OrionGamePage` handles `onEndlessWaveCleared`: when `wavesCleared` beats `_committedProgress.endlessBestFor(stageId)`, call `_persistSave` with `buildSave` = committed progress `.recordEndlessBest(...)` and `onCommitted` updating `_progress`, the same shape as the mission-result save. On failure the existing campaign persistence toast shows, and the next cleared wave retries because the committed best is still lower. Saving after each record-breaking wave means quitting mid-run keeps the record without a separate quit path.
+**Save timing and failure recovery.** `OrionGamePage` handles `onEndlessWaveCleared`: for each strictly higher count, call the existing serialized `_persistSave` with `buildSave` reading `committed.progress.recordEndlessBest(wavesCleared)` and `onCommitted` updating `_progress`. This preserves the maximum even when two wave clears enqueue writes before the first commits. Saving after each improvement means quitting mid-run keeps the last **committed** record; no separate quit save is needed.
+
+Reuse the page's existing `_missionSaveState` (`saving`/`saved`/`failed`) for Endless rather than adding a new flag. Multiple wave saves may be in flight: keep the run in `saving` while **any** queued best-save write remains; an earlier completion must not mark it `saved` while a newer one is pending. Reuse `_pendingSaves` / `_isSavingProgress` from `_persistSave` to determine when the final queued save has settled, then reflect that final result. An intermediate failure can be superseded by a later successful higher save. If the last relevant write fails, retain the committed best and expose **Retry Save** in the defeat report, saving the run's `snapshot.wavesCleared` through the same queue. When there is no new score to persist (including a wave-1 loss), treat the report as saved with no write. The existing on-map failure toast remains useful during an active run, but is not a substitute for report retry.
 
 ## UI
 
-**Stage briefing.** `StageBriefingSheet` gains `int? endlessBest`. When `result != null` (stage cleared), it shows a line "Endless best: N waves" or "No endless run yet" and a second launch action **Endless** (icon `Icons.all_inclusive_rounded`, kicker `ENDLESS`) beside Replay Mission, reusing `_BriefingLaunchAction`. The sheet pops a `RunMode?` instead of `bool?`; `_showStageBriefing` passes it to `_startStage(stage, mode)`. Locked or uncleared stages look exactly as today.
+**Stage briefing.** `StageBriefingSheet` gains `int? endlessBest`. When `result != null` (stage cleared), it shows a line "Endless best: N waves" or "No endless run yet" and a second launch action **Endless** (icon `Icons.all_inclusive_rounded`, kicker `ENDLESS`) beside Replay Mission, reusing `_BriefingLaunchAction`. The sheet pops `RunMode.mission` / `RunMode.endless`, while dismissal returns `null`; `_showStageBriefing` awaits `showModalBottomSheet<RunMode>` and passes the result to `_startStage(stage, mode)`. Update the test harness `_PopRecorder` and its `showModalBottomSheet<bool>` to `RunMode?` / `showModalBottomSheet<RunMode>` explicitly: `Navigator.pop` is not a compile-time type-safety check. Locked or uncleared stages look exactly as today.
 
-**HUD, dock, scanner.** Where a site printed `waveNumber`/`waveTotal`, endless prints the wave number alone: HUD readout with no denominator and semantics "Endless. Wave 12", dock tooltip/pill "Wave 12", scanner "Next wave 12". When `preview.enemyHealthMultiplier > 1`, the scanner adds one line: "Enemies +60% health" (percent rounded). Use plain ASCII copy; avoid glyphs the game fonts may lack (the HPA-20 arrow rendered as a box in tests).
+**HUD, dock, scanner.** Where a site previously read `waveNumber`/`waveTotal`, migrate it to `missionWaveTotal`. Endless prints the wave number alone: HUD readout with a **null denominator** and semantics "Endless. Wave 12", dock tooltip/pill "Wave 12", scanner "Next wave 12" (including its collapsed semantics). When `preview.enemyHealthMultiplier > 1`, the scanner adds one line: "Enemies +60% health" (percent rounded). Use plain ASCII copy; avoid glyphs the game fonts may lack (the HPA-20 arrow rendered as a box in tests).
 
-**Defeat report.** New `projectEndlessReport({snapshot, priorBest})` in `mission_report_content.dart`:
-- `outcomeText`: "Survived N waves"
-- `comparisonText`: "New best! Previous: M waves" / "New best!" (first run) / "Best: M waves"
-- `nextOpportunityText`: "Replay to push further, or return to the World Map."
+**Defeat report.** New `projectEndlessReport({required snapshot, required priorBest, required saveState})` in `mission_report_content.dart`, using existing `MissionReportContent.saveState`, `saveText`, and action copy:
+- `outcomeText`: "Survived N waves", with `N = snapshot.wavesCleared`.
+- `comparisonText`: "New best! Previous: M waves" / "New best!" (first run) / "Best: M waves", comparing against the committed best captured **at run start**.
+- `nextOpportunityText` / `saveText` vary by `MissionSaveState`, reusing the victory report's pending, saved, and retry-failure messaging.
 
-`MissionReportPanel` shows "ENDLESS RUN OVER" instead of "MISSION FAILED" when `content.snapshot.isEndless`, and the WAVES stat shows waves cleared. Replay and Return to Map reuse the existing handlers; `_restartFromMissionReport` recaptures the committed best as the next run's `priorBest`.
+`MissionReportPanel` shows "ENDLESS RUN OVER" instead of "MISSION FAILED" and reads `snapshot.wavesCleared` for the WAVES stat. Suppress medal/R&D rewards for Endless; the regular mission-loss presentation and behavior remain unchanged. For Endless only, reuse the victory branch's save-dependent action rules: **while saving, disable Replay and Return; after success, enable both; after failure, offer Retry Save or Return to Map (Unsaved)**. `_returnToMap` already gates on saving; `_restartFromMissionReport` must also refuse an Endless restart until saved (including queued saves), and then recapture the committed best as the next run's `priorBest`. Retry Save writes the finished run's exact `wavesCleared` again; the existing callback should not award campaign rewards.
 
 **Guide and tips.** The first-mission guide never shows in endless (`guideEligible` adds `!snapshot.isEndless`). Contextual first-time tips stay as they are: they are once-only and already seen by anyone who cleared a stage.
 
@@ -122,14 +124,14 @@ Making `waveTotal` nullable is the deliberate breaking change: the compiler flag
 ## Testing
 
 - `endless_rules_test.dart`: wave wrap-around, loop index, multiplier at loops 0–3.
-- `game_session_test.dart`: endless continues past the script length, never wins, pays the boss-wave clear bonus, drafts only in loop 0, `waveTotal == null`, preview multiplier, restart keeps mode; mission tests untouched.
+- `game_session_test.dart`: endless continues past the script length, never wins, pays the boss-wave clear bonus, drafts only in loop 0, `missionWaveTotal == null`, preview multiplier, restart keeps mode, and `wavesCleared` is 0 on a wave-1 loss and 8 on a wave-9 loss; mission tests untouched.
 - `enemy_logic_test.dart` / `stage_modifier_rules_test.dart`: multiplier scales health, shield, regen, and shield recharge; armor and speed untouched.
-- `campaign_progress_test.dart` / `campaign_progress_store_test.dart`: record/keep best, survives `recordResult`/`withResult`/`withoutUnknownStages`, codec round trip, missing key, bad values.
+- `campaign_progress_test.dart` / `campaign_progress_store_test.dart`: record/keep best, survives `recordResult`, codec round trip, missing key, invalid/unknown stage IDs and bad values; remove tests for the two deleted production helpers.
 - `game_balance_test.dart`: pin `endlessLoopHealthGrowth`.
 - `orion_defense_game_test.dart`: endless callback fires with waves cleared; `onStageWon` never fires.
-- Widget: briefing Endless action and best line (cleared vs uncleared), HUD/dock/scanner endless copy, endless defeat report, and one `widget_test.dart` flow: clear Alpha → launch Endless → clear a wave → best saved → relaunch shows it.
+- Widget: briefing Endless action and best line (cleared vs uncleared), typed modal return test harness, HUD/dock/scanner endless copy, Endless defeat report save states, and `widget_test.dart` flows: clear Alpha → launch Endless → clear a wave → best saved → relaunch shows it; delayed save blocks both exit actions; failed final save exposes Retry Save; two queued scores persist the maximum.
 
-Mission-mode expectations in existing tests should not change beyond the `waveTotal` type.
+Mission-mode expectations in existing tests should remain unchanged in behavior. The rename from `waveTotal` to `missionWaveTotal` and the required `wavesCleared` constructor field intentionally require test-fixture updates.
 
 ## Out of scope
 
@@ -140,5 +142,5 @@ New art, SFX, or music; leaderboards or cloud sync; extra module drafts in later
 - The current `main` still has no `RunMode`, `EndlessRules`, or endless save field. This document is the implementation specification; no game code is part of this docs-only draft.
 - [HPA-699 / PR #49](https://github.com/cwchanap/orion/pull/49) is a separate UI-only overhaul touching briefing, HUD, scanner, and report. Keep Endless behavior isolated from theme/style decisions. Whichever implementation merges second adapts to the current widgets within its **existing single PR**; do not duplicate either ticket or create an integration ticket merely for cosmetic conflicts.
 - An Endless launch must be authorized from **committed** stage-clear state both when rendering the briefing action and at `_startStage(stage, mode)` (not merely from the current stage being unlocked).
-- Save only **strictly higher** wave counts. The existing `_persistSave` queue must build each new record from `committed.progress.recordEndlessBest(...)` so back-to-back wave clears cannot overwrite a higher record. If a record write is still pending on defeat, keep report Replay/Return disabled until that write settles, then compare against committed data; reuse the existing error toast for failures, without a new persistence service.
+- Save only **strictly higher** wave counts. The existing `_persistSave` queue must build each new record from `committed.progress.recordEndlessBest(...)` so back-to-back wave clears cannot overwrite a higher record. Track queued writes via the **existing** `_missionSaveState` and save-queue counters; the last relevant completion controls when the report can unblock. On failure expose Retry Save and a deliberate unsaved exit; do not rely only on a toast or introduce a new save-status subsystem.
 - `OrionReadout.denominator` should receive `null` when total waves are absent, not the string `'null'`. The collapsed scanner's semantic text also needs the same omission, and the scaling callout is based on the exact next-wave multiplier.
