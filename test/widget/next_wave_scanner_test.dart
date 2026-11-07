@@ -661,6 +661,76 @@ void main() {
   });
 
   testWidgets(
+    'collapsed and expanded endless scanners announce the wave without a total',
+    (tester) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(
+          scannerHost(
+            commandDeckPreview(waveNumber: 12, missionWaveTotal: null),
+          ),
+        );
+        expect(
+          find.bySemanticsLabel(
+            'New wave preview available. Next wave 12. 8 enemies.',
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.bySemanticsLabel(RegExp(r'of \d+', caseSensitive: false)),
+          findsNothing,
+        );
+
+        await tester.tap(find.byTooltip('Expand next-wave scanner'));
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel('Next wave 12'), findsOneWidget);
+        expect(
+          find.bySemanticsLabel(RegExp(r'of \d+', caseSensitive: false)),
+          findsNothing,
+        );
+      } finally {
+        handle.dispose();
+      }
+    },
+  );
+
+  testWidgets(
+    'scanner calls out scaled enemy health only above the base multiplier',
+    (tester) async {
+      final handle = tester.ensureSemantics();
+      try {
+        // A preview at the base 1x multiplier shows no scaling callout. The
+        // wave number stays fixed across both pumps so a preview change does
+        // not collapse the expanded scene between assertions.
+        await tester.pumpWidget(
+          scannerHost(
+            commandDeckPreview(missionWaveTotal: null, waveNumber: 12),
+          ),
+        );
+        await tester.tap(find.byTooltip('Expand next-wave scanner'));
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel(RegExp('Enemies.*health')), findsNothing);
+
+        // Loop 1's exact 1.6 multiplier rounds to +60%.
+        await tester.pumpWidget(
+          scannerHost(
+            commandDeckPreview(
+              waveNumber: 12,
+              missionWaveTotal: null,
+              enemyHealthMultiplier: 1.6,
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.bySemanticsLabel('Enemies +60% health'), findsOneWidget);
+        expect(find.text('ENEMIES +60% HEALTH'), findsOneWidget);
+      } finally {
+        handle.dispose();
+      }
+    },
+  );
+
+  testWidgets(
     'scanner opens a full scene and keeps its close action available',
     (tester) async {
       await tester.pumpWidget(scannerHost(commandDeckPreview()));

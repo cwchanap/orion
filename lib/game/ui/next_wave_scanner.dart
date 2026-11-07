@@ -447,6 +447,17 @@ class WaveScannerScene extends StatelessWidget {
                                           size: 10,
                                         ),
                                       ),
+                                    if (preview.enemyHealthMultiplier > 1)
+                                      Semantics(
+                                        label:
+                                            'Enemies +${((preview.enemyHealthMultiplier - 1) * 100).round()}% health',
+                                        excludeSemantics: true,
+                                        child: OrionText.micro(
+                                          'ENEMIES +${((preview.enemyHealthMultiplier - 1) * 100).round()}% HEALTH',
+                                          color: t.warningOrange,
+                                          size: 10,
+                                        ),
+                                      ),
                                   ],
                                 ),
                               ),

@@ -380,6 +380,138 @@ void main() {
     expect(returned, isTrue);
   });
 
+  group('endless defeat report', () {
+    testWidgets(
+      'shows ENDLESS RUN OVER and never mission-failed copy or semantics',
+      (tester) async {
+        await _pumpPanel(tester, _endlessContent(MissionSaveState.saved));
+
+        expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
+        expect(find.text('MISSION FAILED'), findsNothing);
+
+        final handle = tester.ensureSemantics();
+        try {
+          expect(find.bySemanticsLabel('Endless Run Over'), findsOneWidget);
+          // The decorative result graphic announces the endless outcome,
+          // not a mission failure.
+          expect(find.bySemanticsLabel('Endless run over'), findsOneWidget);
+          expect(find.bySemanticsLabel('Mission Failed'), findsNothing);
+          expect(find.bySemanticsLabel('Mission failed'), findsNothing);
+        } finally {
+          handle.dispose();
+        }
+      },
+    );
+
+    testWidgets('WAVES stat reads wavesCleared, not the attempted wave', (
+      tester,
+    ) async {
+      // Defeat during wave 9: eight clears are the score.
+      await _pumpPanel(
+        tester,
+        _endlessContent(MissionSaveState.saved, waveNumber: 9, wavesCleared: 8),
+      );
+      expect(find.text('8'), findsOneWidget);
+      expect(find.text('9'), findsNothing);
+      expect(find.textContaining('/8'), findsNothing);
+
+      // Defeat during wave 1: zero clears.
+      await _pumpPanel(
+        tester,
+        _endlessContent(MissionSaveState.saved, waveNumber: 1, wavesCleared: 0),
+      );
+      expect(find.text('0'), findsOneWidget);
+      expect(find.text('0/20'), findsOneWidget);
+    });
+
+    testWidgets('omits the R&D tile and any medal reward', (tester) async {
+      await _pumpPanel(tester, _endlessContent(MissionSaveState.saved));
+
+      expect(find.text('R&D'), findsNothing);
+      expect(find.text('PENDING'), findsNothing);
+      expect(find.textContaining('R&D'), findsNothing);
+      expect(find.byIcon(Icons.pentagon), findsNothing);
+
+      // The suppression is endless-scoped: an ordinary mission loss keeps
+      // its PENDING tile.
+      await _pumpPanel(tester, _lossContent());
+      expect(find.text('PENDING'), findsOneWidget);
+      expect(find.bySemanticsLabel('Save status'), findsNothing);
+    });
+
+    testWidgets('saved state shows comparison, save row, and both exits', (
+      tester,
+    ) async {
+      var replayed = false;
+      var returned = false;
+      await _pumpPanel(
+        tester,
+        _endlessContent(MissionSaveState.saved, priorBest: 5),
+        onReplay: () => replayed = true,
+        onReturnToMap: () => returned = true,
+      );
+
+      expect(find.text('Saved.'), findsOneWidget);
+      expect(find.text('New best! Previous: 5 waves'), findsOneWidget);
+      expect(find.bySemanticsLabel('Save status'), findsOneWidget);
+      expect(find.text('Replay Mission'), findsOneWidget);
+      expect(find.text('World Map'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.tap(find.byTooltip('World Map'));
+      expect(replayed, isTrue);
+      expect(returned, isTrue);
+    });
+
+    testWidgets('saving keeps replay and return disabled', (tester) async {
+      await _pumpPanel(
+        tester,
+        _endlessContent(MissionSaveState.saving),
+        onReplay: () {},
+        onReturnToMap: () {},
+      );
+
+      expect(find.text('Saving result…'), findsOneWidget);
+      final replayButton = tester.widget<IconButton>(
+        find.descendant(
+          of: find.byTooltip('Replay Mission'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      final mapButton = tester.widget<TextButton>(
+        find.descendant(
+          of: find.byTooltip('World Map'),
+          matching: find.byType(TextButton),
+        ),
+      );
+      expect(replayButton.onPressed, isNull);
+      expect(mapButton.onPressed, isNull);
+    });
+
+    testWidgets('failed offers Retry Save and the unsaved map exit', (
+      tester,
+    ) async {
+      var retried = false;
+      var returned = false;
+      await _pumpPanel(
+        tester,
+        _endlessContent(MissionSaveState.failed),
+        onRetrySave: () => retried = true,
+        onReturnToMap: () => returned = true,
+      );
+
+      expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+      expect(find.text('Retry Save'), findsOneWidget);
+      expect(find.text('World Map (Unsaved)'), findsOneWidget);
+      expect(find.text('Replay Mission'), findsNothing);
+
+      await tester.tap(find.byTooltip('Retry Save'));
+      await tester.tap(find.byTooltip('World Map (Unsaved)'));
+      expect(retried, isTrue);
+      expect(returned, isTrue);
+    });
+  });
+
   testWidgets('Reduced Motion leaves saved-victory actions immediately '
       'available', (tester) async {
     // No entrance animation may delay action availability: with animations
@@ -568,6 +700,8 @@ GameSnapshot _syntheticSnapshot({
   List<RunModuleId> modules = const [],
   int baseHealth = 20,
   int waveNumber = 8,
+  int? missionWaveTotal = 8,
+  int wavesCleared = 0,
   GamePhase phase = GamePhase.won,
 }) {
   return commandDeckSnapshot(
@@ -576,6 +710,8 @@ GameSnapshot _syntheticSnapshot({
     baseHealth: baseHealth,
     startingBaseHealth: 20,
     waveNumber: waveNumber,
+    missionWaveTotal: missionWaveTotal,
+    wavesCleared: wavesCleared,
     stageId: 'outpost-alpha',
     stageName: 'Outpost Alpha',
     stageLabel: 'Alpha',
@@ -622,6 +758,27 @@ MissionReportContent _lossContent() {
       baseHealth: 0,
       waveNumber: 5,
     ),
+  );
+}
+
+MissionReportContent _endlessContent(
+  MissionSaveState saveState, {
+  int waveNumber = 9,
+  int wavesCleared = 8,
+  int? priorBest = 5,
+  List<RunModuleId> moduleIds = const [],
+}) {
+  return projectEndlessReport(
+    snapshot: _syntheticSnapshot(
+      phase: GamePhase.lost,
+      baseHealth: 0,
+      waveNumber: waveNumber,
+      missionWaveTotal: null,
+      wavesCleared: wavesCleared,
+      modules: moduleIds,
+    ),
+    priorBest: priorBest,
+    saveState: saveState,
   );
 }
 

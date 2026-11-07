@@ -1041,7 +1041,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     var modifierTipVisible =
         stage.modifiers.isNotEmpty &&
         !_seenTips.contains(ContextualTip.stageModifier);
-    final shouldStart = await showModalBottomSheet<bool>(
+    final mode = await showModalBottomSheet<RunMode>(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
@@ -1073,7 +1073,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       ),
     );
 
-    if (shouldStart == true && mounted) {
+    if (mode == RunMode.mission && mounted) {
       _startStage(stage);
     }
   }

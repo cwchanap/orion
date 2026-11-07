@@ -6,6 +6,7 @@ import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
+import 'package:orion/game/ui/orion_typography.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
 import '../support/command_deck_fixtures.dart';
@@ -33,6 +34,42 @@ void main() {
         findsOneWidget,
       );
       expect(find.bySemanticsLabel('Credits 150'), findsOneWidget);
+    } finally {
+      handle.dispose();
+    }
+  });
+
+  testWidgets('endless status HUD shows the wave number without a total', (
+    tester,
+  ) async {
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MissionStatusHud(
+            snapshot: commandDeckSnapshot(
+              phase: GamePhase.wave,
+              waveNumber: 12,
+              missionWaveTotal: null,
+            ),
+          ),
+        ),
+      );
+
+      final stageAnchor = find.byKey(const ValueKey('mission-status-stage'));
+      final readout = tester.widget<OrionReadout>(
+        find.descendant(of: stageAnchor, matching: find.byType(OrionReadout)),
+      );
+      // The denominator is a true null so nothing renders — never the
+      // string 'null' or a leftover mission total.
+      expect(readout.value, '12');
+      expect(readout.denominator, isNull);
+      expect(find.textContaining('of 8'), findsNothing);
+      expect(find.textContaining('null'), findsNothing);
+      expect(
+        find.bySemanticsLabel('Outpost Alpha. Endless. Wave 12, Wave Active'),
+        findsOneWidget,
+      );
     } finally {
       handle.dispose();
     }

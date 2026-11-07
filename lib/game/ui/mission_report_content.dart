@@ -124,6 +124,46 @@ MissionReportContent projectVictoryReport({
   );
 }
 
+MissionReportContent projectEndlessReport({
+  required GameSnapshot snapshot,
+  required int? priorBest,
+  required MissionSaveState saveState,
+}) {
+  final wavesCleared = snapshot.wavesCleared;
+  final improved = priorBest == null || wavesCleared > priorBest;
+  return MissionReportContent(
+    snapshot: snapshot,
+    stageId: snapshot.stageId,
+    stageName: snapshot.stageName,
+    didWin: false,
+    outcomeText: 'Survived $wavesCleared waves',
+    comparisonText: priorBest == null
+        ? 'New best!'
+        : improved
+        ? 'New best! Previous: $priorBest waves'
+        : 'Best: $priorBest waves',
+    moduleIds: snapshot.acquiredRunModules,
+    emptyModulesText: snapshot.acquiredRunModules.isEmpty
+        ? 'No Salvage Modules acquired'
+        : null,
+    saveState: saveState,
+    saveText: switch (saveState) {
+      MissionSaveState.saving => 'Saving result…',
+      MissionSaveState.saved =>
+        improved ? 'Saved.' : 'Best result already saved.',
+      MissionSaveState.failed => 'Save failed — progress unchanged.',
+    },
+    nextOpportunityText: switch (saveState) {
+      MissionSaveState.saving =>
+        'Saving must finish before you replay or leave.',
+      MissionSaveState.saved =>
+        'Replay for a better result or continue on the World Map.',
+      MissionSaveState.failed =>
+        'Retry saving, or return without keeping this result.',
+    },
+  );
+}
+
 MissionReportContent projectLossReport({required GameSnapshot snapshot}) {
   return MissionReportContent(
     snapshot: snapshot,
