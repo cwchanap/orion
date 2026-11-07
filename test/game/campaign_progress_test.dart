@@ -273,6 +273,46 @@ void main() {
       );
     });
 
+    test('constructor defensively copies mutable input', () {
+      final results = {
+        'stage-1': const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+      };
+      final progress = CampaignProgress(bestResultsByStageId: results);
+
+      results['stage-2'] = const StageResult(
+        medal: StageMedal.gold,
+        bestBaseHealth: 20,
+      );
+
+      expect(progress.bestResultsByStageId.keys, {'stage-1'});
+      expect(progress.isCleared('stage-2'), isFalse);
+      expect(
+        () => progress.bestResultsByStageId.clear(),
+        throwsUnsupportedError,
+      );
+    });
+
+    test('cleared stage with unmet dependencies is still completed', () {
+      final dependentStage = _stage(
+        id: 'dependent-stage',
+        dependencies: ['missing-stage'],
+      );
+      final progress = CampaignProgress(
+        bestResultsByStageId: {
+          'dependent-stage': const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+        },
+      );
+
+      expect(progress.isUnlocked(dependentStage), isFalse);
+      expect(progress.statusFor(dependentStage), StageProgressStatus.cleared);
+    });
+
     group('endless best', () {
       test('stores the first recorded best', () {
         final progress = CampaignProgress().recordEndlessBest('stage-1', 7);
@@ -365,46 +405,6 @@ void main() {
           throwsUnsupportedError,
         );
       });
-    });
-
-    test('constructor defensively copies mutable input', () {
-      final results = {
-        'stage-1': const StageResult(
-          medal: StageMedal.clear,
-          bestBaseHealth: 1,
-        ),
-      };
-      final progress = CampaignProgress(bestResultsByStageId: results);
-
-      results['stage-2'] = const StageResult(
-        medal: StageMedal.gold,
-        bestBaseHealth: 20,
-      );
-
-      expect(progress.bestResultsByStageId.keys, {'stage-1'});
-      expect(progress.isCleared('stage-2'), isFalse);
-      expect(
-        () => progress.bestResultsByStageId.clear(),
-        throwsUnsupportedError,
-      );
-    });
-
-    test('cleared stage with unmet dependencies is still completed', () {
-      final dependentStage = _stage(
-        id: 'dependent-stage',
-        dependencies: ['missing-stage'],
-      );
-      final progress = CampaignProgress(
-        bestResultsByStageId: {
-          'dependent-stage': const StageResult(
-            medal: StageMedal.clear,
-            bestBaseHealth: 1,
-          ),
-        },
-      );
-
-      expect(progress.isUnlocked(dependentStage), isFalse);
-      expect(progress.statusFor(dependentStage), StageProgressStatus.cleared);
     });
 
     group('recommendedStage', () {
