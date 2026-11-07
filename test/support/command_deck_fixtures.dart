@@ -38,7 +38,8 @@ GameSnapshot commandDeckSnapshot({
   int baseHealth = 20,
   int startingBaseHealth = 20,
   int waveNumber = 1,
-  int waveTotal = 8,
+  int? missionWaveTotal = 8,
+  int wavesCleared = 0,
   String stageId = 'outpost-alpha',
   String stageName = 'Outpost Alpha',
   String stageLabel = 'Alpha',
@@ -77,7 +78,8 @@ GameSnapshot commandDeckSnapshot({
     baseHealth: baseHealth,
     startingBaseHealth: startingBaseHealth,
     waveNumber: waveNumber,
-    waveTotal: waveTotal,
+    missionWaveTotal: missionWaveTotal,
+    wavesCleared: wavesCleared,
     stageId: stageId,
     stageName: stageName,
     stageLabel: stageLabel,
@@ -104,7 +106,8 @@ GameSnapshot commandDeckSnapshot({
 
 WavePreview commandDeckPreview({
   int waveNumber = 1,
-  int waveTotal = 8,
+  int? missionWaveTotal = 8,
+  double enemyHealthMultiplier = 1,
   List<WavePreviewGroup>? groups,
   Set<EnemyTrait> traits = const {},
   int clearBonus = 30,
@@ -112,7 +115,8 @@ WavePreview commandDeckPreview({
 }) {
   return WavePreview(
     waveNumber: waveNumber,
-    waveTotal: waveTotal,
+    missionWaveTotal: missionWaveTotal,
+    enemyHealthMultiplier: enemyHealthMultiplier,
     groups:
         groups ??
         [WavePreviewGroup(enemyCount: 8, label: 'Drones', traits: const {})],

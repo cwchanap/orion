@@ -7,6 +7,7 @@ import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../models/game_models.dart';
 import 'board_layout.dart';
+import 'endless_rules.dart';
 import 'module_offer_picker.dart';
 import 'run_module_rules.dart';
 import 'run_module_unlocks.dart';
@@ -16,6 +17,7 @@ import 'tower_stats_resolver.dart';
 class GameSession {
   factory GameSession.initial({
     StageDefinition? stage,
+    RunMode mode = RunMode.mission,
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     int? gold,
     int? baseHealth,
@@ -32,6 +34,7 @@ class GameSession {
     );
     return GameSession._(
       stage: resolvedStage,
+      mode: mode,
       campaignModifiers: campaignModifiers,
       startingGold: resolvedGold,
       startingBaseHealth: resolvedBaseHealth,
@@ -42,6 +45,7 @@ class GameSession {
 
   GameSession._({
     required this.stage,
+    required this.mode,
     required CampaignModifiers campaignModifiers,
     required int startingGold,
     required int startingBaseHealth,
@@ -66,6 +70,7 @@ class GameSession {
   }
 
   final StageDefinition stage;
+  final RunMode mode;
   final ModuleOfferPicker _offerPicker;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
   final List<RunModuleId> _acquiredRunModules = [];
@@ -103,11 +108,18 @@ class GameSession {
   }
 
   WaveDefinition? get activeWave {
+    if (mode == RunMode.endless) {
+      return EndlessRules.waveAt(stage.waves, _waveIndex);
+    }
     if (_waveIndex >= stage.waves.length) {
       return null;
     }
     return stage.waves[_waveIndex];
   }
+
+  double get enemyHealthMultiplier => mode == RunMode.endless
+      ? EndlessRules.healthMultiplier(_waveIndex, stage.waves.length)
+      : 1;
 
   bool isTowerUnlocked(TowerType type) => unlockedTowerTypes.contains(type);
 
@@ -124,16 +136,22 @@ class GameSession {
     bool autoStartEnabled = false,
     double? autoStartCountdownRemaining,
   }) {
-    final waveNumber = (_waveIndex + 1).clamp(1, stage.waves.length).toInt();
+    final waveNumber = mode == RunMode.endless
+        ? _waveIndex + 1
+        : (_waveIndex + 1).clamp(1, stage.waves.length).toInt();
+    final missionWaveTotal = mode == RunMode.endless
+        ? null
+        : stage.waves.length;
     final unlockedTypes = unlockedTowerTypes;
     final wave = activeWave;
     final nextWavePreview = _phase == GamePhase.build && wave != null
         ? GameBalance.wavePreview(
             wave: wave,
             waveNumber: waveNumber,
-            waveTotal: stage.waves.length,
+            missionWaveTotal: missionWaveTotal,
             unlockedTowerTypes: unlockedTypes,
             effectiveClearBonus: _effectiveClearBonus(wave.clearBonus),
+            enemyHealthMultiplier: enemyHealthMultiplier,
           )
         : null;
 
@@ -143,7 +161,8 @@ class GameSession {
       baseHealth: _baseHealth,
       startingBaseHealth: startingBaseHealth,
       waveNumber: waveNumber,
-      waveTotal: stage.waves.length,
+      missionWaveTotal: missionWaveTotal,
+      wavesCleared: clearedWaveCount,
       stageId: stage.id,
       stageName: stage.name,
       stageLabel: stage.mapLabel,
@@ -321,7 +340,9 @@ class GameSession {
   }
 
   bool startWave() {
-    if (!_canMutateBuild || _waveIndex >= stage.waves.length) {
+    final scriptExhausted =
+        mode == RunMode.mission && _waveIndex >= stage.waves.length;
+    if (!_canMutateBuild || scriptExhausted) {
       return false;
     }
     _phase = GamePhase.wave;
@@ -337,7 +358,7 @@ class GameSession {
     final clearBonus = _effectiveClearBonus(completedWave?.clearBonus ?? 0);
     _waveIndex += 1;
     _gold += clearBonus;
-    if (_waveIndex >= stage.waves.length) {
+    if (mode == RunMode.mission && _waveIndex >= stage.waves.length) {
       _phase = GamePhase.won;
       return;
     }
@@ -409,7 +430,7 @@ class GameSession {
   }
 
   int _effectiveClearBonus(int baseClearBonus) {
-    if (_waveIndex >= stage.waves.length - 1) {
+    if (mode == RunMode.mission && _waveIndex >= stage.waves.length - 1) {
       return 0;
     }
     final campaignAdjusted =

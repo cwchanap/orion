@@ -51,7 +51,7 @@ Widget scannerHost(
 WavePreview representativePreview() {
   return WavePreview(
     waveNumber: 4,
-    waveTotal: 8,
+    missionWaveTotal: 8,
     groups: [
       WavePreviewGroup(
         enemyCount: 12,
@@ -647,7 +647,7 @@ void main() {
     final handle = tester.ensureSemantics();
     try {
       await tester.pumpWidget(
-        scannerHost(commandDeckPreview(waveNumber: 3, waveTotal: 8)),
+        scannerHost(commandDeckPreview(waveNumber: 3, missionWaveTotal: 8)),
       );
       expect(
         find.bySemanticsLabel(

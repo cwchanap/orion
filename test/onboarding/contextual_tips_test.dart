@@ -8,7 +8,7 @@ WavePreviewGroup _group(String label, {int count = 8}) =>
 WavePreview _preview({int waveNumber = 7, List<WavePreviewGroup>? groups}) {
   return WavePreview(
     waveNumber: waveNumber,
-    waveTotal: 8,
+    missionWaveTotal: 8,
     groups: groups ?? [_group('Armored Drones'), _group('Regen Heavy Drones')],
     traits: const {},
     clearBonus: 95,
@@ -49,7 +49,8 @@ GameSnapshot _snapshot({
     baseHealth: 20,
     startingBaseHealth: 20,
     waveNumber: waveNumber,
-    waveTotal: 8,
+    missionWaveTotal: 8,
+    wavesCleared: 0,
     stageId: 'nebula-relay',
     stageName: 'Nebula Relay',
     stageLabel: 'NR',
