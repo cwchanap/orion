@@ -65,7 +65,7 @@
 
 1. Add `enum RunMode { mission, endless }` next to `GamePhase`.
 2. Tests first in `game_session_test.dart` using an existing small fixture stage: endless `activeWave` wraps; finishing every scripted wave leaves `GamePhase.build` (not won) and `startWave` still succeeds; boss/final scripted wave pays its scripted clear bonus in endless; drafts open after waves 2, 4, 6 and not after 10, 12, 14; `enemyHealthMultiplier` is 1 in loop 0 and 1.6 in loop 1; snapshot `waveNumber` keeps counting past the script, `waveTotal == null`, `isEndless == true`, preview `enemyHealthMultiplier` matches; `restart()` keeps endless; base health 0 still loses. Mission tests unchanged.
-3. Make `GameSnapshot.waveTotal` and `WavePreview.waveTotal` `int?`; add `GameSnapshot.isEndless` and `WavePreview.enemyHealthMultiplier` (default 1).
+3. Make `GameSnapshot.waveTotal` and `WavePreview.waveTotal` `int?`; add `GameSnapshot.isEndless` and `WavePreview.enemyHealthMultiplier` (default 1). **Also update `GameBalance.wavePreview` to take nullable `waveTotal` plus optional `enemyHealthMultiplier` and forward both**; otherwise session preview construction cannot compile.
 4. Implement the `GameSession` changes from the design (`mode` on `initial`, `activeWave`, `startWave`, `finishActiveWave`, `_effectiveClearBonus`, `enemyHealthMultiplier`, `snapshot`).
 5. Fix the compile errors from the nullable `waveTotal` with mission-equivalent output for now (endless copy lands in Task 6). Run `flutter test test/game`. Commit.
 
@@ -84,21 +84,28 @@
 
 1. **Briefing.** Widget tests first in `stage_briefing_sheet_test.dart`: uncleared stage has no Endless action or best line; cleared stage shows "No endless run yet" or "Endless best: 17 waves" and an Endless action that pops `RunMode.endless`; Start/Replay pops `RunMode.mission`. Implement with `int? endlessBest` and a second `_BriefingLaunchAction` (`ENDLESS` kicker, `Icons.all_inclusive_rounded`).
 2. **HUD/dock/scanner.** Widget tests first: endless snapshots show "Wave 12" without a total in the HUD readout, HUD semantics, dock tooltip/pill, and scanner; scanner shows "Enemies +60% health" only when the multiplier is above 1. Implement with plain ASCII copy.
-3. **Report.** Tests first in `mission_report_content_test.dart` and `mission_report_panel_test.dart` for `projectEndlessReport` copy (first run, new best, retained best) and the "ENDLESS RUN OVER" header and WAVES stat. Implement.
+3. **Report.** Tests first in `mission_report_content_test.dart` and `mission_report_panel_test.dart` for `projectEndlessReport` copy (first run, new best, retained best, and defeat on wave 1 showing **0 waves cleared**) and the "ENDLESS RUN OVER" header and WAVES stat. Use `max(0, snapshot.waveNumber - 1)` as completed waves; a loss during wave 9 is **8**, not 9. Implement.
 4. Run `flutter test test/widget`. Commit.
 
 ## Task 7 — Page wiring
 
 1. Integration-style tests first in `test/widget_test.dart` (follow the existing Alpha save/replay helpers): after an Alpha clear, the briefing offers Endless; launching it shows endless HUD copy; clearing a wave saves `endlessBest` for Alpha (check the in-memory store); a second, lower run does not overwrite it; a defeat shows the endless report and Replay starts a new endless run; the first-mission guide never appears in endless; Reset Campaign clears the best.
-2. In `OrionGamePage`: `_showStageBriefing` reads the `RunMode?` result and passes `endlessBest: _committedProgress.endlessBestFor(stage.id)`; `_startStage(stage, mode)` stores the mode and the committed best as `_endlessPriorBest`, and passes `mode` plus `onEndlessWaveCleared: _saveEndlessBest` to the game; `_saveEndlessBest` follows the mission-result `_persistSave` shape; the lost branch picks `projectEndlessReport` when `snapshot.isEndless`; `_restartFromMissionReport` recaptures `_endlessPriorBest`; `guideEligible` adds `!snapshot.isEndless`.
+2. In `OrionGamePage`: `_showStageBriefing` reads the `RunMode?` result and passes `endlessBest: _committedProgress.endlessBestFor(stage.id)`; `_startStage(stage, mode)` **rejects Endless unless `_committedProgress.isCleared(stage.id)`**; it stores the mode and the committed best as `_endlessPriorBest`, and passes `mode` plus `onEndlessWaveCleared: _saveEndlessBest` to the game. `_saveEndlessBest` uses the existing `_persistSave` queue, compares against the committed best, and builds the payload from `committed.progress.recordEndlessBest(...)`; the lost branch picks `projectEndlessReport` when `snapshot.isEndless`; `_restartFromMissionReport` recaptures `_endlessPriorBest`; `guideEligible` adds `!snapshot.isEndless`. While an endless best write remains pending, disable Replay/Return on the defeat report until it settles, so the next run cannot capture a stale prior best.
 3. Run `flutter test`. Commit.
 
 ## Task 8 — Final checks
 
 - `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, `flutter test --coverage` (Codecov gate is 90%), `flutter build web --release`.
+- Recheck `main` before implementation, and reconcile UI changes from [HPA-699 / PR #49](https://github.com/cwchanap/orion/pull/49) within this same PR if that restyle merges first. Avoid importing the redesign or creating a separate integration PR.
 - Push, confirm all CI checks are green, then ask the owner to mark the PR ready.
 - Record in the PR body that tuning (×1.6 per loop) is untested by a human; a playtest note goes on HPA-715 if the owner plays it.
 
 ## Not in this PR
 
 Art, SFX, music, leaderboards, cloud sync, later-loop drafts, world-map badges, difficulty presets, speed/gold scaling, campaign rebalance.
+
+## Review notes (2026-11-06)
+
+- Rechecked Linear HPA-715's latest description and the current `main`: the existing eight tasks remain aligned. The earlier design-only PR #46 was closed unmerged; reuse this branch and PR instead of creating a duplicate.
+- Additional regression assertions: no Endless launch for an unlocked-but-uncleared stage; no campaign result, medal, tech points, or blueprint on an Endless boss clear; boss returns on wave 8/16; scanner and semantics show no denominator; score on a loss in wave 1 is zero; pending best saves do not produce a stale comparison on Replay.
+- When editing HUD/briefing/report code, preserve the live `main` look and feel rather than adding another design system. This remains **one feature PR**, with art and sound work out of scope.
