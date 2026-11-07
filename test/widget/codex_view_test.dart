@@ -519,6 +519,13 @@ void main() {
         .getSize(find.byKey(const PageStorageKey<int>(0)))
         .width;
     expect(messageWidth, lessThan(listWidth / 2));
+    expect(
+      tester.getCenter(find.text('No matches in Towers')).dx,
+      closeTo(
+        tester.getCenter(find.byKey(const PageStorageKey<int>(0))).dx,
+        0.1,
+      ),
+    );
   });
 
   testWidgets('clear action restores the full list', (tester) async {
@@ -625,6 +632,33 @@ void main() {
       await tester.pumpAndSettle();
       expect(queryText(tester), '');
       expect(sectionController(tester, 1).offset, enemiesOffset);
+    },
+  );
+
+  testWidgets(
+    'switching tabs with an active query resets the searched section scroll offset on return',
+    (tester) async {
+      await pumpCodex(tester, size: const Size(800, 600));
+
+      // Search and scroll within the filtered results.
+      await tester.enterText(searchField, 'armor');
+      await tester.pump();
+      await tester.drag(
+        find.byKey(const PageStorageKey<int>(0)),
+        const Offset(0, -300),
+      );
+      await tester.pumpAndSettle();
+      expect(sectionController(tester, 0).offset, greaterThan(0));
+
+      // Switching away clears the query.
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+      expect(queryText(tester), '');
+
+      // Returning to Towers shows the full list reset to the top.
+      await tester.tap(find.text('Towers'));
+      await tester.pumpAndSettle();
+      expect(sectionController(tester, 0).offset, 0);
     },
   );
 
