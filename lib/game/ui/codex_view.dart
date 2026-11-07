@@ -52,9 +52,16 @@ class _CodexViewState extends State<CodexView> {
 
   // Only a different section clears the search: re-tapping the selected
   // chip keeps the query (and focus) so accidental taps lose nothing.
+  // When leaving a searched section, reset its scroll offset so returning
+  // to it starts at the top of the full list; unfiltered sections preserve
+  // their scroll positions.
   void _selectSection(int index) {
     if (_section == index) return;
     FocusScope.of(context).unfocus();
+    if (_searchController.text.isNotEmpty) {
+      final controller = _scrollControllers[_section];
+      if (controller.hasClients) controller.jumpTo(0);
+    }
     setState(() {
       _section = index;
       _searchController.clear();
