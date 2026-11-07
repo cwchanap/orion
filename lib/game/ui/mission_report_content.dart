@@ -130,7 +130,7 @@ MissionReportContent projectEndlessReport({
   required MissionSaveState saveState,
 }) {
   final wavesCleared = snapshot.wavesCleared;
-  final improved = priorBest == null || wavesCleared > priorBest;
+  final improved = wavesCleared > (priorBest ?? 0);
   return MissionReportContent(
     snapshot: snapshot,
     stageId: snapshot.stageId,
@@ -138,7 +138,9 @@ MissionReportContent projectEndlessReport({
     didWin: false,
     outcomeText: 'Survived $wavesCleared waves',
     comparisonText: priorBest == null
-        ? 'New best!'
+        ? improved
+              ? 'New best!'
+              : 'No endless best yet'
         : improved
         ? 'New best! Previous: $priorBest waves'
         : 'Best: $priorBest waves',

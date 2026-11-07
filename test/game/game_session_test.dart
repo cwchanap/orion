@@ -2053,35 +2053,73 @@ void main() {
     });
 
     test('wraps the wave script and never wins', () {
-      final session = GameSession.initial(
-        stage: stageWithWaveCount(8),
-        mode: RunMode.endless,
+      final waves = <WaveDefinition>[
+        for (var index = 0; index < 7; index += 1)
+          WaveDefinition(groups: const [], clearBonus: 10 + index),
+        const WaveDefinition(
+          groups: [
+            WaveGroup(enemyCount: 1, enemyStats: GameBalance.relayBreaker),
+          ],
+          clearBonus: 50,
+        ),
+      ];
+      final stage = StageDefinition(
+        id: 'endless-distinct-stage',
+        name: 'Endless Distinct Stage',
+        mapLabel: 'Distinct',
+        description: 'Distinct script with a boss in the final slot',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: waves,
+        mapColumn: 0,
+        mapRow: 0,
       );
+      final session = GameSession.initial(stage: stage, mode: RunMode.endless);
 
       expect(session.mode, RunMode.endless);
-      for (var index = 0; index < session.stage.waves.length; index += 1) {
+      for (var index = 0; index < waves.length * 2; index += 1) {
+        final scriptIndex = index % waves.length;
         expect(
-          identical(session.activeWave, session.stage.waves[index]),
+          identical(session.activeWave, waves[scriptIndex]),
           isTrue,
-          reason: 'waveIndex $index should read script[$index]',
+          reason: 'waveIndex $index should read script[$scriptIndex]',
         );
+        final preview = session.snapshot().nextWavePreview;
+        expect(
+          preview?.clearBonus,
+          waves[scriptIndex].clearBonus,
+          reason: 'waveIndex $index preview should price script[$scriptIndex]',
+        );
+        if (scriptIndex == waves.length - 1) {
+          expect(
+            session.activeWave!.groups.single.enemyStats,
+            isA<BossDefinition>(),
+            reason: 'wave ${index + 1} should be the scripted boss',
+          );
+          expect(preview?.groups.single.label, 'Relay Breaker');
+        }
         completeWave(session);
         selectPendingModuleIfNeeded(session);
       }
 
       expect(session.phase, GamePhase.build);
-      expect(session.waveIndex, session.stage.waves.length);
+      expect(session.waveIndex, waves.length * 2);
       expect(
-        identical(session.activeWave, session.stage.waves.first),
+        identical(session.activeWave, waves.first),
         isTrue,
-        reason: 'waveIndex 8 should wrap to script[0]',
+        reason: 'waveIndex 16 should wrap to script[0]',
       );
 
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
+      selectPendingModuleIfNeeded(session);
 
       expect(session.phase, GamePhase.build);
-      expect(session.waveIndex, session.stage.waves.length + 1);
+      expect(session.waveIndex, waves.length * 2 + 1);
+      expect(
+        identical(session.activeWave, waves[1]),
+        isTrue,
+        reason: 'waveIndex 17 should wrap to script[1]',
+      );
     });
 
     test('pays the scripted boss-wave clear bonus instead of zeroing it', () {

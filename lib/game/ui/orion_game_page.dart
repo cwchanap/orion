@@ -1470,6 +1470,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
       onCommitted: (payload) {
         _progress = payload.progress;
         if (_pendingSaves == 1) {
+          if (_mapFeedback == _persistenceFailureMessage) {
+            _mapFeedback = null;
+          }
           _setMissionSaveState(MissionSaveState.saved);
         }
       },

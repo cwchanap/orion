@@ -2847,6 +2847,45 @@ void main() {
   );
 
   testWidgets(
+    'Endless first-attempt zero-wave loss reports no record and briefing agrees',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await tester.pumpAndSettle();
+
+      await publishLoss(tester, game!);
+      await tester.pump();
+      expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
+      expect(find.text('No endless best yet'), findsOneWidget);
+      expect(find.textContaining('New best'), findsNothing);
+      expect(store.saveCalls, 0);
+      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      expect(reportActionOnPressed(tester, 'World Map'), isNotNull);
+
+      await tester.tap(find.text('World Map'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+
+      await tester.ensureVisible(find.text('Alpha'));
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      expect(find.text('No endless run yet'), findsOneWidget);
+      expect(find.byTooltip('Endless'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
     'Endless save failure during an active run surfaces feedback and recovers',
     (tester) async {
       final store = _TestCampaignProgressStore(
@@ -2888,6 +2927,11 @@ void main() {
       await tester.pump();
       expect(find.text('Saved.'), findsOneWidget);
       expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+
+      await tester.tap(find.text('World Map'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('Could not save campaign progress.'), findsNothing);
     },
   );
 
