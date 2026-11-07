@@ -2660,6 +2660,56 @@ void main() {
     },
   );
 
+  testWidgets(
+    'Endless Retry Save queues once while a retry is already in flight',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+        failOnSaveIndices: {0, 2},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await tester.pumpAndSettle();
+
+      await publishEndlessWaveClear(tester, game!, 4);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await publishLoss(tester, game!);
+      await tester.pump();
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Retry Save'), findsOneWidget);
+
+      // Two activations before the retry's rebuild: the second must not
+      // queue a duplicate of the same score. Without a guard it sits in
+      // the serialized queue behind the first retry, then its configured
+      // failure flips the committed record's report back to failed.
+      await tester.tap(find.byTooltip('Retry Save'));
+      await tester.tap(find.byTooltip('Retry Save'));
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+
+      store.saveCompletions.last.complete();
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 2);
+
+      for (final pending in store.saveCompletions) {
+        if (!pending.isCompleted) pending.complete();
+      }
+      await tester.pumpAndSettle();
+      expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+      expect(find.text('Saved.'), findsOneWidget);
+      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+    },
+  );
+
   testWidgets('Endless failed final write still allows an unsaved exit', (
     tester,
   ) async {
