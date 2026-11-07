@@ -36,7 +36,7 @@ Existing code already gives us:
 
 A loop boundary is a deliberate breather (boss → wave 1 at the next multiplier). No smoothing within a loop: the script already ramps.
 
-**Waves cleared** is the score. On defeat during wave `n` (1-based), the run cleared `n - 1` waves.
+**Waves cleared** is the score. On defeat during wave `n` (1-based), the run cleared `n - 1` waves. The loss snapshot still identifies active wave `n`, so use `max(0, snapshot.waveNumber - 1)` in both the endless report copy and its WAVES stat; never display the attempted wave as cleared.
 
 ## Pure rules
 
@@ -73,6 +73,8 @@ Add `enum RunMode { mission, endless }` beside `GamePhase` in `game_models.dart`
 - `WavePreview.waveTotal` becomes `int?`; `WavePreview` gains `double enemyHealthMultiplier` (default 1), passed by the session.
 
 Making `waveTotal` nullable is the deliberate breaking change: the compiler flags every "of 8" site, so none is missed.
+
+`GameBalance.wavePreview(...)` must also accept nullable `waveTotal` and forward `enemyHealthMultiplier` into `WavePreview`; changing only the `WavePreview` field types is insufficient because this factory is the session's preview construction path.
 
 ## Enemy scaling seam
 
@@ -132,3 +134,11 @@ Mission-mode expectations in existing tests should not change beyond the `waveTo
 ## Out of scope
 
 New art, SFX, or music; leaderboards or cloud sync; extra module drafts in later loops; world-map badges for endless bests; difficulty presets; speed or gold scaling; a campaign rebalance. Revisit tuning after a playtest rather than adding knobs now.
+
+## Implementation coordination (2026-11-06 revalidation)
+
+- The current `main` still has no `RunMode`, `EndlessRules`, or endless save field. This document is the implementation specification; no game code is part of this docs-only draft.
+- [HPA-699 / PR #49](https://github.com/cwchanap/orion/pull/49) is a separate UI-only overhaul touching briefing, HUD, scanner, and report. Keep Endless behavior isolated from theme/style decisions. Whichever implementation merges second adapts to the current widgets within its **existing single PR**; do not duplicate either ticket or create an integration ticket merely for cosmetic conflicts.
+- An Endless launch must be authorized from **committed** stage-clear state both when rendering the briefing action and at `_startStage(stage, mode)` (not merely from the current stage being unlocked).
+- Save only **strictly higher** wave counts. The existing `_persistSave` queue must build each new record from `committed.progress.recordEndlessBest(...)` so back-to-back wave clears cannot overwrite a higher record. If a record write is still pending on defeat, keep report Replay/Return disabled until that write settles, then compare against committed data; reuse the existing error toast for failures, without a new persistence service.
+- `OrionReadout.denominator` should receive `null` when total waves are absent, not the string `'null'`. The collapsed scanner's semantic text also needs the same omission, and the scaling callout is based on the exact next-wave multiplier.
