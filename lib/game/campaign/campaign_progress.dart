@@ -129,7 +129,11 @@ class CampaignProgress {
         const <String, StageResult>{},
     Map<String, int> endlessBestByStageId = const <String, int>{},
   }) : _bestResultsByStageId = Map.unmodifiable(bestResultsByStageId),
-       _endlessBestByStageId = Map.unmodifiable(endlessBestByStageId);
+       _endlessBestByStageId = Map.unmodifiable(
+         Map.fromEntries(
+           endlessBestByStageId.entries.where((entry) => entry.value > 0),
+         ),
+       );
 
   final Map<String, StageResult> _bestResultsByStageId;
   final Map<String, int> _endlessBestByStageId;
