@@ -71,7 +71,7 @@ class MissionReportPanel extends StatelessWidget {
   }
 
   List<_MissionAction> _actions() {
-    if (!content.didWin) {
+    if (!content.didWin && content.saveState == null) {
       return [
         _MissionAction(
           label: 'Retry',
@@ -184,11 +184,19 @@ class _ReportBody extends StatelessWidget {
       children: [
         const SizedBox(height: 32),
         Semantics(
-          label: content.didWin ? 'Victory' : 'Mission Failed',
+          label: content.didWin
+              ? 'Victory'
+              : snapshot.isEndless
+              ? 'Endless Run Over'
+              : 'Mission Failed',
           excludeSemantics: true,
           child: Center(
             child: OrionText.micro(
-              content.didWin ? 'SECTOR SECURED' : 'MISSION FAILED',
+              content.didWin
+                  ? 'SECTOR SECURED'
+                  : snapshot.isEndless
+                  ? 'ENDLESS RUN OVER'
+                  : 'MISSION FAILED',
               size: 11,
               color: accent,
             ),
@@ -213,8 +221,11 @@ class _ReportBody extends StatelessWidget {
                 Transform.scale(scale: scale, child: child),
             child: Semantics(
               label: result == null
-                  ? 'Mission failed'
+                  ? snapshot.isEndless
+                        ? 'Endless run over'
+                        : 'Mission failed'
                   : '${result.medal.label} medal',
+              excludeSemantics: true,
               child: ClipPath(
                 clipper: _MedalClipper(),
                 child: Container(
@@ -293,17 +304,19 @@ class _ReportBody extends StatelessWidget {
                 icon: Icons.hexagon,
               ),
             ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ReportStat(
-                label: content.saveState == MissionSaveState.saved
-                    ? 'R&D'
-                    : 'PENDING',
-                value: '+${content.medalPoints}',
-                color: uiTheme.systemViolet,
-                icon: Icons.pentagon,
+            if (!snapshot.isEndless) ...[
+              const SizedBox(width: 8),
+              Expanded(
+                child: _ReportStat(
+                  label: content.saveState == MissionSaveState.saved
+                      ? 'R&D'
+                      : 'PENDING',
+                  value: '+${content.medalPoints}',
+                  color: uiTheme.systemViolet,
+                  icon: Icons.pentagon,
+                ),
               ),
-            ),
+            ],
           ],
         ),
         const SizedBox(height: 18),
@@ -328,7 +341,7 @@ class _ReportBody extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        if (content.didWin && content.saveText != null)
+        if (content.saveText != null)
           _SaveStateRow(state: content.saveState, text: content.saveText!),
         if (content.comparisonText != null)
           Padding(

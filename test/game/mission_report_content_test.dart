@@ -9,6 +9,8 @@ GameSnapshot terminalSnapshot({
   required GamePhase phase,
   int baseHealth = 14,
   int waveNumber = 8,
+  int? missionWaveTotal = 8,
+  int wavesCleared = 0,
   List<RunModuleId> modules = const [],
 }) {
   return commandDeckSnapshot(
@@ -17,6 +19,8 @@ GameSnapshot terminalSnapshot({
     baseHealth: baseHealth,
     startingBaseHealth: 20,
     waveNumber: waveNumber,
+    missionWaveTotal: missionWaveTotal,
+    wavesCleared: wavesCleared,
     stageId: 'outpost-alpha',
     stageName: 'Outpost Alpha',
     stageLabel: 'Alpha',
@@ -164,5 +168,125 @@ void main() {
     );
 
     expect(content.reward, same(reward));
+  });
+
+  group('projectEndlessReport', () {
+    GameSnapshot endlessDefeat({int waveNumber = 6, int wavesCleared = 5}) {
+      return terminalSnapshot(
+        phase: GamePhase.lost,
+        baseHealth: 0,
+        waveNumber: waveNumber,
+        missionWaveTotal: null,
+        wavesCleared: wavesCleared,
+      );
+    }
+
+    test('first run projects a new best with saved copy', () {
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(),
+        priorBest: null,
+        saveState: MissionSaveState.saved,
+      );
+
+      expect(content.didWin, isFalse);
+      expect(content.snapshot.isEndless, isTrue);
+      expect(content.outcomeText, 'Survived 5 waves');
+      expect(content.comparisonText, 'New best!');
+      expect(content.result, isNull);
+      expect(content.medalPoints, 0);
+      expect(content.reward, isNull);
+      expect(content.saveState, MissionSaveState.saved);
+      expect(content.saveText, 'Saved.');
+      expect(
+        content.nextOpportunityText,
+        'Replay for a better result or continue on the World Map.',
+      );
+    });
+
+    test('new best reports the previous record', () {
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(waveNumber: 18, wavesCleared: 17),
+        priorBest: 12,
+        saveState: MissionSaveState.saved,
+      );
+
+      expect(content.outcomeText, 'Survived 17 waves');
+      expect(content.comparisonText, 'New best! Previous: 12 waves');
+      expect(content.saveText, 'Saved.');
+    });
+
+    test('retained best reports the standing record', () {
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(waveNumber: 13, wavesCleared: 12),
+        priorBest: 20,
+        saveState: MissionSaveState.saved,
+      );
+
+      expect(content.outcomeText, 'Survived 12 waves');
+      expect(content.comparisonText, 'Best: 20 waves');
+      expect(content.saveText, 'Best result already saved.');
+    });
+
+    test('saving reuses the mission pending copy', () {
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(),
+        priorBest: null,
+        saveState: MissionSaveState.saving,
+      );
+
+      expect(content.saveText, 'Saving result…');
+      expect(
+        content.nextOpportunityText,
+        'Saving must finish before you replay or leave.',
+      );
+    });
+
+    test('failed reuses the mission retry-failure copy', () {
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(),
+        priorBest: 4,
+        saveState: MissionSaveState.failed,
+      );
+
+      expect(content.saveText, 'Save failed — progress unchanged.');
+      expect(
+        content.nextOpportunityText,
+        'Retry saving, or return without keeping this result.',
+      );
+    });
+
+    test('a wave-one defeat survived zero waves', () {
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(waveNumber: 1, wavesCleared: 0),
+        priorBest: null,
+        saveState: MissionSaveState.saved,
+      );
+
+      expect(content.outcomeText, 'Survived 0 waves');
+    });
+
+    test('module ids pass through with the shared empty-state copy', () {
+      final withModules = projectEndlessReport(
+        snapshot: terminalSnapshot(
+          phase: GamePhase.lost,
+          baseHealth: 0,
+          missionWaveTotal: null,
+          wavesCleared: 3,
+          modules: const [RunModuleId.heavyCaliber],
+        ),
+        priorBest: null,
+        saveState: MissionSaveState.saved,
+      );
+      final empty = projectEndlessReport(
+        snapshot: endlessDefeat(),
+        priorBest: null,
+        saveState: MissionSaveState.saved,
+      );
+
+      expect(withModules.moduleIds, [RunModuleId.heavyCaliber]);
+      expect(withModules.emptyModulesText, isNull);
+      expect(empty.moduleIds, isEmpty);
+      expect(empty.emptyModulesText, 'No Salvage Modules acquired');
+    });
   });
 }

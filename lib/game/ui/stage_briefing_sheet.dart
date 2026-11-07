@@ -28,11 +28,13 @@ class StageBriefingSheet extends StatelessWidget {
     required this.result,
     required this.startingGold,
     required this.startingBaseHealth,
+    this.endlessBest,
     this.modifierTip,
   });
 
   final StageDefinition stage;
   final StageResult? result;
+  final int? endlessBest;
 
   /// Effective start credits for the committed run (campaign-adjusted gold).
   final int startingGold;
@@ -50,7 +52,6 @@ class StageBriefingSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final actionLabel = result == null ? 'Start Mission' : 'Replay Mission';
     final isOptional = !stage.isMainPath;
     final accent = isOptional ? uiTheme.systemViolet : uiTheme.systemCyan;
     final metadata = stage.modifiers.isEmpty
@@ -261,6 +262,15 @@ class StageBriefingSheet extends StatelessWidget {
                                       '${result!.bestBaseHealth} base health',
                                 ),
                                 const SizedBox(height: 7),
+                                _BriefingIntelRow(
+                                  icon: Icons.all_inclusive_rounded,
+                                  color: uiTheme.systemViolet,
+                                  title: 'ENDLESS',
+                                  detail: endlessBest == null
+                                      ? 'No endless run yet'
+                                      : 'Endless best: $endlessBest waves',
+                                ),
+                                const SizedBox(height: 7),
                               ],
                               // A stage's blueprint module is knowable before
                               // deploying: locked stages tease the module name
@@ -297,14 +307,40 @@ class StageBriefingSheet extends StatelessWidget {
                           MediaQuery.viewInsetsOf(context).bottom,
                         ),
                   ),
-                  child: _BriefingLaunchAction(
-                    label: actionLabel,
-                    accent: accent,
-                    icon: result == null
-                        ? Icons.play_arrow_rounded
-                        : Icons.replay_rounded,
-                    onPressed: () => Navigator.of(context).pop(true),
-                  ),
+                  child: result == null
+                      ? _BriefingLaunchAction(
+                          label: 'Start Mission',
+                          kicker: 'DEPLOY',
+                          accent: accent,
+                          icon: Icons.play_arrow_rounded,
+                          onPressed: () =>
+                              Navigator.of(context).pop(RunMode.mission),
+                        )
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: _BriefingLaunchAction(
+                                label: 'Replay Mission',
+                                kicker: 'REPLAY',
+                                accent: accent,
+                                icon: Icons.replay_rounded,
+                                onPressed: () =>
+                                    Navigator.of(context).pop(RunMode.mission),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: _BriefingLaunchAction(
+                                label: 'Endless',
+                                kicker: 'ENDLESS',
+                                accent: accent,
+                                icon: Icons.all_inclusive_rounded,
+                                onPressed: () =>
+                                    Navigator.of(context).pop(RunMode.endless),
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ],
             ),
@@ -317,7 +353,7 @@ class StageBriefingSheet extends StatelessWidget {
                 radius: 14,
                 child: IconButton(
                   tooltip: 'Dismiss',
-                  onPressed: () => Navigator.of(context).pop(false),
+                  onPressed: () => Navigator.of(context).pop(),
                   icon: Icon(
                     Icons.chevron_left_rounded,
                     color: uiTheme.systemCyan,
@@ -555,12 +591,14 @@ class _StageThreat {
 class _BriefingLaunchAction extends StatelessWidget {
   const _BriefingLaunchAction({
     required this.label,
+    required this.kicker,
     required this.accent,
     required this.icon,
     required this.onPressed,
   });
 
   final String label;
+  final String kicker;
   final Color accent;
   final IconData icon;
   final VoidCallback onPressed;
@@ -612,7 +650,7 @@ class _BriefingLaunchAction extends StatelessWidget {
                         // which microLabel's muted-only rule cannot express.
                         child: ExcludeSemantics(
                           child: Text(
-                            label == 'Start Mission' ? 'DEPLOY' : 'REPLAY',
+                            kicker,
                             style: OrionTypography.microLabel(
                               color: uiTheme.voidBlack,
                               size: 13,

@@ -19,7 +19,7 @@ import '../support/real_fonts.dart';
 const _productViewport = Size(390, 844);
 
 class _PopRecorder {
-  bool? popped;
+  RunMode? popped;
 }
 
 /// Pumps a host that opens [stage]'s briefing through the same modal policy
@@ -29,6 +29,7 @@ Future<_PopRecorder> _pumpBriefing(
   WidgetTester tester, {
   required StageDefinition stage,
   StageResult? result,
+  int? endlessBest,
   int startingGold = GameBalance.startingGold,
   int startingBaseHealth = GameBalance.initialBaseHealth,
   Size viewport = _productViewport,
@@ -54,7 +55,7 @@ Future<_PopRecorder> _pumpBriefing(
           builder: (context) => Center(
             child: FilledButton(
               onPressed: () {
-                showModalBottomSheet<bool>(
+                showModalBottomSheet<RunMode>(
                   context: context,
                   isScrollControlled: true,
                   useSafeArea: true,
@@ -63,6 +64,7 @@ Future<_PopRecorder> _pumpBriefing(
                   builder: (_) => StageBriefingSheet(
                     stage: stage,
                     result: result,
+                    endlessBest: endlessBest,
                     startingGold: startingGold,
                     startingBaseHealth: startingBaseHealth,
                   ),
@@ -407,18 +409,23 @@ void main() {
     expect(find.textContaining('Tower Cap'), findsNothing);
   });
 
-  testWidgets('start mission is the single primary action and pops true', (
-    tester,
-  ) async {
-    final recorder = await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+  testWidgets(
+    'start mission is the single primary action and pops RunMode.mission',
+    (tester) async {
+      final recorder = await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+      );
 
-    expect(find.byTooltip('Start Mission'), findsOneWidget);
-    expect(find.byTooltip('Replay Mission'), findsNothing);
+      expect(find.byTooltip('Start Mission'), findsOneWidget);
+      expect(find.byTooltip('Replay Mission'), findsNothing);
+      expect(find.byTooltip('Endless'), findsNothing);
 
-    await tester.tap(find.byTooltip('Start Mission'));
-    await tester.pumpAndSettle();
-    expect(recorder.popped, isTrue);
-  });
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pumpAndSettle();
+      expect(recorder.popped, RunMode.mission);
+    },
+  );
 
   testWidgets('replay mission when a committed result exists', (tester) async {
     final recorder = await _pumpBriefing(
@@ -432,15 +439,18 @@ void main() {
 
     await tester.tap(find.byTooltip('Replay Mission'));
     await tester.pumpAndSettle();
-    expect(recorder.popped, isTrue);
+    expect(recorder.popped, RunMode.mission);
   });
 
-  testWidgets('dismiss path never pops true', (tester) async {
+  testWidgets('dismiss pops null without a cast error', (tester) async {
     final recorder = await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
 
     await tester.tap(find.byTooltip('Dismiss'));
     await tester.pumpAndSettle();
-    expect(recorder.popped, isNot(true));
+    // The modal is typed RunMode: a bool pop would throw a runtime cast
+    // error and leave the recorder unset.
+    expect(recorder.popped, isNull);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(
@@ -484,7 +494,118 @@ void main() {
     expect(find.byTooltip('Start Mission'), findsOneWidget);
     await tester.tap(find.byTooltip('Start Mission'));
     await tester.pumpAndSettle();
-    expect(recorder.popped, isTrue);
+    expect(recorder.popped, RunMode.mission);
+  });
+
+  group('endless launch action', () {
+    testWidgets('uncleared stage offers no Endless action and no best line', (
+      tester,
+    ) async {
+      await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+
+      expect(find.byTooltip('Endless'), findsNothing);
+      expect(find.text('ENDLESS'), findsNothing);
+      expect(find.text('No endless run yet'), findsNothing);
+      expect(find.textContaining('Endless best:'), findsNothing);
+    });
+
+    testWidgets(
+      'cleared stage without a run shows "No endless run yet" and Endless pops RunMode.endless',
+      (tester) async {
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
+        );
+
+        expect(find.text('No endless run yet'), findsOneWidget);
+        expect(find.byTooltip('Endless'), findsOneWidget);
+
+        await tester.tap(find.byTooltip('Endless'));
+        await tester.pumpAndSettle();
+        expect(recorder.popped, RunMode.endless);
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    testWidgets(
+      'cleared stage shows the saved best and Endless pops RunMode.endless',
+      (tester) async {
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+          endlessBest: 17,
+        );
+
+        expect(find.text('Endless best: 17 waves'), findsOneWidget);
+        expect(find.text('No endless run yet'), findsNothing);
+
+        await tester.tap(find.byTooltip('Endless'));
+        await tester.pumpAndSettle();
+        expect(recorder.popped, RunMode.endless);
+      },
+    );
+
+    testWidgets('launch kickers render DEPLOY, REPLAY, and ENDLESS', (
+      tester,
+    ) async {
+      await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+      expect(
+        find.descendant(
+          of: find.byTooltip('Start Mission'),
+          matching: find.text('DEPLOY'),
+        ),
+        findsOneWidget,
+      );
+
+      await _dismissBriefing(tester);
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
+      );
+      expect(
+        find.descendant(
+          of: find.byTooltip('Replay Mission'),
+          matching: find.text('REPLAY'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: find.byTooltip('Endless'),
+          matching: find.text('ENDLESS'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+      'cleared stage keeps both launch actions reachable at 360x640',
+      (tester) async {
+        const viewport = Size(360, 640);
+        await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 5),
+          endlessBest: 9,
+          viewport: viewport,
+        );
+
+        await _expectActionWithinViewport(
+          tester,
+          viewport,
+          actionTooltip: 'Replay Mission',
+        );
+        await _expectActionWithinViewport(
+          tester,
+          viewport,
+          actionTooltip: 'Endless',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('artboard 1b fact row', () {

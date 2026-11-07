@@ -48,7 +48,7 @@ class MissionStatusHud extends StatelessWidget {
     ).clamp(maxScaleFactor: 1.15);
     final missionWaveTotal = snapshot.missionWaveTotal;
     final waveLabel = missionWaveTotal == null
-        ? 'Wave ${snapshot.waveNumber}'
+        ? 'Endless. Wave ${snapshot.waveNumber}'
         : 'Wave ${snapshot.waveNumber} of $missionWaveTotal';
 
     // Unboxed and spread, per artboard 1a: the status readouts float on the
