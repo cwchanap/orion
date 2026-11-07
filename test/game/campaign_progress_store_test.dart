@@ -456,6 +456,25 @@ void main() {
       expect(decoded.progress.endlessBestByStageId, isEmpty);
     });
 
+    test('encode writes only positive endless bests', () {
+      final encoded = CampaignProgressCodec.encode(
+        CampaignSave(
+          progress: CampaignProgress(
+            endlessBestByStageId: const {
+              'outpost-alpha': 5,
+              'nebula-relay': 0,
+              'salvage-rift': -3,
+            },
+          ),
+          techTree: CampaignTechTree(),
+        ),
+      );
+
+      final raw = jsonDecode(encoded) as Map<String, Object?>;
+
+      expect(raw['endlessBest'], {'outpost-alpha': 5});
+    });
+
     test('reset clears endless bests', () async {
       final store = InMemoryCampaignProgressStore(
         knownStages: OrionCampaign.stages,

@@ -405,6 +405,35 @@ void main() {
           throwsUnsupportedError,
         );
       });
+
+      test('drops non-positive constructor entries', () {
+        final progress = CampaignProgress(
+          endlessBestByStageId: const {
+            'stage-1': 9,
+            'stage-2': 0,
+            'stage-3': -2,
+          },
+        );
+
+        expect(progress.endlessBestByStageId, {'stage-1': 9});
+        expect(progress.endlessBestFor('stage-2'), isNull);
+        expect(progress.endlessBestFor('stage-3'), isNull);
+      });
+
+      test('recording after a dropped non-positive entry starts fresh', () {
+        final progress = CampaignProgress(
+          endlessBestByStageId: const {'stage-1': -2},
+        );
+
+        expect(
+          identical(progress.recordEndlessBest('stage-1', -1), progress),
+          isTrue,
+        );
+
+        final recorded = progress.recordEndlessBest('stage-1', 3);
+
+        expect(recorded.endlessBestFor('stage-1'), 3);
+      });
     });
 
     group('recommendedStage', () {
