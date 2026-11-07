@@ -269,7 +269,7 @@ class IdleCommandBar extends StatelessWidget {
     if (snapshot.phase == GamePhase.wave) {
       final missionWaveTotal = snapshot.missionWaveTotal;
       return missionWaveTotal == null
-          ? '${snapshot.waveNumber}'
+          ? 'Wave ${snapshot.waveNumber}'
           : '${snapshot.waveNumber}/$missionWaveTotal';
     }
     return 'Start Wave';
