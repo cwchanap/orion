@@ -277,7 +277,9 @@ class _ReportBody extends StatelessWidget {
             Expanded(
               child: _ReportStat(
                 label: 'WAVES',
-                value: '${snapshot.waveNumber}/${snapshot.waveTotal}',
+                value: snapshot.missionWaveTotal == null
+                    ? '${snapshot.wavesCleared}'
+                    : '${snapshot.waveNumber}/${snapshot.missionWaveTotal}',
                 color: uiTheme.textPrimary,
                 icon: Icons.radar,
               ),

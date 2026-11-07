@@ -138,12 +138,13 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
       0,
       (total, group) => total + group.enemyCount,
     );
+    final previewWaveTotal = widget.preview.missionWaveTotal;
+    final nextWaveLabel = previewWaveTotal == null
+        ? 'Next wave ${widget.preview.waveNumber}'
+        : 'Next wave ${widget.preview.waveNumber} of $previewWaveTotal';
     final unreadLabel = _hasUnreadPreview
-        ? 'New wave preview available. '
-              'Next wave ${widget.preview.waveNumber} of ${widget.preview.waveTotal}. '
-              '$totalEnemyCount enemies.'
-        : 'Next wave ${widget.preview.waveNumber} of ${widget.preview.waveTotal}. '
-              '$totalEnemyCount enemies.';
+        ? 'New wave preview available. $nextWaveLabel. $totalEnemyCount enemies.'
+        : '$nextWaveLabel. $totalEnemyCount enemies.';
 
     return Semantics(
       key: const ValueKey('next-wave-scanner-collapsed-semantics'),
@@ -265,6 +266,7 @@ class WaveScannerScene extends StatelessWidget {
       (n, g) => g.enemyCount > n ? g.enemyCount : n,
     );
     final bosses = preview.bossGroups;
+    final previewWaveTotal = preview.missionWaveTotal;
     final traits = {
       ...preview.traits,
       for (final group in preview.groups) ...group.traits,
@@ -321,13 +323,16 @@ class WaveScannerScene extends StatelessWidget {
                               size: 9,
                             ),
                             Semantics(
-                              label:
-                                  'Next wave ${preview.waveNumber}/${preview.waveTotal}',
+                              label: previewWaveTotal == null
+                                  ? 'Next wave ${preview.waveNumber}'
+                                  : 'Next wave ${preview.waveNumber}/$previewWaveTotal',
                               excludeSemantics: true,
                               child: OrionReadout(
                                 value: '${preview.waveNumber}'.padLeft(2, '0'),
                                 color: t.textPrimary,
-                                denominator: '${preview.waveTotal}',
+                                denominator: previewWaveTotal == null
+                                    ? null
+                                    : '$previewWaveTotal',
                                 size: 34,
                               ),
                             ),

@@ -130,7 +130,9 @@ MissionReportContent projectLossReport({required GameSnapshot snapshot}) {
     stageId: snapshot.stageId,
     stageName: snapshot.stageName,
     didWin: false,
-    outcomeText: 'Reached Wave ${snapshot.waveNumber}/${snapshot.waveTotal}',
+    outcomeText: snapshot.missionWaveTotal == null
+        ? 'Reached Wave ${snapshot.waveNumber}'
+        : 'Reached Wave ${snapshot.waveNumber}/${snapshot.missionWaveTotal}',
     moduleIds: snapshot.acquiredRunModules,
     emptyModulesText: snapshot.acquiredRunModules.isEmpty
         ? 'No Salvage Modules acquired'

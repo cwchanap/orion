@@ -177,7 +177,7 @@ void main() {
 
       expect(game.stage, stage);
       expect(game.snapshot.stageName, 'Nebula Relay');
-      expect(game.snapshot.waveTotal, 8);
+      expect(game.snapshot.missionWaveTotal, 8);
     });
 
     test('overrideFeedback republishes the active stage modifiers', () {

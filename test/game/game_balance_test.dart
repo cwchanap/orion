@@ -816,7 +816,7 @@ void main() {
       final preview = GameBalance.wavePreview(
         wave: wave,
         waveNumber: 5,
-        waveTotal: 8,
+        missionWaveTotal: 8,
         unlockedTowerTypes: const [
           TowerType.laser,
           TowerType.rocket,
@@ -830,7 +830,7 @@ void main() {
       );
 
       expect(preview.waveNumber, 5);
-      expect(preview.waveTotal, 8);
+      expect(preview.missionWaveTotal, 8);
       expect(preview.clearBonus, 80);
       expect(
         preview.groups.map((group) => '${group.enemyCount} ${group.label}'),
@@ -849,7 +849,7 @@ void main() {
       final preview = GameBalance.wavePreview(
         wave: wave,
         waveNumber: 5,
-        waveTotal: 8,
+        missionWaveTotal: 8,
         unlockedTowerTypes: const [TowerType.laser, TowerType.rocket],
         effectiveClearBonus: wave.clearBonus,
       );
@@ -883,7 +883,7 @@ void main() {
         final preview = GameBalance.wavePreview(
           wave: wave,
           waveNumber: 1,
-          waveTotal: 1,
+          missionWaveTotal: 1,
           unlockedTowerTypes: const [],
           effectiveClearBonus: wave.clearBonus,
         );
@@ -913,7 +913,7 @@ void main() {
       final preview = GameBalance.wavePreview(
         wave: wave,
         waveNumber: 1,
-        waveTotal: 1,
+        missionWaveTotal: 1,
         unlockedTowerTypes: const [],
         effectiveClearBonus: wave.clearBonus,
       );
@@ -935,7 +935,7 @@ void main() {
       final preview = GameBalance.wavePreview(
         wave: wave,
         waveNumber: 1,
-        waveTotal: 1,
+        missionWaveTotal: 1,
         unlockedTowerTypes: const [TowerType.laser],
         effectiveClearBonus: wave.clearBonus,
       );
@@ -951,7 +951,7 @@ void main() {
       final preview = GameBalance.wavePreview(
         wave: wave,
         waveNumber: 1,
-        waveTotal: 8,
+        missionWaveTotal: 8,
         unlockedTowerTypes: const [TowerType.laser],
         effectiveClearBonus: wave.clearBonus,
       );
@@ -1329,7 +1329,7 @@ void main() {
       final preview = GameBalance.wavePreview(
         wave: wave,
         waveNumber: 8,
-        waveTotal: 8,
+        missionWaveTotal: 8,
         unlockedTowerTypes: const [],
         effectiveClearBonus: wave.clearBonus,
       );

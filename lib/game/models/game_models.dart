@@ -4,6 +4,8 @@ import '../util/format.dart';
 
 enum GamePhase { build, wave, won, lost }
 
+enum RunMode { mission, endless }
+
 enum TowerType {
   laser('Laser'),
   rocket('Rocket'),
@@ -460,21 +462,23 @@ class WavePreviewGroup {
 class WavePreview {
   WavePreview({
     required this.waveNumber,
-    required this.waveTotal,
+    required this.missionWaveTotal,
     required List<WavePreviewGroup> groups,
     required Set<EnemyTrait> traits,
     required this.clearBonus,
     required List<TowerType> recommendedTowerTypes,
+    this.enemyHealthMultiplier = 1,
   }) : groups = List.unmodifiable(groups),
        traits = Set.unmodifiable(traits),
        recommendedTowerTypes = List.unmodifiable(recommendedTowerTypes);
 
   final int waveNumber;
-  final int waveTotal;
+  final int? missionWaveTotal;
   final List<WavePreviewGroup> groups;
   final Set<EnemyTrait> traits;
   final int clearBonus;
   final List<TowerType> recommendedTowerTypes;
+  final double enemyHealthMultiplier;
 
   /// Groups whose label matches a [GameBalance.bosses] entry. The one shared
   /// boss predicate: the scanner's boss cards and the contextual boss-tip
@@ -558,7 +562,8 @@ class GameSnapshot {
     required this.baseHealth,
     required this.startingBaseHealth,
     required this.waveNumber,
-    required this.waveTotal,
+    required this.missionWaveTotal,
+    required this.wavesCleared,
     required this.stageId,
     required this.stageName,
     required this.stageLabel,
@@ -598,7 +603,8 @@ class GameSnapshot {
   final int baseHealth;
   final int startingBaseHealth;
   final int waveNumber;
-  final int waveTotal;
+  final int? missionWaveTotal;
+  final int wavesCleared;
   final String stageId;
   final String stageName;
   final String stageLabel;
@@ -643,6 +649,7 @@ class GameSnapshot {
   bool get canStartWave =>
       phase == GamePhase.build && pendingRunModuleOffer == null;
   bool get isEnded => phase == GamePhase.won || phase == GamePhase.lost;
+  bool get isEndless => missionWaveTotal == null;
 }
 
 final class RunModuleDefinition {
@@ -1207,9 +1214,10 @@ class GameBalance {
   static WavePreview wavePreview({
     required WaveDefinition wave,
     required int waveNumber,
-    required int waveTotal,
+    required int? missionWaveTotal,
     required List<TowerType> unlockedTowerTypes,
     required int effectiveClearBonus,
+    double enemyHealthMultiplier = 1,
   }) {
     final groups = [
       for (final group in wave.groups)
@@ -1223,11 +1231,12 @@ class GameBalance {
 
     return WavePreview(
       waveNumber: waveNumber,
-      waveTotal: waveTotal,
+      missionWaveTotal: missionWaveTotal,
       groups: groups,
       traits: traits,
       clearBonus: effectiveClearBonus,
       recommendedTowerTypes: _recommendedTowerTypes(wave, unlockedTowerTypes),
+      enemyHealthMultiplier: enemyHealthMultiplier,
     );
   }
 

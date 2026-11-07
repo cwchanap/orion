@@ -21,7 +21,7 @@ void main() {
         startingBaseHealth: 20,
         gold: 150,
         waveNumber: 3,
-        waveTotal: 8,
+        missionWaveTotal: 8,
       );
       await tester.pumpWidget(
         MaterialApp(home: MissionStatusHud(snapshot: snapshot)),
@@ -374,7 +374,7 @@ void main() {
                       stageName: 'Helios Terminus Orbital Relay Station',
                       stageLabel: 'Terminus Relay',
                       waveNumber: 8,
-                      waveTotal: 8,
+                      missionWaveTotal: 8,
                     ),
                   ),
                 ),

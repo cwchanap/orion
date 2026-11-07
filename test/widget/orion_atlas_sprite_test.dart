@@ -66,7 +66,7 @@ void main() {
           clearBonus: 0,
         ),
         waveNumber: 1,
-        waveTotal: 1,
+        missionWaveTotal: 1,
         unlockedTowerTypes: TowerType.values,
         effectiveClearBonus: 0,
       );

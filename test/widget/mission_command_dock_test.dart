@@ -798,7 +798,7 @@ void main() {
           snapshot: commandDeckSnapshot(
             phase: GamePhase.wave,
             waveNumber: 3,
-            waveTotal: 8,
+            missionWaveTotal: 8,
           ),
           onTogglePause: () {},
           onSpeedSelected: (_) {},

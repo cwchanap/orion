@@ -212,7 +212,7 @@ void main() {
 
       expect(firstPreview, isNotNull);
       expect(firstPreview!.waveNumber, 1);
-      expect(firstPreview.waveTotal, 8);
+      expect(firstPreview.missionWaveTotal, 8);
       expect(
         firstPreview.groups.map(
           (group) => '${group.enemyCount} ${group.label}',
@@ -280,7 +280,7 @@ void main() {
 
       expect(preview, isNotNull);
       expect(preview!.waveNumber, 1);
-      expect(preview.waveTotal, 2);
+      expect(preview.missionWaveTotal, 2);
       expect(preview.groups.single.enemyCount, 3);
       expect(preview.groups.single.label, 'Regen Drones');
       expect(preview.clearBonus, 42);
@@ -300,7 +300,7 @@ void main() {
 
       expect(preview, isNotNull);
       expect(preview!.waveNumber, 8);
-      expect(preview.waveTotal, 8);
+      expect(preview.missionWaveTotal, 8);
       expect(preview.clearBonus, 0);
     });
 
@@ -958,7 +958,7 @@ void main() {
       expect(session.snapshot().stageId, 'test-stage');
       expect(session.snapshot().stageName, 'Test Stage');
       expect(session.snapshot().stageLabel, 'Test');
-      expect(session.snapshot().waveTotal, 2);
+      expect(session.snapshot().missionWaveTotal, 2);
 
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
@@ -2032,6 +2032,236 @@ void main() {
 
       expect(before.placedTowers.single.level, 1);
       expect(session.snapshot().placedTowers.single.level, 2);
+    });
+  });
+
+  group('GameSession endless mode', () {
+    test('defaults to the mission run mode', () {
+      final session = GameSession.initial();
+
+      expect(session.mode, RunMode.mission);
+      expect(session.enemyHealthMultiplier, 1);
+      final snapshot = session.snapshot();
+      expect(snapshot.isEndless, isFalse);
+      expect(snapshot.missionWaveTotal, session.stage.waves.length);
+      expect(snapshot.wavesCleared, 0);
+      expect(
+        snapshot.nextWavePreview?.missionWaveTotal,
+        session.stage.waves.length,
+      );
+      expect(snapshot.nextWavePreview?.enemyHealthMultiplier, 1);
+    });
+
+    test('wraps the wave script and never wins', () {
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        mode: RunMode.endless,
+      );
+
+      expect(session.mode, RunMode.endless);
+      for (var index = 0; index < session.stage.waves.length; index += 1) {
+        expect(
+          identical(session.activeWave, session.stage.waves[index]),
+          isTrue,
+          reason: 'waveIndex $index should read script[$index]',
+        );
+        completeWave(session);
+        selectPendingModuleIfNeeded(session);
+      }
+
+      expect(session.phase, GamePhase.build);
+      expect(session.waveIndex, session.stage.waves.length);
+      expect(
+        identical(session.activeWave, session.stage.waves.first),
+        isTrue,
+        reason: 'waveIndex 8 should wrap to script[0]',
+      );
+
+      expect(session.startWave(), isTrue);
+      session.finishActiveWave();
+
+      expect(session.phase, GamePhase.build);
+      expect(session.waveIndex, session.stage.waves.length + 1);
+    });
+
+    test('pays the scripted boss-wave clear bonus instead of zeroing it', () {
+      final stage = StageDefinition(
+        id: 'endless-boss-stage',
+        name: 'Endless Boss Stage',
+        mapLabel: 'Boss',
+        description: 'Boss wave with an authored clear bonus',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [
+          WaveDefinition(groups: [], clearBonus: 30),
+          WaveDefinition(
+            groups: [
+              WaveGroup(enemyCount: 1, enemyStats: GameBalance.relayBreaker),
+            ],
+            clearBonus: 50,
+          ),
+        ],
+        mapColumn: 0,
+        mapRow: 0,
+      );
+      final session = GameSession.initial(stage: stage, mode: RunMode.endless);
+      final startingGold = session.gold;
+
+      completeWave(session);
+      expect(session.gold, startingGold + 30);
+
+      final bossPreview = session.snapshot().nextWavePreview;
+      expect(bossPreview, isNotNull);
+      expect(bossPreview!.groups.single.label, 'Relay Breaker');
+      expect(bossPreview.clearBonus, 50);
+
+      completeWave(session);
+      expect(session.phase, GamePhase.build);
+      expect(session.gold, startingGold + 80);
+      expect(session.snapshot().nextWavePreview?.clearBonus, 30);
+    });
+
+    test('opens module drafts only in the first loop', () {
+      final picker = _FixedModuleOfferPicker([
+        const [
+          RunModuleId.heavyCaliber,
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+        ],
+        const [
+          RunModuleId.overclockRelay,
+          RunModuleId.longSight,
+          RunModuleId.emergencySalvage,
+        ],
+        const [
+          RunModuleId.longSight,
+          RunModuleId.emergencySalvage,
+          RunModuleId.cryoReservoir,
+        ],
+      ]);
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        mode: RunMode.endless,
+        offerPicker: picker,
+      );
+
+      for (var wave = 1; wave <= 14; wave += 1) {
+        completeWave(session);
+        final offer = session.pendingRunModuleOffer;
+        if (wave == 2 || wave == 4 || wave == 6) {
+          expect(offer, isNotNull, reason: 'draft expected after wave $wave');
+          expect(
+            session.selectRunModule(
+              offerId: offer!.offerId,
+              moduleId: offer.moduleIds.first,
+            ),
+            isTrue,
+          );
+        } else {
+          expect(offer, isNull, reason: 'no draft expected after wave $wave');
+        }
+      }
+
+      expect(picker.seenCandidates, hasLength(3));
+      expect(session.acquiredRunModules, [
+        RunModuleId.heavyCaliber,
+        RunModuleId.overclockRelay,
+        RunModuleId.longSight,
+      ]);
+    });
+
+    test('enemyHealthMultiplier grows by loop', () {
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        mode: RunMode.endless,
+      );
+
+      expect(session.enemyHealthMultiplier, 1);
+      for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
+        completeWave(session);
+        selectPendingModuleIfNeeded(session);
+      }
+
+      expect(
+        session.enemyHealthMultiplier,
+        closeTo(GameBalance.endlessLoopHealthGrowth, 1e-9),
+      );
+    });
+
+    test('snapshot keeps counting waves past the script', () {
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        mode: RunMode.endless,
+      );
+
+      for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
+        completeWave(session);
+        selectPendingModuleIfNeeded(session);
+      }
+
+      final snapshot = session.snapshot();
+      expect(snapshot.isEndless, isTrue);
+      expect(snapshot.missionWaveTotal, isNull);
+      expect(snapshot.waveNumber, session.stage.waves.length + 1);
+      expect(snapshot.wavesCleared, session.stage.waves.length);
+
+      final preview = snapshot.nextWavePreview;
+      expect(preview, isNotNull);
+      expect(preview!.missionWaveTotal, isNull);
+      expect(preview.waveNumber, session.stage.waves.length + 1);
+      expect(
+        preview.enemyHealthMultiplier,
+        closeTo(GameBalance.endlessLoopHealthGrowth, 1e-9),
+      );
+    });
+
+    test('wavesCleared counts only finished waves on defeat', () {
+      final firstWaveLoss = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        mode: RunMode.endless,
+      );
+      expect(firstWaveLoss.startWave(), isTrue);
+      firstWaveLoss.damageBase(firstWaveLoss.startingBaseHealth);
+
+      expect(firstWaveLoss.phase, GamePhase.lost);
+      expect(firstWaveLoss.snapshot().wavesCleared, 0);
+
+      final ninthWaveLoss = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        mode: RunMode.endless,
+      );
+      for (var wave = 0; wave < 8; wave += 1) {
+        completeWave(ninthWaveLoss);
+        selectPendingModuleIfNeeded(ninthWaveLoss);
+      }
+      expect(ninthWaveLoss.startWave(), isTrue);
+      ninthWaveLoss.damageBase(ninthWaveLoss.startingBaseHealth);
+
+      expect(ninthWaveLoss.phase, GamePhase.lost);
+      expect(ninthWaveLoss.snapshot().wavesCleared, 8);
+    });
+
+    test('restart keeps the endless run mode', () {
+      final session = GameSession.initial(
+        stage: stageWithWaveCount(8),
+        mode: RunMode.endless,
+      );
+      completeWave(session);
+
+      session.restart();
+
+      expect(session.mode, RunMode.endless);
+      expect(session.waveIndex, 0);
+      expect(session.phase, GamePhase.build);
+      expect(session.snapshot().isEndless, isTrue);
+      expect(session.snapshot().missionWaveTotal, isNull);
+
+      for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
+        completeWave(session);
+        selectPendingModuleIfNeeded(session);
+      }
+      expect(session.phase, GamePhase.build);
+      expect(session.startWave(), isTrue);
+      expect(session.phase, GamePhase.wave);
     });
   });
 }

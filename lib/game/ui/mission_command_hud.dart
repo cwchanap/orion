@@ -46,6 +46,10 @@ class MissionStatusHud extends StatelessWidget {
     final textScaler = MediaQuery.textScalerOf(
       context,
     ).clamp(maxScaleFactor: 1.15);
+    final missionWaveTotal = snapshot.missionWaveTotal;
+    final waveLabel = missionWaveTotal == null
+        ? 'Wave ${snapshot.waveNumber}'
+        : 'Wave ${snapshot.waveNumber} of $missionWaveTotal';
 
     // Unboxed and spread, per artboard 1a: the status readouts float on the
     // live board rather than each sitting in its own pill. Every
@@ -82,7 +86,7 @@ class MissionStatusHud extends StatelessWidget {
           excludeSemantics: true,
           label:
               '${snapshot.stageName}. '
-              'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}, '
+              '$waveLabel, '
               '${_missionPhaseLabel(snapshot)}',
           child: _MissionStatusAnchor(
             key: const ValueKey('mission-status-stage'),
@@ -212,7 +216,9 @@ class _MissionStatusAnchor extends StatelessWidget {
         children: [
           OrionReadout(
             value: '${snapshot.waveNumber}',
-            denominator: '${snapshot.waveTotal}',
+            denominator: snapshot.missionWaveTotal == null
+                ? null
+                : '${snapshot.missionWaveTotal}',
             color: uiTheme.systemCyan,
             size: 22,
             maxLines: 1,

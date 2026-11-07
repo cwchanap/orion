@@ -193,8 +193,11 @@ class IdleCommandBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final countdown = snapshot.autoStartCountdownRemaining;
     final reactorLabel = _reactorLabel(snapshot, countdown);
+    final missionWaveTotal = snapshot.missionWaveTotal;
     final reactorTooltip = snapshot.phase == GamePhase.wave
-        ? 'Wave ${snapshot.waveNumber} of ${snapshot.waveTotal}'
+        ? missionWaveTotal == null
+              ? 'Wave ${snapshot.waveNumber}'
+              : 'Wave ${snapshot.waveNumber} of $missionWaveTotal'
         : reactorLabel;
 
     return Padding(
@@ -264,7 +267,10 @@ class IdleCommandBar extends StatelessWidget {
   static String _reactorLabel(GameSnapshot snapshot, double? countdown) {
     if (countdown != null) return 'Start Now';
     if (snapshot.phase == GamePhase.wave) {
-      return '${snapshot.waveNumber}/${snapshot.waveTotal}';
+      final missionWaveTotal = snapshot.missionWaveTotal;
+      return missionWaveTotal == null
+          ? '${snapshot.waveNumber}'
+          : '${snapshot.waveNumber}/$missionWaveTotal';
     }
     return 'Start Wave';
   }
