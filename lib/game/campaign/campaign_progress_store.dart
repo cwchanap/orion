@@ -46,9 +46,16 @@ class CampaignProgressCodec {
           .toJson();
     }
 
+    final endlessIds = save.progress.endlessBestByStageId.keys.toList()..sort();
+    final endlessBest = <String, Object>{};
+    for (final stageId in endlessIds) {
+      endlessBest[stageId] = save.progress.endlessBestByStageId[stageId]!;
+    }
+
     return jsonEncode({
       'version': 3,
       'stageResults': stageResults,
+      'endlessBest': endlessBest,
       'techPurchases': save.techTree.toIdList(),
     });
   }
@@ -86,7 +93,11 @@ class CampaignProgressCodec {
       }
 
       return CampaignSave(
-        progress: _decodeStageResults(decoded, knownStages: knownStages),
+        progress: _decodeStageResults(
+          decoded,
+          knownStages: knownStages,
+          includeEndlessBest: true,
+        ),
         techTree: _decodeTechPurchases(decoded['techPurchases']),
       );
     } on FormatException {
@@ -99,6 +110,7 @@ class CampaignProgressCodec {
   static CampaignProgress _decodeStageResults(
     Map<String, Object?> decoded, {
     required Iterable<StageDefinition> knownStages,
+    bool includeEndlessBest = false,
   }) {
     final rawResults = decoded['stageResults'];
     if (rawResults is! Map<String, Object?>) {
@@ -116,7 +128,30 @@ class CampaignProgressCodec {
       }
       results[entry.key] = result;
     }
-    return CampaignProgress(bestResultsByStageId: results);
+    return CampaignProgress(
+      bestResultsByStageId: results,
+      endlessBestByStageId: includeEndlessBest
+          ? _decodeEndlessBest(decoded['endlessBest'], knownIds)
+          : const <String, int>{},
+    );
+  }
+
+  static Map<String, int> _decodeEndlessBest(
+    Object? raw,
+    Set<String> knownIds,
+  ) {
+    if (raw is! Map<String, Object?>) {
+      return const <String, int>{};
+    }
+    final bests = <String, int>{};
+    for (final entry in raw.entries) {
+      final value = entry.value;
+      if (!knownIds.contains(entry.key) || value is! int || value <= 0) {
+        continue;
+      }
+      bests[entry.key] = value;
+    }
+    return bests;
   }
 
   static CampaignTechTree _decodeTechPurchases(Object? raw) {
