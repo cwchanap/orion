@@ -813,35 +813,37 @@ void main() {
     expect(startWaveTaps, 0);
   });
 
-  testWidgets(
-    'endless active wave shows the number alone in pill and tooltip',
-    (tester) async {
-      var startWaveTaps = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: IdleCommandBar(
-            snapshot: commandDeckSnapshot(
-              phase: GamePhase.wave,
-              waveNumber: 12,
-              missionWaveTotal: null,
-            ),
-            onTogglePause: () {},
-            onSpeedSelected: (_) {},
-            onToggleAutoStart: () {},
-            onStartWave: () => startWaveTaps += 1,
+  testWidgets('endless active wave says Wave 12 in pill and tooltip', (
+    tester,
+  ) async {
+    var startWaveTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: IdleCommandBar(
+          snapshot: commandDeckSnapshot(
+            phase: GamePhase.wave,
+            waveNumber: 12,
+            missionWaveTotal: null,
           ),
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+          onStartWave: () => startWaveTaps += 1,
         ),
-      );
+      ),
+    );
 
-      expect(find.text('12'), findsOneWidget);
-      expect(find.text('12/8'), findsNothing);
-      expect(find.textContaining('null'), findsNothing);
-      expect(find.byTooltip('Wave 12'), findsOneWidget);
-      expect(find.byTooltip('Wave 12 of 8'), findsNothing);
-      await tester.tap(find.byTooltip('Wave 12'));
-      expect(startWaveTaps, 0);
-    },
-  );
+    // The pill uppercases its label to match the artboard, so the visible
+    // copy is WAVE 12 — the bare number is not enough context on its own.
+    expect(find.text('WAVE 12'), findsOneWidget);
+    expect(find.text('12'), findsNothing);
+    expect(find.text('12/8'), findsNothing);
+    expect(find.textContaining('null'), findsNothing);
+    expect(find.byTooltip('Wave 12'), findsOneWidget);
+    expect(find.byTooltip('Wave 12 of 8'), findsNothing);
+    await tester.tap(find.byTooltip('Wave 12'));
+    expect(startWaveTaps, 0);
+  });
 
   testWidgets('attaching or detaching the wave guide anchor runs no reactor '
       'transition, while a label change still does', (tester) async {
