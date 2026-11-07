@@ -606,6 +606,59 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'cleared stage keeps both launch actions reachable and tappable at 360x640 and 2x text scale',
+      (tester) async {
+        const viewport = Size(360, 640);
+        const result = StageResult(medal: StageMedal.clear, bestBaseHealth: 5);
+
+        final firstRecorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          result: result,
+          endlessBest: 9,
+          viewport: viewport,
+          textScaler: const TextScaler.linear(2),
+        );
+        await _expectActionWithinViewport(
+          tester,
+          viewport,
+          actionTooltip: 'Replay Mission',
+        );
+        await _expectActionWithinViewport(
+          tester,
+          viewport,
+          actionTooltip: 'Endless',
+        );
+        await tester.tap(find.byTooltip('Replay Mission'));
+        await tester.pumpAndSettle();
+        expect(firstRecorder.popped, RunMode.mission);
+
+        final secondRecorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          result: result,
+          endlessBest: 9,
+          viewport: viewport,
+          textScaler: const TextScaler.linear(2),
+        );
+        await _expectActionWithinViewport(
+          tester,
+          viewport,
+          actionTooltip: 'Replay Mission',
+        );
+        await _expectActionWithinViewport(
+          tester,
+          viewport,
+          actionTooltip: 'Endless',
+        );
+        await tester.tap(find.byTooltip('Endless'));
+        await tester.pumpAndSettle();
+        expect(secondRecorder.popped, RunMode.endless);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('artboard 1b fact row', () {
