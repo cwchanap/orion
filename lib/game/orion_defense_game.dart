@@ -42,15 +42,18 @@ class StageCompletion {
 class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
+    this.mode = RunMode.mission,
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     Iterable<RunModuleId>? availableRunModules,
     ModuleOfferPicker? moduleOfferPicker,
     this.onStageWon,
+    this.onEndlessWaveCleared,
     this.onReturnToMap,
     this.gameFeedback = const NoOpGameFeedback(),
   }) : stage = stage ?? OrionCampaign.stageOne,
        _session = GameSession.initial(
          stage: stage ?? OrionCampaign.stageOne,
+         mode: mode,
          campaignModifiers: campaignModifiers,
          availableRunModules: availableRunModules,
          offerPicker: moduleOfferPicker,
@@ -59,7 +62,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   final StageDefinition stage;
+  final RunMode mode;
   final ValueChanged<StageCompletion>? onStageWon;
+  final ValueChanged<int>? onEndlessWaveCleared;
   final VoidCallback? onReturnToMap;
   final GameFeedback gameFeedback;
   final GameSession _session;
@@ -1019,6 +1024,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     return StageModifierRules.enemyProfile(
       stats: stats,
       stageModifiers: stage.modifiers,
+      healthMultiplier: _session.enemyHealthMultiplier,
     );
   }
 
@@ -1212,6 +1218,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
     if (completion != null) {
       onStageWon?.call(completion);
+    }
+    if (mode == RunMode.endless) {
+      onEndlessWaveCleared?.call(_session.clearedWaveCount);
     }
   }
 

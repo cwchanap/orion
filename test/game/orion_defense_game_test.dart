@@ -311,6 +311,77 @@ void main() {
       );
     });
 
+    group('endless mode', () {
+      test('reports cleared wave counts past the script and never wins', () {
+        final clearedCounts = <int>[];
+        var stageWonCalls = 0;
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(2),
+          mode: RunMode.endless,
+          onEndlessWaveCleared: clearedCounts.add,
+          onStageWon: (_) => stageWonCalls += 1,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        for (var wave = 0; wave < 5; wave += 1) {
+          game.startWave();
+          game.update(0);
+          _selectPendingModuleIfNeeded(game);
+        }
+
+        expect(clearedCounts, [1, 2, 3, 4, 5]);
+        expect(stageWonCalls, 0);
+        expect(game.snapshot.phase, GamePhase.build);
+        expect(game.snapshot.missionWaveTotal, isNull);
+        expect(game.snapshot.wavesCleared, 5);
+      });
+
+      test('spawns loop-1 enemies at the loop health multiplier', () {
+        final game = OrionDefenseGame(
+          stage: _oneEnemyStage(waveCount: 1),
+          mode: RunMode.endless,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        game.startWave();
+        game.update(double.minPositive);
+        var enemy = game.children.whereType<EnemyComponent>().single;
+        final scriptedHealth = enemy.stats.health;
+        expect(enemy.maxHealth, scriptedHealth);
+
+        enemy.applyDamage(enemy.maxHealth);
+        game.update(0);
+        game.processLifecycleEvents();
+        expect(game.snapshot.wavesCleared, 1);
+
+        game.startWave();
+        game.update(double.minPositive);
+        enemy = game.children.whereType<EnemyComponent>().single;
+        expect(
+          enemy.maxHealth,
+          scriptedHealth * GameBalance.endlessLoopHealthGrowth,
+        );
+      });
+
+      test('mission run never calls onEndlessWaveCleared', () {
+        final clearedCounts = <int>[];
+        var stageWonCalls = 0;
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(1),
+          onEndlessWaveCleared: clearedCounts.add,
+          onStageWon: (_) => stageWonCalls += 1,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        game.startWave();
+        game.update(0);
+
+        expect(game.snapshot.phase, GamePhase.won);
+        expect(stageWonCalls, 1);
+        expect(clearedCounts, isEmpty);
+      });
+    });
+
     test(
       'wave clear starts auto-start countdown when another wave remains',
       () {
