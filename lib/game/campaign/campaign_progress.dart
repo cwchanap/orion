@@ -127,14 +127,23 @@ class CampaignProgress {
   CampaignProgress({
     Map<String, StageResult> bestResultsByStageId =
         const <String, StageResult>{},
-  }) : _bestResultsByStageId = Map.unmodifiable(bestResultsByStageId);
+    Map<String, int> endlessBestByStageId = const <String, int>{},
+  }) : _bestResultsByStageId = Map.unmodifiable(bestResultsByStageId),
+       _endlessBestByStageId = Map.unmodifiable(endlessBestByStageId);
 
   final Map<String, StageResult> _bestResultsByStageId;
+  final Map<String, int> _endlessBestByStageId;
 
   Map<String, StageResult> get bestResultsByStageId => _bestResultsByStageId;
 
+  Map<String, int> get endlessBestByStageId => _endlessBestByStageId;
+
   StageResult? resultFor(String stageId) {
     return _bestResultsByStageId[stageId];
+  }
+
+  int? endlessBestFor(String stageId) {
+    return _endlessBestByStageId[stageId];
   }
 
   bool isCleared(String stageId) {
@@ -186,18 +195,6 @@ class CampaignProgress {
         mainPathStages.every((stage) => isCleared(stage.id));
   }
 
-  CampaignProgress withoutUnknownStages(Iterable<StageDefinition> stages) {
-    final knownStageIds = stages.map((stage) => stage.id).toSet();
-
-    return CampaignProgress(
-      bestResultsByStageId: Map.fromEntries(
-        _bestResultsByStageId.entries.where(
-          (entry) => knownStageIds.contains(entry.key),
-        ),
-      ),
-    );
-  }
-
   CampaignProgress recordResult(String stageId, StageResult result) {
     final savedResult = _bestResultsByStageId[stageId];
     if (!result.isBetterThan(savedResult)) {
@@ -206,23 +203,18 @@ class CampaignProgress {
 
     return CampaignProgress(
       bestResultsByStageId: {..._bestResultsByStageId, stageId: result},
+      endlessBestByStageId: _endlessBestByStageId,
     );
   }
 
-  /// Returns a copy with [stageId]'s result set to [result], or removed when
-  /// [result] is null. Used by the save-rollback path to undo a single stage
-  /// result without clobbering concurrent optimistic updates to other stages.
-  CampaignProgress withResult(String stageId, StageResult? result) {
-    if (result == null) {
-      if (!_bestResultsByStageId.containsKey(stageId)) {
-        return this;
-      }
-      final updated = Map<String, StageResult>.from(_bestResultsByStageId);
-      updated.remove(stageId);
-      return CampaignProgress(bestResultsByStageId: updated);
+  CampaignProgress recordEndlessBest(String stageId, int wavesCleared) {
+    if (wavesCleared <= (_endlessBestByStageId[stageId] ?? 0)) {
+      return this;
     }
+
     return CampaignProgress(
-      bestResultsByStageId: {..._bestResultsByStageId, stageId: result},
+      bestResultsByStageId: _bestResultsByStageId,
+      endlessBestByStageId: {..._endlessBestByStageId, stageId: wavesCleared},
     );
   }
 }

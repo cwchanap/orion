@@ -370,5 +370,111 @@ void main() {
       expect(decoded.progress.bestResultsByStageId, isEmpty);
       expect(decoded.techTree.purchased, isEmpty);
     });
+
+    test('round-trips endless bests with sorted keys at version three', () {
+      final save = CampaignSave(
+        progress: CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
+          endlessBestByStageId: const {'outpost-alpha': 11, 'nebula-relay': 4},
+        ),
+        techTree: CampaignTechTree(),
+      );
+
+      final encoded = CampaignProgressCodec.encode(save);
+      final raw = jsonDecode(encoded) as Map<String, Object?>;
+      final endlessBest = raw['endlessBest'] as Map<String, Object?>;
+
+      expect(raw['version'], 3);
+      expect(endlessBest.keys, ['nebula-relay', 'outpost-alpha']);
+      expect(endlessBest['outpost-alpha'], 11);
+      expect(endlessBest['nebula-relay'], 4);
+
+      final decoded = CampaignProgressCodec.decode(
+        encoded,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.endlessBestByStageId, {
+        'outpost-alpha': 11,
+        'nebula-relay': 4,
+      });
+      expect(
+        decoded.progress.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+    });
+
+    test('v3 payload without endlessBest decodes to an empty map', () {
+      const raw =
+          '{"version":3,'
+          '"stageResults":{"outpost-alpha":'
+          '{"medal":"gold","bestBaseHealth":20}},'
+          '"techPurchases":["solar-capacitors"]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.endlessBestByStageId, isEmpty);
+      expect(decoded.progress.endlessBestFor('outpost-alpha'), isNull);
+      expect(
+        decoded.progress.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      expect(decoded.techTree.purchased, {CampaignTechUpgrade.solarCapacitors});
+    });
+
+    test('drops invalid endlessBest entries on decode', () {
+      const raw =
+          '{"version":3,"stageResults":{},'
+          '"endlessBest":{"outpost-alpha":9,"missing-stage":12,'
+          '"nebula-relay":"high","salvage-rift":0,"void-bastion":-2,'
+          '"aurora-gate":3.5}}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.endlessBestByStageId, {'outpost-alpha': 9});
+    });
+
+    test('non-map endlessBest decodes to an empty map', () {
+      const raw = '{"version":3,"stageResults":{},"endlessBest":[1,2,3]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.endlessBestByStageId, isEmpty);
+    });
+
+    test('reset clears endless bests', () async {
+      final store = InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      );
+
+      await store.save(
+        CampaignSave(
+          progress: CampaignProgress(
+            endlessBestByStageId: const {'outpost-alpha': 9},
+          ),
+          techTree: CampaignTechTree(),
+        ),
+      );
+      expect((await store.load()).progress.endlessBestByStageId, {
+        'outpost-alpha': 9,
+      });
+
+      await store.reset();
+      expect((await store.load()).progress.endlessBestByStageId, isEmpty);
+    });
   });
 }

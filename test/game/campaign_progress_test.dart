@@ -273,39 +273,98 @@ void main() {
       );
     });
 
-    test('withoutUnknownStages filters unknown results', () {
-      final progress = CampaignProgress(
-        bestResultsByStageId: {
-          'stage-1': const StageResult(
-            medal: StageMedal.clear,
-            bestBaseHealth: 1,
-          ),
-          'side-a': const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 11,
-          ),
-          'unknown-stage': const StageResult(
-            medal: StageMedal.gold,
-            bestBaseHealth: 20,
-          ),
-        },
-      );
+    group('endless best', () {
+      test('stores the first recorded best', () {
+        final progress = CampaignProgress().recordEndlessBest('stage-1', 7);
 
-      final filtered = progress.withoutUnknownStages(stages.take(2));
-
-      expect(filtered.bestResultsByStageId.keys, {'stage-1'});
-      expect(progress.bestResultsByStageId.keys, {
-        'stage-1',
-        'side-a',
-        'unknown-stage',
+        expect(progress.endlessBestFor('stage-1'), 7);
+        expect(progress.endlessBestByStageId, {'stage-1': 7});
+        expect(progress.endlessBestFor('stage-2'), isNull);
       });
-      expect(
-        () => filtered.bestResultsByStageId['stage-2'] = const StageResult(
-          medal: StageMedal.clear,
-          bestBaseHealth: 1,
-        ),
-        throwsUnsupportedError,
-      );
+
+      test('replaces the saved best only with a strictly higher value', () {
+        final progress = CampaignProgress().recordEndlessBest('stage-1', 7);
+
+        final lower = progress.recordEndlessBest('stage-1', 5);
+        final equal = progress.recordEndlessBest('stage-1', 7);
+        final higher = progress.recordEndlessBest('stage-1', 12);
+
+        expect(identical(lower, progress), isTrue);
+        expect(identical(equal, progress), isTrue);
+        expect(progress.endlessBestFor('stage-1'), 7);
+        expect(higher.endlessBestFor('stage-1'), 12);
+      });
+
+      test('returns the same instance for a non-positive first record', () {
+        final progress = CampaignProgress();
+
+        expect(
+          identical(progress.recordEndlessBest('stage-1', 0), progress),
+          isTrue,
+        );
+        expect(
+          identical(progress.recordEndlessBest('stage-1', -3), progress),
+          isTrue,
+        );
+        expect(progress.endlessBestFor('stage-1'), isNull);
+      });
+
+      test('recordResult preserves the endless best map', () {
+        final progress = CampaignProgress(
+          bestResultsByStageId: {
+            'stage-1': const StageResult(
+              medal: StageMedal.clear,
+              bestBaseHealth: 5,
+            ),
+          },
+          endlessBestByStageId: const {'stage-1': 9, 'stage-2': 4},
+        );
+
+        final updated = progress.recordResult(
+          'stage-1',
+          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        final unchanged = progress.recordResult(
+          'stage-1',
+          const StageResult(medal: StageMedal.clear, bestBaseHealth: 3),
+        );
+
+        expect(updated.endlessBestByStageId, {'stage-1': 9, 'stage-2': 4});
+        expect(identical(unchanged, progress), isTrue);
+      });
+
+      test('recordEndlessBest preserves stage results', () {
+        final progress = CampaignProgress(
+          bestResultsByStageId: {
+            'stage-1': const StageResult(
+              medal: StageMedal.silver,
+              bestBaseHealth: 12,
+            ),
+          },
+          endlessBestByStageId: const {'stage-1': 9},
+        );
+
+        final updated = progress.recordEndlessBest('stage-1', 15);
+
+        expect(
+          updated.resultFor('stage-1'),
+          const StageResult(medal: StageMedal.silver, bestBaseHealth: 12),
+        );
+        expect(updated.endlessBestFor('stage-1'), 15);
+      });
+
+      test('constructor defensively copies the endless best map', () {
+        final bests = {'stage-1': 6};
+        final progress = CampaignProgress(endlessBestByStageId: bests);
+
+        bests['stage-2'] = 3;
+
+        expect(progress.endlessBestByStageId, {'stage-1': 6});
+        expect(
+          () => progress.endlessBestByStageId.clear(),
+          throwsUnsupportedError,
+        );
+      });
     });
 
     test('constructor defensively copies mutable input', () {
@@ -346,75 +405,6 @@ void main() {
 
       expect(progress.isUnlocked(dependentStage), isFalse);
       expect(progress.statusFor(dependentStage), StageProgressStatus.cleared);
-    });
-
-    group('withResult (save-rollback helper)', () {
-      test('removes a stage result when passed null', () {
-        final progress = CampaignProgress(
-          bestResultsByStageId: {
-            'alpha': const StageResult(
-              medal: StageMedal.gold,
-              bestBaseHealth: 20,
-            ),
-            'relay': const StageResult(
-              medal: StageMedal.silver,
-              bestBaseHealth: 14,
-            ),
-          },
-        );
-
-        final rolled = progress.withResult('alpha', null);
-
-        expect(rolled.bestResultsByStageId.keys, {'relay'});
-        expect(rolled.resultFor('alpha'), isNull);
-        // Other stages are untouched.
-        expect(
-          rolled.resultFor('relay'),
-          const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-        );
-      });
-
-      test('restores a prior result without touching other stages', () {
-        // Round-4 review P3: exercise the actual rollback direction — start
-        // from the optimistic (new) result and restore the original (prior)
-        // result via withResult. The previous setup started from gold and
-        // replaced it with clear, which only verified ordinary replacement,
-        // not rollback restoration.
-        final progress = CampaignProgress(
-          bestResultsByStageId: {
-            'alpha': const StageResult(
-              medal: StageMedal.clear,
-              bestBaseHealth: 1,
-            ),
-            'relay': const StageResult(
-              medal: StageMedal.silver,
-              bestBaseHealth: 14,
-            ),
-          },
-        );
-
-        final rolled = progress.withResult(
-          'alpha',
-          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-        );
-
-        expect(
-          rolled.resultFor('alpha'),
-          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-        );
-        expect(
-          rolled.resultFor('relay'),
-          const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
-        );
-      });
-
-      test('returns same instance when removing a missing stage', () {
-        final progress = CampaignProgress();
-        expect(
-          identical(progress.withResult('absent', null), progress),
-          isTrue,
-        );
-      });
     });
 
     group('recommendedStage', () {
