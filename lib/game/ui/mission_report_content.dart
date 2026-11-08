@@ -132,19 +132,20 @@ MissionReportContent projectEndlessReport({
 }) {
   final wavesCleared = snapshot.wavesCleared;
   final improved = wavesCleared > (priorBest ?? 0);
+  final outcomeWaveUnit = wavesCleared == 1 ? 'wave' : 'waves';
   return MissionReportContent(
     snapshot: snapshot,
     stageId: snapshot.stageId,
     stageName: snapshot.stageName,
     didWin: false,
-    outcomeText: 'Survived $wavesCleared waves',
+    outcomeText: 'Survived $wavesCleared $outcomeWaveUnit',
     comparisonText: priorBest == null
         ? improved
               ? 'New best!'
               : 'No endless best yet'
         : improved
-        ? 'New best! Previous: $priorBest waves'
-        : 'Best: $priorBest waves',
+        ? 'New best! Previous: $priorBest ${priorBest == 1 ? 'wave' : 'waves'}'
+        : 'Best: $priorBest ${priorBest == 1 ? 'wave' : 'waves'}',
     moduleIds: snapshot.acquiredRunModules,
     emptyModulesText: snapshot.acquiredRunModules.isEmpty
         ? 'No Salvage Modules acquired'
@@ -161,7 +162,7 @@ MissionReportContent projectEndlessReport({
       MissionSaveState.failed =>
         savedBest == null
             ? 'Save failed — progress unchanged.'
-            : 'Save failed — best $savedBest waves kept.',
+            : 'Save failed — best $savedBest ${savedBest == 1 ? 'wave' : 'waves'} kept.',
     },
     nextOpportunityText: switch (saveState) {
       MissionSaveState.saving =>
@@ -180,9 +181,8 @@ MissionReportContent projectLossReport({required GameSnapshot snapshot}) {
     stageId: snapshot.stageId,
     stageName: snapshot.stageName,
     didWin: false,
-    outcomeText: snapshot.missionWaveTotal == null
-        ? 'Reached Wave ${snapshot.waveNumber}'
-        : 'Reached Wave ${snapshot.waveNumber}/${snapshot.missionWaveTotal}',
+    outcomeText:
+        'Reached Wave ${snapshot.waveNumber}/${snapshot.missionWaveTotal}',
     moduleIds: snapshot.acquiredRunModules,
     emptyModulesText: snapshot.acquiredRunModules.isEmpty
         ? 'No Salvage Modules acquired'

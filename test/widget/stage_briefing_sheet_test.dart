@@ -547,6 +547,19 @@ void main() {
       },
     );
 
+    testWidgets('cleared stage shows singular wave for endless best of 1', (
+      tester,
+    ) async {
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        endlessBest: 1,
+      );
+
+      expect(find.text('Endless best: 1 wave'), findsOneWidget);
+    });
+
     testWidgets('launch kickers render DEPLOY, REPLAY, and ENDLESS', (
       tester,
     ) async {

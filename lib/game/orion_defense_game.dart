@@ -42,7 +42,7 @@ class StageCompletion {
 class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   OrionDefenseGame({
     StageDefinition? stage,
-    this.mode = RunMode.mission,
+    RunMode mode = RunMode.mission,
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     Iterable<RunModuleId>? availableRunModules,
     ModuleOfferPicker? moduleOfferPicker,
@@ -62,7 +62,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   }
 
   final StageDefinition stage;
-  final RunMode mode;
+  RunMode get mode => _session.mode;
   final ValueChanged<StageCompletion>? onStageWon;
   final ValueChanged<int>? onEndlessWaveCleared;
   final VoidCallback? onReturnToMap;

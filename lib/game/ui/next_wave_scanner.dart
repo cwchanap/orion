@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
+import '../util/format.dart';
 import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
@@ -450,10 +451,10 @@ class WaveScannerScene extends StatelessWidget {
                                     if (preview.enemyHealthMultiplier > 1)
                                       Semantics(
                                         label:
-                                            'Enemies +${((preview.enemyHealthMultiplier - 1) * 100).round()}% health',
+                                            'Enemies +${percent(preview.enemyHealthMultiplier - 1)} health',
                                         excludeSemantics: true,
                                         child: OrionText.micro(
-                                          'ENEMIES +${((preview.enemyHealthMultiplier - 1) * 100).round()}% HEALTH',
+                                          'ENEMIES +${percent(preview.enemyHealthMultiplier - 1)} HEALTH',
                                           color: t.warningOrange,
                                           size: 10,
                                         ),

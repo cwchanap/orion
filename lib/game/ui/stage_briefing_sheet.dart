@@ -268,7 +268,7 @@ class StageBriefingSheet extends StatelessWidget {
                                   title: 'ENDLESS',
                                   detail: endlessBest == null
                                       ? 'No endless run yet'
-                                      : 'Endless best: $endlessBest waves',
+                                      : 'Endless best: $endlessBest ${endlessBest == 1 ? 'wave' : 'waves'}',
                                 ),
                                 const SizedBox(height: 7),
                               ],
@@ -587,7 +587,8 @@ class _StageThreat {
   final int shielded;
 }
 
-/// The sheet's one solid, filled action.
+/// A solid, filled launch action on the briefing sheet (such as Launch,
+/// Replay, or Endless).
 class _BriefingLaunchAction extends StatelessWidget {
   const _BriefingLaunchAction({
     required this.label,
