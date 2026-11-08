@@ -2869,6 +2869,8 @@ void main() {
       expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
       expect(find.text('No endless best yet'), findsOneWidget);
       expect(find.textContaining('New best'), findsNothing);
+      expect(find.text('No result to save.'), findsOneWidget);
+      expect(find.text('Best result already saved.'), findsNothing);
       expect(store.saveCalls, 0);
       expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNotNull);

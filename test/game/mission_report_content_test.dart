@@ -265,7 +265,7 @@ void main() {
       expect(content.outcomeText, 'Survived 0 waves');
       expect(content.comparisonText, 'No endless best yet');
       expect(content.saveState, MissionSaveState.saved);
-      expect(content.saveText, 'Best result already saved.');
+      expect(content.saveText, 'No result to save.');
       expect(
         content.nextOpportunityText,
         'Replay for a better result or continue on the World Map.',
