@@ -152,7 +152,11 @@ MissionReportContent projectEndlessReport({
     saveText: switch (saveState) {
       MissionSaveState.saving => 'Saving result…',
       MissionSaveState.saved =>
-        improved ? 'Saved.' : 'Best result already saved.',
+        improved
+            ? 'Saved.'
+            : priorBest == null
+            ? 'No result to save.'
+            : 'Best result already saved.',
       MissionSaveState.failed => 'Save failed — progress unchanged.',
     },
     nextOpportunityText: switch (saveState) {
