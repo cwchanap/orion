@@ -112,11 +112,17 @@ class CampaignProgressCodec {
     required Iterable<StageDefinition> knownStages,
     bool includeEndlessBest = false,
   }) {
+    final knownIds = knownStages.map((stage) => stage.id).toSet();
+    // Endless records decode independently of mission results: a malformed
+    // `stageResults` must not discard valid `endlessBest` entries, or the next
+    // save would permanently overwrite them.
+    final endlessBest = includeEndlessBest
+        ? _decodeEndlessBest(decoded['endlessBest'], knownIds)
+        : const <String, int>{};
     final rawResults = decoded['stageResults'];
     if (rawResults is! Map<String, Object?>) {
-      return CampaignProgress();
+      return CampaignProgress(endlessBestByStageId: endlessBest);
     }
-    final knownIds = knownStages.map((stage) => stage.id).toSet();
     final results = <String, StageResult>{};
     for (final entry in rawResults.entries) {
       if (!knownIds.contains(entry.key)) {
@@ -130,9 +136,7 @@ class CampaignProgressCodec {
     }
     return CampaignProgress(
       bestResultsByStageId: results,
-      endlessBestByStageId: includeEndlessBest
-          ? _decodeEndlessBest(decoded['endlessBest'], knownIds)
-          : const <String, int>{},
+      endlessBestByStageId: endlessBest,
     );
   }
 

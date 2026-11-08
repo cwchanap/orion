@@ -963,6 +963,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
                             content: projectEndlessReport(
                               snapshot: snapshot,
                               priorBest: _endlessPriorBest,
+                              savedBest: _committedProgress.endlessBestFor(
+                                snapshot.stageId,
+                              ),
                               saveState:
                                   _missionSaveState ?? MissionSaveState.saved,
                             ),

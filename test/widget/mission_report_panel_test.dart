@@ -446,7 +446,7 @@ void main() {
       var returned = false;
       await _pumpPanel(
         tester,
-        _endlessContent(MissionSaveState.saved, priorBest: 5),
+        _endlessContent(MissionSaveState.saved, priorBest: 5, savedBest: 8),
         onReplay: () => replayed = true,
         onReturnToMap: () => returned = true,
       );
@@ -454,10 +454,13 @@ void main() {
       expect(find.text('Saved.'), findsOneWidget);
       expect(find.text('New best! Previous: 5 waves'), findsOneWidget);
       expect(find.bySemanticsLabel('Save status'), findsOneWidget);
-      expect(find.text('Replay Mission'), findsOneWidget);
+      // The replay action launches another endless run, so it is labeled
+      // 'Replay Endless' — 'Replay Mission' belongs to the finite mission.
+      expect(find.text('Replay Endless'), findsOneWidget);
+      expect(find.text('Replay Mission'), findsNothing);
       expect(find.text('World Map'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.tap(find.byTooltip('Replay Endless'));
       await tester.tap(find.byTooltip('World Map'));
       expect(replayed, isTrue);
       expect(returned, isTrue);
@@ -474,7 +477,7 @@ void main() {
       expect(find.text('Saving result…'), findsOneWidget);
       final replayButton = tester.widget<IconButton>(
         find.descendant(
-          of: find.byTooltip('Replay Mission'),
+          of: find.byTooltip('Replay Endless'),
           matching: find.byType(IconButton),
         ),
       );
@@ -495,15 +498,16 @@ void main() {
       var returned = false;
       await _pumpPanel(
         tester,
-        _endlessContent(MissionSaveState.failed),
+        _endlessContent(MissionSaveState.failed, savedBest: 5),
         onRetrySave: () => retried = true,
         onReturnToMap: () => returned = true,
       );
 
-      expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+      expect(find.text('Save failed — best 5 waves kept.'), findsOneWidget);
       expect(find.text('Retry Save'), findsOneWidget);
       expect(find.text('World Map (Unsaved)'), findsOneWidget);
       expect(find.text('Replay Mission'), findsNothing);
+      expect(find.text('Replay Endless'), findsNothing);
 
       await tester.tap(find.byTooltip('Retry Save'));
       await tester.tap(find.byTooltip('World Map (Unsaved)'));
@@ -766,6 +770,7 @@ MissionReportContent _endlessContent(
   int waveNumber = 9,
   int wavesCleared = 8,
   int? priorBest = 5,
+  int? savedBest,
   List<RunModuleId> moduleIds = const [],
 }) {
   return projectEndlessReport(
@@ -778,6 +783,7 @@ MissionReportContent _endlessContent(
       modules: moduleIds,
     ),
     priorBest: priorBest,
+    savedBest: savedBest,
     saveState: saveState,
   );
 }

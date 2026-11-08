@@ -2488,7 +2488,7 @@ void main() {
     expect(find.text('Survived 7 waves'), findsOneWidget);
 
     // Replay keeps the endless mode and recaptures the committed best.
-    await tester.tap(find.byTooltip('Replay Mission'));
+    await tester.tap(find.byTooltip('Replay Endless'));
     await tester.pumpAndSettle();
     expect(game!.mode, RunMode.endless);
     expect(game!.snapshot.phase, GamePhase.build);
@@ -2591,16 +2591,16 @@ void main() {
       expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
       expect(find.text('Saving result…'), findsOneWidget);
       // Both report exits stay disabled while the best write is in flight.
-      expect(reportActionOnPressed(tester, 'Replay Mission'), isNull);
+      expect(reportActionOnPressed(tester, 'Replay Endless'), isNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNull);
 
       store.saveCompletions.single.complete();
       await tester.pumpAndSettle();
       expect(find.text('Saved.'), findsOneWidget);
-      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNotNull);
 
-      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.tap(find.byTooltip('Replay Endless'));
       await tester.pumpAndSettle();
       expect(game!.snapshot.phase, GamePhase.build);
       expect(game!.snapshot.isEndless, isTrue);
@@ -2660,6 +2660,47 @@ void main() {
     },
   );
 
+  testWidgets('Endless failed final write names the committed mid-run best', (
+    tester,
+  ) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithAlphaCleared(),
+      delaySaves: true,
+      failOnSaveIndices: {1},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    // Wave 4's record write commits; wave 7's fails. The report must name
+    // the standing record — "progress unchanged" would be a lie here.
+    await publishEndlessWaveClear(tester, game!, 4);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+    expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+
+    await publishEndlessWaveClear(tester, game!, 7);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+
+    await publishLoss(tester, game!);
+    await tester.pump();
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Save failed — best 4 waves kept.'), findsOneWidget);
+    expect(find.text('Save failed — progress unchanged.'), findsNothing);
+    expect(find.byTooltip('Retry Save'), findsOneWidget);
+    expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+  });
+
   testWidgets(
     'Endless Retry Save queues once while a retry is already in flight',
     (tester) async {
@@ -2706,7 +2747,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(store.progress.endlessBestFor('outpost-alpha'), 4);
       expect(find.text('Saved.'), findsOneWidget);
-      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
     },
   );
 
@@ -2782,13 +2823,13 @@ void main() {
       await _pumpUntil(tester, () => store.saveCompletions.length > 1);
       await tester.pump();
       expect(find.text('Saving result…'), findsOneWidget);
-      expect(reportActionOnPressed(tester, 'Replay Mission'), isNull);
+      expect(reportActionOnPressed(tester, 'Replay Endless'), isNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNull);
 
       store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       expect(find.text('Saved.'), findsOneWidget);
-      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
       // The larger queued score is what disk keeps.
       expect(store.progress.endlessBestFor('outpost-alpha'), 7);
     },
@@ -2825,7 +2866,7 @@ void main() {
       await tester.pump();
       expect(find.text('Survived 0 waves'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.tap(find.byTooltip('Replay Endless'));
       await tester.pumpAndSettle();
       expect(game!.snapshot.phase, GamePhase.build);
       expect(game!.snapshot.isEndless, isTrue);
@@ -2872,7 +2913,7 @@ void main() {
       expect(find.text('No result to save.'), findsOneWidget);
       expect(find.text('Best result already saved.'), findsNothing);
       expect(store.saveCalls, 0);
-      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNotNull);
 
       await tester.tap(find.text('World Map'));
@@ -2928,7 +2969,7 @@ void main() {
       await publishLoss(tester, game!);
       await tester.pump();
       expect(find.text('Saved.'), findsOneWidget);
-      expect(reportActionOnPressed(tester, 'Replay Mission'), isNotNull);
+      expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
 
       await tester.tap(find.text('World Map'));
       await tester.pumpAndSettle();

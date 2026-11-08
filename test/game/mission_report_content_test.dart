@@ -185,6 +185,7 @@ void main() {
       final content = projectEndlessReport(
         snapshot: endlessDefeat(),
         priorBest: null,
+        savedBest: 5,
         saveState: MissionSaveState.saved,
       );
 
@@ -207,6 +208,7 @@ void main() {
       final content = projectEndlessReport(
         snapshot: endlessDefeat(waveNumber: 18, wavesCleared: 17),
         priorBest: 12,
+        savedBest: 17,
         saveState: MissionSaveState.saved,
       );
 
@@ -219,6 +221,7 @@ void main() {
       final content = projectEndlessReport(
         snapshot: endlessDefeat(waveNumber: 13, wavesCleared: 12),
         priorBest: 20,
+        savedBest: 20,
         saveState: MissionSaveState.saved,
       );
 
@@ -231,6 +234,7 @@ void main() {
       final content = projectEndlessReport(
         snapshot: endlessDefeat(),
         priorBest: null,
+        savedBest: null,
         saveState: MissionSaveState.saving,
       );
 
@@ -241,10 +245,11 @@ void main() {
       );
     });
 
-    test('failed reuses the mission retry-failure copy', () {
+    test('failed with nothing committed keeps the progress-unchanged copy', () {
       final content = projectEndlessReport(
         snapshot: endlessDefeat(),
-        priorBest: 4,
+        priorBest: null,
+        savedBest: null,
         saveState: MissionSaveState.failed,
       );
 
@@ -255,10 +260,29 @@ void main() {
       );
     });
 
+    test('failed names the committed best instead of the unsaved score', () {
+      // Mid-run record saves can commit before the final write fails: a run
+      // that scored 5 against prior best 3 may still hold a committed 4.
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(waveNumber: 6, wavesCleared: 5),
+        priorBest: 3,
+        savedBest: 4,
+        saveState: MissionSaveState.failed,
+      );
+
+      expect(content.comparisonText, 'New best! Previous: 3 waves');
+      expect(content.saveText, 'Save failed — best 4 waves kept.');
+      expect(
+        content.nextOpportunityText,
+        'Retry saving, or return without keeping this result.',
+      );
+    });
+
     test('a wave-one defeat survived zero waves', () {
       final content = projectEndlessReport(
         snapshot: endlessDefeat(waveNumber: 1, wavesCleared: 0),
         priorBest: null,
+        savedBest: null,
         saveState: MissionSaveState.saved,
       );
 
@@ -282,11 +306,13 @@ void main() {
           modules: const [RunModuleId.heavyCaliber],
         ),
         priorBest: null,
+        savedBest: 3,
         saveState: MissionSaveState.saved,
       );
       final empty = projectEndlessReport(
         snapshot: endlessDefeat(),
         priorBest: null,
+        savedBest: 5,
         saveState: MissionSaveState.saved,
       );
 

@@ -87,14 +87,17 @@ class MissionReportPanel extends StatelessWidget {
       ];
     }
 
+    final replayLabel = content.snapshot.isEndless
+        ? 'Replay Endless'
+        : 'Replay Mission';
     return switch (content.saveState) {
       MissionSaveState.saving || null => [
-        _MissionAction(label: 'Replay Mission', icon: Icons.replay),
+        _MissionAction(label: replayLabel, icon: Icons.replay),
         _MissionAction(label: 'World Map', icon: Icons.map, tonal: true),
       ],
       MissionSaveState.saved => [
         _MissionAction(
-          label: 'Replay Mission',
+          label: replayLabel,
           icon: Icons.replay,
           onPressed: onReplay,
         ),
