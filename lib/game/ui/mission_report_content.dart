@@ -127,6 +127,7 @@ MissionReportContent projectVictoryReport({
 MissionReportContent projectEndlessReport({
   required GameSnapshot snapshot,
   required int? priorBest,
+  required int? savedBest,
   required MissionSaveState saveState,
 }) {
   final wavesCleared = snapshot.wavesCleared;
@@ -157,7 +158,10 @@ MissionReportContent projectEndlessReport({
             : priorBest == null
             ? 'No result to save.'
             : 'Best result already saved.',
-      MissionSaveState.failed => 'Save failed — progress unchanged.',
+      MissionSaveState.failed =>
+        savedBest == null
+            ? 'Save failed — progress unchanged.'
+            : 'Save failed — best $savedBest waves kept.',
     },
     nextOpportunityText: switch (saveState) {
       MissionSaveState.saving =>

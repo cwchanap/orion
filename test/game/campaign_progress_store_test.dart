@@ -456,6 +456,26 @@ void main() {
       expect(decoded.progress.endlessBestByStageId, isEmpty);
     });
 
+    test('malformed stageResults still decodes endlessBest', () {
+      // A torn or hand-edited v3 save must not lose committed endless records:
+      // the next save writes the whole aggregate, so dropping them here would
+      // permanently overwrite them.
+      const raw =
+          '{"version":3,"stageResults":[1,2,3],'
+          '"endlessBest":{"outpost-alpha":9,"nebula-relay":4}}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.bestResultsByStageId, isEmpty);
+      expect(decoded.progress.endlessBestByStageId, {
+        'outpost-alpha': 9,
+        'nebula-relay': 4,
+      });
+    });
+
     test('encode writes only positive endless bests', () {
       final encoded = CampaignProgressCodec.encode(
         CampaignSave(
