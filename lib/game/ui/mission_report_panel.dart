@@ -494,7 +494,10 @@ class _SaveStateRow extends StatelessWidget {
     };
     final icon = switch (state) {
       MissionSaveState.saving => Icons.sync,
-      MissionSaveState.saved => Icons.check_circle_outline,
+      MissionSaveState.saved =>
+        text == 'No result to save.'
+            ? Icons.info_outline
+            : Icons.check_circle_outline,
       MissionSaveState.failed => Icons.error_outline,
       null => Icons.info_outline,
     };

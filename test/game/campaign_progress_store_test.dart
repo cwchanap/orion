@@ -42,7 +42,7 @@ void main() {
       );
     });
 
-    test('encodes sorted stage result JSON at codec version three', () {
+    test('encodes sorted stage result JSON at codec version four', () {
       final encoded = CampaignProgressCodec.encode(
         CampaignSave(
           progress: CampaignProgress(
@@ -64,7 +64,7 @@ void main() {
       final decoded = jsonDecode(encoded) as Map<String, Object?>;
       final stageResults = decoded['stageResults'] as Map<String, Object?>;
 
-      expect(decoded['version'], 3);
+      expect(decoded['version'], 4);
       expect(stageResults.keys, ['nebula-relay', 'outpost-alpha']);
       expect(stageResults['outpost-alpha'], {
         'medal': 'gold',
@@ -371,7 +371,7 @@ void main() {
       expect(decoded.techTree.purchased, isEmpty);
     });
 
-    test('round-trips endless bests with sorted keys at version three', () {
+    test('round-trips endless bests with sorted keys at version four', () {
       final save = CampaignSave(
         progress: CampaignProgress(
           bestResultsByStageId: {
@@ -389,7 +389,7 @@ void main() {
       final raw = jsonDecode(encoded) as Map<String, Object?>;
       final endlessBest = raw['endlessBest'] as Map<String, Object?>;
 
-      expect(raw['version'], 3);
+      expect(raw['version'], 4);
       expect(endlessBest.keys, ['nebula-relay', 'outpost-alpha']);
       expect(endlessBest['outpost-alpha'], 11);
       expect(endlessBest['nebula-relay'], 4);
@@ -430,9 +430,30 @@ void main() {
       expect(decoded.techTree.purchased, {CampaignTechUpgrade.solarCapacitors});
     });
 
+    test('v4 payload without endlessBest decodes to an empty map', () {
+      const raw =
+          '{"version":4,'
+          '"stageResults":{"outpost-alpha":'
+          '{"medal":"gold","bestBaseHealth":20}},'
+          '"techPurchases":["solar-capacitors"]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.endlessBestByStageId, isEmpty);
+      expect(decoded.progress.endlessBestFor('outpost-alpha'), isNull);
+      expect(
+        decoded.progress.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      expect(decoded.techTree.purchased, {CampaignTechUpgrade.solarCapacitors});
+    });
+
     test('drops invalid endlessBest entries on decode', () {
       const raw =
-          '{"version":3,"stageResults":{},'
+          '{"version":4,"stageResults":{},'
           '"endlessBest":{"outpost-alpha":9,"missing-stage":12,'
           '"nebula-relay":"high","salvage-rift":0,"void-bastion":-2,'
           '"aurora-gate":3.5}}';
@@ -446,7 +467,7 @@ void main() {
     });
 
     test('non-map endlessBest decodes to an empty map', () {
-      const raw = '{"version":3,"stageResults":{},"endlessBest":[1,2,3]}';
+      const raw = '{"version":4,"stageResults":{},"endlessBest":[1,2,3]}';
 
       final decoded = CampaignProgressCodec.decode(
         raw,
@@ -457,11 +478,11 @@ void main() {
     });
 
     test('malformed stageResults still decodes endlessBest', () {
-      // A torn or hand-edited v3 save must not lose committed endless records:
+      // A torn or hand-edited v4 save must not lose committed endless records:
       // the next save writes the whole aggregate, so dropping them here would
       // permanently overwrite them.
       const raw =
-          '{"version":3,"stageResults":[1,2,3],'
+          '{"version":4,"stageResults":[1,2,3],'
           '"endlessBest":{"outpost-alpha":9,"nebula-relay":4}}';
 
       final decoded = CampaignProgressCodec.decode(

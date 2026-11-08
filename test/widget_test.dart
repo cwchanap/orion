@@ -2788,6 +2788,134 @@ void main() {
   });
 
   testWidgets(
+    'Endless failed final write names committed best when leaving to map',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+        failOnSaveIndices: {1},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      // Wave 4 commits; wave 7 fails.
+      await publishEndlessWaveClear(tester, game!, 4);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+
+      await publishEndlessWaveClear(tester, game!, 7);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+
+      await publishLoss(tester, game!);
+      await tester.pump();
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Save failed — best 4 waves kept.'), findsOneWidget);
+      await tester.tap(find.byTooltip('World Map (Unsaved)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(
+        find.text('Endless save failed — best 4 waves kept.'),
+        findsOneWidget,
+      );
+      expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+    },
+  );
+
+  testWidgets(
+    'in-game World Map button during in-flight Endless save reports feedback',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      await publishEndlessWaveClear(tester, game!, 4);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      // Tapping the in-game World Map button while save is in flight.
+      await tester.tap(find.byTooltip('World Map'));
+      await tester.pump();
+
+      expect(find.text('ORION SECTOR'), findsNothing);
+      expect(
+        find.text('Saving Endless best… Finish saving before returning.'),
+        findsOneWidget,
+      );
+
+      // After save settles, returning to map works.
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('World Map'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'earlier failed Endless write replaced by later queued write does not report failure',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      await publishEndlessWaveClear(tester, game!, 4);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await publishEndlessWaveClear(tester, game!, 7);
+      await tester.pump();
+
+      // First save fails.
+      store.saveCompletions[0].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      await tester.pump();
+
+      // Failure toast is suppressed because write 2 is queued.
+      expect(find.text('Could not save campaign progress.'), findsNothing);
+
+      // Second save succeeds.
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(store.progress.endlessBestFor('outpost-alpha'), 7);
+    },
+  );
+
+  testWidgets(
     'Endless queued writes keep the report saving until the last settles',
     (tester) async {
       final store = _TestCampaignProgressStore(
@@ -5770,11 +5898,12 @@ Future<void> publishEndlessWaveClear(
 }
 
 /// The onPressed backing a mission-report action label, or null when the
-/// report does not render that action or the action is disabled. Non-tonal
-/// actions are IconButtons; the tonal exit is a TextButton inside
-/// OrionPrimaryButton — disabled actions keep their label, so onPressed is
-/// the enabled-state authority.
+/// action is disabled. Non-tonal actions are IconButtons; the tonal exit is a
+/// TextButton inside OrionPrimaryButton — disabled actions keep their label, so
+/// onPressed is the enabled-state authority. Throws if the action label is not
+/// rendered on the report.
 VoidCallback? reportActionOnPressed(WidgetTester tester, String label) {
+  expect(find.text(label), findsOneWidget);
   final iconButton = find.ancestor(
     of: find.text(label),
     matching: find.byType(IconButton),
@@ -5789,7 +5918,7 @@ VoidCallback? reportActionOnPressed(WidgetTester tester, String label) {
   if (textButton.evaluate().isNotEmpty) {
     return tester.widget<TextButton>(textButton).onPressed;
   }
-  return null;
+  fail('Action $label has neither IconButton nor TextButton ancestor');
 }
 
 Finder _activeIgnorePointerAncestorsOf(Finder finder) {

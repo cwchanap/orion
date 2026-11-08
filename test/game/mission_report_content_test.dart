@@ -278,6 +278,27 @@ void main() {
       );
     });
 
+    test('uses singular wave when count is 1', () {
+      final content = projectEndlessReport(
+        snapshot: endlessDefeat(waveNumber: 2, wavesCleared: 1),
+        priorBest: 1,
+        savedBest: 1,
+        saveState: MissionSaveState.failed,
+      );
+
+      expect(content.outcomeText, 'Survived 1 wave');
+      expect(content.comparisonText, 'Best: 1 wave');
+      expect(content.saveText, 'Save failed — best 1 wave kept.');
+
+      final newBestContent = projectEndlessReport(
+        snapshot: endlessDefeat(waveNumber: 3, wavesCleared: 2),
+        priorBest: 1,
+        savedBest: 1,
+        saveState: MissionSaveState.saved,
+      );
+      expect(newBestContent.comparisonText, 'New best! Previous: 1 wave');
+    });
+
     test('a wave-one defeat survived zero waves', () {
       final content = projectEndlessReport(
         snapshot: endlessDefeat(waveNumber: 1, wavesCleared: 0),

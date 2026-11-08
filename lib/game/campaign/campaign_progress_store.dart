@@ -53,7 +53,7 @@ class CampaignProgressCodec {
     }
 
     return jsonEncode({
-      'version': 3,
+      'version': 4,
       'stageResults': stageResults,
       'endlessBest': endlessBest,
       'techPurchases': save.techTree.toIdList(),
@@ -87,17 +87,19 @@ class CampaignProgressCodec {
           techTree: CampaignTechTree(),
         );
       }
-      if (version != 3) {
+      if (version == 3) {
+        return CampaignSave(
+          progress: _decodeStageResults(decoded, knownStages: knownStages),
+          techTree: _decodeTechPurchases(decoded['techPurchases']),
+        );
+      }
+      if (version != 4) {
         // Unknown future version: return empty save (existing policy).
         return CampaignSave.empty;
       }
 
       return CampaignSave(
-        progress: _decodeStageResults(
-          decoded,
-          knownStages: knownStages,
-          includeEndlessBest: true,
-        ),
+        progress: _decodeVersionFour(decoded, knownStages: knownStages),
         techTree: _decodeTechPurchases(decoded['techPurchases']),
       );
     } on FormatException {
@@ -110,18 +112,11 @@ class CampaignProgressCodec {
   static CampaignProgress _decodeStageResults(
     Map<String, Object?> decoded, {
     required Iterable<StageDefinition> knownStages,
-    bool includeEndlessBest = false,
   }) {
     final knownIds = knownStages.map((stage) => stage.id).toSet();
-    // Endless records decode independently of mission results: a malformed
-    // `stageResults` must not discard valid `endlessBest` entries, or the next
-    // save would permanently overwrite them.
-    final endlessBest = includeEndlessBest
-        ? _decodeEndlessBest(decoded['endlessBest'], knownIds)
-        : const <String, int>{};
     final rawResults = decoded['stageResults'];
     if (rawResults is! Map<String, Object?>) {
-      return CampaignProgress(endlessBestByStageId: endlessBest);
+      return CampaignProgress();
     }
     final results = <String, StageResult>{};
     for (final entry in rawResults.entries) {
@@ -134,8 +129,24 @@ class CampaignProgressCodec {
       }
       results[entry.key] = result;
     }
+    return CampaignProgress(bestResultsByStageId: results);
+  }
+
+  static CampaignProgress _decodeVersionFour(
+    Map<String, Object?> decoded, {
+    required Iterable<StageDefinition> knownStages,
+  }) {
+    final stageProgress = _decodeStageResults(
+      decoded,
+      knownStages: knownStages,
+    );
+    final knownIds = knownStages.map((stage) => stage.id).toSet();
+    // Endless records decode independently of mission results: a malformed
+    // `stageResults` must not discard valid `endlessBest` entries, or the next
+    // save would permanently overwrite them.
+    final endlessBest = _decodeEndlessBest(decoded['endlessBest'], knownIds);
     return CampaignProgress(
-      bestResultsByStageId: results,
+      bestResultsByStageId: stageProgress.bestResultsByStageId,
       endlessBestByStageId: endlessBest,
     );
   }

@@ -454,6 +454,7 @@ void main() {
       expect(find.text('Saved.'), findsOneWidget);
       expect(find.text('New best! Previous: 5 waves'), findsOneWidget);
       expect(find.bySemanticsLabel('Save status'), findsOneWidget);
+      expect(find.byIcon(Icons.check_circle_outline), findsOneWidget);
       // The replay action launches another endless run, so it is labeled
       // 'Replay Endless' — 'Replay Mission' belongs to the finite mission.
       expect(find.text('Replay Endless'), findsOneWidget);
@@ -465,6 +466,26 @@ void main() {
       expect(replayed, isTrue);
       expect(returned, isTrue);
     });
+
+    testWidgets(
+      'zero-wave endless defeat pairs No result to save with info icon',
+      (tester) async {
+        await _pumpPanel(
+          tester,
+          _endlessContent(
+            MissionSaveState.saved,
+            waveNumber: 1,
+            wavesCleared: 0,
+            priorBest: null,
+            savedBest: null,
+          ),
+        );
+
+        expect(find.text('No result to save.'), findsOneWidget);
+        expect(find.byIcon(Icons.info_outline), findsOneWidget);
+        expect(find.byIcon(Icons.check_circle_outline), findsNothing);
+      },
+    );
 
     testWidgets('saving keeps replay and return disabled', (tester) async {
       await _pumpPanel(

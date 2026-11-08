@@ -155,7 +155,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   StageResult? _missionVictoryResult;
   String? _missionStageId;
   MissionSaveState? _missionSaveState;
-  RunMode _runMode = RunMode.mission;
+  int _endlessSaveSequence = 0;
   int? _endlessPriorBest;
   bool _didPrecacheCommandDeckAssets = false;
 
@@ -1236,7 +1236,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     final campaignModifiers = _committedCampaignModifiers();
-    _runMode = mode;
+    _endlessSaveSequence = 0;
     _missionPriorResult = _committedProgress.resultFor(stage.id);
     _missionVictoryResult = null;
     _missionStageId = stage.id;
@@ -1464,6 +1464,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
+    final saveSequence = ++_endlessSaveSequence;
     _setMissionSaveState(MissionSaveState.saving);
     _persistSave(
       buildSave: (committed) => CampaignSave(
@@ -1472,7 +1473,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       ),
       onCommitted: (payload) {
         _progress = payload.progress;
-        if (_pendingSaves == 1) {
+        if (saveSequence == _endlessSaveSequence) {
           if (_mapFeedback == _persistenceFailureMessage) {
             _mapFeedback = null;
           }
@@ -1480,11 +1481,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
         }
       },
       onFailed: () {
-        if (_pendingSaves == 1) {
+        if (saveSequence == _endlessSaveSequence) {
           _setMissionSaveState(MissionSaveState.failed);
-        }
-        if (mounted && _game?.snapshot.isEnded == false) {
-          _showCampaignPersistenceFailure();
+          if (mounted && _game?.snapshot.isEnded == false) {
+            _showCampaignPersistenceFailure();
+          }
         }
       },
     );
@@ -1557,12 +1558,28 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   void _returnFromMissionReport() {
     if (_missionSaveState == MissionSaveState.saving) {
+      final isEndless = _game?.snapshot.isEndless ?? false;
+      if (isEndless && _activeView == _ShellView.stage && _game != null) {
+        _game!.overrideFeedback(
+          'Saving Endless best… Finish saving before returning.',
+        );
+      }
       return;
     }
     if (_missionSaveState == MissionSaveState.failed) {
-      _mapFeedback = _runMode == RunMode.endless
-          ? 'Endless best was not saved.'
-          : 'Mission result was not saved.';
+      final isEndless = _game?.snapshot.isEndless ?? false;
+      if (isEndless) {
+        final savedBest = _missionStageId == null
+            ? null
+            : _committedProgress.endlessBestFor(_missionStageId!);
+        final committedEarlier =
+            savedBest != null && savedBest > (_endlessPriorBest ?? 0);
+        _mapFeedback = committedEarlier
+            ? 'Endless save failed — best $savedBest ${savedBest == 1 ? 'wave' : 'waves'} kept.'
+            : 'Endless best was not saved.';
+      } else {
+        _mapFeedback = 'Mission result was not saved.';
+      }
     }
     _returnToMap();
   }
@@ -1571,7 +1588,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final game = _game;
     if (game == null) return;
 
-    final isEndless = _runMode == RunMode.endless;
+    final isEndless = game.snapshot.isEndless;
     if (isEndless) {
       if (_missionSaveState != MissionSaveState.saved) {
         return;
@@ -1582,6 +1599,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     _inspectedTowerId = null;
+    _endlessSaveSequence = 0;
     _missionPriorResult = _committedProgress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
     _missionSaveState = isEndless ? MissionSaveState.saved : null;
