@@ -53,7 +53,7 @@ class CampaignProgressCodec {
     }
 
     return jsonEncode({
-      'version': 4,
+      'version': 3,
       'stageResults': stageResults,
       'endlessBest': endlessBest,
       'techPurchases': save.techTree.toIdList(),
@@ -87,19 +87,13 @@ class CampaignProgressCodec {
           techTree: CampaignTechTree(),
         );
       }
-      if (version == 3) {
-        return CampaignSave(
-          progress: _decodeStageResults(decoded, knownStages: knownStages),
-          techTree: _decodeTechPurchases(decoded['techPurchases']),
-        );
-      }
-      if (version != 4) {
-        // Unknown future version: return empty save (existing policy).
+      if (version != 3) {
+        // Unknown version: return empty save (existing policy).
         return CampaignSave.empty;
       }
 
       return CampaignSave(
-        progress: _decodeVersionFour(decoded, knownStages: knownStages),
+        progress: _decodeVersionThree(decoded, knownStages: knownStages),
         techTree: _decodeTechPurchases(decoded['techPurchases']),
       );
     } on FormatException {
@@ -132,7 +126,7 @@ class CampaignProgressCodec {
     return CampaignProgress(bestResultsByStageId: results);
   }
 
-  static CampaignProgress _decodeVersionFour(
+  static CampaignProgress _decodeVersionThree(
     Map<String, Object?> decoded, {
     required Iterable<StageDefinition> knownStages,
   }) {
