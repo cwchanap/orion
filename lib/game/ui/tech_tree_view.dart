@@ -19,7 +19,7 @@ class TechTreeView extends StatefulWidget {
     this.feedback,
     this.isSavingProgress = false,
     required this.onPurchase,
-    required this.onBack,
+    this.onBack,
   });
 
   final CampaignProgress progress;
@@ -32,8 +32,9 @@ class TechTreeView extends StatefulWidget {
   /// Invoked when the user taps an affordable upgrade's Purchase button.
   final ValueChanged<CampaignTechUpgrade> onPurchase;
 
-  /// Invoked when the user taps the back button.
-  final VoidCallback onBack;
+  /// Back action for standalone hosts. Null inside the shared menu shell —
+  /// the bottom tabs own navigation there, so no back button renders.
+  final VoidCallback? onBack;
 
   @override
   State<TechTreeView> createState() => _TechTreeViewState();
@@ -65,9 +66,13 @@ class _TechTreeViewState extends State<TechTreeView> {
       [CampaignTechUpgrade.cryoCoolant],
     ];
 
-    return Scaffold(
-      backgroundColor: uiTheme.voidBlack,
-      body: Stack(
+    // A flat body, not a Scaffold: inside the shared menu shell the shell's
+    // Scaffold owns insets and chrome, and its MediaQuery.removePadding
+    // turns this view's own SafeArea into a no-op. Standalone test hosts
+    // still get the full layout.
+    return Material(
+      color: uiTheme.voidBlack,
+      child: Stack(
         children: [
           const Positioned.fill(
             child: _TechTreeBackdrop(key: ValueKey('tech-tree-backdrop')),
@@ -77,14 +82,20 @@ class _TechTreeViewState extends State<TechTreeView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+                  padding: EdgeInsets.fromLTRB(
+                    widget.onBack == null ? 12 : 4,
+                    4,
+                    12,
+                    0,
+                  ),
                   child: Row(
                     children: [
-                      IconButton(
-                        tooltip: 'Back',
-                        onPressed: widget.onBack,
-                        icon: const Icon(Icons.arrow_back),
-                      ),
+                      if (widget.onBack != null)
+                        IconButton(
+                          tooltip: 'Back',
+                          onPressed: widget.onBack,
+                          icon: const Icon(Icons.arrow_back),
+                        ),
                       Expanded(
                         child: OrionTitle(
                           'R & D',
@@ -208,19 +219,7 @@ class _TechTreeBackdrop extends StatelessWidget {
         ),
         const DecoratedBox(
           key: ValueKey('tech-tree-scrim'),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0x5505080D),
-                Color(0x2205080D),
-                Color(0x6605080D),
-                Color(0xCC05080D),
-              ],
-              stops: [0, 0.28, 0.72, 1],
-            ),
-          ),
+          decoration: BoxDecoration(gradient: orionTechTreeScrim),
         ),
       ],
     );

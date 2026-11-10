@@ -29,7 +29,9 @@ import 'mission_chrome.dart';
 import 'mission_command_dock.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
+import 'orion_menu_shell.dart';
 import 'orion_surface.dart';
+import 'orion_title_view.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
@@ -38,7 +40,7 @@ import 'tech_tree_view.dart';
 import 'tower_inspector.dart';
 import 'world_map_view.dart';
 
-enum _ShellView { worldMap, codex, techTree, stage }
+enum _ShellView { title, worldMap, codex, techTree, stage }
 
 /// Persistence-failure breadcrumb surfaced on both the active view and the
 /// world map. Hoisted to a top-level constant so retry paths can match and
@@ -61,6 +63,7 @@ class OrionGamePage extends StatefulWidget {
     this.gameFeedback,
     this.gameMusicController,
     this.onGameCreated,
+    @visibleForTesting this.startOnWorldMap = false,
   });
 
   final CampaignProgressStore? progressStore;
@@ -84,6 +87,13 @@ class OrionGamePage extends StatefulWidget {
 
   final ValueChanged<OrionDefenseGame>? onGameCreated;
 
+  /// Test seam: the shipped game lands on the title screen after loading,
+  /// while the bulk of the widget-test suite is written map-first. Fixtures
+  /// that exercise map/stage flows pass `true` to keep that starting point;
+  /// production always uses the default.
+  @visibleForTesting
+  final bool startOnWorldMap;
+
   @override
   State<OrionGamePage> createState() => _OrionGamePageState();
 }
@@ -102,7 +112,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
   CampaignProgress _committedProgress = CampaignProgress();
   CampaignTechTree _committedTechTree = CampaignTechTree();
   CampaignProgressStore? _store;
-  String? _mapFeedback;
+  // Transient status line rendered by the shared menu shell (and the title
+  // screen): locked-stage, persistence, save, and reset breadcrumbs.
+  String? _menuFeedback;
   String? _techTreeFeedback;
   FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
   FeedbackPreferencesStore? _feedbackPreferencesStore;
@@ -144,7 +156,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// [OrionGamePage.gameFeedback] was injected; disposed in [dispose] —
   /// never an injected implementation.
   PlatformGameFeedback? _ownedGameFeedback;
-  _ShellView _activeView = _ShellView.worldMap;
+  // Initialized once from the test seam: production always lands on the
+  // title, map-first fixtures opt into the world map.
+  late _ShellView _activeView = widget.startOnWorldMap
+      ? _ShellView.worldMap
+      : _ShellView.title;
   bool _isLoading = true;
   int _progressGeneration = 0;
   Future<void> _saveQueue = Future<void>.value();
@@ -366,7 +382,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _firstMissionGuideStore = guideStore;
         _firstMissionGuideCompleted = guideCompleted ?? false;
         _seenTips = seenTips;
-        _mapFeedback = 'Could not load campaign progress.';
+        _menuFeedback = 'Could not load campaign progress.';
         _isLoading = false;
       });
     }
@@ -535,27 +551,68 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     switch (_activeView) {
+      case _ShellView.title:
+        return _buildTitleView();
       case _ShellView.worldMap:
-        return _buildWorldMapScaffold();
       case _ShellView.techTree:
-        return TechTreeView(
-          progress: _progress,
-          techTree: _techTree,
-          feedback: _techTreeFeedback,
-          isSavingProgress: _isSavingProgress,
-          onPurchase: _purchaseTech,
-          onBack: _closeTechTree,
-        );
       case _ShellView.codex:
-        return CodexView(progress: _progress, onBack: _closeCodex);
+        return _buildMenuShell();
       case _ShellView.stage:
         return _buildStageScaffold();
     }
   }
 
-  Widget _buildWorldMapScaffold() {
-    return Scaffold(
-      body: WorldMapView(
+  /// Scene 1a: the command-deck front door. The Continue action reuses the
+  /// campaign's single recommender — the stage the map's next-mission card
+  /// steers to — and only stays a 'Continue' while that recommendation is
+  /// an unlocked, uncleared target. A null recommendation or the helper's
+  /// already-cleared replay fallback turns the action into Sectors so the
+  /// title never promises a mission it would actually replay.
+  Widget _buildTitleView() {
+    final recommended = _progress.recommendedStage(OrionCampaign.stages);
+    final continueAvailable =
+        recommended != null &&
+        _progress.statusFor(recommended) == StageProgressStatus.unlocked;
+    return OrionTitleView(
+      recommendedStage: recommended,
+      isContinueAvailable: continueAvailable,
+      medalEarned: CampaignTechTree.totalMedalRank(_progress),
+      medalTotal: _mainStageMedalTotal,
+      researchPoints: _techTree.unspentPoints(_progress),
+      busy: _isBusy,
+      feedback: _menuFeedback,
+      onContinue: continueAvailable
+          ? () => _showStageBriefing(recommended)
+          : null,
+      onOpenSectors: () => _openMenuDestination(OrionMenuDestination.sectors),
+      onOpenResearch: () => _openMenuDestination(OrionMenuDestination.research),
+      onOpenCodex: () => _openMenuDestination(OrionMenuDestination.codex),
+      onOpenSettings: _feedbackPreferencesLoaded ? _openFeedbackSettings : null,
+    );
+  }
+
+  /// Map, R&D, and Codex share one shell: resource chips and Settings up
+  /// top, the destination tabs at the bottom, and the transient breadcrumb
+  /// line under the top bar so a save error stays readable wherever it was
+  /// triggered. The views stay flat bodies — the shell's Scaffold owns the
+  /// SafeArea insets — so nothing nests a second Scaffold or Navigator.
+  Widget _buildMenuShell() {
+    final destination = switch (_activeView) {
+      _ShellView.techTree => OrionMenuDestination.research,
+      _ShellView.codex => OrionMenuDestination.codex,
+      _ => OrionMenuDestination.sectors,
+    };
+    final body = switch (_activeView) {
+      _ShellView.techTree => TechTreeView(
+        progress: _progress,
+        techTree: _techTree,
+        feedback: _techTreeFeedback,
+        isSavingProgress: _isSavingProgress,
+        onPurchase: _purchaseTech,
+        onBack: null,
+      ),
+      _ShellView.codex => CodexView(progress: _progress, onBack: null),
+      _ => WorldMapView(
         stages: OrionCampaign.stages,
         progress: _progress,
         campaignModifiers: CampaignModifiers.fromProgress(
@@ -563,20 +620,62 @@ class _OrionGamePageState extends State<OrionGamePage> {
           OrionCampaign.stages,
           _techTree,
         ),
-        feedback: _mapFeedback,
+        feedback: null,
         isSavingProgress: _isSavingProgress,
         isResetting: _isResetting,
-        isSavingFeedback: _isSavingFeedback,
         onStageSelected: _showStageBriefing,
         onLockedStageSelected: _showLockedStageFeedback,
-        onResetCampaign: _confirmResetCampaign,
-        onOpenTechTree: _openTechTree,
-        onOpenCodex: _openCodex,
-        onOpenSettings: _feedbackPreferencesLoaded
-            ? _openFeedbackSettings
-            : null,
       ),
+    };
+    // HPA-100 dual-targets a failed purchase write into both
+    // _techTreeFeedback (inline banner, visible now) and _menuFeedback (the
+    // breadcrumb that survives returning to the map). When the tree is the
+    // active body and already echoes that exact message, showing the shell
+    // line too would render the same sentence twice — suppress the shell copy.
+    final bodyEchoesMenuFeedback =
+        _activeView == _ShellView.techTree &&
+        _techTreeFeedback != null &&
+        _techTreeFeedback == _menuFeedback;
+    return OrionMenuShell(
+      destination: destination,
+      medalEarned: CampaignTechTree.totalMedalRank(_progress),
+      medalTotal: _mainStageMedalTotal,
+      researchPoints: _techTree.unspentPoints(_progress),
+      navigationEnabled: !_isBusy,
+      settingsEnabled: _feedbackPreferencesLoaded && !_isSavingFeedback,
+      onDestinationSelected: _openMenuDestination,
+      onOpenSettings: _feedbackPreferencesLoaded ? _openFeedbackSettings : null,
+      feedback: bodyEchoesMenuFeedback ? null : _menuFeedback,
+      child: body,
     );
+  }
+
+  int get _mainStageMedalTotal =>
+      OrionCampaign.stages.where((stage) => stage.isMainPath).length * 3;
+
+  bool get _isBusy => _isSavingProgress || _isResetting;
+
+  /// The shell's one navigation path: swap `_activeView` to the tapped
+  /// destination. No Navigator, no second state owner — and inert while a
+  /// campaign write is in flight so navigation can't interleave with it.
+  void _openMenuDestination(OrionMenuDestination destination) {
+    if (_isBusy) {
+      return;
+    }
+    final target = switch (destination) {
+      OrionMenuDestination.sectors => _ShellView.worldMap,
+      OrionMenuDestination.research => _ShellView.techTree,
+      OrionMenuDestination.codex => _ShellView.codex,
+    };
+    if (target == _activeView) {
+      return;
+    }
+    setState(() {
+      // Leaving (and re-entering) the tree drops a stale purchase banner;
+      // a fresh visit should not resurrect an old 'Researched …'.
+      _techTreeFeedback = null;
+      _activeView = target;
+    });
   }
 
   /// Tap arbiter shared by floating chrome (collapsed next-wave scanner,
@@ -631,8 +730,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final game = _game;
     if (game == null) {
       // Defensive: _activeView == stage implies _game is set, but if state
-      // ever drifts we fall back to the world map rather than crashing.
-      return _buildWorldMapScaffold();
+      // ever drifts we fall back to the shared menu shell rather than
+      // crashing.
+      return _buildMenuShell();
     }
     return Scaffold(
       body: SafeArea(
@@ -1110,7 +1210,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     if (_isSavingFeedback || !_feedbackPreferencesLoaded) {
       return;
     }
-    final updated = await showModalBottomSheet<FeedbackPreferences>(
+    final result = await showModalBottomSheet<FeedbackSettingsResult>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
@@ -1150,13 +1250,32 @@ class _OrionGamePageState extends State<OrionGamePage> {
       ),
     );
 
-    if (updated == null || updated == _feedbackPreferences) {
+    if (result == null) {
       return;
     }
-    await _saveFeedbackPreferences(updated);
+
+    // A changed draft must finish persisting BEFORE the reset confirmation
+    // opens — the reset's own queue drain must never race a still-running
+    // preference write. On save failure the error breadcrumb shows here and
+    // the reset dialog stays closed: resetting after a failed preference
+    // write would look like the save went through. An unchanged draft or a
+    // committed save proceeds to the confirmation; cancelling it does not
+    // roll back the preferences already persisted.
+    if (result.preferences != _feedbackPreferences) {
+      final saved = await _saveFeedbackPreferences(result.preferences);
+      if (!saved) {
+        return;
+      }
+    }
+    if (result.resetCampaignRequested && mounted) {
+      await _confirmResetCampaign();
+    }
   }
 
-  Future<void> _saveFeedbackPreferences(FeedbackPreferences updated) async {
+  /// Reports whether the write committed so the settings flow can order a
+  /// requested campaign reset behind it; the breadcrumb is surfaced here as
+  /// before, only now the caller can observe the outcome too.
+  Future<bool> _saveFeedbackPreferences(FeedbackPreferences updated) async {
     _isSavingFeedback = true;
     if (mounted) {
       setState(() {});
@@ -1168,23 +1287,25 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // like the campaign persistence failure path.
       _isSavingFeedback = false;
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
-        _mapFeedback = _feedbackSaveFailureMessage;
+        _menuFeedback = _feedbackSaveFailureMessage;
       });
-      return;
+      return false;
     }
+    var committed = false;
     try {
       await store.save(updated);
+      committed = true;
       if (!mounted) {
-        return;
+        return true;
       }
       setState(() {
         _feedbackPreferences = updated;
         _feedbackPreferencesLoaded = true;
-        if (_mapFeedback == _feedbackSaveFailureMessage) {
-          _mapFeedback = null;
+        if (_menuFeedback == _feedbackSaveFailureMessage) {
+          _menuFeedback = null;
         }
       });
       _syncMusic();
@@ -1192,10 +1313,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // Keep the prior effective value; surface a breadcrumb like the
       // campaign persistence failure path.
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
-        _mapFeedback = _feedbackSaveFailureMessage;
+        _menuFeedback = _feedbackSaveFailureMessage;
       });
     } finally {
       _isSavingFeedback = false;
@@ -1203,6 +1324,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         setState(() {});
       }
     }
+    return committed;
   }
 
   // Run inputs (campaign modifiers and module eligibility) are derived from
@@ -1219,7 +1341,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   void _startStage(StageDefinition stage, RunMode mode) {
     if (_isSavingProgress || _isResetting) {
       setState(() {
-        _mapFeedback = _isResetting
+        _menuFeedback = _isResetting
             ? 'Resetting campaign…'
             : 'Saving campaign progress…';
       });
@@ -1258,7 +1380,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     widget.onGameCreated?.call(game);
 
     setState(() {
-      _mapFeedback = null;
+      _menuFeedback = null;
       _listenToGame(game);
       _inspectedTowerId = null;
       _boardViewport = null;
@@ -1268,34 +1390,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   void _showLockedStageFeedback(StageDefinition stage) {
     setState(() {
-      _mapFeedback = '${stage.name} is locked.';
-    });
-  }
-
-  void _openTechTree() {
-    setState(() {
-      _techTreeFeedback = null;
-      _activeView = _ShellView.techTree;
-    });
-  }
-
-  // Wired up by TechTreeView's back button.
-  void _closeTechTree() {
-    setState(() {
-      _techTreeFeedback = null;
-      _activeView = _ShellView.worldMap;
-    });
-  }
-
-  void _openCodex() {
-    setState(() {
-      _activeView = _ShellView.codex;
-    });
-  }
-
-  void _closeCodex() {
-    setState(() {
-      _activeView = _ShellView.worldMap;
+      _menuFeedback = '${stage.name} is locked.';
     });
   }
 
@@ -1312,12 +1407,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
       });
     }
     // P2 (round-4 review): also clear the matching map breadcrumb. A failed
-    // purchase writes the persistence-failure message into _mapFeedback; the
+    // purchase writes the persistence-failure message into _menuFeedback; the
     // retry previously cleared only _techTreeFeedback, so returning to the
     // world map after a successful retry still showed the stale error.
-    if (_mapFeedback == _persistenceFailureMessage) {
+    if (_menuFeedback == _persistenceFailureMessage) {
       setState(() {
-        _mapFeedback = null;
+        _menuFeedback = null;
       });
     }
     final newTechTree = _techTree.purchase(upgrade, _progress);
@@ -1474,8 +1569,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
       onCommitted: (payload) {
         _progress = payload.progress;
         if (saveSequence == _endlessSaveSequence) {
-          if (_mapFeedback == _persistenceFailureMessage) {
-            _mapFeedback = null;
+          if (_menuFeedback == _persistenceFailureMessage) {
+            _menuFeedback = null;
           }
           _setMissionSaveState(MissionSaveState.saved);
         }
@@ -1574,11 +1669,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
             : _committedProgress.endlessBestFor(_missionStageId!);
         final committedEarlier =
             savedBest != null && savedBest > (_endlessPriorBest ?? 0);
-        _mapFeedback = committedEarlier
+        _menuFeedback = committedEarlier
             ? 'Endless save failed — best $savedBest ${savedBest == 1 ? 'wave' : 'waves'} kept.'
             : 'Endless best was not saved.';
       } else {
-        _mapFeedback = 'Mission result was not saved.';
+        _menuFeedback = 'Mission result was not saved.';
       }
     }
     _returnToMap();
@@ -1701,7 +1796,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
 
       setState(() {
-        _mapFeedback = 'Could not reset campaign progress.';
+        _menuFeedback = 'Could not reset campaign progress.';
       });
       return;
     }
@@ -1733,7 +1828,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committedTechTree = CampaignTechTree();
         _listenToGame(null);
         _activeView = _ShellView.worldMap;
-        _mapFeedback = 'Campaign reset.';
+        _menuFeedback = 'Campaign reset.';
         _pendingSaves = 0;
         _isSavingProgress = false;
       });
@@ -1746,7 +1841,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // during the drain, so no save is skipped. New saves capture the new
       // generation and persist normally.
       setState(() {
-        _mapFeedback = 'Could not reset campaign progress.';
+        _menuFeedback = 'Could not reset campaign progress.';
       });
     } finally {
       _isResetting = false;
@@ -1778,7 +1873,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     const message = _persistenceFailureMessage;
     final game = _game;
     setState(() {
-      _mapFeedback = message; // always; preserves HPA-94 breadcrumb behavior
+      _menuFeedback = message; // always; preserves HPA-94 breadcrumb behavior
       if (_activeView == _ShellView.techTree) {
         _techTreeFeedback = message;
       }

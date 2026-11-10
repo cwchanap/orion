@@ -9,10 +9,13 @@ import 'orion_ui_theme.dart';
 import 'tower_icons.dart';
 
 class CodexView extends StatefulWidget {
-  const CodexView({super.key, required this.progress, required this.onBack});
+  const CodexView({super.key, required this.progress, this.onBack});
 
   final CampaignProgress progress;
-  final VoidCallback onBack;
+
+  /// Back action for standalone hosts. Null inside the shared menu shell —
+  /// the bottom tabs own navigation there, so no back button renders.
+  final VoidCallback? onBack;
 
   @override
   State<CodexView> createState() => _CodexViewState();
@@ -80,8 +83,13 @@ class _CodexViewState extends State<CodexView> {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return Scaffold(
-      body: SafeArea(
+    // A flat body, not a Scaffold: inside the shared menu shell the shell's
+    // Scaffold owns insets and chrome, and its MediaQuery.removePadding
+    // turns this view's own SafeArea into a no-op. Standalone test hosts
+    // still get the full layout.
+    return Material(
+      color: uiTheme.voidBlack,
+      child: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -96,11 +104,12 @@ class _CodexViewState extends State<CodexView> {
                     padding: const EdgeInsets.all(8),
                     child: Row(
                       children: [
-                        IconButton(
-                          tooltip: 'Back',
-                          onPressed: widget.onBack,
-                          icon: const Icon(Icons.arrow_back),
-                        ),
+                        if (widget.onBack != null)
+                          IconButton(
+                            tooltip: 'Back',
+                            onPressed: widget.onBack,
+                            icon: const Icon(Icons.arrow_back),
+                          ),
                         const SizedBox(width: 8),
                         OrionTitle('Codex', color: uiTheme.textPrimary),
                       ],

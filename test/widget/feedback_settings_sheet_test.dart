@@ -38,6 +38,7 @@ void main() {
     expect(find.text('Music'), findsOneWidget);
     expect(find.text('Reduced Motion'), findsOneWidget);
     expect(find.text('Replay Tutorial'), findsOneWidget);
+    expect(find.text('Reset Campaign'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -168,8 +169,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping Done pops the final preferences value', (tester) async {
-    FeedbackPreferences? popped;
+  testWidgets('tapping Done pops the typed result with the final draft', (
+    tester,
+  ) async {
+    FeedbackSettingsResult? popped;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -177,7 +180,7 @@ void main() {
             body: Center(
               child: FilledButton(
                 onPressed: () async {
-                  popped = await showModalBottomSheet<FeedbackPreferences>(
+                  popped = await showModalBottomSheet<FeedbackSettingsResult>(
                     context: context,
                     builder: (context) => const FeedbackSettingsSheet(
                       initialPreferences: FeedbackPreferences(),
@@ -203,20 +206,76 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      popped,
+      popped?.preferences,
       const FeedbackPreferences(
         soundEffectsEnabled: true,
         hapticsEnabled: true,
         musicEnabled: false,
       ),
     );
+    expect(popped?.resetCampaignRequested, isFalse);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'tapping Reset Campaign pops the typed reset intent without saving',
+    (tester) async {
+      // The sheet only reports intent: confirmation and the reset itself are
+      // orchestrated by the page, so the row carries the current draft along
+      // for the ordered save-then-reset flow.
+      FeedbackSettingsResult? popped;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: FilledButton(
+                  onPressed: () async {
+                    popped = await showModalBottomSheet<FeedbackSettingsResult>(
+                      context: context,
+                      builder: (context) => const FeedbackSettingsSheet(
+                        initialPreferences: FeedbackPreferences(
+                          musicEnabled: false,
+                        ),
+                        reduceMotion: false,
+                      ),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      // Draft edits ride along with the reset intent: the page saves them
+      // before the reset starts.
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
+      await tester.pump();
+      await tester.ensureVisible(find.text('Reset Campaign'));
+      await tester.tap(find.text('Reset Campaign'));
+      await tester.pumpAndSettle();
+
+      expect(popped?.resetCampaignRequested, isTrue);
+      expect(
+        popped?.preferences,
+        const FeedbackPreferences(
+          soundEffectsEnabled: true,
+          hapticsEnabled: false,
+          musicEnabled: false,
+        ),
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('dismissing via the barrier returns null (draft not persisted)', (
     tester,
   ) async {
-    FeedbackPreferences? popped;
+    FeedbackSettingsResult? popped;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -224,7 +283,7 @@ void main() {
             body: Center(
               child: FilledButton(
                 onPressed: () async {
-                  popped = await showModalBottomSheet<FeedbackPreferences>(
+                  popped = await showModalBottomSheet<FeedbackSettingsResult>(
                     context: context,
                     builder: (context) => const FeedbackSettingsSheet(
                       initialPreferences: FeedbackPreferences(),

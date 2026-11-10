@@ -4,12 +4,28 @@ import '../feedback/feedback_preferences.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-/// Self-contained settings sheet for the three persisted feedback toggles plus
-/// the first-mission tutorial replay action.
+/// What the settings sheet resolved to. [preferences] is always the final
+/// local draft; [resetCampaignRequested] carries the destructive intent the
+/// page confirms and orchestrates — the sheet never resets (or saves)
+/// anything itself. A barrier dismissal pops null instead.
+class FeedbackSettingsResult {
+  const FeedbackSettingsResult({
+    required this.preferences,
+    this.resetCampaignRequested = false,
+  });
+
+  final FeedbackPreferences preferences;
+  final bool resetCampaignRequested;
+}
+
+/// Self-contained settings sheet for the three persisted feedback toggles,
+/// the first-mission tutorial replay action, and the campaign-reset request.
 ///
-/// Owns only a local draft of the preferences and pops the final value when
-/// Done is tapped. Persistence, platform feedback calls, and the tutorial
-/// store live in the page, never here — replay is a plain async callback.
+/// Owns only a local draft of the preferences and pops a
+/// [FeedbackSettingsResult] when Done or Reset Campaign is tapped.
+/// Persistence, platform feedback calls, the tutorial store, and reset
+/// confirmation live in the page, never here — replay is a plain async
+/// callback and reset is pure intent in the popped result.
 class FeedbackSettingsSheet extends StatefulWidget {
   const FeedbackSettingsSheet({
     super.key,
@@ -134,9 +150,29 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
                 enabled: canReplay,
                 onTap: canReplay ? _replayTutorial : null,
               ),
+              ListTile(
+                title: Text(
+                  'Reset Campaign',
+                  style: TextStyle(color: uiTheme.dangerRed),
+                ),
+                subtitle: const Text(
+                  'Clears every cleared sector, medal, and blueprint.',
+                ),
+                // The page owns confirmation and the reset queue; this row
+                // only pops the intent (with the current draft, so the page
+                // can save it first).
+                onTap: () => Navigator.of(context).pop(
+                  FeedbackSettingsResult(
+                    preferences: _draft,
+                    resetCampaignRequested: true,
+                  ),
+                ),
+              ),
               const SizedBox(height: 8),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(_draft),
+                onPressed: () => Navigator.of(
+                  context,
+                ).pop(FeedbackSettingsResult(preferences: _draft)),
                 child: const Text('Done'),
               ),
             ],

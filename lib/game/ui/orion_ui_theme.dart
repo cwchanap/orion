@@ -253,3 +253,90 @@ const orionIdleBobDuration = Duration(milliseconds: 1600);
 
 AnimationStyle? orionSheetAnimationStyle(BuildContext context) =>
     MediaQuery.disableAnimationsOf(context) ? AnimationStyle.noAnimation : null;
+
+/// The shared menu shell's flat chrome plate (top bar and tab bar): a
+/// vertical #0E1822 -> #070C12 plate with a 1px #2A4256 divider edge,
+/// matching the kit's `.topbar` / `.tabbar` surfaces.
+const orionChromePlate = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF0E1822), Color(0xFF070C12)],
+);
+
+/// Ghost action plate fill (#1C2C3A -> #111C27): the kit's `.btn.ghost`
+/// and the selected tab in `.tabbar`.
+const orionGhostFill = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF1C2C3A), Color(0xFF111C27)],
+);
+
+/// Ghost action edge — the barely-visible cool steel ring on `.btn.ghost`.
+const orionGhostEdge = Color(0x1F8FB4D8);
+
+/// Ghost action lip — the darker plate line under a ghost button.
+const orionGhostLip = Color(0xFF070D14);
+
+/// Resource chip plate fill: rgba(10,18,26,.82) on the kit's `.chip`.
+const orionChipFill = Color(0xD10A121A);
+
+/// Framed art edge (#3A5A74): stage thumbs in the next-mission card.
+const orionArtFrame = Color(0xFF3A5A74);
+
+/// Unfilled medal pip under a cleared node's label (#2A3A48).
+const orionPipEmpty = Color(0xFF2A3A48);
+
+/// Dim route stroke for locked legs (#5F7487).
+const orionRouteDim = Color(0xFF5F7487);
+
+/// Title wordmark gradient mid-stop (#DDF8FF): white -> ice -> cyan.
+const orionWordmarkMid = Color(0xFFDDf8FF);
+
+/// Title wordmark drop lip: the solid dark offset under the gradient word.
+const orionWordmarkLip = Color(0xE604283C);
+
+/// Vertical white -> ice -> cyan fill for the ORION wordmark, applied via
+/// ShaderMask so the gradient follows the glyphs.
+const orionWordmarkFill = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFFFFFFFF), orionWordmarkMid, Color(0xFF46E6FF)],
+  stops: [0, .45, 1],
+);
+
+/// Title-screen readability shade over the command-center art:
+/// rgba(3,7,12,.4) -> .3 -> .94, matching the kit's `.shade`.
+const orionTitleShade = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0x6603070C), Color(0x4D03070C), Color(0xF003070C)],
+  stops: [0, .45, 1],
+);
+
+/// World-map backdrop scrim: keeps the chart readable over the approved
+/// star-field art without hiding it (previously inline raw colors).
+const orionMapScrim = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0xAA05080D),
+    Color(0x3305080D),
+    Color(0x4405080D),
+    Color(0x8805080D),
+  ],
+  stops: [0, 0.28, 0.72, 1],
+);
+
+/// R&D bay backdrop scrim: same recipe, heavier bottom melt so the upgrade
+/// grid reads at its footer.
+const orionTechTreeScrim = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0x5505080D),
+    Color(0x2205080D),
+    Color(0x6605080D),
+    Color(0xCC05080D),
+  ],
+  stops: [0, 0.28, 0.72, 1],
+);
