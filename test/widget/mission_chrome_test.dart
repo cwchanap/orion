@@ -1,7 +1,10 @@
+import 'package:flame/flame.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/assets/game_sprite_sheet.dart';
+import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
@@ -175,6 +178,94 @@ void main() {
       () => captureReactorRimFixture(boundaryKey, 'fixture-1a-band.png'),
     );
   });
+
+  for (final viewSize in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('capture boss-intel evidence fixture $viewSize', (
+      tester,
+    ) async {
+      tester.view.physicalSize = viewSize;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      // The expanded scanner's boss card over the mission chrome bands, at
+      // both target portraits. A live boss fight needs the full Alpha run to
+      // reach, so this captures the real boss-intel path: the real
+      // MissionChrome + NextWaveScanner + Relay Breaker preview group (the
+      // boss stage Alpha's final wave actually brings), art resolved from
+      // the real sprite sheets.
+      await loadRealFonts();
+      OrionArtDescriptor.resetSpriteCache();
+      await tester.runAsync(() async {
+        await Flame.images.load(GameSpriteSheet.fileName);
+        await Flame.images.load(GameTowerVarietySheet.fileName);
+        await Flame.images.load('orion_boss_sheet.png');
+      });
+      final boundaryKey = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: chromeHost(
+            commandDeckSnapshot(
+              waveNumber: 8,
+              wavesCleared: 7,
+              nextWavePreview: commandDeckPreview(
+                waveNumber: 8,
+                groups: [
+                  WavePreviewGroup(
+                    enemyCount: 18,
+                    label: 'Swarm Drones',
+                    traits: {EnemyTrait.swarm},
+                  ),
+                  WavePreviewGroup(
+                    enemyCount: 1,
+                    label: 'Relay Breaker',
+                    traits: {
+                      EnemyTrait.armored,
+                      EnemyTrait.shielded,
+                      EnemyTrait.heavy,
+                    },
+                  ),
+                ],
+              ),
+            ),
+            backgroundColor: OrionUiTheme.dark.hullBlack,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('BOSS'), findsWidgets);
+      await tester.runAsync(
+        () => warmSceneImages(tester.element(find.byType(WaveScannerScene)), [
+          'reactor_rim_ui/backdrops/command-center.png',
+        ]),
+      );
+      await tester.pump();
+
+      final suffix = viewSize.height < 700 ? '-compact' : '';
+      // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+      // real async engine work and deadlocks the FakeAsync zone otherwise.
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundaryKey,
+          'fixture-boss-intel$suffix.png',
+        ),
+      );
+      // The expanded scanner is a full-field overlay, so clearance evidence
+      // is that its boss card reads fully inside the viewport at both sizes.
+      for (final finder in [
+        find.bySemanticsLabel('Relay Breaker'),
+        find.textContaining('BOSS'),
+      ]) {
+        final rect = tester.getRect(finder.first);
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(viewSize.width));
+        expect(rect.bottom, lessThanOrEqualTo(viewSize.height));
+      }
+    });
+  }
 
   testWidgets('mission actions render their labels fully at product width', (
     tester,
@@ -1364,5 +1455,51 @@ void main() {
         reason: 'the intel panel reads left of the Start action',
       );
     });
+  });
+
+  testWidgets('idle, selected, then idle again restores the board viewport the '
+      'dock-mounted scanner gave up', (tester) async {
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final viewports = <Rect>[];
+    Widget host(GameSnapshot snapshot) =>
+        chromeHost(snapshot, onBoardViewportChanged: viewports.add);
+
+    await tester.pumpWidget(
+      host(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+    );
+    await tester.pump();
+    await tester.pump();
+    final idleViewport = viewports.last;
+
+    await tester.pumpWidget(
+      host(
+        commandDeckSnapshot(
+          nextWavePreview: commandDeckPreview(),
+          selectedCell: const GridPosition(1, 1),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump();
+    expect(find.byType(NextWaveScanner), findsOneWidget);
+    expect(viewports.last.top, greaterThan(idleViewport.top));
+
+    await tester.pumpWidget(
+      host(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+    );
+    await tester.pump();
+    await tester.pump();
+
+    expect(
+      viewports.last,
+      idleViewport,
+      reason:
+          'selection moved the scanner back under the HUD but the '
+          'top reserve never recovered: the board viewport stayed '
+          'compressed after the selection cleared',
+    );
   });
 }

@@ -159,6 +159,19 @@ class MissionCommandDock extends StatelessWidget {
                 ),
               ],
             )
+          : snapshot.waveHostilesTotal != null
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _WaveStatusStrip(snapshot: snapshot),
+                ),
+                const SizedBox(height: 8),
+                idleBar,
+              ],
+            )
           : idleBar;
     }
 
@@ -266,6 +279,11 @@ class IdleCommandBar extends StatelessWidget {
   /// not the guide anchor is attached, so toggling the guide never fires a
   /// transition while label changes still do. The inner KeyedSubtree
   /// carries the (possibly null) guide anchor key.
+  ///
+  /// Wide filled pill for the dock's single primary action: 48-56dp tall,
+  /// filled cyan with dark content while enabled, and the dock's only glow.
+  /// The wave-progress and countdown variants share the same footprint so
+  /// the idle dock never reflows when the phase label changes.
   Widget _reactorPill({
     required String reactorLabel,
     required String tooltip,
@@ -281,10 +299,15 @@ class IdleCommandBar extends StatelessWidget {
         label: tooltip,
         onTap: onPressed,
         excludeSemantics: true,
+        // The strongest glow in the idle dock is reserved for this
+        // one action; pacing and the shell carry none.
         child: SizedBox(
           width: 116,
           height: 48,
           child: OrionPrimaryButton(
+            // Caps to match the artboard's pill; the pill
+            // already excludes its own semantics in favour of
+            // `tooltip`, so the real copy is untouched.
             label: label.toUpperCase(),
             icon: snapshot.phase == GamePhase.wave
                 ? Icons.radar
@@ -311,6 +334,138 @@ class IdleCommandBar extends StatelessWidget {
           : '${snapshot.waveNumber}/$missionWaveTotal';
     }
     return 'Start Wave';
+  }
+}
+
+class _WaveStatusStrip extends StatelessWidget {
+  const _WaveStatusStrip({required this.snapshot});
+
+  final GameSnapshot snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final total = snapshot.waveHostilesTotal;
+    final remaining = snapshot.waveHostilesRemaining;
+    final bonus = snapshot.waveClearBonus;
+    if (total == null || remaining == null || bonus == null) {
+      return const SizedBox.shrink();
+    }
+    final resolved = total - remaining;
+    final progress = total <= 0
+        ? 0.0
+        : (resolved / total).clamp(0.0, 1.0).toDouble();
+    return OrionSurface(
+      role: OrionSurfaceRole.card,
+      radius: 14,
+      padding: const EdgeInsets.fromLTRB(10, 8, 10, 9),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Wave ${snapshot.waveNumber}',
+                      maxLines: 1,
+                      style: OrionTypography.microLabel(
+                        color: uiTheme.textMuted,
+                        size: 11,
+                      ),
+                    ),
+                    Text(
+                      '·',
+                      style: OrionTypography.microLabel(
+                        color: uiTheme.textDim,
+                        size: 11,
+                      ),
+                    ),
+                    Container(
+                      key: const ValueKey('mission-hostiles-remaining'),
+                      child: Text(
+                        '$remaining hostiles left',
+                        maxLines: 1,
+                        style: OrionTypography.microLabel(
+                          color: uiTheme.dangerRed,
+                          size: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Semantics(
+                label: 'Clear bonus $bonus credits',
+                excludeSemantics: true,
+                child: Container(
+                  key: const ValueKey('mission-clear-bonus'),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: uiTheme.creditGold.withValues(alpha: .08),
+                    borderRadius: BorderRadius.circular(11),
+                    border: Border.all(
+                      color: uiTheme.creditGold.withValues(alpha: .45),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.hexagon, size: 13, color: uiTheme.creditGold),
+                      const SizedBox(width: 4),
+                      Text(
+                        '+$bonus clear',
+                        maxLines: 1,
+                        style: OrionTypography.microLabel(
+                          color: uiTheme.creditGold,
+                          size: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            key: const ValueKey('mission-wave-progress'),
+            height: 9,
+            child: Semantics(
+              value: '$resolved of $total hostiles resolved',
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(4.5),
+                child: ColoredBox(
+                  color: uiTheme.hullBlack,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: FractionallySizedBox(
+                      widthFactor: progress,
+                      heightFactor: 1,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [uiTheme.dangerRed, uiTheme.warningOrange],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }
 

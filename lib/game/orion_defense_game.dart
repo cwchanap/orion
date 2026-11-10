@@ -1305,6 +1305,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _board?.selectedRange = _selectedTower == null
         ? 0
         : _session.resolveTowerStats(_selectedTower!).range;
+    var unresolvedActive = 0;
+    for (final enemy in _activeEnemyComponents.values) {
+      if (!enemy.isResolved) unresolvedActive += 1;
+    }
     stateNotifier.value = _session.snapshot(
       selectedCell: _selectedCell,
       selectedTower: _selectedTower,
@@ -1316,6 +1320,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       speedMultiplier: _speedMultiplier,
       autoStartEnabled: _autoStartEnabled,
       autoStartCountdownRemaining: _autoStartCountdownRemaining,
+      waveEnemiesResolved: _spawnedCount - unresolvedActive,
     );
   }
 

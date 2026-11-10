@@ -62,51 +62,41 @@ class BoardComponent extends PositionComponent {
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
   final Paint _fieldGridPaint = Paint()
-    ..color = const Color(0xFF182430)
+    ..color =
+        const Color(0x1246E6FF) // rgba(70,230,255,.07)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
   final Paint _pathPaint = Paint()..color = const Color(0xFF56616B);
-  // systemCyan. The lane is the one board element the artboard draws in the
-  // accent, and it is drawn rather than tiled: the path tile art is a
-  // full-cell panel with the channel baked in, so on any board skin the
-  // route reads as grey-on-grey and the player cannot see where enemies go.
-  //
-  // The artboard draws it as two polylines, and the split matters -- a single
-  // fat dashed stroke reads as a pipe, not a route:
-  //
-  //   bed   stroke rgba(70,230,255,.14)  width 28    (no dash)
-  //   core  stroke #46E6FF               width 3.4   dasharray 16 16
-  //         plus drop-shadow(0 0 4px #46E6FF)
-  //
-  // Against the artboard's 49.125px cell those are the _lane* fractions
-  // below. The bed is continuous: it is the channel the dashes travel down.
-  final Paint _laneBedPaint = Paint()
+  // board.js's lane is one stroked path drawn four times, widest to
+  // narrowest: a cyan glow under a steel rim under the dark channel under
+  // the core line, then the flow chevrons on top.
+  final Paint _laneGlowPaint = Paint()
     ..color =
-        const Color(0x2446E6FF) // systemCyan @ 14%
+        const Color(0x3846E6FF) // #46E6FF @ 22%
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
   final Paint _laneRimPaint = Paint()
-    ..color = const Color(0xFF1E3A4E)
+    ..color = const Color(0xFF2C6F86)
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
   final Paint _laneChannelPaint = Paint()
-    ..color = const Color(0xFF0B1520)
+    ..color = const Color(0xFF08121B)
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final Paint _laneCorePaint = Paint()
+    ..color = const Color(0xFF0E2230)
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
   final Paint _laneChevronPaint = Paint()
-    ..color = const Color(0xFF46E6FF)
+    ..color =
+        const Color(0xBF46E6FF) // #46E6FF @ 75%
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
-  final Paint _laneChevronGlowPaint = Paint()
-    ..color = const Color(0x9946E6FF)
-    ..style = PaintingStyle.stroke
-    ..strokeCap = StrokeCap.round
-    ..strokeJoin = StrokeJoin.round
-    ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
   // The 1e artboard's placement palette, in tokens: naniteGreen for an
   // allowed cell, dangerRed for a blocked one, each a light wash under a
   // full-strength stroke. The previous fills were #3DDC84 and #E35D6A --
@@ -227,6 +217,7 @@ class BoardComponent extends PositionComponent {
       canvas,
       pathCells.first,
       _spawnPaint,
+      outerRadiusFactor: _spawnMarkerFactor,
       innerRadiusFactor: 0.30,
       sprite: GameSprite.spawnGate,
     );
@@ -234,6 +225,7 @@ class BoardComponent extends PositionComponent {
       canvas,
       pathCells.last,
       _basePaint,
+      outerRadiusFactor: _coreMarkerFactor,
       innerRadiusFactor: 0.38,
       sprite: GameSprite.baseReactor,
     );
@@ -243,91 +235,94 @@ class BoardComponent extends PositionComponent {
     }
   }
 
-  /// The artboard's lane fractions, against its 49.125px cell.
-  @visibleForTesting
-  static const double laneBedWidth = 28 / 49.125; // 0.570
-  @visibleForTesting
-  static const double laneCoreWidth = 3.4 / 49.125; // 0.069
-  @visibleForTesting
-  static const double laneDash = 16 / 49.125; // 0.326
+  static const double _kitCellSize = 46.75;
+  static const List<(double, double)> _laneGlowSteps = [
+    (1.30, 0.03),
+    (1.12, 0.07),
+    (1.00, 0.13),
+    (0.92, 0.22),
+  ];
+  static const double _laneRimWidthFactor = 0.8;
+  static const double _laneChannelWidthFactor = 0.72;
+  static const double _laneCoreWidthFactor = 0.5;
+  static const double _spawnMarkerFactor = 1.35 / 2;
+  static const double _coreMarkerFactor = 1.45 / 2;
 
-  static const double _laneRimWidthFactor = 0.86;
-  static const double _laneChannelWidthFactor = 0.70;
-  static const double _chevronSpacingFactor = 0.5;
-  static const double _chevronLeadFactor = 0.1;
-  static const double _chevronStartFactor = 0.28;
-  static const double _chevronSpreadRadians = 0.62;
-  static const double _markerOuterFactor = 0.62;
-
-  /// The artboard's lane: a wide, faint, continuous channel with a thin
-  /// bright dashed core running down it. Every dimension scales with
-  /// [cellSize] so the rhythm holds on any board size.
+  /// board.js strokes the whole route four times, widest to narrowest, and
+  /// leads it in from the left edge. Its glow blur is drawn as a stepped
+  /// falloff of wider, fainter strokes instead of a mask filter — the same
+  /// soft halo with a bounded edge, and nothing blurred per frame.
   void _renderLane(Canvas canvas) {
     if (pathCells.length < 2) {
       return;
     }
 
+    final first = cellCenter(pathCells.first);
     final centreLine = Path()
-      ..moveTo(cellCenter(pathCells.first).dx, cellCenter(pathCells.first).dy);
+      ..moveTo(-cellSize * 0.2, first.dy)
+      ..lineTo(first.dx, first.dy);
     for (final cell in pathCells.skip(1)) {
       final centre = cellCenter(cell);
       centreLine.lineTo(centre.dx, centre.dy);
     }
 
-    _laneBedPaint.color = previewActive
-        ? const Color(0x40FF5D6C)
-        : const Color(0x2446E6FF);
-    _laneRimPaint.color = previewActive
-        ? const Color(0xFF4E2430)
-        : const Color(0xFF1E3A4E);
-    _laneChannelPaint.color = previewActive
-        ? const Color(0xFF14090F)
-        : const Color(0xFF0B1520);
-    _laneChevronPaint.color = previewActive
-        ? const Color(0xFFFF5D6C)
-        : const Color(0xFF46E6FF);
-    _laneChevronGlowPaint.color = previewActive
-        ? const Color(0x66FF5D6C)
-        : const Color(0x9946E6FF);
+    for (final (width, alpha) in _laneGlowSteps) {
+      _laneGlowPaint
+        ..strokeWidth = cellSize * width
+        ..color = const Color(0xFF46E6FF).withValues(alpha: alpha);
+      canvas.drawPath(centreLine, _laneGlowPaint);
+    }
     _laneRimPaint.strokeWidth = cellSize * _laneRimWidthFactor;
     _laneChannelPaint.strokeWidth = cellSize * _laneChannelWidthFactor;
-    _laneBedPaint.strokeWidth = cellSize * laneBedWidth;
+    _laneCorePaint.strokeWidth = cellSize * _laneCoreWidthFactor;
     canvas
       ..drawPath(centreLine, _laneRimPaint)
       ..drawPath(centreLine, _laneChannelPaint)
-      ..drawPath(centreLine, _laneBedPaint);
-    _renderFlowChevrons(canvas, centreLine);
+      ..drawPath(centreLine, _laneCorePaint);
+    _renderFlowChevrons(canvas);
   }
 
-  void _renderFlowChevrons(Canvas canvas, Path centreLine) {
-    final spacing = cellSize * _chevronSpacingFactor;
-    if (spacing <= 0) {
-      return;
-    }
-    // A hairline core would disappear on a small board, so hold a floor.
-    final stroke = math.max(cellSize * laneCoreWidth, 1.5);
-    _laneChevronPaint.strokeWidth = stroke;
-    _laneChevronGlowPaint.strokeWidth = stroke * 2;
-    final lead = cellSize * _chevronLeadFactor;
-    final arm = cellSize * laneDash / 2;
-    for (final metric in centreLine.computeMetrics()) {
-      var distance = cellSize * _chevronStartFactor;
-      while (distance < metric.length) {
-        final tangent = metric.getTangentForOffset(distance);
-        if (tangent == null) {
-          break;
-        }
-        final tip =
-            tangent.position +
-            Offset(math.cos(tangent.angle), math.sin(tangent.angle)) * lead;
-        for (final sign in const [1.0, -1.0]) {
-          final angle = tangent.angle + math.pi + sign * _chevronSpreadRadians;
-          final end = tip + Offset(math.cos(angle), math.sin(angle)) * arm;
-          canvas
-            ..drawLine(tip, end, _laneChevronGlowPaint)
-            ..drawLine(tip, end, _laneChevronPaint);
-        }
-        distance += spacing;
+  /// board.js's flow chevrons: `M -5 -7 L 4 0 L -5 7`, one per cell of each
+  /// straight segment, rotated to the segment's direction and dimmed to 35%
+  /// while a placement preview is armed (its `dimLane` flag).
+  void _renderFlowChevrons(Canvas canvas) {
+    final kit = cellSize / _kitCellSize;
+    _laneChevronPaint
+      ..color = previewActive
+          ? const Color(0x5946E6FF) // #46E6FF @ 35%
+          : const Color(0xBF46E6FF)
+      // A hairline core would disappear on a small board, so hold a floor.
+      ..strokeWidth = math.max(2.6 * kit, 1.5);
+    final lead = 4 * kit;
+    final back = 5 * kit;
+    final arm = 7 * kit;
+    for (var i = 0; i + 1 < pathCells.length; i += 1) {
+      final a = cellCenter(pathCells[i]);
+      final b = cellCenter(pathCells[i + 1]);
+      final length = (b - a).distance;
+      if (length <= 0) {
+        continue;
+      }
+      final count = math.max(1, (length / cellSize).round());
+      final angle = math.atan2(b.dy - a.dy, b.dx - a.dx);
+      final cos = math.cos(angle);
+      final sin = math.sin(angle);
+      for (var k = 0; k < count; k += 1) {
+        final t = (k + 0.5) / count;
+        final x = a.dx + (b.dx - a.dx) * t;
+        final y = a.dy + (b.dy - a.dy) * t;
+        final tip = Offset(x + lead * cos, y + lead * sin);
+        final armA = Offset(
+          x - back * cos + arm * sin,
+          y - back * sin - arm * cos,
+        );
+        final armB = Offset(
+          x - back * cos - arm * sin,
+          y - back * sin + arm * cos,
+        );
+        canvas
+          ..drawLine(tip, armA, _laneChevronPaint)
+          ..drawLine(tip, armB, _laneChevronPaint);
       }
     }
   }
@@ -389,16 +384,18 @@ class BoardComponent extends PositionComponent {
   @visibleForTesting
   Paint get gridPaint => _gridPaint;
 
+  /// board.js borders every inner cell boundary only — the board edge stays
+  /// the backdrop's skin, not a stroked frame.
   void _renderFieldGrid(Canvas canvas) {
     final boardWidth = BoardLayout.columns * cellSize;
     final boardHeight = BoardLayout.rows * cellSize;
 
-    for (var column = 0; column <= BoardLayout.columns; column += 1) {
+    for (var column = 1; column < BoardLayout.columns; column += 1) {
       final x = column * cellSize;
       canvas.drawLine(Offset(x, 0), Offset(x, boardHeight), _fieldGridPaint);
     }
 
-    for (var row = 0; row <= BoardLayout.rows; row += 1) {
+    for (var row = 1; row < BoardLayout.rows; row += 1) {
       final y = row * cellSize;
       canvas.drawLine(Offset(0, y), Offset(boardWidth, y), _fieldGridPaint);
     }
@@ -433,6 +430,7 @@ class BoardComponent extends PositionComponent {
     Canvas canvas,
     GridPosition position,
     Paint paint, {
+    required double outerRadiusFactor,
     required double innerRadiusFactor,
     required GameSprite sprite,
   }) {
@@ -440,14 +438,14 @@ class BoardComponent extends PositionComponent {
     if (spriteSheet != null) {
       final rect = Rect.fromCircle(
         center: cellCenter(position),
-        radius: cellSize * _markerOuterFactor,
+        radius: cellSize * outerRadiusFactor,
       );
       spriteSheet.sprite(sprite).renderRect(canvas, rect);
       return;
     }
 
     final center = cellCenter(position);
-    canvas.drawCircle(center, cellSize * _markerOuterFactor, paint);
+    canvas.drawCircle(center, cellSize * outerRadiusFactor, paint);
     canvas.drawCircle(center, cellSize * innerRadiusFactor, _backgroundPaint);
   }
 }

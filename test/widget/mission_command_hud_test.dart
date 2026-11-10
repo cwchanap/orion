@@ -1,4 +1,7 @@
+import 'dart:ui' show SemanticsFlags, Tristate;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
@@ -727,5 +730,152 @@ void main() {
           'Unboxed readouts ${stageRect.left - baseRect.right}px apart read '
           'as one run-together string.',
     );
+  });
+
+  group('wave speed segments accessibility', () {
+    Widget pacingHost({double speed = 1, ValueChanged<double>? onSelected}) =>
+        MaterialApp(
+          theme: orionThemeData,
+          home: Scaffold(
+            body: Center(
+              child: MissionPacingControls(
+                snapshot: commandDeckSnapshot(
+                  phase: GamePhase.wave,
+                  speedMultiplier: speed,
+                ),
+                onTogglePause: () {},
+                onSpeedSelected: onSelected ?? (_) {},
+                onToggleAutoStart: () {},
+              ),
+            ),
+          ),
+        );
+
+    testWidgets('segments expose selected-state semantics as one group', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await tester.pumpWidget(pacingHost());
+        await tester.pump();
+
+        SemanticsFlags flagsOf(String label) => tester
+            .getSemantics(find.bySemanticsLabel(label))
+            .getSemanticsData()
+            .flagsCollection;
+
+        for (final label in ['Speed 1x', 'Speed 2x', 'Speed 3x']) {
+          final flags = flagsOf(label);
+          expect(
+            flags.isButton,
+            isTrue,
+            reason: '$label must stay a semantic button',
+          );
+          expect(
+            flags.isInMutuallyExclusiveGroup,
+            isTrue,
+            reason:
+                '$label is one cell of a segmented control; without the '
+                'mutually-exclusive flag semantics announce three '
+                'unrelated buttons',
+          );
+          expect(
+            flags.isFocused,
+            isNot(Tristate.none),
+            reason:
+                '$label must be a focusable keyboard target; a bare '
+                'GestureDetector publishes no focus state at all',
+          );
+        }
+        expect(
+          flagsOf('Speed 1x').isSelected,
+          Tristate.isTrue,
+          reason: 'the active segment must announce its selection',
+        );
+        expect(
+          flagsOf('Speed 2x').isSelected,
+          Tristate.isFalse,
+          reason: 'an inactive segment must announce it is not selected',
+        );
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    for (final viewport in [const Size(390, 844), const Size(360, 640)]) {
+      testWidgets('every speed segment keeps a 48dp target at '
+          '${viewport.width.toInt()}x${viewport.height.toInt()}', (
+        tester,
+      ) async {
+        final handle = tester.ensureSemantics();
+        try {
+          tester.view.physicalSize = viewport;
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+
+          await tester.pumpWidget(pacingHost());
+          await tester.pump();
+
+          for (final label in ['Speed 1x', 'Speed 2x', 'Speed 3x']) {
+            final rect = tester.getRect(find.bySemanticsLabel(label));
+            expect(
+              rect.width,
+              greaterThanOrEqualTo(48),
+              reason:
+                  '$label is ${rect.width.toStringAsFixed(1)}px wide — '
+                  'below the 48dp touch floor at $viewport',
+            );
+            expect(
+              rect.height,
+              greaterThanOrEqualTo(48),
+              reason:
+                  '$label is ${rect.height.toStringAsFixed(1)}px tall — '
+                  'below the 48dp touch floor at $viewport',
+            );
+          }
+        } finally {
+          handle.dispose();
+        }
+      });
+    }
+
+    testWidgets('keyboard focus and activation select a segment', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      try {
+        double? speed;
+        await tester.pumpWidget(pacingHost(onSelected: (v) => speed = v));
+        await tester.pump();
+
+        Future<void> tabToSegment(String label) async {
+          for (var i = 0; i < 8; i += 1) {
+            final focused =
+                tester
+                    .getSemantics(find.bySemanticsLabel(label))
+                    .getSemanticsData()
+                    .flagsCollection
+                    .isFocused ==
+                Tristate.isTrue;
+            if (focused) return;
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pump();
+          }
+          fail('$label never received keyboard focus within 8 Tab presses');
+        }
+
+        await tabToSegment('Speed 2x');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(speed, 2.0, reason: 'Enter must activate the focused segment');
+
+        await tabToSegment('Speed 3x');
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pump();
+        expect(speed, 3.0, reason: 'Space must activate the focused segment');
+      } finally {
+        handle.dispose();
+      }
+    });
   });
 }

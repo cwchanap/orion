@@ -211,103 +211,109 @@ void main() {
     },
   );
 
-  testWidgets('capture scene 1e fixture', (tester) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  for (final viewSize in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('capture scene 1e fixture $viewSize', (tester) async {
+      tester.view.physicalSize = viewSize;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
 
-    // Representative scene 1e state, captured mid-drag: a buildable cell is
-    // selected (rail visible), the Laser card is long-press-lifted (source
-    // LIFTED, rail header DROP TO BUILD, finger ghost + cost pill airborne)
-    // and the pointer hovers a valid cell (allowed candidate, resolved range
-    // ring, path danger wash on the board). Real Roboto for true metrics.
-    await loadRealFonts();
+      final suffix = viewSize.height < 700 ? '-compact' : '';
+      // Representative scene 1e state, captured mid-drag: a buildable cell is
+      // selected (rail visible), the Laser card is long-press-lifted (source
+      // LIFTED, rail header DROP TO BUILD, finger ghost + cost pill airborne)
+      // and the pointer hovers a valid cell (allowed candidate, resolved range
+      // ring, path danger wash on the board). Real Roboto for true metrics.
+      await loadRealFonts();
 
-    // Warm Flame's global image cache BEFORE the game exists so its onLoad
-    // resolves from cache instead of racing real engine decodes, which
-    // never complete under the fake-async test binding.
-    await tester.runAsync(() async {
-      for (final name in [
-        'reactor_rim_ui/boards/nebula.png',
-        'orion_path_tiles.png',
-        'orion_sprite_sheet.png',
-        'orion_tower_variety_sheet.png',
-        'orion_boss_sheet.png',
-      ]) {
-        await Flame.images.load(name);
-      }
+      // Warm Flame's global image cache BEFORE the game exists so its onLoad
+      // resolves from cache instead of racing real engine decodes, which
+      // never complete under the fake-async test binding.
+      await tester.runAsync(() async {
+        for (final name in [
+          'reactor_rim_ui/boards/nebula.png',
+          'orion_path_tiles.png',
+          'orion_sprite_sheet.png',
+          'orion_tower_variety_sheet.png',
+          'orion_boss_sheet.png',
+        ]) {
+          await Flame.images.load(name);
+        }
+      });
+
+      final boundaryKey = GlobalKey();
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: testGamePage(onGameCreated: (created) => game = created),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+      // Fixed pumps from here: once the warm-cache load completes the game
+      // mounts and its live loop never lets pumpAndSettle settle.
+      await tester.pump();
+      await tester.pump();
+      expect(game!.isMounted, isTrue);
+      // Restore the cold image cache: later tests were written against the
+      // never-mounts-under-test-binding behavior and their pumpAndSettles
+      // would hang against a live mounted game loop.
+      addTearDown(Flame.images.clearCache);
+
+      final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+      Offset globalFor(GridPosition cell) =>
+          gameRect.topLeft + game!.boardCellCenter(cell);
+
+      // The mounted game loop never settles under fake async, so every frame
+      // wait from here on is a fixed pump.
+      game!.handleBoardTap(
+        globalFor(const GridPosition(2, 3)) - gameRect.topLeft,
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+
+      final start = tester.getCenter(
+        find.byKey(const ValueKey('tower-card-laser')),
+      );
+      final holdTarget = globalFor(const GridPosition(4, 5));
+      final gesture = await tester.startGesture(start);
+      await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+      await gesture.moveBy(holdTarget - start);
+      await tester.pump();
+      await tester.pump();
+
+      // All five 1e treatments must be live while the gesture is held.
+      expect(find.text('LIFTED'), findsOneWidget);
+      expect(find.text('DROP TO BUILD'), findsOneWidget);
+      expect(game!.placementPreview.cell, const GridPosition(4, 5));
+      expect(game!.placementPreview.allowed, isTrue);
+      expect(game!.placementPreview.range, greaterThan(0));
+
+      // PNG encoding is real async engine work; capture while held.
+      await tester.runAsync(
+        () => captureReactorRimFixture(boundaryKey, 'fixture-1e$suffix.png'),
+      );
+
+      await gesture.moveTo(globalFor(const GridPosition(6, 5)));
+      await tester.pump();
+      expect(game!.placementPreview.allowed, isFalse);
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundaryKey,
+          'fixture-1e-invalid$suffix.png',
+        ),
+      );
+      await gesture.up();
+      await tester.pump();
+      expect(game!.stateNotifier.value.gold, 150);
+      expect(game!.stateNotifier.value.selectedTower, isNull);
+      // Tear the mounted game down so its live loop ticker does not leak into
+      // the tests that follow this fixture.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump(const Duration(milliseconds: 100));
     });
-
-    final boundaryKey = GlobalKey();
-    OrionDefenseGame? game;
-    await tester.pumpWidget(
-      RepaintBoundary(
-        key: boundaryKey,
-        child: testGamePage(onGameCreated: (created) => game = created),
-      ),
-    );
-    await tester.pumpAndSettle();
-    await startStageFromBriefing(tester);
-    // Fixed pumps from here: once the warm-cache load completes the game
-    // mounts and its live loop never lets pumpAndSettle settle.
-    await tester.pump();
-    await tester.pump();
-    expect(game!.isMounted, isTrue);
-    // Restore the cold image cache: later tests were written against the
-    // never-mounts-under-test-binding behavior and their pumpAndSettles
-    // would hang against a live mounted game loop.
-    addTearDown(Flame.images.clearCache);
-
-    final gameRect = tester.getRect(find.bySubtype<GameWidget>());
-    Offset globalFor(GridPosition cell) =>
-        gameRect.topLeft + game!.boardCellCenter(cell);
-
-    // The mounted game loop never settles under fake async, so every frame
-    // wait from here on is a fixed pump.
-    game!.handleBoardTap(
-      globalFor(const GridPosition(2, 3)) - gameRect.topLeft,
-    );
-    await tester.pump();
-    await tester.pump();
-    expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
-
-    final start = tester.getCenter(
-      find.byKey(const ValueKey('tower-card-laser')),
-    );
-    final holdTarget = globalFor(const GridPosition(4, 5));
-    final gesture = await tester.startGesture(start);
-    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
-    await gesture.moveBy(holdTarget - start);
-    await tester.pump();
-    await tester.pump();
-
-    // All five 1e treatments must be live while the gesture is held.
-    expect(find.text('LIFTED'), findsOneWidget);
-    expect(find.text('DROP TO BUILD'), findsOneWidget);
-    expect(game!.placementPreview.cell, const GridPosition(4, 5));
-    expect(game!.placementPreview.allowed, isTrue);
-    expect(game!.placementPreview.range, greaterThan(0));
-
-    // PNG encoding is real async engine work; capture while held.
-    await tester.runAsync(
-      () => captureReactorRimFixture(boundaryKey, 'fixture-1e.png'),
-    );
-
-    await gesture.moveTo(globalFor(const GridPosition(6, 5)));
-    await tester.pump();
-    expect(game!.placementPreview.allowed, isFalse);
-    await tester.runAsync(
-      () => captureReactorRimFixture(boundaryKey, 'fixture-1e-invalid.png'),
-    );
-    await gesture.up();
-    await tester.pump();
-    expect(game!.stateNotifier.value.gold, 150);
-    expect(game!.stateNotifier.value.selectedTower, isNull);
-    // Tear the mounted game down so its live loop ticker does not leak into
-    // the tests that follow this fixture.
-    await tester.pumpWidget(const SizedBox.shrink());
-    await tester.pump(const Duration(milliseconds: 100));
-  });
+  }
 
   for (final viewSize in [const Size(390, 844), const Size(360, 640)]) {
     testWidgets('capture scene 1a fixture $viewSize', (tester) async {
@@ -441,6 +447,20 @@ void main() {
           'fixture-1a-radial$suffix.png',
         ),
       );
+      // A first-selection contextual tip can sit over the radial; dismiss it
+      // and capture again so overlay-clearance evidence reads unoccluded.
+      final gotIt = find.text('Got it');
+      if (tester.any(gotIt)) {
+        await tester.tap(gotIt);
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 300));
+        await tester.runAsync(
+          () => captureReactorRimFixture(
+            boundaryKey,
+            'fixture-1a-radial-clear$suffix.png',
+          ),
+        );
+      }
       await tester.tap(find.byTooltip('Inspect tower'));
       await tester.pump();
       expect(find.byType(TowerInspector), findsOneWidget);
@@ -5974,12 +5994,155 @@ void main() {
     expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'an active wave renders live progress, hostiles and clear bonus from '
+    'real wave state',
+    (tester) async {
+      final game = await pumpMountedMission(tester);
+      final wave = OrionCampaign.stageOne.waves.first;
+      final hostiles = find.byKey(const ValueKey('mission-hostiles-remaining'));
+
+      game.startWave();
+      await tester.pump();
+      await tester.pump();
+
+      expect(game.snapshot.phase, GamePhase.wave);
+      expect(
+        find.byKey(const ValueKey('mission-wave-progress')),
+        findsOneWidget,
+        reason: 'the running wave must show its progress readout',
+      );
+      expect(hostiles, findsOneWidget);
+      expect(find.byKey(const ValueKey('mission-clear-bonus')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: hostiles,
+          matching: find.textContaining('${wave.enemyCount}'),
+        ),
+        findsOneWidget,
+        reason:
+            'at wave start every hostile is unresolved; the readout must '
+            'show the real ${wave.enemyCount}, not an invented count',
+      );
+
+      var pumps = 0;
+      while (game.snapshot.baseHealth >= game.snapshot.startingBaseHealth &&
+          pumps < 400) {
+        await tester.pump(const Duration(milliseconds: 250));
+        pumps += 1;
+      }
+      expect(
+        game.snapshot.baseHealth,
+        lessThan(game.snapshot.startingBaseHealth),
+        reason:
+            'untowered, every drone leaks for one base damage; the pump '
+            'loop timed out before any hostile resolved',
+      );
+      final resolved =
+          game.snapshot.startingBaseHealth - game.snapshot.baseHealth;
+      final remaining = wave.enemyCount - resolved;
+      expect(
+        find.descendant(
+          of: hostiles,
+          matching: find.textContaining('$remaining'),
+        ),
+        findsOneWidget,
+        reason:
+            'with $resolved hostile(s) resolved the readout must show '
+            '$remaining remaining — the live count, not the wave total',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('mission-clear-bonus')),
+          matching: find.textContaining('${wave.clearBonus}'),
+        ),
+        findsOneWidget,
+        reason:
+            'Outpost Alpha wave 1 still clears for ${wave.clearBonus} '
+            'mid-wave; the readout must keep showing that reward',
+      );
+    },
+  );
+
+  for (final viewSize in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('capture active-wave evidence fixture $viewSize', (
+      tester,
+    ) async {
+      final boundaryKey = GlobalKey();
+      OrionDefenseGame? game;
+      tester.view.physicalSize = viewSize;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      await _warmGameImages(tester);
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 100));
+      });
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: testGamePage(onGameCreated: (value) => game = value),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+      await tester.pump();
+      await tester.pump();
+      expect(game!.isMounted, isTrue);
+
+      game!.startWave();
+      await tester.pump();
+      await tester.pump();
+      expect(game!.snapshot.phase, GamePhase.wave);
+      expect(
+        game!.snapshot.waveHostilesTotal,
+        OrionCampaign.stageOne.waves.first.enemyCount,
+      );
+      // Three wave-seconds in: the first drones have spawned and are walking
+      // the lane (a leak needs the full lane length), so the capture shows
+      // live combat under the wave readouts.
+      for (var i = 0; i < 12; i += 1) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+
+      final suffix = viewSize.height < 700 ? '-compact' : '';
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundaryKey,
+          'fixture-live-wave$suffix.png',
+        ),
+      );
+      // Geometry evidence beside the PNG: the status HUD must clear the
+      // board's first row and the dock must not overlap the last row.
+      final hudRect = tester.getRect(
+        find.byKey(const ValueKey('mission-status-hud')),
+      );
+      final dockRect = tester.getRect(find.byType(MissionCommandDock));
+      final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+      for (var column = 0; column < BoardLayout.columns; column++) {
+        final topCell =
+            gameRect.topLeft + game!.boardCellCenter(GridPosition(column, 0));
+        final bottomCell =
+            gameRect.topLeft +
+            game!.boardCellCenter(GridPosition(column, BoardLayout.rows - 1));
+        expect(topCell.dy, greaterThan(hudRect.bottom));
+        expect(bottomCell.dy, lessThan(dockRect.top));
+      }
+    });
+  }
 }
 
 /// Warms fonts and the game's sprite sheets into their process-global caches
-/// so a mounted game's onLoad resolves instantly, pumps [testGamePage] at the
-/// 360x640 guided-path viewport, starts the stage named by [mapLabel] from
-/// its briefing, and returns the mounted game.
+/// so a mounted game's onLoad resolves instantly, pumps [testGamePage] at
+/// [viewSize] (the 360x640 guided-path viewport by default), starts the
+/// stage named by [mapLabel] from its briefing, and returns the mounted
+/// game.
 Future<OrionDefenseGame> pumpMountedMission(
   WidgetTester tester, {
   String mapLabel = 'Alpha',
@@ -5987,8 +6150,9 @@ Future<OrionDefenseGame> pumpMountedMission(
   CampaignProgressStore? progressStore,
   FirstMissionGuideStore? firstMissionGuideStore,
   ModuleOfferPicker? moduleOfferPicker,
+  Size viewSize = const Size(360, 640),
 }) async {
-  tester.view.physicalSize = const Size(360, 640);
+  tester.view.physicalSize = viewSize;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.runAsync(loadRealFonts);

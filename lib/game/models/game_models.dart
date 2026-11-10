@@ -564,6 +564,9 @@ class GameSnapshot {
     required this.waveNumber,
     required this.missionWaveTotal,
     required this.wavesCleared,
+    this.waveHostilesTotal,
+    this.waveHostilesRemaining,
+    this.waveClearBonus,
     required this.stageId,
     required this.stageName,
     required this.stageLabel,
@@ -605,6 +608,9 @@ class GameSnapshot {
   final int waveNumber;
   final int? missionWaveTotal;
   final int wavesCleared;
+  final int? waveHostilesTotal;
+  final int? waveHostilesRemaining;
+  final int? waveClearBonus;
   final String stageId;
   final String stageName;
   final String stageLabel;
