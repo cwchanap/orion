@@ -1,6 +1,7 @@
 import 'package:orion/game/ui/tower_inspector.dart';
 import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
@@ -17,6 +18,7 @@ import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/components/enemy_component.dart';
+import 'package:orion/game/components/enemy_overlay.dart';
 import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
@@ -451,8 +453,6 @@ void main() {
           'fixture-1a-radial$suffix.png',
         ),
       );
-      // A first-selection contextual tip can sit over the radial; dismiss it
-      // and capture again so overlay-clearance evidence reads unoccluded.
       final gotIt = find.text('Got it');
       if (tester.any(gotIt)) {
         await tester.tap(gotIt);
@@ -6104,9 +6104,6 @@ void main() {
         game!.snapshot.waveHostilesTotal,
         OrionCampaign.stageOne.waves.first.enemyCount,
       );
-      // Three wave-seconds in: the first drones have spawned and are walking
-      // the lane (a leak needs the full lane length), so the capture shows
-      // live combat under the wave readouts.
       for (var i = 0; i < 12; i += 1) {
         await tester.pump(const Duration(milliseconds: 250));
       }
@@ -6122,8 +6119,6 @@ void main() {
           'fixture-live-wave$suffix.png',
         ),
       );
-      // Geometry evidence beside the PNG: the status HUD must clear the
-      // board's first row and the dock must not overlap the last row.
       final hudRect = tester.getRect(
         find.byKey(const ValueKey('mission-status-hud')),
       );
@@ -6141,12 +6136,6 @@ void main() {
     });
   }
 
-  // Fix-round-2 evidence: a live fighting boss, not a staged intel card.
-  // The fixture mounts a real OrionDefenseGame on a fixture stage whose
-  // wave one is the real GameBalance.relayBreaker inside the same
-  // GameWidget + MissionChrome composition the page builds, so the PNG
-  // shows a live EnemyComponent walking the lane — health and shield
-  // bars, trait badges, status rings — alongside its summoned minions.
   for (final viewSize in [const Size(390, 844), const Size(360, 640)]) {
     testWidgets('capture fighting-boss evidence fixture $viewSize', (
       tester,
@@ -6177,7 +6166,6 @@ void main() {
               ],
               clearBonus: 40,
             ),
-            // A trailing empty wave keeps the run open after the boss.
             WaveDefinition(groups: [], clearBonus: 0),
           ],
           mapColumn: 0,
@@ -6188,7 +6176,6 @@ void main() {
         RepaintBoundary(
           key: boundaryKey,
           child: MaterialApp(
-            // The product app hides this banner; a fixture host must too.
             debugShowCheckedModeBanner: false,
             theme: orionThemeData,
             home: Scaffold(
@@ -6236,9 +6223,6 @@ void main() {
       await tester.pump();
       expect(game.snapshot.phase, GamePhase.wave);
 
-      // Advance until Relay Breaker's first summon lands (its real
-      // firstDelay of 4s): the capture must show a live boss with real
-      // minions on the lane.
       await advanceUntil(
         tester,
         game,
@@ -6282,12 +6266,6 @@ void main() {
         reason: 'real summoned minions share the lane in the fixture',
       );
 
-      // boss.position is simulation space; the game renders it under
-      // _boardScale/_boardTranslation, so screen-space assertions must map
-      // through the real transform — never through boardCellAt (canvas
-      // space in) or the raw offset. The transform's inputs are public:
-      // game.size gives _layoutBoard's cellSize/boardOrigin and
-      // onBoardViewportChanged reports the live viewport rect.
       final gameSize = game.size;
       final simCellSize = math.min(
         gameSize.x / BoardLayout.columns,
@@ -6326,18 +6304,12 @@ void main() {
         boardOrigin: simBoardOrigin,
       );
 
-      // Walk the boss down the lane until it reaches a middle row so its
-      // overlay — bars and badges above, status rings around — sits fully
-      // inside the board band at both capture sizes.
       await advanceUntil(
         tester,
         game,
         (snapshot) => (bossSimCell()?.row ?? 0) >= 3,
       );
 
-      // Real status application through the live component API: the
-      // overlay must show the slow and corrosion rings, which only paint
-      // with non-zero radii.
       boss.applySlow(multiplier: 0.6, duration: 60);
       boss.applyCorrosion(damagePerSecond: 1, duration: 60, armorShred: 0.1);
       await tester.pump();
@@ -6371,10 +6343,6 @@ void main() {
         reason: 'bars and badges hang above the boss, not on it',
       );
 
-      // Geometry evidence beside the PNG: the HUD clears every top-row
-      // cell, the dock clears every bottom-row cell, and the fighting
-      // boss's whole overlay — not a cell centre — sits inside the
-      // reported board viewport band.
       final hudRect = tester.getRect(
         find.byKey(const ValueKey('mission-status-hud')),
       );
@@ -6404,39 +6372,211 @@ void main() {
             'the fighting boss renders inside the board band, clear of '
             'the chrome the PNG photographs it under',
       );
-      // The overlay's real screen bounds: its content spans originY
-      // above the boss centre down to the widest status ring below it.
-      final overlayTop = bossScreen.dy + overlayLayout.originY * boardScale;
-      final overlayBottom =
-          bossScreen.dy +
-          math.max(
-                overlayLayout.slowedRingRadius,
-                overlayLayout.corrodedRingRadius,
-              ) *
-              boardScale;
-      expect(
-        overlayTop,
-        greaterThan(hudRect.bottom),
-        reason:
-            'the overlay bars/badges must clear the status HUD at the '
-            'boss\'s live screen position',
+      final radius = boss.radius;
+      final name = (boss.stats as BossDefinition).name;
+      final namePainter = TextPainter(
+        text: TextSpan(
+          text: name,
+          style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 12),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      final badgeWidth =
+          overlayState.badges.length * overlayLayout.badgeSize +
+          (overlayState.badges.length - 1) * overlayLayout.badgeGap;
+      final localBounds = <String, Rect>{
+        'name': Rect.fromLTWH(
+          radius - namePainter.width / 2,
+          overlayLayout.originY - namePainter.height - 2,
+          namePainter.width,
+          namePainter.height,
+        ),
+        'badges': Rect.fromLTWH(
+          radius - badgeWidth / 2,
+          overlayLayout.badgesY!,
+          badgeWidth,
+          overlayLayout.badgeSize,
+        ).inflate(0.5),
+        'health bar': Rect.fromLTWH(
+          radius - overlayLayout.healthBarWidth / 2,
+          overlayLayout.healthBarY!,
+          overlayLayout.healthBarWidth,
+          overlayLayout.healthBarHeight,
+        ),
+        'shield bar': Rect.fromLTWH(
+          radius - overlayLayout.shieldBarWidth / 2,
+          overlayLayout.shieldBarY!,
+          overlayLayout.shieldBarWidth,
+          overlayLayout.shieldBarHeight,
+        ),
+        'slow ring': Rect.fromCircle(
+          center: Offset(radius, radius),
+          radius: overlayLayout.slowedRingRadius + 0.75,
+        ),
+        'corrosion ring': Rect.fromCircle(
+          center: Offset(radius, radius),
+          radius: overlayLayout.corrodedRingRadius + 0.75,
+        ),
+      };
+      namePainter.dispose();
+
+      Rect screenBounds(Rect rect) {
+        final corners =
+            [
+              rect.topLeft,
+              rect.topRight,
+              rect.bottomLeft,
+              rect.bottomRight,
+            ].map((local) {
+              final sim = boss.absolutePositionOf(Vector2(local.dx, local.dy));
+              return gameRect.topLeft + simToCanvas(sim.toOffset());
+            }).toList();
+        return Rect.fromLTRB(
+          corners.map((p) => p.dx).reduce(math.min),
+          corners.map((p) => p.dy).reduce(math.min),
+          corners.map((p) => p.dx).reduce(math.max),
+          corners.map((p) => p.dy).reduce(math.max),
+        );
+      }
+
+      final viewportScreen = viewport.shift(gameRect.topLeft);
+      void expectClearance(String part, Rect rect) {
+        final screen = screenBounds(rect);
+        expect(screen.left, greaterThanOrEqualTo(gameRect.left), reason: part);
+        expect(screen.right, lessThanOrEqualTo(gameRect.right), reason: part);
+        expect(screen.top, greaterThanOrEqualTo(gameRect.top), reason: part);
+        expect(screen.bottom, lessThanOrEqualTo(gameRect.bottom), reason: part);
+        expect(
+          screen.left,
+          greaterThanOrEqualTo(viewportScreen.left),
+          reason: part,
+        );
+        expect(
+          screen.right,
+          lessThanOrEqualTo(viewportScreen.right),
+          reason: part,
+        );
+        expect(
+          screen.top,
+          greaterThanOrEqualTo(viewportScreen.top),
+          reason: part,
+        );
+        expect(
+          screen.bottom,
+          lessThanOrEqualTo(viewportScreen.bottom),
+          reason: part,
+        );
+        expect(screen.top, greaterThan(hudRect.bottom), reason: part);
+        expect(screen.bottom, lessThan(dockRect.top), reason: part);
+      }
+
+      for (final entry in localBounds.entries) {
+        expectClearance(entry.key, entry.value);
+      }
+      final localUnion = localBounds.values.reduce(
+        (a, b) => a.expandToInclude(b),
       );
+      expectClearance('complete overlay union', localUnion);
+
+      const rasterSize = 256;
+      const padding = 128.0;
+      final pixels = await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        final canvas = ui.Canvas(recorder)..translate(padding, padding);
+        EnemyOverlayRenderer().render(
+          canvas,
+          state: overlayState,
+          radius: radius,
+          towerVarietySheet: boss.towerVarietySheet,
+          name: name,
+        );
+        final picture = recorder.endRecording();
+        final image = await picture.toImage(rasterSize, rasterSize);
+        final bytes = await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+        image.dispose();
+        picture.dispose();
+        return bytes;
+      });
+      expect(pixels, isNotNull);
+      var left = rasterSize;
+      var top = rasterSize;
+      var right = -1;
+      var bottom = -1;
+      final paintedByPart = <String, int>{
+        'name': 0,
+        'badges': 0,
+        'health bar': 0,
+        'shield bar': 0,
+      };
+      for (var y = 0; y < rasterSize; y++) {
+        for (var x = 0; x < rasterSize; x++) {
+          if (pixels!.getUint8((y * rasterSize + x) * 4 + 3) == 0) continue;
+          left = math.min(left, x);
+          top = math.min(top, y);
+          right = math.max(right, x);
+          bottom = math.max(bottom, y);
+          final point = Offset(x + 0.5 - padding, y + 0.5 - padding);
+          for (final part in paintedByPart.keys) {
+            if (localBounds[part]!.contains(point)) {
+              paintedByPart[part] = paintedByPart[part]! + 1;
+            }
+          }
+        }
+      }
+      for (final entry in paintedByPart.entries) {
+        expect(entry.value, greaterThan(0), reason: '${entry.key} must paint');
+      }
+      bool ringPainted(
+        double ringRadius,
+        bool Function(int, int) colorMatches,
+      ) {
+        final x = (padding + radius + ringRadius).round();
+        final y = (padding + radius).round();
+        for (var dy = -1; dy <= 1; dy++) {
+          for (var dx = -1; dx <= 1; dx++) {
+            final index = ((y + dy) * rasterSize + x + dx) * 4;
+            if (pixels!.getUint8(index + 3) > 0 &&
+                colorMatches(
+                  pixels.getUint8(index + 1),
+                  pixels.getUint8(index + 2),
+                )) {
+              return true;
+            }
+          }
+        }
+        return false;
+      }
+
       expect(
-        overlayBottom,
-        lessThan(dockRect.top),
-        reason:
-            'the status rings must clear the command dock at the boss\'s '
-            'live screen position',
-      );
-      expect(
-        bossScreen.dx >= 0 && bossScreen.dx <= gameRect.width,
+        ringPainted(overlayLayout.slowedRingRadius, (g, b) => b > g),
         isTrue,
-        reason: 'the live boss must stay inside the board horizontally',
+        reason: 'slow ring must paint at its own radius',
       );
+      expect(
+        ringPainted(overlayLayout.corrodedRingRadius, (g, b) => g > b + 30),
+        isTrue,
+        reason: 'corrosion ring must paint at its own radius',
+      );
+      expect(left, greaterThan(0));
+      expect(top, greaterThan(0));
+      expect(right, lessThan(rasterSize - 1));
+      expect(bottom, lessThan(rasterSize - 1));
+      final paintedBounds = Rect.fromLTRB(
+        left - padding,
+        top - padding,
+        right + 1 - padding,
+        bottom + 1 - padding,
+      );
+      final antialiasedUnion = localUnion.inflate(1.5);
+      expect(paintedBounds.left, greaterThanOrEqualTo(antialiasedUnion.left));
+      expect(paintedBounds.top, greaterThanOrEqualTo(antialiasedUnion.top));
+      expect(paintedBounds.right, lessThanOrEqualTo(antialiasedUnion.right));
+      expect(paintedBounds.bottom, lessThanOrEqualTo(antialiasedUnion.bottom));
+      expectClearance('rasterized overlay', paintedBounds);
 
       final suffix = viewSize.height < 700 ? '-compact' : '';
-      // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
-      // real async engine work and deadlocks the FakeAsync zone otherwise.
       await tester.runAsync(
         () => captureReactorRimFixture(
           boundaryKey,

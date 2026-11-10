@@ -148,10 +148,6 @@ class _MissionChromeState extends State<MissionChrome> {
                   )
                   .dy +
               8;
-    // The scanner lives inside the dock in every state now — idle it rides
-    // the idle bar, a selection parks it as a collapsed chip in the rail
-    // row — so it can never claim top-band reserve. The reserve math stays
-    // in case a future mount moves it back above the board.
     _scannerReserve = _scannerDockMounted || scanner == null
         ? 0
         : box

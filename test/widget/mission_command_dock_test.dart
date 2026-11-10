@@ -1768,8 +1768,6 @@ void main() {
           );
         }
 
-        // An empty buildable cell via the same entry point chrome's tap
-        // arbiter uses for real board taps.
         game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
         await tester.pump();
         await tester.pump();
@@ -1788,8 +1786,6 @@ void main() {
           );
         }
 
-        // A path cell is also a normal board tap target during waves
-        // (enemy inspection lives there); the readouts must stay too.
         game!.handleBoardTap(game!.boardCellCenter(const GridPosition(7, 10)));
         await tester.pump();
         await tester.pump();
@@ -1808,7 +1804,6 @@ void main() {
           );
         }
 
-        // Clearing the selection leaves the readouts available again.
         game!.handleBoardTap(const Offset(-1000, -1000));
         await tester.pump();
         await tester.pump();

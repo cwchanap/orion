@@ -1,7 +1,11 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flame/components.dart';
 import 'package:flame/flame.dart';
+import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/components/board_component.dart';
@@ -39,8 +43,501 @@ Future<List<int>> _rgbaAt(Image image, int x, int y) async {
   ];
 }
 
+Future<Image> _uploadMarker(Uint8List pixels, int width, int height) {
+  final result = Completer<Image>();
+  decodeImageFromPixels(
+    pixels,
+    width,
+    height,
+    PixelFormat.rgba8888,
+    result.complete,
+  );
+  return result.future;
+}
+
+class _MarkerSheetProbe implements GameSpriteSheet {
+  _MarkerSheetProbe(
+    this.delegate, {
+    this.failOnce = false,
+    this.alwaysFail = false,
+    this.failSprite = GameSprite.spawnGate,
+    this.failLookup = 1,
+  });
+
+  final GameSpriteSheet delegate;
+  bool failOnce;
+  final bool alwaysFail;
+  final GameSprite failSprite;
+  final int failLookup;
+  int matchingLookups = 0;
+  final List<GameSprite> calls = [];
+
+  @override
+  Sprite sprite(GameSprite sprite) {
+    calls.add(sprite);
+    if (sprite == failSprite) matchingLookups++;
+    if (sprite == failSprite &&
+        (alwaysFail || (failOnce && matchingLookups == failLookup))) {
+      failOnce = false;
+      throw StateError('transient marker lookup failure');
+    }
+    return delegate.sprite(sprite);
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+
+  for (final uploadPhase in [false, true]) {
+    testWidgets(
+      'injected pending ${uploadPhase ? 'upload' : 'readback'} is cancelled on removal',
+      (tester) async {
+        final source = await tester.runAsync(
+          () => Flame.images.load(GameSpriteSheet.fileName),
+        );
+        final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(source!));
+        final game = FlameGame();
+        await tester.pumpWidget(GameWidget(game: game));
+        await tester.pump();
+        Image? silhouette;
+        var readbacks = 0;
+        var uploads = 0;
+        final created = <Image>[];
+        final previousOnCreate = Image.onCreate;
+        Image.onCreate = (image) {
+          previousOnCreate?.call(image);
+          created.add(image);
+        };
+        addTearDown(() {
+          Image.onCreate = previousOnCreate;
+          for (final image in created) {
+            if (!image.debugDisposed) image.dispose();
+          }
+        });
+        await tester.runAsync(() async {
+          final readbackGate = Completer<ByteData?>();
+          final uploadGate = Completer<Image>();
+          final uploadStarted = Completer<void>();
+          final board = BoardComponent(
+            cellSize: 20,
+            pathCells: BoardLayout.pathCells,
+            spriteSheet: sheet,
+            markerReadback: (image) async {
+              readbacks++;
+              if (!uploadPhase && readbacks == 1) {
+                silhouette = image;
+                return readbackGate.future;
+              }
+              return ByteData(image.width * image.height * 4);
+            },
+            markerUpload: (pixels, width, height) async {
+              uploads++;
+              if (uploadPhase && uploads == 1) {
+                uploadStarted.complete();
+                return uploadGate.future;
+              }
+              return _uploadMarker(pixels, width, height);
+            },
+          );
+          game.add(board);
+          game.processLifecycleEvents();
+          expect(board.isMounted, isTrue);
+          final bake = board.ensureMarkerShadows();
+          if (uploadPhase) await uploadStarted.future;
+          expect(sheet.calls, [GameSprite.spawnGate]);
+          board.removeFromParent();
+          game.processLifecycleEvents();
+          expect(board.isRemoved, isTrue);
+          Image? lateImage;
+          if (uploadPhase) {
+            lateImage = await _rasterize(2, 2, (_) {});
+            uploadGate.complete(lateImage);
+          } else {
+            readbackGate.complete(
+              ByteData(silhouette!.width * silhouette!.height * 4),
+            );
+          }
+          await bake;
+          if (uploadPhase) {
+            expect(lateImage!.debugDisposed, isTrue);
+          } else {
+            expect(silhouette!.debugDisposed, isTrue);
+            expect(uploads, 0, reason: 'removal stops upload after readback');
+          }
+          expect(sheet.calls, [GameSprite.spawnGate]);
+          expect(created.every((image) => image.debugDisposed), isTrue);
+        });
+      },
+    );
+  }
+
+  for (final failure in ['null', 'throw']) {
+    test('transient $failure readback is cleaned up and retried', () async {
+      final sheet = _MarkerSheetProbe(
+        GameSpriteSheet.fromImage(
+          await Flame.images.load(GameSpriteSheet.fileName),
+        ),
+      );
+      final silhouettes = <Image>[];
+      final pictures = <Picture>[];
+      final previousPictureCreate = Picture.onCreate;
+      Picture.onCreate = (picture) {
+        previousPictureCreate?.call(picture);
+        pictures.add(picture);
+      };
+      var calls = 0;
+      final board = BoardComponent(
+        cellSize: 20,
+        pathCells: BoardLayout.pathCells,
+        spriteSheet: sheet,
+        markerReadback: (image) async {
+          silhouettes.add(image);
+          calls++;
+          if (calls == 1) {
+            if (failure == 'throw') throw StateError('readback failed');
+            return null;
+          }
+          return image.toByteData(format: ImageByteFormat.rawRgba);
+        },
+      );
+      addTearDown(() {
+        Picture.onCreate = previousPictureCreate;
+        board.onRemove();
+        for (final image in silhouettes) {
+          if (!image.debugDisposed) image.dispose();
+        }
+        for (final picture in pictures) {
+          if (!picture.debugDisposed) picture.dispose();
+        }
+      });
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          await board.ensureMarkerShadows();
+        } catch (_) {}
+      }
+      expect(silhouettes.first.debugDisposed, isTrue);
+      expect(pictures, isNotEmpty);
+      expect(pictures.every((picture) => picture.debugDisposed), isTrue);
+      expect(calls, 3, reason: 'retry spawn and then bake the core');
+      expect(sheet.calls, [
+        GameSprite.spawnGate,
+        GameSprite.spawnGate,
+        GameSprite.baseReactor,
+      ]);
+    });
+  }
+
+  test('transient upload failure is retried for both marker shadows', () async {
+    final sheet = _MarkerSheetProbe(
+      GameSpriteSheet.fromImage(
+        await Flame.images.load(GameSpriteSheet.fileName),
+      ),
+    );
+    var uploads = 0;
+    final board = BoardComponent(
+      cellSize: 20,
+      pathCells: BoardLayout.pathCells,
+      spriteSheet: sheet,
+      markerUpload: (pixels, width, height) {
+        uploads++;
+        if (uploads == 1) throw StateError('upload failed');
+        return _uploadMarker(pixels, width, height);
+      },
+    );
+    addTearDown(board.onRemove);
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        await board.ensureMarkerShadows();
+      } catch (_) {}
+    }
+    expect(uploads, 3);
+    expect(sheet.calls, [
+      GameSprite.spawnGate,
+      GameSprite.spawnGate,
+      GameSprite.baseReactor,
+    ]);
+  });
+
+  for (final failure in ['readback throw', 'readback null', 'upload throw']) {
+    for (final startFromRender in [false, true]) {
+      test('persistent $failure has bounded fallback from '
+          '${startFromRender ? 'render' : 'onLoad'}', () async {
+        final source = await Flame.images.load(GameSpriteSheet.fileName);
+        var attempts = 0;
+        final silhouettes = <Image>[];
+        final diagnostics = <String>[];
+        final previousDebugPrint = debugPrint;
+        debugPrint = (message, {wrapWidth}) {
+          if (message != null) diagnostics.add(message);
+        };
+        final board = BoardComponent(
+          cellSize: 20,
+          pathCells: BoardLayout.pathCells,
+          spriteSheet: GameSpriteSheet.fromImage(source),
+          markerReadback: (image) async {
+            silhouettes.add(image);
+            if (failure.startsWith('readback')) {
+              attempts++;
+              if (failure == 'readback null') return null;
+              throw StateError('persistent readback failure');
+            }
+            return image.toByteData(format: ImageByteFormat.rawRgba);
+          },
+          markerUpload: (pixels, width, height) {
+            attempts++;
+            throw StateError('persistent upload failure');
+          },
+        );
+        addTearDown(() {
+          debugPrint = previousDebugPrint;
+          board.onRemove();
+          for (final image in silhouettes) {
+            if (!image.debugDisposed) image.dispose();
+          }
+        });
+        final uncaught = <Object>[];
+        await runZonedGuarded(() async {
+          if (!startFromRender) board.onLoad();
+          for (var frame = 0; frame < 10; frame++) {
+            final recorder = PictureRecorder();
+            board.render(Canvas(recorder));
+            recorder.endRecording().dispose();
+            await Future<void>.delayed(const Duration(milliseconds: 10));
+          }
+        }, (error, stack) => uncaught.add(error));
+        expect(uncaught, isEmpty);
+        expect(
+          attempts,
+          4,
+          reason: 'each marker gets two attempts, not per-frame retries',
+        );
+        expect(diagnostics, hasLength(4));
+        expect(
+          diagnostics.every(
+            (line) => line.contains(
+              failure == 'readback null'
+                  ? 'readback returned null'
+                  : 'persistent ${failure.split(' ').first} failure',
+            ),
+          ),
+          isTrue,
+        );
+        expect(silhouettes.every((image) => image.debugDisposed), isTrue);
+      });
+    }
+  }
+
+  test(
+    'a failed spawn shadow does not prevent a successful core shadow',
+    () async {
+      final sheet = _MarkerSheetProbe(
+        GameSpriteSheet.fromImage(
+          await Flame.images.load(GameSpriteSheet.fileName),
+        ),
+      );
+      var readbacks = 0;
+      final uploaded = <Image>[];
+      final board = BoardComponent(
+        cellSize: 20,
+        pathCells: BoardLayout.pathCells,
+        spriteSheet: sheet,
+        markerReadback: (image) async {
+          readbacks++;
+          if (readbacks <= 2) throw StateError('spawn readback failed');
+          return image.toByteData(format: ImageByteFormat.rawRgba);
+        },
+        markerUpload: (pixels, width, height) async {
+          final image = await _uploadMarker(pixels, width, height);
+          uploaded.add(image);
+          return image;
+        },
+      );
+      addTearDown(() {
+        board.onRemove();
+        for (final image in uploaded) {
+          if (!image.debugDisposed) image.dispose();
+        }
+      });
+      await board.ensureMarkerShadows();
+      expect(sheet.calls, [
+        GameSprite.spawnGate,
+        GameSprite.spawnGate,
+        GameSprite.baseReactor,
+      ]);
+      expect(uploaded, hasLength(1));
+      expect(uploaded.single.debugDisposed, isFalse);
+    },
+  );
+
+  for (final checkDisposal in [false, true]) {
+    testWidgets(
+      checkDisposal
+          ? 'removing a board during a marker bake disposes every produced image'
+          : 'removing a board during a marker bake stops later markers',
+      (tester) async {
+        final image = await tester.runAsync(
+          () => Flame.images.load(GameSpriteSheet.fileName),
+        );
+        final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(image!));
+        final game = FlameGame();
+        await tester.pumpWidget(GameWidget(game: game));
+        await tester.pump();
+        expect(game.isMounted, isTrue);
+
+        final created = <Image>[];
+        final previousOnCreate = Image.onCreate;
+        Image.onCreate = (image) {
+          previousOnCreate?.call(image);
+          created.add(image);
+        };
+        addTearDown(() {
+          Image.onCreate = previousOnCreate;
+          for (final image in created) {
+            if (!image.debugDisposed) image.dispose();
+          }
+        });
+
+        await tester.runAsync(() async {
+          final board = BoardComponent(
+            cellSize: 20,
+            pathCells: BoardLayout.pathCells,
+            spriteSheet: sheet,
+          );
+          game.add(board);
+          game.processLifecycleEvents();
+          expect(board.isMounted, isTrue);
+          final bake = board.ensureMarkerShadows();
+          expect(sheet.calls, [GameSprite.spawnGate]);
+          expect(created, isNotEmpty);
+          board.removeFromParent();
+          game.processLifecycleEvents();
+          expect(board.isRemoved, isTrue);
+          await bake;
+          if (checkDisposal) {
+            expect(
+              created.every((image) => image.debugDisposed),
+              isTrue,
+              reason: 'no image produced by a removed board may remain owned',
+            );
+          } else {
+            expect(
+              sheet.calls,
+              [GameSprite.spawnGate],
+              reason: 'removal must prevent the core marker bake from starting',
+            );
+          }
+        });
+      },
+    );
+  }
+
+  for (final failedSprite in [GameSprite.spawnGate, GameSprite.baseReactor]) {
+    test(
+      'a transient $failedSprite bake error does not poison subsequent attempts',
+      () async {
+        final sheet = _MarkerSheetProbe(
+          GameSpriteSheet.fromImage(
+            await Flame.images.load(GameSpriteSheet.fileName),
+          ),
+          failOnce: true,
+          failSprite: failedSprite,
+        );
+        final board = BoardComponent(
+          cellSize: 20,
+          pathCells: BoardLayout.pathCells,
+          spriteSheet: sheet,
+        );
+        addTearDown(board.onRemove);
+        final errors = <Object>[];
+        final completed = <bool>[];
+        for (var attempt = 0; attempt < 2; attempt++) {
+          try {
+            await board.ensureMarkerShadows();
+            completed.add(true);
+          } catch (error) {
+            errors.add(error);
+            completed.add(false);
+          }
+        }
+        expect(
+          sheet.calls.where((sprite) => sprite == failedSprite).length,
+          2,
+          reason: 'a transient failure must leave a way to retry the marker',
+        );
+        expect(sheet.calls, contains(GameSprite.baseReactor));
+        expect(errors.length, lessThanOrEqualTo(1));
+        expect(completed.last, isTrue);
+      },
+    );
+  }
+
+  for (final startFromRender in [false, true]) {
+    test('fire-and-forget marker bake errors stay inside the board from '
+        '${startFromRender ? 'render' : 'onLoad'}', () async {
+      final sheet = _MarkerSheetProbe(
+        GameSpriteSheet.fromImage(
+          await Flame.images.load(GameSpriteSheet.fileName),
+        ),
+        failOnce: true,
+        failLookup: startFromRender ? 2 : 1,
+      );
+      final board = BoardComponent(
+        cellSize: 20,
+        pathCells: BoardLayout.pathCells,
+        spriteSheet: sheet,
+      );
+      addTearDown(board.onRemove);
+      final uncaught = <Object>[];
+      await runZonedGuarded(() async {
+        if (startFromRender) {
+          final recorder = PictureRecorder();
+          board.render(Canvas(recorder));
+          recorder.endRecording().dispose();
+        } else {
+          board.onLoad();
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 30));
+      }, (error, stack) => uncaught.add(error));
+      expect(sheet.failOnce, isFalse, reason: 'the injected error was reached');
+      expect(uncaught, isEmpty);
+    });
+  }
+
+  test(
+    'persistent render sprite lookup failure falls back without retrying every frame',
+    () async {
+      final sheet = _MarkerSheetProbe(
+        GameSpriteSheet.fromImage(
+          await Flame.images.load(GameSpriteSheet.fileName),
+        ),
+        alwaysFail: true,
+      );
+      final board = BoardComponent(
+        cellSize: 20,
+        pathCells: BoardLayout.pathCells,
+        spriteSheet: sheet,
+      );
+      addTearDown(board.onRemove);
+      final uncaught = <Object>[];
+      await runZonedGuarded(() async {
+        for (var frame = 0; frame < 10; frame++) {
+          final recorder = PictureRecorder();
+          try {
+            board.render(Canvas(recorder));
+          } catch (error) {
+            uncaught.add(error);
+          }
+          recorder.endRecording().dispose();
+          await Future<void>.delayed(const Duration(milliseconds: 10));
+        }
+      }, (error, stack) => uncaught.add(error));
+      expect(uncaught, isEmpty);
+      expect(
+        sheet.calls.where((sprite) => sprite == GameSprite.spawnGate).length,
+        lessThanOrEqualTo(4),
+      );
+    },
+  );
 
   group('BoardComponent.dashed', () {
     test('cuts a line into dash/gap segments', () {
@@ -486,13 +983,8 @@ void main() {
 
   group('BoardComponent board.js acceptance — gaussian lane halo and sprite '
       'marker drop-shadows (fix round 2)', () {
-    // The binding kit cell size; the blur sigma and drop-shadow radii are
-    // specified in absolute pixels at this scale.
     const cell = 46.75;
 
-    // [pad] adds a transparent margin so marker drop-shadows that bloom
-    // past the board edge (the core marker's 1.45C rect overflows the 8C
-    // board on its right) can still be probed.
     Future<Image> renderKitBoard({
       GameSpriteSheet? spriteSheet,
       double pad = 0,
@@ -502,9 +994,6 @@ void main() {
         pathCells: BoardLayout.pathCells,
         spriteSheet: spriteSheet,
       );
-      // Marker shadows rasterize their alpha blur through a fire-and-
-      // forget bake (onLoad/render kick it; the mount never waits on the
-      // read-back). Tests await the same dedup'd future directly.
       await board.ensureMarkerShadows();
       return _rasterize(
         (BoardLayout.columns * cell + pad * 2).ceil(),
@@ -523,16 +1012,8 @@ void main() {
       int alphaAt(int x, int y) =>
           data!.getUint8((y * image.width + x) * 4 + 3);
 
-      // Perpendicular scan off the horizontal (0,1)-(3,1) run at
-      // x = 1.25C: clear of the per-cell chevron glyphs (x = 1C/2C/3C),
-      // of both markers, and of the y = 1.0C field-grid line.
       final x = (1.25 * cell).round();
 
-      // board.js blurs the .92C-wide @.22 glow with
-      // feGaussianBlur stdDeviation=6: the tail still emits a few
-      // percent alpha ~0.24C past the band edge, reaching ~0.85C.
-      // A stepped stack whose widest stroke is 1.30C goes dead at
-      // 0.65C + antialiasing, so rows y ∈ [0.62C, 0.79C] must be dark.
       var tail = 0;
       for (var y = (0.62 * cell).ceil(); y <= (0.79 * cell).floor(); y++) {
         tail += alphaAt(x, y);
@@ -547,12 +1028,6 @@ void main() {
             'hard at 0.65C',
       );
 
-      // Inside the path-row band the probe sits on the opaque path fill,
-      // so only the tail zone is measurable — and a Gaussian tail decays
-      // with distance where a stepped or uniform band cannot. Compare two
-      // tail samples: nearer the centreline must read strictly stronger.
-      // (Measured under the real σ6 layer: ~8/255 at 0.60C, ~4 at 0.65C,
-      // 0 by 0.76C.)
       final near = alphaAt(x, (0.90 * cell).round());
       final far = alphaAt(x, (0.66 * cell).round());
       expect(
@@ -583,12 +1058,6 @@ void main() {
       int redAt(int x, int y) => data!.getUint8((y * image.width + x) * 4);
       int blueAt(int x, int y) => data!.getUint8((y * image.width + x) * 4 + 2);
 
-      // Spawn marker at (0.5C, 1.5C); its sprite is clipped to a
-      // 0.675C-radius rect (top edge y = 0.825C). The kit draws
-      // drop-shadow(0 0 12px rgba(70,230,255,.9)) — a strong cyan glow
-      // just past the sprite silhouette. Scan the column above the
-      // marker: the lane halo can only contribute ~2 alpha this far
-      // off the centreline, so ≥8 is the sprite's own shadow.
       final x = (0.5 * cell).round();
       var strongCyan = 0;
       for (var y = (0.62 * cell).ceil(); y <= (0.81 * cell).floor(); y++) {
@@ -613,12 +1082,6 @@ void main() {
       );
       final image = await renderKitBoard(spriteSheet: sheet);
 
-      // Core marker at (7.5C, 10.5C); its sprite is clipped to a
-      // 0.725C-radius rect. The kit draws
-      // drop-shadow(0 0 16px rgba(255,200,87,.95)) — amber, which the
-      // cyan lane halo cannot fake (cyan reads blue>red). Probe the
-      // annulus off-lane: left, down-left and down of the marker, all
-      // outside the rect but inside the 16px shadow reach.
       const centre = Offset(7.5 * cell, 10.5 * cell);
       const dirs = [Offset(-1, 0), Offset(-0.707, 0.707), Offset(0, 1)];
       var amberGlow = 0;
@@ -659,16 +1122,6 @@ void main() {
       int cyanAt(int x, int y) =>
           alphaAt(x, y) >= 4 && blueAt(x, y) > redAt(x, y) ? alphaAt(x, y) : 0;
 
-      // The spawn sprite's 362x362 sheet cell only has art in
-      // (85,20)-(336,268): its silhouette nearly reaches the cell's top
-      // edge but ends 26% above the cell's bottom edge. Mapped onto the
-      // 1.35C marker rect centred at (0.5C, 1.5C), the silhouette's
-      // bottom edge sits ~16px inside the rect — so the real
-      // drop-shadow must bloom visibly just above the rect and barely
-      // at all the same distance below it. A disc blurred at sigma 12
-      // is symmetric: it lights both probes equally. Scan a small
-      // window across the centre column because the silhouette's
-      // topmost art need not sit on the centre axis.
       int bestCyanAt(double y) {
         var best = 0;
         for (var dx = -10; dx <= 10; dx += 2) {
@@ -714,8 +1167,6 @@ void main() {
       final sheet = GameSpriteSheet.fromImage(
         await Flame.images.load(GameSpriteSheet.fileName),
       );
-      // The core marker's 1.45C rect spans past the board's right edge —
-      // pad the raster so its overhang bloom is capturable.
       const pad = 44.0;
       final image = await renderKitBoard(spriteSheet: sheet, pad: pad);
       final data = await image.toByteData(format: ImageByteFormat.rawRgba);
@@ -726,15 +1177,6 @@ void main() {
       int amberAt(int x, int y) =>
           alphaAt(x, y) >= 4 && redAt(x, y) > blueAt(x, y) ? alphaAt(x, y) : 0;
 
-      // The core sprite's 362x362 sheet cell has art in (79,11)-(314,268):
-      // ~9px right margin vs ~18px bottom margin once mapped onto the
-      // 1.45C rect. The lane's end-segment occupies the whole upper band
-      // of this marker (opaque channel + halo answer every above-rect
-      // probe, so a top probe can never isolate the shadow), while right
-      // and below are lane-free. Compare the shadow's reach off the right
-      // edge against below the bottom edge: the real silhouette hugs the
-      // right edge but dies ~17.6px before the rect bottom, a blurred
-      // rect-edge disc lights both equally.
       int bestAmberRight(int dx) {
         var best = 0;
         for (

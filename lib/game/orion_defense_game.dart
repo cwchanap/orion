@@ -995,10 +995,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _spawnTimer -= dt;
     while (_spawnTimer <= 0 && _spawnedCount < wave.enemyCount) {
       final group = wave.groups[_activeGroupIndex];
-      // Count the spawn before _spawnEnemy runs: a boss publishes its
-      // arrival snapshot from inside _spawnEnemy, and the resolved
-      // projection must already include this enemy or the readout
-      // announces a hostile wave larger than scripted.
       _spawnedCount += 1;
       _spawnedInGroup += 1;
       _spawnEnemy(group.enemyStats);
@@ -1105,9 +1101,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _nextEnemyId += 1;
     _activeEnemyComponents[enemy.enemyId] = enemy;
     add(enemy);
-    // Summoned hostiles join the same projected wave state as scripted
-    // spawns: the count keeps resolved >= 0 and the republish makes the
-    // arrival visible to chrome instead of waiting for the next event.
     _summonedCount += 1;
     _publishSnapshot();
   }

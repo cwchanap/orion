@@ -124,13 +124,8 @@ class MissionCommandDock extends StatelessWidget {
           // Selected-cell branch only: see [towerCardGuideAnchor].
           towerCardGuideAnchor: towerCardGuideAnchor,
         ),
-        // The collapsed scanner rides the rail row while a cell is
-        // selected so chrome never has to relocate it into the top band
-        // (which would shift the board viewport the tests pin as fixed).
         accessory: nextWaveIntel,
       );
-      // A wave must keep its readouts through a selection: progress,
-      // hostiles-left and clear bonus are wave state, not idle state.
       content = snapshot.waveHostilesTotal != null
           ? Column(
               mainAxisSize: MainAxisSize.min,
@@ -300,7 +295,6 @@ class IdleCommandBar extends StatelessWidget {
   /// not the guide anchor is attached, so toggling the guide never fires a
   /// transition while label changes still do. The inner KeyedSubtree
   /// carries the (possibly null) guide anchor key.
-  ///
   /// Wide filled pill for the dock's single primary action: 48-56dp tall,
   /// filled cyan with dark content while enabled, and the dock's only glow.
   /// The wave-progress and countdown variants share the same footprint so the
