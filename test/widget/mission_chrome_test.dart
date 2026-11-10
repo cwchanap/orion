@@ -29,6 +29,11 @@ Widget chromeHost(
   Color? backgroundColor,
   ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
   ValueChanged<Rect>? onBoardViewportChanged,
+  Offset? towerAnchor,
+  VoidCallback? onInspectTower,
+  VoidCallback? onUpgrade,
+  VoidCallback? onSell,
+  ValueChanged<TowerTargetingMode>? onTargetingChanged,
 }) {
   return MaterialApp(
     // The product app hides this banner; a fixture host must too, or the
@@ -64,10 +69,12 @@ Widget chromeHost(
               onSpeedSelected: (_) {},
               onToggleAutoStart: () {},
               onPlaceTower: (_) {},
-              onUpgrade: () {},
+              onUpgrade: onUpgrade ?? () {},
               onSpecialize: (_) {},
-              onTargetingChanged: (_) {},
-              onSell: () {},
+              onTargetingChanged: onTargetingChanged ?? (_) {},
+              onSell: onSell ?? () {},
+              towerAnchor: towerAnchor,
+              onInspectTower: onInspectTower,
               onPlacementPreviewEvent: onPlacementPreviewEvent,
               onBoardViewportChanged: onBoardViewportChanged,
             ),
@@ -1815,5 +1822,119 @@ void main() {
           'top reserve never recovered: the board viewport stayed '
           'compressed after the selection cleared',
     );
+  });
+
+  group('tower radial actions (HPA-699 restyle contract)', () {
+    GameSnapshot radialSnapshot({GamePhase phase = GamePhase.build}) =>
+        commandDeckSnapshot(
+          phase: phase,
+          selectedTower: const PlacedTower(
+            id: 8,
+            type: TowerType.laser,
+            position: GridPosition(4, 5),
+          ),
+          selectedTowerStats: GameBalance.towerStats(TowerType.laser, level: 1),
+        );
+
+    testWidgets('mounted radial keeps its four actions wired inside the '
+        'viewport', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      var upgrades = 0;
+      var inspects = 0;
+      var sells = 0;
+      final targeting = <TowerTargetingMode>[];
+      await tester.pumpWidget(
+        chromeHost(
+          radialSnapshot(),
+          towerAnchor: const Offset(180, 400),
+          onInspectTower: () => inspects++,
+          onUpgrade: () => upgrades++,
+          onSell: () => sells++,
+          onTargetingChanged: targeting.add,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      final radial = find.byType(TowerRadialActions);
+      expect(radial, findsOneWidget);
+      final rect = tester.getRect(radial);
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.top, greaterThanOrEqualTo(0));
+      expect(rect.right, lessThanOrEqualTo(360));
+      expect(rect.bottom, lessThanOrEqualTo(640));
+
+      final upgradeCost = GameBalance.towerStats(
+        TowerType.laser,
+        level: 1,
+      ).upgradeCost;
+      await tester.tap(find.byTooltip('Upgrade $upgradeCost'));
+      await tester.tap(find.byTooltip('Inspect tower'));
+      await tester.tap(find.byTooltip('Targeting: First. Change targeting'));
+      expect(upgrades, 1);
+      expect(inspects, 1);
+      expect(targeting, [TowerTargetingMode.strongest]);
+
+      expect(find.byKey(const ValueKey('radial-salvage-8')), findsOneWidget);
+      final hold = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-sell'))),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(milliseconds: 900));
+      await hold.up();
+      expect(sells, 1);
+    });
+
+    testWidgets('radial mutations disable outside build phase while inspect '
+        'stays live', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      var sells = 0;
+      final targeting = <TowerTargetingMode>[];
+      await tester.pumpWidget(
+        chromeHost(
+          radialSnapshot(phase: GamePhase.wave),
+          towerAnchor: const Offset(180, 400),
+          onInspectTower: () {},
+          onSell: () => sells++,
+          onTargetingChanged: targeting.add,
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+
+      IconButton buttonFor(String tooltip) => tester.widget<IconButton>(
+        find.byWidgetPredicate(
+          (widget) => widget is IconButton && widget.tooltip == tooltip,
+        ),
+      );
+
+      final upgradeCost = GameBalance.towerStats(
+        TowerType.laser,
+        level: 1,
+      ).upgradeCost;
+      expect(buttonFor('Upgrade $upgradeCost').onPressed, isNull);
+      expect(buttonFor('Targeting: First. Change targeting').onPressed, isNull);
+      expect(buttonFor('Inspect tower').onPressed, isNotNull);
+
+      final salvage = tester.widget<Semantics>(
+        find.byKey(const ValueKey('tower-sell-semantics')),
+      );
+      expect(salvage.properties.enabled, isFalse);
+
+      final hold = await tester.startGesture(
+        tester.getCenter(find.byKey(const ValueKey('tower-sell'))),
+      );
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(milliseconds: 900));
+      await hold.up();
+      expect(sells, 0);
+      expect(targeting, isEmpty);
+    });
   });
 }

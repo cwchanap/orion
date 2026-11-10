@@ -37,6 +37,8 @@ class TowerInspector extends StatelessWidget {
     if (tower == null) return const SizedBox.shrink();
 
     final maxHeight = math.min(600.0, MediaQuery.sizeOf(context).height * .72);
+    final uiTheme = OrionUiTheme.of(context);
+    final canMutate = snapshot.phase == GamePhase.build;
     return FocusScope(
       autofocus: true,
       child: Align(
@@ -53,19 +55,73 @@ class TowerInspector extends StatelessWidget {
               color: Colors.transparent,
               child: Column(
                 children: [
-                  Row(
-                    children: [
-                      const SizedBox(width: 48),
-                      const Spacer(),
-                      Container(
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Center(
+                      child: Container(
                         width: 44,
                         height: 4,
                         decoration: BoxDecoration(
-                          color: OrionUiTheme.of(context).frameSteel,
+                          color: uiTheme.frameSteel,
                           borderRadius: BorderRadius.circular(3),
                         ),
                       ),
-                      const Spacer(),
+                    ),
+                  ),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Container(
+                        key: const ValueKey('tower-inspector-hero'),
+                        width: 70,
+                        height: 70,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: uiTheme.panelRaised,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: uiTheme.systemCyanStrong.withValues(
+                              alpha: 0.45,
+                            ),
+                            width: 1.5,
+                          ),
+                        ),
+                        child: OrionAtlasSprite(
+                          art: OrionArt.tower(tower.type),
+                          size: const Size(56, 56),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            OrionTitle(
+                              tower.type.label,
+                              size: 22,
+                              color: uiTheme.textPrimary,
+                            ),
+                            const SizedBox(height: 2),
+                            OrionText.micro(
+                              tower.specialization == null
+                                  ? 'Level ${tower.level}'
+                                  : 'Level ${tower.level} • '
+                                        '${tower.specialization!.label}',
+                              color: uiTheme.textMuted,
+                              size: 10,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      HoldToSalvage(
+                        key: ValueKey('salvage-${tower.id}'),
+                        compact: true,
+                        refund: sellRefund,
+                        onSell: canMutate ? onSell : null,
+                      ),
+                      const SizedBox(width: 4),
                       IconButton(
                         autofocus: true,
                         tooltip: 'Close tower inspector',
@@ -74,19 +130,23 @@ class TowerInspector extends StatelessWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 10),
                   Expanded(
                     child: SingleChildScrollView(
                       key: const ValueKey('tower-inspector-scroll'),
                       child: _InspectorBody(
                         snapshot: snapshot,
                         tower: tower,
-                        onUpgrade: onUpgrade,
                         onSpecialize: onSpecialize,
                         onTargetingChanged: onTargetingChanged,
-                        onSell: onSell,
-                        sellRefund: sellRefund,
                       ),
                     ),
+                  ),
+                  _ProgressionFooter(
+                    snapshot: snapshot,
+                    tower: tower,
+                    canMutate: canMutate,
+                    onUpgrade: onUpgrade,
                   ),
                 ],
               ),
@@ -102,20 +162,14 @@ class _InspectorBody extends StatelessWidget {
   const _InspectorBody({
     required this.snapshot,
     required this.tower,
-    required this.onUpgrade,
     required this.onSpecialize,
     required this.onTargetingChanged,
-    required this.onSell,
-    required this.sellRefund,
   });
 
   final GameSnapshot snapshot;
   final PlacedTower tower;
-  final VoidCallback onUpgrade;
   final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
-  final VoidCallback onSell;
-  final int sellRefund;
 
   @override
   Widget build(BuildContext context) {
@@ -128,101 +182,42 @@ class _InspectorBody extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Container(
-              key: const ValueKey('tower-inspector-hero'),
-              width: 96,
-              height: 96,
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: uiTheme.panelRaised,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: uiTheme.frameSteel.withValues(alpha: 0.55),
-                ),
-              ),
-              child: OrionAtlasSprite(
-                art: OrionArt.tower(tower.type),
-                size: const Size(78, 78),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  OrionTitle(
-                    tower.type.label,
-                    size: 22,
-                    color: uiTheme.textPrimary,
-                  ),
-                  const SizedBox(height: 2),
-                  OrionText.micro(
-                    tower.specialization == null
-                        ? 'Level ${tower.level}'
-                        : 'Level ${tower.level} • '
-                              '${tower.specialization!.label}',
-                    color: uiTheme.textMuted,
-                    size: 10,
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
         _TargetingActions(
           tower: tower,
           canMutate: canMutate,
           onTargetingChanged: onTargetingChanged,
         ),
         if (stats != null) ...[
-          const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: _StatRow(
-                  key: const ValueKey('tower-stat-damage'),
-                  label: 'Damage',
-                  value: number(stats.damage),
-                  fill: scale.damageFill(stats),
-                  accent: uiTheme.dangerRed,
-                ),
-              ),
-              Expanded(
-                child: _StatRow(
-                  key: const ValueKey('tower-stat-fire'),
-                  label: 'Fire',
-                  value: '${cadence(stats.fireInterval)}s',
-                  fill: scale.fireFill(stats),
-                  accent: uiTheme.creditGold,
-                ),
-              ),
-              Expanded(
-                child: _StatRow(
-                  key: const ValueKey('tower-stat-range'),
-                  label: 'Range',
-                  value: number(stats.range),
-                  fill: scale.rangeFill(stats),
-                  accent: uiTheme.systemCyan,
-                ),
-              ),
-              if (scale.secondaryMetric case final metric?)
-                Expanded(
-                  child: _StatRow(
-                    key: const ValueKey('tower-stat-secondary'),
-                    label: _secondaryMetricLabel(metric),
-                    value: _secondaryMetricValue(metric, stats),
-                    fill: scale.secondaryFill(stats) ?? 0,
-                    accent: uiTheme.systemViolet,
-                  ),
-                ),
-            ],
+          const SizedBox(height: 14),
+          _StatRow(
+            key: const ValueKey('tower-stat-damage'),
+            label: 'Damage',
+            value: number(stats.damage),
+            fill: scale.damageFill(stats),
+            accent: uiTheme.dangerRed,
           ),
+          _StatRow(
+            key: const ValueKey('tower-stat-fire'),
+            label: 'Fire',
+            value: '${cadence(stats.fireInterval)}s',
+            fill: scale.fireFill(stats),
+            accent: uiTheme.creditGold,
+          ),
+          _StatRow(
+            key: const ValueKey('tower-stat-range'),
+            label: 'Range',
+            value: number(stats.range),
+            fill: scale.rangeFill(stats),
+            accent: uiTheme.systemCyan,
+          ),
+          if (scale.secondaryMetric case final metric?)
+            _StatRow(
+              key: const ValueKey('tower-stat-secondary'),
+              label: _secondaryMetricLabel(metric),
+              value: _secondaryMetricValue(metric, stats),
+              fill: scale.secondaryFill(stats) ?? 0,
+              accent: uiTheme.systemViolet,
+            ),
         ],
         const SizedBox(height: 20),
         _ProgressionActions(
@@ -230,14 +225,7 @@ class _InspectorBody extends StatelessWidget {
           tower: tower,
           stats: stats,
           canMutate: canMutate,
-          onUpgrade: onUpgrade,
           onSpecialize: onSpecialize,
-        ),
-        const SizedBox(height: 16),
-        HoldToSalvage(
-          key: ValueKey('salvage-${tower.id}'),
-          refund: sellRefund,
-          onSell: canMutate ? onSell : null,
         ),
       ],
     );
@@ -426,48 +414,104 @@ class _StatRow extends StatelessWidget {
       readOnly: true,
       container: true,
       excludeSemantics: true,
-      child: Column(
-        children: [
-          SizedBox.square(
-            dimension: 58,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Positioned.fill(
-                  child: CircularProgressIndicator(
-                    value: fill,
-                    strokeWidth: 7,
-                    backgroundColor: uiTheme.frameSteel.withValues(alpha: .5),
-                    color: accent,
-                  ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 2.5),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 84,
+              child: Text(
+                label.toUpperCase(),
+                style: OrionTypography.microLabel(
+                  size: 10,
+                  color: uiTheme.textMuted,
                 ),
-                Padding(
-                  padding: const EdgeInsets.all(6),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      value,
-                      style: OrionTypography.readout(
-                        size: 16,
-                        color: uiTheme.textPrimary,
-                      ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: LinearProgressIndicator(
+                  value: fill.clamp(0.0, 1.0),
+                  minHeight: 10,
+                  backgroundColor: uiTheme.frameSteel.withValues(alpha: .5),
+                  color: accent,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            SizedBox(
+              width: 52,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    style: OrionTypography.readout(
+                      size: 15,
+                      color: uiTheme.textPrimary,
                     ),
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            label.toUpperCase(),
-            textAlign: TextAlign.center,
-            style: OrionTypography.microLabel(
-              size: 10,
-              color: uiTheme.textMuted,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
+    );
+  }
+}
+
+class _ProgressionFooter extends StatelessWidget {
+  const _ProgressionFooter({
+    required this.snapshot,
+    required this.tower,
+    required this.canMutate,
+    required this.onUpgrade,
+  });
+
+  final GameSnapshot snapshot;
+  final PlacedTower tower;
+  final bool canMutate;
+  final VoidCallback onUpgrade;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final stats = snapshot.selectedTowerStats;
+    final Widget? action;
+    if (tower.isMaxLevel) {
+      action = FilledButton.icon(
+        onPressed: null,
+        icon: const Icon(Icons.check, size: 17),
+        label: const Text('Max'),
+      );
+    } else if (tower.canUpgrade) {
+      final cost = stats?.upgradeCost;
+      final enabled =
+          canMutate && stats != null && snapshot.gold >= stats.upgradeCost;
+      action = FilledButton.icon(
+        key: const ValueKey('tower-upgrade'),
+        onPressed: enabled ? onUpgrade : null,
+        icon: const Icon(Icons.upgrade, size: 17),
+        label: Text(cost == null ? 'Upgrade' : 'Upgrade $cost'),
+      );
+    } else {
+      action = null;
+    }
+    if (action == null) return const SizedBox.shrink();
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(top: 10),
+      padding: const EdgeInsets.only(top: 10),
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: uiTheme.frameSteel.withValues(alpha: .6)),
+        ),
+      ),
+      child: Align(alignment: Alignment.centerLeft, child: action),
     );
   }
 }
@@ -478,7 +522,6 @@ class _ProgressionActions extends StatelessWidget {
     required this.tower,
     required this.stats,
     required this.canMutate,
-    required this.onUpgrade,
     required this.onSpecialize,
   });
 
@@ -486,30 +529,17 @@ class _ProgressionActions extends StatelessWidget {
   final PlacedTower tower;
   final TowerStats? stats;
   final bool canMutate;
-  final VoidCallback onUpgrade;
   final ValueChanged<TowerSpecialization> onSpecialize;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     if (tower.isMaxLevel) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton.icon(
-          onPressed: null,
-          icon: const Icon(Icons.check, size: 17),
-          label: const Text('Max'),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     final resolvedStats = stats;
     if (tower.canUpgrade) {
-      final cost = resolvedStats?.upgradeCost;
-      final enabled =
-          canMutate &&
-          resolvedStats != null &&
-          snapshot.gold >= resolvedStats.upgradeCost;
       final candidate = snapshot.selectedTowerUpgradeStats;
       final rows = resolvedStats == null || candidate == null
           ? const <_PreviewRow>[]
@@ -536,16 +566,6 @@ class _ProgressionActions extends StatelessWidget {
               ),
             ),
           ],
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: FilledButton.icon(
-              key: const ValueKey('tower-upgrade'),
-              onPressed: enabled ? onUpgrade : null,
-              icon: const Icon(Icons.upgrade, size: 17),
-              label: Text(cost == null ? 'Upgrade' : 'Upgrade $cost'),
-            ),
-          ),
         ],
       );
     }
@@ -713,44 +733,170 @@ class _TargetingActions extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final modes = TowerTargetingMode.values;
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       children: [
         OrionText.micro('Targeting', color: uiTheme.textMuted, size: 11),
-        const SizedBox(height: 4),
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              for (final mode in TowerTargetingMode.values) ...[
-                if (mode != TowerTargetingMode.first) const SizedBox(width: 5),
-                Tooltip(
-                  message: _targetingTooltip(mode),
-                  child: ChoiceChip(
-                    key: ValueKey('tower-target-${mode.name}'),
-                    label: Text(mode.label),
-                    selected: tower.targetingMode == mode,
-                    onSelected: canMutate
-                        ? (_) => onTargetingChanged(mode)
-                        : null,
-                    materialTapTargetSize: MaterialTapTargetSize.padded,
+        const SizedBox(height: 8),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final style = OrionTypography.microLabel(
+              size: 11,
+              color: uiTheme.textMuted,
+            );
+            final scaler = MediaQuery.textScalerOf(context);
+            var widest = 0.0;
+            for (final mode in modes) {
+              final painter = TextPainter(
+                text: TextSpan(text: mode.label, style: style),
+                textDirection: TextDirection.ltr,
+                textScaler: scaler,
+              )..layout();
+              widest = math.max(widest, painter.width);
+              painter.dispose();
+            }
+            const cellPadding = 12.0;
+            const selectedIcon = 16.0;
+            final needed = widest + cellPadding + selectedIcon;
+            var columns = 3;
+            while (columns > 1 &&
+                (constraints.maxWidth - (columns - 1) * 8.0) / columns <
+                    needed) {
+              columns--;
+            }
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var row = 0; row * columns < modes.length; row++) ...[
+                  if (row > 0) const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      for (var col = 0; col < columns; col++) ...[
+                        if (col > 0) const SizedBox(width: 8),
+                        if (row * columns + col < modes.length)
+                          Expanded(
+                            child: _TargetingCell(
+                              mode: modes[row * columns + col],
+                              selected:
+                                  tower.targetingMode ==
+                                  modes[row * columns + col],
+                              enabled: canMutate,
+                              onTap: () => onTargetingChanged(
+                                modes[row * columns + col],
+                              ),
+                            ),
+                          )
+                        else
+                          const Spacer(),
+                      ],
+                    ],
                   ),
-                ),
+                ],
               ],
-            ],
-          ),
+            );
+          },
         ),
       ],
     );
   }
+}
 
-  static String _targetingTooltip(TowerTargetingMode mode) => switch (mode) {
-    TowerTargetingMode.first => 'Target the enemy furthest along the path',
-    TowerTargetingMode.strongest => 'Target the enemy with the highest health',
-    TowerTargetingMode.weakest => 'Target the enemy with the lowest health',
-    TowerTargetingMode.closest => 'Target the enemy closest to this tower',
-    TowerTargetingMode.shielded => 'Target shielded enemies first',
-    TowerTargetingMode.armored => 'Target armored enemies first',
-  };
+String _targetingTooltip(TowerTargetingMode mode) => switch (mode) {
+  TowerTargetingMode.first => 'Target the enemy furthest along the path',
+  TowerTargetingMode.strongest => 'Target the enemy with the highest health',
+  TowerTargetingMode.weakest => 'Target the enemy with the lowest health',
+  TowerTargetingMode.closest => 'Target the enemy closest to this tower',
+  TowerTargetingMode.shielded => 'Target shielded enemies first',
+  TowerTargetingMode.armored => 'Target armored enemies first',
+};
+
+class _TargetingCell extends StatelessWidget {
+  const _TargetingCell({
+    required this.mode,
+    required this.selected,
+    required this.enabled,
+    required this.onTap,
+  });
+
+  final TowerTargetingMode mode;
+  final bool selected;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final radius = BorderRadius.circular(10);
+    return Semantics(
+      key: ValueKey('tower-target-${mode.name}'),
+      button: true,
+      enabled: enabled,
+      selected: selected,
+      label: mode.label,
+      onTap: enabled ? onTap : null,
+      excludeSemantics: true,
+      child: Tooltip(
+        message: _targetingTooltip(mode),
+        child: Material(
+          color: selected
+              ? uiTheme.systemCyan.withValues(alpha: 0.10)
+              : uiTheme.hullBlack.withValues(alpha: 0.55),
+          borderRadius: radius,
+          child: InkWell(
+            borderRadius: radius,
+            onTap: enabled ? onTap : null,
+            child: Container(
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                borderRadius: radius,
+                border: Border.all(
+                  color: selected
+                      ? uiTheme.systemCyan
+                      : uiTheme.frameSteel.withValues(alpha: 0.7),
+                  width: 1.5,
+                ),
+                boxShadow: selected
+                    ? [
+                        BoxShadow(
+                          color: uiTheme.systemCyan.withValues(alpha: 0.25),
+                          blurRadius: 8,
+                        ),
+                      ]
+                    : null,
+              ),
+              padding: const EdgeInsets.symmetric(horizontal: 6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (selected) ...[
+                    Icon(Icons.check, size: 12, color: uiTheme.systemCyan),
+                    const SizedBox(width: 4),
+                  ],
+                  Flexible(
+                    child: Text(
+                      mode.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OrionTypography.microLabel(
+                        size: 11,
+                        color: !enabled
+                            ? uiTheme.textDim
+                            : selected
+                            ? uiTheme.systemCyan
+                            : uiTheme.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

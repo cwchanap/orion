@@ -147,13 +147,17 @@ class _HoldToSalvageState extends State<HoldToSalvage>
                     : EdgeInsets.zero,
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
-                  color: t.hullBlack.withValues(alpha: .85),
-                  borderRadius: BorderRadius.circular(widget.compact ? 28 : 14),
+                  color: t.hullBlack.withValues(alpha: .88),
+                  borderRadius: BorderRadius.circular(widget.compact ? 16 : 14),
                   border: Border.all(
+                    width: 1.5,
                     color: enabled
-                        ? t.dangerRed.withValues(alpha: .6)
-                        : t.frameSteel,
+                        ? t.dangerRed.withValues(alpha: .8)
+                        : t.frameSteel.withValues(alpha: .7),
                   ),
+                  boxShadow: [
+                    BoxShadow(color: t.voidBlack, offset: const Offset(0, 3)),
+                  ],
                 ),
                 child: Stack(
                   children: [

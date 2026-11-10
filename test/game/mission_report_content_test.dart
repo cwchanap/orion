@@ -343,4 +343,49 @@ void main() {
       expect(empty.emptyModulesText, 'No Salvage Modules acquired');
     });
   });
+
+  group('report content contracts (HPA-699)', () {
+    test('endless projections never carry medals or rewards in any save '
+        'state', () {
+      for (final saveState in MissionSaveState.values) {
+        final content = projectEndlessReport(
+          snapshot: terminalSnapshot(
+            phase: GamePhase.lost,
+            baseHealth: 0,
+            missionWaveTotal: null,
+            wavesCleared: 6,
+          ),
+          priorBest: 5,
+          savedBest: 6,
+          saveState: saveState,
+        );
+
+        expect(content.result, isNull, reason: saveState.name);
+        expect(content.medalPoints, 0, reason: saveState.name);
+        expect(content.reward, isNull, reason: saveState.name);
+      }
+    });
+
+    test('victory projections keep result, medal points and reward in any '
+        'save state', () {
+      const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+      const reward = MissionRewardFact(
+        title: 'Blueprint: Relay Calibration',
+        detail: 'All towers +8% range, −8% attack interval',
+      );
+      for (final saveState in MissionSaveState.values) {
+        final content = projectVictoryReport(
+          snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 20),
+          result: result,
+          priorSavedResult: null,
+          saveState: saveState,
+          reward: reward,
+        );
+
+        expect(content.result, result, reason: saveState.name);
+        expect(content.medalPoints, 3, reason: saveState.name);
+        expect(content.reward, same(reward), reason: saveState.name);
+      }
+    });
+  });
 }

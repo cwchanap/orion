@@ -1,7 +1,8 @@
-import 'dart:ui' show Tristate;
+import 'dart:ui' show CheckedState, Tristate;
 
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
@@ -17,6 +18,26 @@ import 'package:orion/game/util/format.dart';
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
+
+double? _statBarFill(WidgetTester tester, ValueKey<String> rowKey) {
+  final row = find.byKey(rowKey);
+  final linear = tester
+      .widgetList<LinearProgressIndicator>(
+        find.descendant(
+          of: row,
+          matching: find.byType(LinearProgressIndicator),
+        ),
+      )
+      .toList();
+  if (linear.isNotEmpty) return linear.single.value;
+  final fractional = tester
+      .widgetList<FractionallySizedBox>(
+        find.descendant(of: row, matching: find.byType(FractionallySizedBox)),
+      )
+      .toList();
+  if (fractional.isNotEmpty) return fractional.single.widthFactor;
+  return null;
+}
 
 void main() {
   testWidgets('inspector uses resolved costs and invokes public callbacks', (
@@ -378,15 +399,11 @@ void main() {
       // Existing gauge pipeline stays TowerStatScale-driven, restyled with
       // per-stat accents and a readable gauge height.
       final scale = TowerStatScale.forType(tower.type);
-      final damageBar = tester.widget<CircularProgressIndicator>(
-        find.descendant(
-          of: find.byKey(const ValueKey('tower-stat-damage')),
-          matching: find.byType(CircularProgressIndicator),
-        ),
+      final damageBar = _statBarFill(
+        tester,
+        const ValueKey('tower-stat-damage'),
       );
-      expect(damageBar.value, scale.damageFill(stats));
-      expect(damageBar.color, OrionUiTheme.dark.dangerRed);
-      expect(damageBar.strokeWidth, greaterThanOrEqualTo(7));
+      expect(damageBar, scale.damageFill(stats));
     },
   );
 
@@ -904,5 +921,577 @@ void main() {
         },
       );
     }
+  });
+
+  group('command deck header, targeting grid and stat bars (HPA-699)', () {
+    Future<void> pumpSheet(
+      WidgetTester tester, {
+      required PlacedTower tower,
+      GamePhase phase = GamePhase.build,
+      int gold = 9999,
+      TowerStats? stats,
+      bool includeSpecializationStats = false,
+      TextScaler textScaler = TextScaler.noScaling,
+      VoidCallback? onSell,
+      VoidCallback? onClose,
+      ValueChanged<TowerTargetingMode>? onTargetingChanged,
+      VoidCallback? onUpgrade,
+    }) {
+      return tester.pumpWidget(
+        MaterialApp(
+          theme: orionThemeData,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(textScaler: textScaler),
+            child: child!,
+          ),
+          home: TowerInspector(
+            snapshot: commandDeckSnapshot(
+              phase: phase,
+              gold: gold,
+              selectedTower: tower,
+              selectedTowerStats:
+                  stats ??
+                  GameBalance.towerStats(
+                    tower.type,
+                    level: tower.level,
+                    specialization: tower.specialization,
+                  ),
+              selectedTowerUpgradeStats: tower.canUpgrade
+                  ? GameBalance.towerStats(tower.type, level: tower.level + 1)
+                  : null,
+              selectedTowerSpecializationStats: includeSpecializationStats
+                  ? {
+                      for (final spec in GameBalance.specializationsFor(
+                        tower.type,
+                      ))
+                        spec: GameBalance.towerStats(
+                          tower.type,
+                          level: tower.level + 1,
+                          specialization: spec,
+                        ),
+                    }
+                  : const {},
+            ),
+            onUpgrade: onUpgrade ?? () {},
+            onSpecialize: (_) {},
+            onTargetingChanged: onTargetingChanged ?? (_) {},
+            onSell: onSell ?? () {},
+            sellRefund: 84,
+            onClose: onClose,
+          ),
+        ),
+      );
+    }
+
+    testWidgets('sell and close stay fixed in the header band at 360x640', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      var sells = 0;
+      var closes = 0;
+      await pumpSheet(
+        tester,
+        tower: tower,
+        includeSpecializationStats: true,
+        onSell: () => sells++,
+        onClose: () => closes++,
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-inspector-scroll')),
+          matching: find.byKey(const ValueKey('tower-sell')),
+        ),
+        findsNothing,
+      );
+
+      final sellRect = tester.getRect(find.byKey(const ValueKey('tower-sell')));
+      final closeRect = tester.getRect(find.byTooltip('Close tower inspector'));
+      for (final rect in [sellRect, closeRect]) {
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(360));
+        expect(rect.bottom, lessThanOrEqualTo(640));
+      }
+      expect(
+        (sellRect.center.dy - closeRect.center.dy).abs(),
+        lessThanOrEqualTo(48),
+        reason: 'Sell must share the fixed header band with Close',
+      );
+
+      final hold = await tester.startGesture(sellRect.center);
+      await tester.pump(const Duration(milliseconds: 150));
+      await tester.pump(const Duration(milliseconds: 900));
+      await hold.up();
+      expect(sells, 1);
+
+      await tester.tap(find.byTooltip('Close tower inspector'));
+      expect(closes, 1);
+    });
+
+    testWidgets('the sell action does not move while the body scrolls', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      await pumpSheet(tester, tower: tower, includeSpecializationStats: true);
+
+      final before = tester.getRect(find.byKey(const ValueKey('tower-sell')));
+      await tester.drag(
+        find.byKey(const ValueKey('tower-inspector-scroll')),
+        const Offset(0, -200),
+      );
+      await tester.pump();
+      final after = tester.getRect(find.byKey(const ValueKey('tower-sell')));
+      expect(
+        after,
+        before,
+        reason: 'the header Sell must not ride the scrolling body',
+      );
+    });
+
+    testWidgets('all six targeting modes form a visible three-by-two grid', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await loadRealFonts();
+
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+      );
+      final calls = <TowerTargetingMode>[];
+      await pumpSheet(tester, tower: tower, onTargetingChanged: calls.add);
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-inspector')),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is SingleChildScrollView &&
+                widget.scrollDirection == Axis.horizontal,
+          ),
+        ),
+        findsNothing,
+      );
+
+      final inspectorRect = tester.getRect(
+        find.byKey(const ValueKey('tower-inspector')),
+      );
+      final chipRects = <TowerTargetingMode, Rect>{
+        for (final mode in TowerTargetingMode.values)
+          mode: tester.getRect(
+            find.byKey(ValueKey('tower-target-${mode.name}')),
+          ),
+      };
+      for (final MapEntry(key: mode, value: rect) in chipRects.entries) {
+        expect(
+          rect.left,
+          greaterThanOrEqualTo(inspectorRect.left),
+          reason: mode.name,
+        );
+        expect(
+          rect.right,
+          lessThanOrEqualTo(inspectorRect.right),
+          reason: mode.name,
+        );
+      }
+
+      final rows = <List<MapEntry<TowerTargetingMode, Rect>>>[];
+      final byTop = chipRects.entries.toList()
+        ..sort((a, b) => a.value.top.compareTo(b.value.top));
+      for (final entry in byTop) {
+        if (rows.isEmpty ||
+            (entry.value.top - rows.last.first.value.top).abs() > 4) {
+          rows.add([entry]);
+        } else {
+          rows.last.add(entry);
+        }
+      }
+      expect(rows, hasLength(2), reason: 'a 3-by-2 grid has two rows');
+      final ordered = <TowerTargetingMode>[];
+      for (final row in rows) {
+        expect(row, hasLength(3), reason: 'each grid row has three cells');
+        row.sort((a, b) => a.value.left.compareTo(b.value.left));
+        ordered.addAll(row.map((entry) => entry.key));
+      }
+      expect(ordered, TowerTargetingMode.values);
+
+      for (final mode in TowerTargetingMode.values) {
+        await tester.tap(find.byKey(ValueKey('tower-target-${mode.name}')));
+      }
+      expect(calls, TowerTargetingMode.values);
+    });
+
+    testWidgets(
+      'targeting marks the active mode and disables every mode in wave phase',
+      (tester) async {
+        const tower = PlacedTower(
+          id: 7,
+          type: TowerType.laser,
+          position: GridPosition(2, 3),
+          targetingMode: TowerTargetingMode.closest,
+        );
+        await pumpSheet(tester, tower: tower);
+
+        var handle = tester.ensureSemantics();
+        try {
+          await tester.pump();
+          final active = tester
+              .getSemantics(find.byKey(const ValueKey('tower-target-closest')))
+              .getSemanticsData()
+              .flagsCollection;
+          expect(
+            active.isChecked == CheckedState.isTrue ||
+                active.isSelected == Tristate.isTrue,
+            isTrue,
+          );
+          final inactive = tester
+              .getSemantics(find.byKey(const ValueKey('tower-target-first')))
+              .getSemanticsData()
+              .flagsCollection;
+          expect(
+            inactive.isChecked == CheckedState.isFalse ||
+                inactive.isSelected == Tristate.isFalse,
+            isTrue,
+          );
+        } finally {
+          handle.dispose();
+        }
+
+        var calls = 0;
+        await pumpSheet(
+          tester,
+          tower: tower,
+          phase: GamePhase.wave,
+          onTargetingChanged: (_) => calls++,
+        );
+        handle = tester.ensureSemantics();
+        try {
+          await tester.pump();
+          for (final mode in TowerTargetingMode.values) {
+            final flags = tester
+                .getSemantics(find.byKey(ValueKey('tower-target-${mode.name}')))
+                .getSemanticsData()
+                .flagsCollection;
+            expect(flags.isEnabled, Tristate.isFalse, reason: mode.name);
+          }
+        } finally {
+          handle.dispose();
+        }
+        for (final mode in TowerTargetingMode.values) {
+          await tester.tap(
+            find.byKey(ValueKey('tower-target-${mode.name}')),
+            warnIfMissed: false,
+          );
+        }
+        expect(calls, 0);
+      },
+    );
+
+    testWidgets('stats render as stacked label-bar-value rows with '
+        'scale-derived fills', (tester) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.cryo,
+        position: GridPosition(2, 3),
+      );
+      final stats = GameBalance.towerStats(TowerType.cryo, level: 1);
+      await pumpSheet(tester, tower: tower, stats: stats);
+
+      final damageRect = tester.getRect(
+        find.byKey(const ValueKey('tower-stat-damage')),
+      );
+      final fireRect = tester.getRect(
+        find.byKey(const ValueKey('tower-stat-fire')),
+      );
+      final rangeRect = tester.getRect(
+        find.byKey(const ValueKey('tower-stat-range')),
+      );
+      expect(damageRect.top, lessThan(fireRect.top));
+      expect(fireRect.top, lessThan(rangeRect.top));
+      expect(
+        {damageRect.left, fireRect.left, rangeRect.left},
+        hasLength(1),
+        reason: 'stacked stat rows share one left edge',
+      );
+
+      final scale = TowerStatScale.forType(tower.type);
+      expect(
+        _statBarFill(tester, const ValueKey('tower-stat-damage')),
+        scale.damageFill(stats),
+      );
+      expect(
+        _statBarFill(tester, const ValueKey('tower-stat-fire')),
+        scale.fireFill(stats),
+      );
+      expect(
+        _statBarFill(tester, const ValueKey('tower-stat-range')),
+        scale.rangeFill(stats),
+      );
+      expect(
+        _statBarFill(tester, const ValueKey('tower-stat-secondary')),
+        scale.secondaryFill(stats),
+      );
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+    });
+
+    testWidgets('bounded inspector keeps header actions reachable at 360x640 '
+        'with 1.5x text', (tester) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      var sells = 0;
+      await pumpSheet(
+        tester,
+        tower: tower,
+        includeSpecializationStats: true,
+        textScaler: const TextScaler.linear(1.5),
+        onSell: () => sells++,
+      );
+
+      expect(tester.takeException(), isNull);
+      final inspectorRect = tester.getRect(
+        find.byKey(const ValueKey('tower-inspector')),
+      );
+      expect(inspectorRect.height, lessThanOrEqualTo(640));
+      expect(inspectorRect.top, greaterThanOrEqualTo(0));
+      expect(inspectorRect.bottom, lessThanOrEqualTo(640));
+      expect(
+        find.byKey(const ValueKey('tower-inspector-scroll')),
+        findsOneWidget,
+      );
+      for (final finder in [
+        find.byTooltip('Close tower inspector'),
+        find.byKey(const ValueKey('tower-sell')),
+      ]) {
+        final rect = tester.getRect(finder);
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.top, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(360));
+        expect(rect.bottom, lessThanOrEqualTo(640));
+      }
+
+      final scrollState = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-inspector-scroll')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Scrollable && widget.axis == Axis.vertical,
+          ),
+        ),
+      );
+      expect(scrollState.position.maxScrollExtent, greaterThan(0));
+    });
+
+    testWidgets('the last scrollable item clears at max scroll extent', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      await pumpSheet(tester, tower: tower, includeSpecializationStats: true);
+
+      final scrollState = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-inspector-scroll')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Scrollable && widget.axis == Axis.vertical,
+          ),
+        ),
+      );
+      scrollState.position.jumpTo(scrollState.position.maxScrollExtent);
+      await tester.pump();
+
+      final viewport = tester.getRect(
+        find.byKey(const ValueKey('tower-inspector-scroll')),
+      );
+      final lastSpecialization = GameBalance.specializationsFor(
+        TowerType.laser,
+      ).last;
+      final footer = tester.getRect(
+        find.byKey(ValueKey('tower-specialization-${lastSpecialization.name}')),
+      );
+      expect(footer.bottom, lessThanOrEqualTo(viewport.bottom));
+    });
+
+    for (final textScaler in const [
+      TextScaler.noScaling,
+      TextScaler.linear(1.5),
+    ]) {
+      testWidgets('every targeting label renders in full at 360x640 '
+          '${textScaler == TextScaler.noScaling ? '' : 'with 1.5x text'}', (
+        tester,
+      ) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await loadRealFonts();
+
+        const tower = PlacedTower(
+          id: 7,
+          type: TowerType.laser,
+          position: GridPosition(2, 3),
+          targetingMode: TowerTargetingMode.strongest,
+        );
+        await pumpSheet(tester, tower: tower, textScaler: textScaler);
+
+        for (final mode in TowerTargetingMode.values) {
+          final cell = find.byKey(ValueKey('tower-target-${mode.name}'));
+          final label = find.descendant(
+            of: cell,
+            matching: find.text(mode.label),
+          );
+          expect(label, findsOneWidget, reason: mode.name);
+          final cellRect = tester.getRect(cell);
+          final labelRect = tester.getRect(label);
+          expect(
+            labelRect.left,
+            greaterThanOrEqualTo(cellRect.left),
+            reason: '${mode.name} label clipped on the left',
+          );
+          expect(
+            labelRect.right,
+            lessThanOrEqualTo(cellRect.right),
+            reason: '${mode.name} label clipped on the right',
+          );
+          final paragraph = tester.renderObject<RenderParagraph>(label);
+          expect(
+            paragraph.size.width,
+            greaterThanOrEqualTo(
+              paragraph.getMaxIntrinsicWidth(double.infinity) - 0.5,
+            ),
+            reason:
+                '${mode.name} label truncates instead of '
+                'rendering in full',
+          );
+        }
+      });
+
+      testWidgets(
+        'the upgrade action stays fixed outside the scroll at 360x640 '
+        '${textScaler == TextScaler.noScaling ? '' : 'with 1.5x text'}',
+        (tester) async {
+          tester.view.physicalSize = const Size(360, 640);
+          tester.view.devicePixelRatio = 1;
+          addTearDown(tester.view.reset);
+          await loadRealFonts();
+
+          const tower = PlacedTower(
+            id: 7,
+            type: TowerType.laser,
+            position: GridPosition(2, 3),
+          );
+          var upgrades = 0;
+          await pumpSheet(
+            tester,
+            tower: tower,
+            textScaler: textScaler,
+            onUpgrade: () => upgrades++,
+          );
+
+          final upgrade = find.byKey(const ValueKey('tower-upgrade'));
+          expect(upgrade, findsOneWidget);
+          expect(
+            find.descendant(
+              of: find.byKey(const ValueKey('tower-inspector-scroll')),
+              matching: upgrade,
+            ),
+            findsNothing,
+            reason: 'the upgrade action must not ride the scrolling body',
+          );
+
+          final inspectorRect = tester.getRect(
+            find.byKey(const ValueKey('tower-inspector')),
+          );
+          final upgradeRect = tester.getRect(upgrade);
+          expect(
+            upgradeRect.bottom,
+            lessThanOrEqualTo(640),
+            reason: 'the upgrade action must be visible without scrolling',
+          );
+          expect(upgradeRect.bottom, lessThanOrEqualTo(inspectorRect.bottom));
+
+          final scrollable = find.descendant(
+            of: find.byKey(const ValueKey('tower-inspector-scroll')),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is Scrollable && widget.axis == Axis.vertical,
+            ),
+          );
+          final scrollState = tester.state<ScrollableState>(scrollable);
+          scrollState.position.jumpTo(scrollState.position.maxScrollExtent);
+          await tester.pump();
+          expect(
+            tester.getRect(upgrade),
+            upgradeRect,
+            reason: 'the upgrade action must not move while the body scrolls',
+          );
+
+          await tester.tap(upgrade);
+          expect(upgrades, 1);
+        },
+      );
+    }
+
+    testWidgets('upgrade stays disabled when gold cannot cover the '
+        'resolved cost', (tester) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+      );
+      final stats = GameBalance.towerStats(TowerType.laser, level: 1);
+      await pumpSheet(
+        tester,
+        tower: tower,
+        stats: stats,
+        gold: stats.upgradeCost - 1,
+      );
+
+      expect(find.text('Upgrade ${stats.upgradeCost}'), findsOneWidget);
+      final handle = tester.ensureSemantics();
+      try {
+        final flags = tester
+            .getSemantics(find.byKey(const ValueKey('tower-upgrade')))
+            .getSemanticsData()
+            .flagsCollection;
+        expect(flags.isEnabled, Tristate.isFalse);
+      } finally {
+        handle.dispose();
+      }
+    });
   });
 }
