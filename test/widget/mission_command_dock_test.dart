@@ -480,7 +480,7 @@ void main() {
     );
 
     // Artboard 1a's dock is two rows during build -- pacing controls, then
-    // the tower rail -- held on one shelf with a card per tower.
+    // the tower rail -- so two surfaces, not one.
     await pumpIdle(commandDeckSnapshot());
     final shelf = surfaces()
         .evaluate()
@@ -503,9 +503,9 @@ void main() {
       findsNothing,
     );
 
-    // The invariant this test exists for: the reactor button carries its
-    // own internal octagon frames, so no surface chrome may wrap it inside
-    // the bar -- the shelf is the only surface a dock control sits on.
+    // The invariant this test exists for: the reactor button carries its own
+    // internal octagon frames, so no OrionSurface chrome may wrap a dock
+    // surface in either state.
     expect(
       find.descendant(
         of: find.byType(IdleCommandBar),

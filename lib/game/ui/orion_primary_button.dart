@@ -17,7 +17,7 @@ typedef _VariantSpec = ({
   Color? shade,
 });
 
-/// The export's solid action, shared by full-screen scene actions.
+/// The export's solid cyan action, shared by full-screen scene actions.
 class OrionPrimaryButton extends StatefulWidget {
   const OrionPrimaryButton({
     super.key,
