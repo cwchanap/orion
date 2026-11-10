@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/ui/command_toast.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
 Widget toastHost(
@@ -221,6 +222,21 @@ void main() {
       find.byKey(const ValueKey('command-toast')),
     );
     expect(frameRect.width, lessThanOrEqualTo(328));
+  });
+
+  testWidgets('toast chrome stays on the shared floating surface', (
+    tester,
+  ) async {
+    await tester.pumpWidget(toastHost('Not enough gold.'));
+    final surface = find.ancestor(
+      of: find.text('Not enough gold.'),
+      matching: find.byType(OrionSurface),
+    );
+    expect(surface, findsOneWidget);
+    expect(
+      tester.widget<OrionSurface>(surface).role,
+      OrionSurfaceRole.floating,
+    );
   });
 
   testWidgets('reduced motion removes toast transitions', (tester) async {

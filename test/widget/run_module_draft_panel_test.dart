@@ -84,6 +84,37 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('draft frame is a sheet surface over card-surface modules', (
+    tester,
+  ) async {
+    final offer = RunModuleOffer(
+      offerId: 1,
+      draftNumber: 1,
+      draftTotal: GameBalance.moduleDraftWaves.length,
+      moduleIds: const [RunModuleId.heavyCaliber, RunModuleId.longSight],
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: RunModuleDraftPanel(offer: offer, onSelected: (_) {}),
+        ),
+      ),
+    );
+
+    final frame = tester.widget<OrionSurface>(
+      find.byKey(const ValueKey('run-module-draft-frame')),
+    );
+    expect(frame.role, OrionSurfaceRole.sheet);
+    final cards = find
+        .byWidgetPredicate(
+          (widget) =>
+              widget is OrionSurface && widget.role == OrionSurfaceRole.card,
+        )
+        .evaluate()
+        .length;
+    expect(cards, greaterThanOrEqualTo(offer.moduleIds.length));
+  });
+
   testWidgets('acquired reminder renders title and inline effect text', (
     tester,
   ) async {

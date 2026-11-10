@@ -9,6 +9,7 @@ import 'package:orion/game/onboarding/contextual_tips.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/first_mission_guide_callout.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/command_deck_fixtures.dart';
@@ -1394,6 +1395,44 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 100));
     });
+  });
+
+  testWidgets('the tip callout chrome stays on the shared floating surface', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Stack(
+            children: [
+              Positioned.fill(
+                child: ContextualTipCallout(
+                  tip: ContextualTip.stageModifier,
+                  targetPoint: const Offset(180, 200),
+                  onDone: () {},
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pump();
+
+    final surface = find.descendant(
+      of: find.byKey(const ValueKey('first-mission-guide-callout-bubble')),
+      matching: find.byType(OrionSurface),
+    );
+    expect(surface, findsOneWidget);
+    expect(
+      tester.widget<OrionSurface>(surface).role,
+      OrionSurfaceRole.floating,
+    );
   });
 
   testWidgets('an endless build phase never projects the first-mission guide', (

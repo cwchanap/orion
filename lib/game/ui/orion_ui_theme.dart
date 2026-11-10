@@ -319,3 +319,62 @@ const orionTechTreeScrim = LinearGradient(
   ],
   stops: [0, 0.28, 0.72, 1],
 );
+
+const orionScannerScrim = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0x8005080D), Color(0x3305080D), Color(0xCC05080D)],
+);
+
+const orionBriefingDeployFill = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF7FF0FF), Color(0xFF13B8E6), Color(0xFF0A7EA3)],
+  stops: [0, 0.6, 1],
+);
+
+const orionHexOwnShell = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFFD5C7FF), Color(0xFF7A5CE6)],
+);
+
+const orionHexOwnCore = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF2A2150), Color(0xFF17122E)],
+);
+
+const orionHexAvailShell = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF8AF4FF), Color(0xFF13B2E2)],
+);
+
+const orionHexAvailCore = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF123042), Color(0xFF0A1822)],
+);
+
+const orionHexLockCore = Color(0xFF0C141D);
+
+const orionHexLockBadge = Color(0xFF0E1822);
+
+const orionHexCheckInk = Color(0xFF17122E);
+
+const orionBarDamage = LinearGradient(
+  colors: [Color(0xFFFF5D6C), Color(0xFFFF8A9A)],
+);
+
+const orionBarFire = LinearGradient(
+  colors: [Color(0xFFFFB534), Color(0xFFFFE08A)],
+);
+
+const orionBarRange = LinearGradient(
+  colors: [Color(0xFF13B8E6), Color(0xFF46E6FF)],
+);
+
+const orionBarSecondary = LinearGradient(
+  colors: [Color(0xFF7A5CE6), Color(0xFFD5C7FF)],
+);

@@ -4,9 +4,11 @@ import '../campaign/campaign_progress.dart';
 import '../codex/codex_data.dart';
 import '../models/game_models.dart';
 import '../util/format.dart';
+import 'orion_atlas_sprite.dart';
+import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
-import 'tower_icons.dart';
+import 'tower_stat_scale.dart';
 
 class CodexView extends StatefulWidget {
   const CodexView({super.key, required this.progress, this.onBack});
@@ -22,6 +24,7 @@ class CodexView extends StatefulWidget {
 class _CodexViewState extends State<CodexView> {
   int _section = 0;
   static const _sections = ['Towers', 'Enemies', 'Effects', 'Stages'];
+  TowerType? _selectedTower;
 
   // One ScrollController per section so each section's scroll offset is
   // preserved independently when the player switches chips.
@@ -83,113 +86,142 @@ class _CodexViewState extends State<CodexView> {
     final uiTheme = OrionUiTheme.of(context);
     return Material(
       color: uiTheme.voidBlack,
-      child: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Compact chrome follows the app convention of clamping text
-            // scale; result cards below keep scaling fully.
-            MediaQuery.withClampedTextScaling(
-              maxScaleFactor: 1.15,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(8),
-                    child: Row(
-                      children: [
-                        if (widget.onBack != null)
-                          IconButton(
-                            tooltip: 'Back',
-                            onPressed: widget.onBack,
-                            icon: const Icon(Icons.arrow_back),
-                          ),
-                        const SizedBox(width: 8),
-                        OrionTitle('Codex', color: uiTheme.textPrimary),
-                      ],
-                    ),
-                  ),
-                  // The chips join the field's tap region: mouse/stylus (and
-                  // web touch) taps outside a TextField unfocus it on
-                  // pointer-down, which would run before _selectSection's
-                  // re-tap guard and steal focus from a no-op chip re-tap.
-                  TextFieldTapRegion(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      child: Wrap(
-                        spacing: 8,
-                        children: [
-                          for (var i = 0; i < _sections.length; i++)
-                            ChoiceChip(
-                              label: Text(_sections[i]),
-                              selected: _section == i,
-                              onSelected: (_) => _selectSection(i),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (_) => _applySearchUpdate(),
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.search),
-                        labelText:
-                            'Search ${_sections[_section].toLowerCase()}',
-                        suffixIcon: _searchController.text.isEmpty
-                            ? null
-                            : IconButton(
-                                tooltip: 'Clear',
-                                onPressed: () {
-                                  _searchController.clear();
-                                  _applySearchUpdate();
-                                },
-                                icon: const Icon(Icons.clear),
+      child: Stack(
+        children: [
+          const Positioned.fill(child: _CodexBackdrop()),
+          SafeArea(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Compact chrome follows the app convention of clamping text
+                // scale; result cards below keep scaling fully.
+                MediaQuery.withClampedTextScaling(
+                  maxScaleFactor: 1.15,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.all(8),
+                        child: Row(
+                          children: [
+                            if (widget.onBack != null)
+                              IconButton(
+                                tooltip: 'Back',
+                                onPressed: widget.onBack,
+                                icon: const Icon(Icons.arrow_back),
                               ),
+                            const SizedBox(width: 8),
+                            OrionTitle('Codex', color: uiTheme.textPrimary),
+                          ],
+                        ),
                       ),
+                      // The chips join the field's tap region: mouse/stylus (and
+                      // web touch) taps outside a TextField unfocus it on
+                      // pointer-down, which would run before _selectSection's
+                      // re-tap guard and steal focus from a no-op chip re-tap.
+                      TextFieldTapRegion(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: orionChipFill,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: orionShelfEdge,
+                                width: 1.5,
+                              ),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Row(
+                                children: [
+                                  for (var i = 0; i < _sections.length; i++)
+                                    Expanded(
+                                      child: _CodexTab(
+                                        label: _sections[i],
+                                        selected: _section == i,
+                                        onTap: () => _selectSection(i),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (_) => _applySearchUpdate(),
+                          decoration: InputDecoration(
+                            prefixIcon: const Icon(Icons.search),
+                            labelText:
+                                'Search ${_sections[_section].toLowerCase()}',
+                            suffixIcon: _searchController.text.isEmpty
+                                ? null
+                                : IconButton(
+                                    tooltip: 'Clear',
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      _applySearchUpdate();
+                                    },
+                                    icon: const Icon(Icons.clear),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  // A user drag (dragDetails != null) unfocuses the search field
+                  // immediately — on a clamping list with zero scroll extent the
+                  // built-in onDrag dismissal never sees a scroll update.
+                  child: PageStorage(
+                    bucket: _pageStorageBucket,
+                    child: NotificationListener<ScrollStartNotification>(
+                      onNotification: (notification) {
+                        if (notification.dragDetails != null) {
+                          FocusScope.of(context).unfocus();
+                        }
+                        return false;
+                      },
+                      child: _body(),
                     ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            Expanded(
-              // A user drag (dragDetails != null) unfocuses the search field
-              // immediately — on a clamping list with zero scroll extent the
-              // built-in onDrag dismissal never sees a scroll update.
-              child: PageStorage(
-                bucket: _pageStorageBucket,
-                child: NotificationListener<ScrollStartNotification>(
-                  onNotification: (notification) {
-                    if (notification.dragDetails != null) {
-                      FocusScope.of(context).unfocus();
-                    }
-                    return false;
-                  },
-                  child: _body(),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
   Widget _body() {
-    final uiTheme = OrionUiTheme.of(context);
     final controller = _scrollControllers[_section];
     final query = _searchController.text;
     List<Widget> children;
     switch (_section) {
       case 0:
+        final towers = CodexData.towers
+            .where((t) => codexMatches(query, t.searchTerms))
+            .toList();
+        if (towers.isEmpty) {
+          children = const [];
+          break;
+        }
+        final detail = towers.firstWhere(
+          (t) => t.type == _selectedTower,
+          orElse: () => towers.first,
+        );
         children = [
-          for (final t in CodexData.towers.where(
-            (t) => codexMatches(query, t.searchTerms),
-          ))
-            _towerCard(t),
+          _towerGrid(towers, detail.type),
+          const SizedBox(height: 12),
+          _towerDetail(detail),
+          ..._specIndex(towers, detail),
         ];
       case 1:
         final traits = CodexData.traits
@@ -199,19 +231,26 @@ class _CodexViewState extends State<CodexView> {
             .where((e) => codexMatches(query, e.searchTerms))
             .toList();
         children = [
-          for (final tr in traits) _line(tr.label, tr.effect),
+          for (final tr in traits)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _line(tr.label, tr.effect),
+            ),
           // The divider only makes sense between the two groups.
           if (traits.isNotEmpty && enemies.isNotEmpty) const Divider(),
           for (final e in enemies) _enemyCard(e),
         ];
       case 2:
+        final uiTheme = OrionUiTheme.of(context);
         children = [
           for (final ef in CodexData.effects.where(
             (ef) => codexMatches(query, ef.searchTerms),
           ))
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: OrionSurface(
+                role: OrionSurfaceRole.card,
+                radius: 14,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -278,79 +317,303 @@ class _CodexViewState extends State<CodexView> {
     );
   }
 
-  Widget _towerCard(CodexTowerEntry t) {
+  Widget _towerGrid(List<CodexTowerEntry> towers, TowerType detailType) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: Column(
+        children: [
+          for (var row = 0; row < towers.length; row += 4) ...[
+            if (row > 0) const SizedBox(height: 8),
+            Row(
+              children: [
+                for (var col = 0; col < 4; col++) ...[
+                  if (col > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: row + col < towers.length
+                        ? _CodexTile(
+                            entry: towers[row + col],
+                            selected: towers[row + col].type == detailType,
+                            onSelect: () => setState(
+                              () => _selectedTower = towers[row + col].type,
+                            ),
+                          )
+                        : const SizedBox(height: 92),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _towerDetail(CodexTowerEntry t) {
     final uiTheme = OrionUiTheme.of(context);
-    final lines = <(String, String)>[
-      ('Range', number(t.baseStats.range)),
-      ('Cost', '${t.baseStats.cost}'),
-      ('Upgrade cost', '${t.upgradeCost}'),
-      // Damage / Fire interval only when meaningful (drone bay has damage 0).
-      if (t.baseStats.damage > 0) ...[
-        ('Damage', number(t.baseStats.damage)),
-        ('Fire interval', '${cadence(t.baseStats.fireInterval)}s'),
-      ],
-      ..._specialtyLines(t.baseStats),
-    ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    final stats = t.baseStats;
+    final scale = TowerStatScale.forType(t.type);
+    final secondaryFill = scale.secondaryFill(stats);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: OrionSurface(
+        role: OrionSurfaceRole.sheet,
+        key: const ValueKey('codex-detail'),
+        radius: 18,
+        padding: const EdgeInsets.all(14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
-                Icon(towerIcon(t.type)),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    t.label,
-                    style: OrionTypography.microLabel(
-                      size: 11,
-                      color: uiTheme.textMuted,
-                    ),
+                OrionAtlasSprite(
+                  art: OrionArt.tower(t.type),
+                  size: const Size.square(56),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        t.label.toUpperCase(),
+                        style: OrionTypography.readout(
+                          size: 20,
+                          color: uiTheme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Available from wave ${t.unlockWave}',
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const Spacer(),
-                Flexible(
-                  child: Text(
-                    'Available from wave ${t.unlockWave}',
-                    style: OrionTypography.microLabel(color: uiTheme.textMuted),
-                    textAlign: TextAlign.end,
+                Text(
+                  '${stats.cost}g',
+                  style: OrionTypography.readout(
+                    size: 14,
+                    color: uiTheme.creditGold,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            for (final (k, v) in lines) _line(k, v),
-            const SizedBox(height: 8),
-            for (final spec in t.specializations) ...[
-              Text(
-                '${spec.label} (${t.specializationCost}g)',
-                style: OrionTypography.microLabel(
-                  size: 11,
-                  color: uiTheme.textMuted,
-                ),
+            const SizedBox(height: 12),
+            // Damage / Fire interval only when meaningful (drone bay has damage 0).
+            if (stats.damage > 0)
+              _statBar(
+                'Damage',
+                number(stats.damage),
+                scale.damageFill(stats),
+                orionBarDamage,
               ),
-              Text(
-                spec.description,
-                style: OrionTypography.microLabel(
-                  size: 10,
-                  color: uiTheme.textMuted,
-                ),
+            _statBar(
+              'Fire rate',
+              '${cadence(stats.fireInterval)}s',
+              scale.fireFill(stats),
+              orionBarFire,
+            ),
+            _statBar(
+              'Range',
+              number(stats.range),
+              scale.rangeFill(stats),
+              orionBarRange,
+            ),
+            if (secondaryFill != null)
+              _statBar(
+                _secondaryLabel(scale.secondaryMetric!),
+                _secondaryValue(scale.secondaryMetric!, stats),
+                secondaryFill,
+                orionBarSecondary,
               ),
-              for (final (k, v) in _specializationCoreLines(
-                spec.specializedStats,
-              ))
-                _line(k, v),
-              for (final (k, v) in _specialtyLines(spec.specializedStats))
-                _line(k, v),
-              const SizedBox(height: 6),
-            ],
+            const SizedBox(height: 12),
+            Text(
+              'Specializations',
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: uiTheme.textMuted,
+              ),
+            ),
+            for (final spec in t.specializations)
+              _specCard(t, spec, includeCoreLines: true),
           ],
         ),
       ),
     );
   }
+
+  List<Widget> _specIndex(
+    List<CodexTowerEntry> towers,
+    CodexTowerEntry detail,
+  ) {
+    final uiTheme = OrionUiTheme.of(context);
+    final others = [
+      for (final t in towers)
+        if (t.type != detail.type) t,
+    ];
+    if (others.isEmpty) return const [];
+    return [
+      const SizedBox(height: 12),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: Text(
+          'All specializations',
+          style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+        ),
+      ),
+      for (final t in others)
+        for (final spec in t.specializations)
+          _specCard(t, spec, includeCoreLines: false),
+    ];
+  }
+
+  Widget _specCard(
+    CodexTowerEntry t,
+    CodexSpecializationEntry spec, {
+    required bool includeCoreLines,
+  }) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: OrionSurface(
+        role: OrionSurfaceRole.card,
+        radius: 12,
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                OrionAtlasSprite(
+                  art: OrionArt.specialization(spec.specialization),
+                  size: const Size.square(34),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        spec.label,
+                        style: OrionTypography.readout(
+                          size: 14,
+                          color: uiTheme.textPrimary,
+                        ),
+                      ),
+                      Text(
+                        spec.description,
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Text(
+                  '${t.specializationCost}g',
+                  style: OrionTypography.readout(
+                    size: 14,
+                    color: uiTheme.creditGold,
+                  ),
+                ),
+              ],
+            ),
+            if (includeCoreLines)
+              for (final (k, v) in _specializationCoreLines(
+                spec.specializedStats,
+              ))
+                _line(k, v),
+            for (final (k, v) in _specialtyLines(spec.specializedStats))
+              _line(k, v),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _statBar(String label, String value, double fill, Gradient barFill) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 78,
+            child: Text(
+              label,
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: uiTheme.textMuted,
+              ),
+            ),
+          ),
+          Expanded(
+            child: SizedBox(
+              height: 8,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: orionPipEmpty,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: fill,
+                    heightFactor: 1,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        gradient: barFill,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            width: 44,
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: OrionTypography.readout(
+                size: 12,
+                color: uiTheme.textPrimary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _secondaryLabel(TowerSecondaryMetric metric) =>
+      switch (metric) {
+        TowerSecondaryMetric.chainCount => 'Chain',
+        TowerSecondaryMetric.pierceCount => 'Pierce',
+        TowerSecondaryMetric.slowDuration => 'Slow',
+        TowerSecondaryMetric.splashRadius => 'Splash',
+        TowerSecondaryMetric.corrosionDamagePerSecond => 'Corrosion',
+        TowerSecondaryMetric.droneDamage => 'Drones',
+      };
+
+  static String _secondaryValue(TowerSecondaryMetric metric, TowerStats s) =>
+      switch (metric) {
+        TowerSecondaryMetric.chainCount => '${s.chainCount}',
+        TowerSecondaryMetric.pierceCount => '${s.pierceCount}',
+        TowerSecondaryMetric.slowDuration => '${number(s.slowDuration)}s',
+        TowerSecondaryMetric.splashRadius => number(s.splashRadius),
+        TowerSecondaryMetric.corrosionDamagePerSecond =>
+          '${number(s.corrosionDamagePerSecond)}/s',
+        TowerSecondaryMetric.droneDamage => number(s.droneDamage),
+      };
 
   // Core stats for a specialization card. Range always renders; Damage and
   // Fire interval render when meaningful (drone bay has damage 0). These are
@@ -433,9 +696,11 @@ class _CodexViewState extends State<CodexView> {
       if (e.stats.regenPerSecond > 0)
         ('Regen', '${number(e.stats.regenPerSecond)}/s'),
     ];
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: OrionSurface(
+        role: OrionSurfaceRole.card,
+        radius: 14,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -472,9 +737,11 @@ class _CodexViewState extends State<CodexView> {
 
   Widget _stageCard(CodexStageEntry s) {
     final uiTheme = OrionUiTheme.of(context);
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+      child: OrionSurface(
+        role: OrionSurfaceRole.card,
+        radius: 14,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -581,6 +848,172 @@ class _CodexViewState extends State<CodexView> {
       child: Text(
         text,
         style: OrionTypography.microLabel(color: uiTheme.textMuted),
+      ),
+    );
+  }
+}
+
+class _CodexBackdrop extends StatelessWidget {
+  const _CodexBackdrop();
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ColoredBox(color: uiTheme.voidBlack),
+        Opacity(
+          opacity: 0.35,
+          child: Image.asset(
+            'assets/images/reactor_rim_ui/backdrops/map-room.png',
+            fit: BoxFit.cover,
+            alignment: Alignment.topCenter,
+            excludeFromSemantics: true,
+            errorBuilder: (context, error, stackTrace) =>
+                const SizedBox.shrink(),
+          ),
+        ),
+        const DecoratedBox(decoration: BoxDecoration(gradient: orionMapScrim)),
+      ],
+    );
+  }
+}
+
+class _CodexTab extends StatelessWidget {
+  const _CodexTab({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          gradient: selected ? orionSecondaryFill : null,
+          borderRadius: BorderRadius.circular(10),
+          boxShadow: selected
+              ? const [
+                  BoxShadow(color: orionSecondaryLip, offset: Offset(0, 3)),
+                ]
+              : null,
+        ),
+        child: SizedBox(
+          height: 36,
+          child: Center(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: selected ? orionSecondaryInk : uiTheme.textMuted,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CodexTile extends StatelessWidget {
+  const _CodexTile({
+    required this.entry,
+    required this.selected,
+    required this.onSelect,
+  });
+
+  final CodexTowerEntry entry;
+  final bool selected;
+  final VoidCallback onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: entry.label,
+      child: InkWell(
+        onTap: onSelect,
+        borderRadius: BorderRadius.circular(12),
+        child: ConstrainedBox(
+          key: ValueKey('codex-tile-${entry.type.name}'),
+          constraints: const BoxConstraints(minHeight: 92),
+          child: Stack(
+            children: [
+              const Positioned.fill(
+                child: OrionSurface(
+                  role: OrionSurfaceRole.card,
+                  radius: 12,
+                  padding: EdgeInsets.zero,
+                  child: SizedBox.expand(),
+                ),
+              ),
+              if (selected)
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: uiTheme.systemCyan, width: 1.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: uiTheme.systemCyan.withValues(alpha: .35),
+                          blurRadius: 16,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  OrionAtlasSprite(
+                    art: OrionArt.tower(entry.type),
+                    size: const Size.square(46),
+                  ),
+                  const SizedBox(height: 4),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    child: Text(
+                      entry.label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.center,
+                      style: OrionTypography.microLabel(
+                        size: 10,
+                        color: selected
+                            ? uiTheme.systemCyan
+                            : uiTheme.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                top: 5,
+                right: 6,
+                child: Text(
+                  'W${entry.unlockWave}',
+                  style: OrionTypography.microLabel(
+                    size: 10,
+                    color: uiTheme.textDim,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

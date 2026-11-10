@@ -11,6 +11,7 @@ import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_title_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -348,7 +349,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Done'));
+      await tester.tap(find.widgetWithText(OrionPrimaryButton, 'Done'));
       await tester.pumpAndSettle();
       expect(store.saveCompletions, hasLength(1));
 
