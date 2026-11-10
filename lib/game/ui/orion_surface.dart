@@ -4,8 +4,8 @@ import 'orion_ui_theme.dart';
 
 enum OrionSurfaceRole { floating, card, sheet, shelf }
 
-/// Solid, framed, rounded chrome. Pure presentation: no gestures, animation,
-/// or semantics of its own.
+/// Rounded chrome. Pure presentation: no gestures, animation, or semantics of
+/// its own.
 ///
 /// Solid primary actions (WAVE, DEPLOY) deliberately do not use this.
 class OrionSurface extends StatelessWidget {
@@ -25,7 +25,7 @@ class OrionSurface extends StatelessWidget {
   /// 14–20 for cards, 22 for pills. Circles use [BoxShape.circle] elsewhere.
   final double radius;
 
-  /// The shelf's tray is edged along its top side only.
+  /// shelf is bordered along its top edge only.
   final bool topBorderOnly;
 
   @override
@@ -63,7 +63,7 @@ class OrionSurface extends StatelessWidget {
 
 const _borderWidth = 1.5;
 
-/// Fill, edge and shadow per [OrionSurfaceRole].
+/// Fill, gradient and border.
 BoxDecoration _roleDecoration(
   OrionSurfaceRole role, {
   required OrionUiTheme theme,
