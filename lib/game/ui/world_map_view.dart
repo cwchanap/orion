@@ -600,6 +600,8 @@ class _HeaderBadge extends StatelessWidget {
   }
 }
 
+// Lower-noise chrome: the rail is a bare column of 48dp buttons over the
+// backdrop instead of a framed plate (artboard 1f has no utility rail).
 class _IllustratedStageNode extends StatelessWidget {
   const _IllustratedStageNode({
     super.key,
