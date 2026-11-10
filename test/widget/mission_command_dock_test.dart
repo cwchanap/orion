@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/rules/stage_modifier_rules.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
@@ -12,9 +13,11 @@ import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/command_deck_fixtures.dart';
 import '../support/real_fonts.dart';
+import '../widget_test.dart' as fixtures;
 
 Widget railHost({
   int gold = 9999,
@@ -1678,5 +1681,150 @@ void main() {
         );
       }
     });
+
+    for (final (label, cell) in [
+      ('an empty buildable cell', const GridPosition(4, 5)),
+      ('a path cell', const GridPosition(7, 10)),
+    ]) {
+      testWidgets(
+        'selecting $label during an active wave keeps the wave readouts',
+        (tester) async {
+          final session = GameSession.initial(stage: OrionCampaign.stageOne);
+          session.startWave();
+          final snapshot = session.snapshot(selectedCell: cell);
+          expect(
+            snapshot.waveHostilesTotal,
+            isNotNull,
+            reason: 'fixture sanity: the wave must still be running',
+          );
+
+          await tester.pumpWidget(dockHost(snapshot));
+          await tester.pump();
+
+          for (final key in [
+            'mission-wave-progress',
+            'mission-hostiles-remaining',
+            'mission-clear-bonus',
+          ]) {
+            expect(
+              find.byKey(ValueKey(key)),
+              findsOneWidget,
+              reason:
+                  'wave readouts are status, not build actions — selecting '
+                  '$label mid-wave must not hide $key behind the build rail',
+            );
+          }
+        },
+      );
+    }
+
+    testWidgets('a wave snapshot with no selection still exposes the readouts '
+        '(control for the selection variants)', (tester) async {
+      final session = GameSession.initial(stage: OrionCampaign.stageOne);
+      session.startWave();
+      await tester.pumpWidget(dockHost(session.snapshot()));
+      await tester.pump();
+
+      for (final key in [
+        'mission-wave-progress',
+        'mission-hostiles-remaining',
+        'mission-clear-bonus',
+      ]) {
+        expect(find.byKey(ValueKey(key)), findsOneWidget);
+      }
+    });
+
+    testWidgets(
+      'board taps through the page keep wave readouts while a cell is '
+      'selected mid-wave, and restore them after deselect',
+      (tester) async {
+        SharedPreferences.setMockInitialValues({});
+        tester.view.physicalSize = const Size(390, 844);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          fixtures.testGamePage(onGameCreated: (created) => game = created),
+        );
+        await tester.pumpAndSettle();
+        await fixtures.startStageFromBriefing(tester);
+        await tester.pump();
+        await tester.pump();
+
+        const readoutKeys = [
+          'mission-wave-progress',
+          'mission-hostiles-remaining',
+          'mission-clear-bonus',
+        ];
+
+        game!.startWave();
+        await tester.pump();
+        await tester.pump();
+        for (final key in readoutKeys) {
+          expect(
+            find.byKey(ValueKey(key)),
+            findsOneWidget,
+            reason: 'fixture sanity: a running wave must show $key',
+          );
+        }
+
+        // An empty buildable cell via the same entry point chrome's tap
+        // arbiter uses for real board taps.
+        game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
+        await tester.pump();
+        await tester.pump();
+        expect(
+          game!.snapshot.selectedCell,
+          const GridPosition(4, 5),
+          reason: 'fixture sanity: the board tap must select the cell',
+        );
+        for (final key in readoutKeys) {
+          expect(
+            find.byKey(ValueKey(key)),
+            findsOneWidget,
+            reason:
+                'selecting a build cell swaps the dock to the rail; the '
+                'wave readouts must survive — $key vanished',
+          );
+        }
+
+        // A path cell is also a normal board tap target during waves
+        // (enemy inspection lives there); the readouts must stay too.
+        game!.handleBoardTap(game!.boardCellCenter(const GridPosition(7, 10)));
+        await tester.pump();
+        await tester.pump();
+        expect(
+          game!.snapshot.selectedCell,
+          const GridPosition(7, 10),
+          reason: 'fixture sanity: the path-cell tap must select the cell',
+        );
+        for (final key in readoutKeys) {
+          expect(
+            find.byKey(ValueKey(key)),
+            findsOneWidget,
+            reason:
+                'selecting a path cell swaps the dock the same way; the '
+                'wave readouts must survive — $key vanished',
+          );
+        }
+
+        // Clearing the selection leaves the readouts available again.
+        game!.handleBoardTap(const Offset(-1000, -1000));
+        await tester.pump();
+        await tester.pump();
+        expect(
+          game!.snapshot.selectedCell,
+          isNull,
+          reason: 'fixture sanity: tapping off-board must deselect',
+        );
+        for (final key in readoutKeys) {
+          expect(
+            find.byKey(ValueKey(key)),
+            findsOneWidget,
+            reason: '$key must be back once the selection clears',
+          );
+        }
+      },
+    );
   });
 }

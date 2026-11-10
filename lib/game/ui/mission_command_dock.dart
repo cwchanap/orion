@@ -98,12 +98,13 @@ class MissionCommandDock extends StatelessWidget {
     final Widget content;
     final Key contentKey;
     final worldMapAction = this.worldMapAction;
-    Widget railRow(TowerBuildRail rail) => Padding(
+    Widget railRow(TowerBuildRail rail, {Widget? accessory}) => Padding(
       padding: const EdgeInsets.only(right: 12),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(child: rail),
+          if (accessory != null) ...[const SizedBox(width: 8), accessory],
           if (worldMapAction != null) ...[
             const SizedBox(width: 8),
             worldMapAction,
@@ -113,7 +114,7 @@ class MissionCommandDock extends StatelessWidget {
     );
     if (snapshot.selectedCell != null && snapshot.selectedTower == null) {
       contentKey = const ValueKey('command-dock-build');
-      content = railRow(
+      final rail = railRow(
         TowerBuildRail(
           phase: snapshot.phase,
           gold: snapshot.gold,
@@ -123,7 +124,27 @@ class MissionCommandDock extends StatelessWidget {
           // Selected-cell branch only: see [towerCardGuideAnchor].
           towerCardGuideAnchor: towerCardGuideAnchor,
         ),
+        // The collapsed scanner rides the rail row while a cell is
+        // selected so chrome never has to relocate it into the top band
+        // (which would shift the board viewport the tests pin as fixed).
+        accessory: nextWaveIntel,
       );
+      // A wave must keep its readouts through a selection: progress,
+      // hostiles-left and clear bonus are wave state, not idle state.
+      content = snapshot.waveHostilesTotal != null
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: _WaveStatusStrip(snapshot: snapshot),
+                ),
+                const SizedBox(height: 8),
+                rail,
+              ],
+            )
+          : rail;
     } else {
       contentKey = const ValueKey('command-dock-idle');
       final idleBar = IdleCommandBar(
