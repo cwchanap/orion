@@ -25,11 +25,13 @@ import '../rules/stage_modifier_rules.dart';
 import 'codex_view.dart';
 import 'feedback_settings_sheet.dart';
 import 'first_mission_guide_callout.dart';
+import 'menu_shell.dart';
 import 'mission_chrome.dart';
 import 'mission_command_dock.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
 import 'orion_surface.dart';
+import 'orion_title_view.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
@@ -38,7 +40,7 @@ import 'tech_tree_view.dart';
 import 'tower_inspector.dart';
 import 'world_map_view.dart';
 
-enum _ShellView { worldMap, codex, techTree, stage }
+enum _ShellView { title, worldMap, codex, techTree, stage }
 
 /// Persistence-failure breadcrumb surfaced on both the active view and the
 /// world map. Hoisted to a top-level constant so retry paths can match and
@@ -61,6 +63,7 @@ class OrionGamePage extends StatefulWidget {
     this.gameFeedback,
     this.gameMusicController,
     this.onGameCreated,
+    @visibleForTesting this.startOnWorldMap = false,
   });
 
   final CampaignProgressStore? progressStore;
@@ -83,6 +86,12 @@ class OrionGamePage extends StatefulWidget {
   final GameMusicController? gameMusicController;
 
   final ValueChanged<OrionDefenseGame>? onGameCreated;
+
+  /// Test seam: production boots into the title front door; map-first widget
+  /// fixtures opt into the world map so their stage-tap and reset flows keep
+  /// their one-tap reachability. Read exactly once in [initState].
+  @visibleForTesting
+  final bool startOnWorldMap;
 
   @override
   State<OrionGamePage> createState() => _OrionGamePageState();
@@ -144,7 +153,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// [OrionGamePage.gameFeedback] was injected; disposed in [dispose] —
   /// never an injected implementation.
   PlatformGameFeedback? _ownedGameFeedback;
-  _ShellView _activeView = _ShellView.worldMap;
+  late _ShellView _activeView;
   bool _isLoading = true;
   int _progressGeneration = 0;
   Future<void> _saveQueue = Future<void>.value();
@@ -162,6 +171,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
   @override
   void initState() {
     super.initState();
+    _activeView = widget.startOnWorldMap
+        ? _ShellView.worldMap
+        : _ShellView.title;
     final lifecycleState = WidgetsBinding.instance.lifecycleState;
     _appForeground =
         lifecycleState == null || lifecycleState == AppLifecycleState.resumed;
@@ -535,47 +547,121 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
 
     switch (_activeView) {
+      case _ShellView.title:
+        return _buildTitleScaffold();
       case _ShellView.worldMap:
-        return _buildWorldMapScaffold();
+        return _buildMenuShell(
+          OrionMenuDestination.map,
+          child: _buildWorldMapBody(),
+        );
       case _ShellView.techTree:
-        return TechTreeView(
-          progress: _progress,
-          techTree: _techTree,
-          feedback: _techTreeFeedback,
-          isSavingProgress: _isSavingProgress,
-          onPurchase: _purchaseTech,
-          onBack: _closeTechTree,
+        return _buildMenuShell(
+          OrionMenuDestination.techTree,
+          child: TechTreeView(
+            progress: _progress,
+            techTree: _techTree,
+            feedback: _techTreeFeedback,
+            isSavingProgress: _isSavingProgress,
+            onPurchase: _purchaseTech,
+          ),
         );
       case _ShellView.codex:
-        return CodexView(progress: _progress, onBack: _closeCodex);
+        return _buildMenuShell(
+          OrionMenuDestination.codex,
+          child: CodexView(progress: _progress),
+        );
       case _ShellView.stage:
         return _buildStageScaffold();
     }
   }
 
-  Widget _buildWorldMapScaffold() {
+  /// The title front door resolves the same campaign recommendation the map
+  /// footer's destination card uses; Continue goes through the stage
+  /// briefing, never straight into combat.
+  Widget _buildTitleScaffold() {
+    final recommended = _progress.recommendedStage(OrionCampaign.stages);
+    final canContinue =
+        recommended != null &&
+        _progress.statusFor(recommended) == StageProgressStatus.unlocked;
+    // The "complete" treatment — All missions cleared plus a Sectors lead —
+    // waits until every sector is cleared. A main-path finish with optional
+    // routes still open keeps recommending the next open mission instead.
+    final campaignComplete = OrionCampaign.stages.every(
+      (stage) => _progress.isCleared(stage.id),
+    );
+    final canNavigate = !_isSavingProgress && !_isResetting;
     return Scaffold(
-      body: WorldMapView(
-        stages: OrionCampaign.stages,
-        progress: _progress,
-        campaignModifiers: CampaignModifiers.fromProgress(
-          _progress,
-          OrionCampaign.stages,
-          _techTree,
-        ),
+      body: OrionTitleView(
+        recommendedStage: recommended,
+        canContinue: canContinue,
+        campaignComplete: campaignComplete,
+        medalRank: CampaignTechTree.totalMedalRank(_progress),
+        medalRankMax: OrionCampaign.stages.length * 3,
+        researchPoints: _techTree.unspentPoints(_progress),
         feedback: _mapFeedback,
-        isSavingProgress: _isSavingProgress,
-        isResetting: _isResetting,
-        isSavingFeedback: _isSavingFeedback,
-        onStageSelected: _showStageBriefing,
-        onLockedStageSelected: _showLockedStageFeedback,
-        onResetCampaign: _confirmResetCampaign,
-        onOpenTechTree: _openTechTree,
-        onOpenCodex: _openCodex,
-        onOpenSettings: _feedbackPreferencesLoaded
+        actionsEnabled: canNavigate,
+        onContinue: canContinue ? () => _showStageBriefing(recommended) : null,
+        onOpenSectors: canNavigate
+            ? () => _selectMenuDestination(OrionMenuDestination.map)
+            : null,
+        onOpenTechTree: canNavigate
+            ? () => _selectMenuDestination(OrionMenuDestination.techTree)
+            : null,
+        onOpenCodex: canNavigate
+            ? () => _selectMenuDestination(OrionMenuDestination.codex)
+            : null,
+        onOpenSettings:
+            _feedbackPreferencesLoaded && !_isSavingFeedback && canNavigate
             ? _openFeedbackSettings
             : null,
       ),
+    );
+  }
+
+  /// One shell owns the top resource chips, Settings entry, and the
+  /// Map/R&D/Codex tab bar for the three menu destinations.
+  Widget _buildMenuShell(
+    OrionMenuDestination destination, {
+    required Widget child,
+  }) {
+    final canNavigate = !_isSavingProgress && !_isResetting;
+    return OrionMenuShell(
+      destination: destination,
+      navigationEnabled: canNavigate,
+      onDestinationSelected: _selectMenuDestination,
+      medalRank: CampaignTechTree.totalMedalRank(_progress),
+      medalRankMax: OrionCampaign.stages.length * 3,
+      researchPoints: _techTree.unspentPoints(_progress),
+      onOpenSettings: _feedbackPreferencesLoaded && !_isSavingFeedback
+          ? _openFeedbackSettings
+          : null,
+      // The map body renders its own fixed feedback slot, and the tech
+      // tree shows its own purchase-failure line; only the preference-save
+      // failure — which can surface wherever the sheet was opened from —
+      // needs this banner.
+      feedback:
+          destination == OrionMenuDestination.map ||
+              _mapFeedback != _feedbackSaveFailureMessage
+          ? null
+          : _mapFeedback,
+      child: child,
+    );
+  }
+
+  Widget _buildWorldMapBody() {
+    return WorldMapView(
+      stages: OrionCampaign.stages,
+      progress: _progress,
+      campaignModifiers: CampaignModifiers.fromProgress(
+        _progress,
+        OrionCampaign.stages,
+        _techTree,
+      ),
+      feedback: _mapFeedback,
+      isSavingProgress: _isSavingProgress,
+      isResetting: _isResetting,
+      onStageSelected: _showStageBriefing,
+      onLockedStageSelected: _showLockedStageFeedback,
     );
   }
 
@@ -632,7 +718,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
     if (game == null) {
       // Defensive: _activeView == stage implies _game is set, but if state
       // ever drifts we fall back to the world map rather than crashing.
-      return _buildWorldMapScaffold();
+      return _buildMenuShell(
+        OrionMenuDestination.map,
+        child: _buildWorldMapBody(),
+      );
     }
     return Scaffold(
       body: SafeArea(
@@ -1110,7 +1199,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     if (_isSavingFeedback || !_feedbackPreferencesLoaded) {
       return;
     }
-    final updated = await showModalBottomSheet<FeedbackPreferences>(
+    final result = await showModalBottomSheet<FeedbackSettingsResult>(
       context: context,
       useSafeArea: true,
       isScrollControlled: true,
@@ -1150,13 +1239,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
       ),
     );
 
-    if (updated == null || updated == _feedbackPreferences) {
+    if (result == null) {
+      // Back or scrim dismissal: the draft is discarded, nothing persists.
       return;
     }
-    await _saveFeedbackPreferences(updated);
+    var saved = true;
+    if (result.preferences != _feedbackPreferences) {
+      saved = await _saveFeedbackPreferences(result.preferences);
+    }
+    // The reset confirmation follows only a settled preference write: a
+    // failed save keeps its own breadcrumb and never reaches the dialog.
+    if (result.resetCampaign && saved && mounted) {
+      await _confirmResetCampaign();
+    }
   }
 
-  Future<void> _saveFeedbackPreferences(FeedbackPreferences updated) async {
+  Future<bool> _saveFeedbackPreferences(FeedbackPreferences updated) async {
     _isSavingFeedback = true;
     if (mounted) {
       setState(() {});
@@ -1168,17 +1266,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // like the campaign persistence failure path.
       _isSavingFeedback = false;
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _mapFeedback = _feedbackSaveFailureMessage;
       });
-      return;
+      return false;
     }
+    var saved = false;
     try {
       await store.save(updated);
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _feedbackPreferences = updated;
@@ -1188,11 +1287,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
         }
       });
       _syncMusic();
+      saved = true;
     } catch (_) {
       // Keep the prior effective value; surface a breadcrumb like the
       // campaign persistence failure path.
       if (!mounted) {
-        return;
+        return false;
       }
       setState(() {
         _mapFeedback = _feedbackSaveFailureMessage;
@@ -1203,6 +1303,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         setState(() {});
       }
     }
+    return saved;
   }
 
   // Run inputs (campaign modifiers and module eligibility) are derived from
@@ -1272,30 +1373,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
-  void _openTechTree() {
+  /// Shared-shell destination switching: one method serves the bottom tabs,
+  /// the top-bar back button, and the title shortcuts. Entering or leaving
+  /// the tech tree clears its feedback line, matching the old open/close pair.
+  void _selectMenuDestination(OrionMenuDestination destination) {
     setState(() {
       _techTreeFeedback = null;
-      _activeView = _ShellView.techTree;
-    });
-  }
-
-  // Wired up by TechTreeView's back button.
-  void _closeTechTree() {
-    setState(() {
-      _techTreeFeedback = null;
-      _activeView = _ShellView.worldMap;
-    });
-  }
-
-  void _openCodex() {
-    setState(() {
-      _activeView = _ShellView.codex;
-    });
-  }
-
-  void _closeCodex() {
-    setState(() {
-      _activeView = _ShellView.worldMap;
+      _activeView = switch (destination) {
+        OrionMenuDestination.map => _ShellView.worldMap,
+        OrionMenuDestination.techTree => _ShellView.techTree,
+        OrionMenuDestination.codex => _ShellView.codex,
+      };
     });
   }
 

@@ -9,6 +9,7 @@ import 'package:orion/game/campaign/stage_reward_label.dart';
 import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/codex_view.dart';
+import 'package:orion/game/ui/menu_shell.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 
 void main() {
@@ -138,21 +139,26 @@ void main() {
     expect(pressed, isTrue);
   });
 
-  testWidgets('world map shows a Codex button that fires onOpenCodex', (
+  testWidgets('menu shell shows a Codex tab that reports the destination', (
     tester,
   ) async {
+    // Destination switching lives in the shared menu shell now; the map body
+    // no longer owns a Codex rail button.
     var pressed = false;
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: WorldMapView(
+        home: OrionMenuShell(
+          destination: OrionMenuDestination.map,
+          onDestinationSelected: (destination) =>
+              pressed = destination == OrionMenuDestination.codex,
+          medalRank: 0,
+          medalRankMax: 15,
+          researchPoints: 0,
+          child: WorldMapView(
             stages: OrionCampaign.stages,
             progress: CampaignProgress(),
             feedback: null,
             onStageSelected: (_) {},
-            onResetCampaign: () {},
-            onOpenTechTree: () {},
-            onOpenCodex: () => pressed = true,
           ),
         ),
       ),

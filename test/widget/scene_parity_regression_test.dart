@@ -11,6 +11,7 @@ import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
+import 'package:orion/game/ui/menu_shell.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
@@ -235,15 +236,21 @@ void main() {
               onStartWave: () {},
             );
           case 'map':
-            content = WorldMapView(
-              stages: OrionCampaign.stages,
-              progress: CampaignProgress(),
-              feedback: null,
-              onStageSelected: (_) {},
-              onResetCampaign: () {},
-              onOpenTechTree: () {},
-              onOpenCodex: () {},
+            // The shell owns the destination chrome in production; parity
+            // captures include it so the review fixtures show what ships.
+            content = OrionMenuShell(
+              destination: OrionMenuDestination.map,
+              onDestinationSelected: (_) {},
+              medalRank: 0,
+              medalRankMax: OrionCampaign.stages.length * 3,
+              researchPoints: 0,
               onOpenSettings: () {},
+              child: WorldMapView(
+                stages: OrionCampaign.stages,
+                progress: CampaignProgress(),
+                feedback: null,
+                onStageSelected: (_) {},
+              ),
             );
           default:
             throw StateError('Unknown review scene: $scene');
@@ -266,7 +273,10 @@ void main() {
         );
         await tester.pumpAndSettle();
         await tester.runAsync(() async {
-          await warmSceneImages(tester.element(find.byType(Scaffold)), [
+          // The shell mounts its own Scaffold inside the fixture's, so a
+          // `find.byType(Scaffold)` context is ambiguous; the capture
+          // boundary's context is not.
+          await warmSceneImages(boundary.currentContext!, [
             if (scene == 'scanner')
               'reactor_rim_ui/backdrops/command-center.png',
             if (scene == 'map') 'reactor_rim_ui/backdrops/map-room.png',

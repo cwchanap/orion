@@ -4,12 +4,22 @@ import '../feedback/feedback_preferences.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-/// Self-contained settings sheet for the three persisted feedback toggles plus
-/// the first-mission tutorial replay action.
+/// What the sheet hands back: the draft preferences plus whether the player
+/// asked to reset the campaign. Back/scrim dismissal pops nothing, so a null
+/// result still means "discard the draft".
+typedef FeedbackSettingsResult = ({
+  FeedbackPreferences preferences,
+  bool resetCampaign,
+});
+
+/// Self-contained settings sheet for the three persisted feedback toggles,
+/// the first-mission tutorial replay action, and the Reset Campaign entry.
 ///
-/// Owns only a local draft of the preferences and pops the final value when
-/// Done is tapped. Persistence, platform feedback calls, and the tutorial
-/// store live in the page, never here — replay is a plain async callback.
+/// Owns only a local draft of the preferences and pops a
+/// [FeedbackSettingsResult] when Done or Reset Campaign is tapped.
+/// Persistence, the reset confirmation, platform feedback calls, and the
+/// tutorial store live in the page, never here — replay is a plain async
+/// callback and Reset Campaign is only an intent flag on the result.
 class FeedbackSettingsSheet extends StatefulWidget {
   const FeedbackSettingsSheet({
     super.key,
@@ -134,9 +144,31 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
                 enabled: canReplay,
                 onTap: canReplay ? _replayTutorial : null,
               ),
+              // Intent only: the page owns the confirmation dialog and the
+              // reset itself, and it commits the draft before confirming —
+              // never a one-tap reset.
+              ListTile(
+                leading: Icon(
+                  Icons.restart_alt_rounded,
+                  color: uiTheme.dangerRed,
+                ),
+                title: Text(
+                  'Reset Campaign',
+                  style: TextStyle(color: uiTheme.dangerRed),
+                ),
+                subtitle: Text(
+                  'Clears all campaign progress',
+                  style: OrionTypography.microLabel(color: uiTheme.textMuted),
+                ),
+                onTap: () => Navigator.of(
+                  context,
+                ).pop((preferences: _draft, resetCampaign: true)),
+              ),
               const SizedBox(height: 8),
               FilledButton(
-                onPressed: () => Navigator.of(context).pop(_draft),
+                onPressed: () => Navigator.of(
+                  context,
+                ).pop((preferences: _draft, resetCampaign: false)),
                 child: const Text('Done'),
               ),
             ],
