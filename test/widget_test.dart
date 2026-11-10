@@ -3765,7 +3765,8 @@ void main() {
       await tester.pumpWidget(testGamePage());
       await tester.pumpAndSettle();
 
-      // The shared shell's tab bar is present on the world map.
+      // Wired callback → button is visible and tappable.
+      // Sanity: button is present on the world map header.
       expect(find.byTooltip('R&D'), findsOneWidget);
 
       await tester.tap(find.byTooltip('R&D'));
@@ -3777,7 +3778,7 @@ void main() {
       expect(find.text('ORION SECTOR'), findsNothing);
       expect(find.byTooltip('Map'), findsOneWidget);
 
-      // The Map tab returns the player to the world map.
+      // The back arrow returns the player to the world map.
       await tester.tap(find.byTooltip('Map'));
       await tester.pumpAndSettle();
 

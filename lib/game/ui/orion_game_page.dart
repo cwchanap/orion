@@ -1358,6 +1358,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
+  // Wired up by TechTreeView's back button.
+
   // Invoked by TechTreeView purchase buttons.
   Future<void> _purchaseTech(CampaignTechUpgrade upgrade) async {
     if (_isSavingProgress || _isResetting) {
