@@ -3,8 +3,6 @@ import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-/// The kit's `.btn` variants: one dominant amber action per surface, a
-/// supporting cyan action, and the destructive action.
 enum OrionButtonVariant { primary, secondary, danger }
 
 typedef _VariantSpec = ({
@@ -19,13 +17,7 @@ typedef _VariantSpec = ({
   Color? shade,
 });
 
-/// The kit's solid framed action — lip, glint and press — shared by
-/// full-screen scene actions.
-///
-/// Press sinks the whole control 4px onto a 1px lip, routed through
-/// [orionMotionDuration] so reduced motion snaps instead of tweening.
-/// Disabled follows the kit's grayscale rule; [loading] shows a busy glyph
-/// and renders the action inert without losing its semantics.
+/// The export's solid action, shared by full-screen scene actions.
 class OrionPrimaryButton extends StatefulWidget {
   const OrionPrimaryButton({
     super.key,
@@ -41,8 +33,6 @@ class OrionPrimaryButton extends StatefulWidget {
   final VoidCallback? onPressed;
   final OrionButtonVariant variant;
 
-  /// In-flight state: the glyph replaces the icon and the button stops
-  /// firing, so a tap cannot queue a second action.
   final bool loading;
 
   @override
@@ -50,15 +40,10 @@ class OrionPrimaryButton extends StatefulWidget {
 }
 
 class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
-  /// Physical press tracked by pointer events rather than the inner button's
-  /// states controller — a Listener observes taps without joining the
-  /// TextButton's gesture arena or semantics.
   var _pressed = false;
 
   static const _radius = 14.0;
 
-  /// kit.css `grayscale(1) brightness(.55)` as a ColorFilter matrix: the
-  /// luminance row, scaled by .55, applied to every channel.
   static const _disabledFilter = ColorFilter.matrix([
     .1173,
     .3934,
@@ -121,9 +106,6 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
   @override
   Widget build(BuildContext context) {
     final spec = _spec();
-    // A null onPressed or an in-flight load renders the kit's disabled rule;
-    // the TextButton keeps the null onPressed either way so semantics stay
-    // honest about the control being inert.
     final enabled = widget.onPressed != null && !widget.loading;
     final borderRadius = BorderRadius.circular(_radius);
     final pressed = enabled && _pressed;
@@ -156,9 +138,6 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
           inset: spec.edge == null ? 0 : 1.5,
           topColor: spec.glint,
           topWidth: spec.glint == null ? 0 : 1.5,
-          // Pressed trades the resting shade for the kit's deeper inset
-          // shadow (`inset 0 2px 4px rgba(150,70,0,.4)`); only the amber
-          // variant carries a bottom shade at all.
           bottomColor: pressed && spec.shade == orionPrimaryShade
               ? orionPrimaryShadePressed
               : spec.shade,

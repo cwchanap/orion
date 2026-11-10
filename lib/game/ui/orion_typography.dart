@@ -8,12 +8,8 @@ import 'orion_ui_theme.dart';
 /// carries every label. Nothing in the game UI reads Material's [TextTheme].
 abstract final class OrionTypography {
   /// Shadow applied to all roles so contrast never depends on a surface fill.
-  /// The literal lives once in [orionTextShadow].
   static const shadow = orionTextShadow;
 
-  /// Oxanium has no U+2192 glyph; Chakra Petch does. The two Oxanium roles
-  /// carry this fallback so a comparison arrow ('18 → 20') renders in the
-  /// bundled face that owns it rather than whatever the engine picks next.
   static const _oxaniumFallback = ['ChakraPetch'];
 
   /// Resource, hull, wave, cost and count numerals. The sheet's hero range is
@@ -49,16 +45,15 @@ abstract final class OrionTypography {
 
   /// Every label. Muted by construction: the sheet says "muted, never white".
   ///
-  /// The kit's type scale declares a 10px floor for labels ("Type scale —
-  /// min 10px"), so the default step *is* the floor and explicit sizes may
-  /// only climb. There is no role above [title] for a label bigger than the
-  /// steps below, so the migration reaches for [microLabel] at larger sizes
-  /// too. Each step is deliberate and reviewed; this list exists so the next
-  /// feature copies from it instead of picking a new number:
+  /// The kit's type scale sets a 10px floor for this role, and there is no
+  /// role above [title] for a label bigger than that, so the migration also
+  /// reaches for [microLabel] at larger sizes the sheet never wrote down.
+  /// Each step below is deliberate and reviewed; this list exists so the
+  /// next feature copies from it instead of picking a new number:
   ///
-  ///  - 10 (the default and the floor) — the base label size for the
-  ///    tightest chrome: tower-build cards, dock pills, chips, supporting
-  ///    subtitles and other high-density controls.
+  ///  - 10 (the default) — the base label size for the tightest chrome:
+  ///    tower-build cards, dock pills, chips, and other high-density
+  ///    controls.
   ///  - 11 — section and detail labels inside expanded panels, and the
   ///    caption beside a numeral-heavy [readout] (e.g. "Targeting",
   ///    "SPECIALIZE - LV 4", a cost figure's label).

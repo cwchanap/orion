@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
@@ -40,8 +44,6 @@ Container buttonFrame(WidgetTester tester) {
 
 void main() {
   test('three action variants exist', () {
-    // One dominant action, a supporting one and the destructive one — the
-    // kit's .btn.primary/.secondary/.danger set.
     expect(OrionButtonVariant.values, [
       OrionButtonVariant.primary,
       OrionButtonVariant.secondary,
@@ -107,6 +109,42 @@ void main() {
     );
   });
 
+  testWidgets('danger paints its lit top edge inside the frame', (t) async {
+    final key = GlobalKey();
+    await t.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: key,
+            child: OrionPrimaryButton(
+              label: 'Purge',
+              icon: Icons.delete,
+              onPressed: () {},
+              variant: OrionButtonVariant.danger,
+            ),
+          ),
+        ),
+      ),
+    );
+    late ByteData bytes;
+    late int width;
+    await t.runAsync(() async {
+      final boundary =
+          key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 1);
+      width = image.width;
+      bytes = (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+      image.dispose();
+    });
+    int channel(int x, int y, int c) => bytes.getUint8((y * width + x) * 4 + c);
+    final x = width ~/ 2;
+    expect(
+      channel(x, 3, 0) - channel(x, 6, 0),
+      greaterThan(4),
+      reason: 'the .danger top glint must land inside the 1.5px frame',
+    );
+  });
+
   testWidgets('fires onPressed', (t) async {
     var taps = 0;
     await t.pumpWidget(host(onPressed: () => taps++));
@@ -118,8 +156,6 @@ void main() {
     await t.pumpWidget(host(onPressed: () {}));
     final center = t.getCenter(find.byType(OrionPrimaryButton));
     final gesture = await t.startGesture(center);
-    // One frame to land the press and start the sink, a second for the
-    // 90ms tween to complete.
     await t.pump();
     await t.pump(const Duration(milliseconds: 200));
 
@@ -145,8 +181,6 @@ void main() {
     await t.pumpWidget(host(onPressed: () {}, disableAnimations: true));
     final center = t.getCenter(find.byType(OrionPrimaryButton));
     final gesture = await t.startGesture(center);
-    // No elapsed motion: reduced motion means the sink still applies, just
-    // without a tween — the state is never ambiguous.
     await t.pump();
     expect(buttonFrame(t).transform!.getTranslation().y, 4);
     await gesture.up();
@@ -157,8 +191,6 @@ void main() {
   testWidgets('disabled renders the grayscale rule and cannot fire', (t) async {
     var taps = 0;
     await t.pumpWidget(host(onPressed: null));
-    // The kit's disabled rule is grayscale(1) brightness(.55) over a #222
-    // lip — the same look for every variant.
     expect(
       find.descendant(
         of: find.byType(OrionPrimaryButton),
@@ -196,8 +228,6 @@ void main() {
 
   testWidgets('keeps button semantics and a 48dp+ target', (t) async {
     await t.pumpWidget(host(onPressed: () {}));
-    // The InkResponse inside TextButton owns the button flag; the variant
-    // chrome sits outside it and must not swallow the role.
     expect(
       find.descendant(
         of: find.byType(OrionPrimaryButton),

@@ -15,9 +15,6 @@ Iterable<File> _libDartFiles() sync* {
   }
 }
 
-/// Screens that still carry raw `Color(0x...)` literals while they wait for
-/// their own restyle task. This list only ever shrinks: each entry leaves as
-/// its screen moves to theme tokens, and it must be empty by Task 5.
 const _rawColorAllowlist = <String>{
   'lib/game/ui/mission_command_dock.dart',
   'lib/game/ui/mission_report_panel.dart',

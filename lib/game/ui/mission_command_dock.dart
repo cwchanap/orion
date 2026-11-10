@@ -733,7 +733,6 @@ class _TowerBuildCard extends StatelessWidget {
         key: ValueKey('tower-card-${type.name}'),
         width: baseWidth * scaleFactor,
         height: baseHeight * scaleFactor,
-        // A card tile riding on the rail's shelf chrome.
         child: OrionSurface(
           role: OrionSurfaceRole.card,
           // Keep room for the sprite above the cost and name.

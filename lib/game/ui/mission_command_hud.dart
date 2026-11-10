@@ -359,10 +359,6 @@ class MissionPacingControls extends StatelessWidget {
               semanticsLabel: autoSemanticsLabel,
               tooltip: 'Auto-start waves',
               icon: Icons.timer_outlined,
-              // Compact copy keeps the chip inside the shared 48dp box at
-              // the 10px label floor: "Auto" at rest, just the countdown
-              // seconds while it ticks. The full phrase still lives in the
-              // semantics label and tooltip.
               label: countdown == null ? 'Auto' : '${countdown.ceil()}s',
               accent: uiTheme.warningOrange,
               active: snapshot.autoStartEnabled,
@@ -379,8 +375,8 @@ class MissionPacingControls extends StatelessWidget {
 ///
 /// A three-segment control costs three 48dp touch targets (144px). At the
 /// product width the idle dock has 248px for pacing and needs 249.5 with the
-/// segments, so it wrapped onto a second row over the board — and any
-/// widening chip only worsens that. Segments
+/// segments, so it wrapped onto a second row over the board — and a
+/// widening label only worsens that. Segments
 /// cannot shrink below the touch floor, so the control had to stop costing
 /// three of them. One button costs 48px and leaves real headroom.
 ///
@@ -431,10 +427,9 @@ class _PacingChip extends StatelessWidget {
         child: Tooltip(
           message: tooltip,
           excludeFromSemantics: true,
-          // 44dp square is the artboard's shape and this chip's minimum;
-          // the label carries no horizontal padding so the longest label
-          // that can appear ("Auto") stays inside the shared 48dp box and
-          // the row never wraps a chip at the 360px product width.
+          // 44dp square is the artboard's shape and this chip's minimum; the
+          // auto-start chip widens rather than clipping its own label. The
+          // tappable box stays 48dp tall.
           // The artboard's 44dp is the visual; the tappable box holds a 48dp
           // minimum in both axes, and grows past it only for a long label.
           child: ConstrainedBox(

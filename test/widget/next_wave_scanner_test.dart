@@ -733,7 +733,6 @@ void main() {
     'scanner opens a full scene and keeps its close action available',
     (tester) async {
       await tester.pumpWidget(scannerHost(commandDeckPreview()));
-      // The collapsed scanner is a floating control holding its radar card.
       expect(find.byType(OrionSurface), findsWidgets);
       await tester.tap(find.byTooltip('Expand next-wave scanner'));
       await tester.pumpAndSettle();
