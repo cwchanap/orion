@@ -240,6 +240,86 @@ const orionDangerGlint = Color(0x2EFF788C);
 
 const orionDisabledLip = Color(0xFF222222);
 
+// Scene 01 title wordmark: white falling into cyan, with the glow wash and
+// deep shade the artboard layers behind the command-center art.
+const orionTitleWordFill = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFFFFFFFF), Color(0xFFDDF8FF), Color(0xFF46E6FF)],
+  stops: [0, .45, 1],
+);
+
+const orionTitleGlow = Color(0x8C46E6FF);
+
+const orionTitleGlowWash = RadialGradient(
+  center: Alignment(0, -0.22),
+  radius: 0.85,
+  colors: [Color(0x4046E6FF), Color(0x0005080D)],
+);
+
+const orionTitleShade = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xE604283C), Color(0x6605080D), Color(0xF205080D)],
+  stops: [0, .55, 1],
+);
+
+// Shared menu shell: the faded top bar over each destination's backdrop and
+// the raised tab bar anchoring Map/R&D/Codex (artboards 02/07/08).
+const orionTopBarFade = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xEB05080D), Color(0x0005080D)],
+);
+
+const orionTabBarFill = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF0E1822), Color(0xFF070C12)],
+);
+
+const orionDeckBlack = Color(0xFF0E1822);
+
+const orionCrestEdge = Color(0xFF3A5A74);
+
+const orionNameChipFill = Color(0xD905080D);
+
+const orionNameChipText = Color(0xFFD7E3EC);
+
+const orionEmptyPip = Color(0xFF2A3A48);
+
+// The sheet's solid cyan launch action (Start Mission / Replay / Endless).
+const orionLaunchFill = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF7FF0FF), Color(0xFF13B8E6), Color(0xFF0A7EA3)],
+  stops: [0, .6, 1],
+);
+
+// Star-chart readability scrim over the map-room backdrop (scene 02).
+const orionMapScrim = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0xAA05080D),
+    Color(0x3305080D),
+    Color(0x4405080D),
+    Color(0x8805080D),
+  ],
+  stops: [0, 0.28, 0.72, 1],
+);
+
+// Ghost shortcut tiles on the title front door (scene 01).
+const orionGhostFill = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [Color(0xFF1C2C3A), Color(0xFF111C27)],
+);
+
+const orionGhostLip = Color(0xFF060A10);
+
+const orionGhostGlint = Color(0x19FFFFFF);
+
 Duration orionMotionDuration(BuildContext context, Duration normal) =>
     MediaQuery.disableAnimationsOf(context) ? Duration.zero : normal;
 

@@ -28,13 +28,16 @@ import 'package:orion/game/ui/acquired_run_module_control.dart';
 import 'package:orion/game/ui/first_mission_guide_callout.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
+import 'package:orion/game/ui/menu_shell.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
+import 'package:orion/game/ui/stage_briefing_sheet.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,6 +58,7 @@ Widget testGamePage({
   ModuleOfferPicker? moduleOfferPicker,
   ValueChanged<OrionDefenseGame>? onGameCreated,
   GameFeedback gameFeedback = const NoOpGameFeedback(),
+  bool startOnWorldMap = true,
 }) {
   return MaterialApp(
     // The product app hides this banner; a fixture host must too, or the
@@ -79,8 +83,53 @@ Widget testGamePage({
       moduleOfferPicker: moduleOfferPicker,
       onGameCreated: onGameCreated,
       gameFeedback: gameFeedback,
+      // Map-first fixtures predate the title front door: they opt into the
+      // world map so stage taps keep their one-tap reachability. Title tests
+      // pass false — or use testTitlePage, which exercises the production
+      // default directly.
+      startOnWorldMap: startOnWorldMap,
     ),
   );
+}
+
+/// Same fixture shell as [testGamePage] but deliberately does NOT pass
+/// `startOnWorldMap`, so the page uses its real production default — the
+/// title front door — the way the shipped app does.
+Widget testTitlePage({
+  CampaignProgressStore? progressStore,
+  Future<CampaignProgressStore> Function()? progressStoreLoader,
+  FeedbackPreferencesStore? feedbackPreferencesStore,
+  FirstMissionGuideStore? firstMissionGuideStore,
+  ModuleOfferPicker? moduleOfferPicker,
+  ValueChanged<OrionDefenseGame>? onGameCreated,
+  GameFeedback gameFeedback = const NoOpGameFeedback(),
+}) {
+  return MaterialApp(
+    debugShowCheckedModeBanner: false,
+    theme: orionThemeData,
+    home: OrionGamePage(
+      progressStore: progressStore,
+      progressStoreLoader: progressStoreLoader,
+      feedbackPreferencesStore: feedbackPreferencesStore,
+      firstMissionGuideStore:
+          firstMissionGuideStore ??
+          InMemoryFirstMissionGuideStore(completed: true),
+      moduleOfferPicker: moduleOfferPicker,
+      onGameCreated: onGameCreated,
+      gameFeedback: gameFeedback,
+    ),
+  );
+}
+
+/// Reset lives in Settings now: opens the settings sheet and taps its
+/// Reset Campaign row, which pops the reset intent back to the page —
+/// the confirmation dialog appears after this returns.
+Future<void> openResetFromSettings(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Settings'));
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(find.text('Reset Campaign'));
+  await tester.tap(find.text('Reset Campaign'));
+  await tester.pumpAndSettle();
 }
 
 Future<void> startStageFromBriefing(
@@ -158,6 +207,167 @@ void main() {
   // themselves after this, overriding the empty default.
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+  });
+
+  group('title front door and shared menu shell', () {
+    testWidgets('production startup lands on the title screen', (tester) async {
+      await tester.pumpWidget(testTitlePage());
+      await tester.pumpAndSettle();
+
+      expect(find.text('ORION'), findsOneWidget);
+      expect(find.text('SPACE TOWER DEFENSE'), findsOneWidget);
+      expect(find.text('HOLD THE SECTOR'), findsOneWidget);
+      expect(find.text('Continue'), findsOneWidget);
+      // The live recommendation card: first unlocked mission, real name.
+      expect(find.text('Campaign · Next mission'), findsOneWidget);
+      expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
+      expect(find.text('v1.0 · Command deck'), findsOneWidget);
+      // The map chrome stays off-screen until the player navigates.
+      expect(find.text('ORION SECTOR'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('title Continue opens the stage briefing, not combat', (
+      tester,
+    ) async {
+      await tester.pumpWidget(testTitlePage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+
+      // The briefing sheet — Start Mission, never a direct launch. The
+      // title card stays mounted beneath, so scope to the sheet itself.
+      expect(
+        find.descendant(
+          of: find.byType(StageBriefingSheet),
+          matching: findOrionTitle('Outpost Alpha'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Start Mission'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('title recommends the first open optional stage', (
+      tester,
+    ) async {
+      // All main missions cleared: the recommendation falls through to the
+      // first open side stage (Salvage Rift), which Continue then briefs.
+      final store = await storeWithResults({
+        for (final stage in OrionCampaign.stages.where((s) => s.isMainPath))
+          stage.id: const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+      });
+      await tester.pumpWidget(testTitlePage(progressStore: store));
+      await tester.pumpAndSettle();
+
+      expect(findOrionTitle('Salvage Rift'), findsOneWidget);
+      await tester.tap(find.text('Continue'));
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byType(StageBriefingSheet),
+          matching: findOrionTitle('Salvage Rift'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byTooltip('Start Mission'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('completed campaign leads with Sectors into the map', (
+      tester,
+    ) async {
+      final store = await storeWithResults({
+        for (final stage in OrionCampaign.stages)
+          stage.id: const StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+      });
+      await tester.pumpWidget(testTitlePage(progressStore: store));
+      await tester.pumpAndSettle();
+
+      // No Continue path: the recommendation is a cleared replay fallback,
+      // so the primary action is Sectors and the card reads complete.
+      expect(find.text('Continue'), findsNothing);
+      expect(find.text('Campaign · Complete'), findsOneWidget);
+      expect(findOrionTitle('All missions cleared'), findsOneWidget);
+
+      await tester.tap(
+        find.descendant(
+          of: find.byType(OrionPrimaryButton),
+          matching: find.text('Sectors'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('ALL SECTORS SECURED'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('title shortcuts reach R&D and Codex; tabs return to map', (
+      tester,
+    ) async {
+      await tester.pumpWidget(testTitlePage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.pumpAndSettle();
+      expect(findOrionTitle('R & D'), findsOneWidget);
+      // Shell chrome on a non-map destination: back arrow + tabs.
+      expect(find.byTooltip('Back'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Sectors'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Sectors'));
+      await tester.pumpAndSettle();
+      // Tapping the active tab is a no-op that keeps the map mounted.
+
+      // Title -> Codex ghost reaches the codex destination too.
+      await tester.pumpWidget(testTitlePage());
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Codex'));
+      await tester.pumpAndSettle();
+      expect(findOrionTitle('Codex'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('title shortcuts Sectors enters the world map', (tester) async {
+      await tester.pumpWidget(testTitlePage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Sectors'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('title Settings gear opens the feedback sheet', (tester) async {
+      await tester.pumpWidget(testTitlePage());
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      expect(findOrionTitle('Settings'), findsOneWidget);
+      expect(find.text('Reset Campaign'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('startOnWorldMap seam skips the title for map fixtures', (
+      tester,
+    ) async {
+      await tester.pumpWidget(testGamePage());
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('HOLD THE SECTOR'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets(
@@ -634,6 +844,7 @@ void main() {
               child: child!,
             ),
             home: OrionGamePage(
+              startOnWorldMap: true,
               progressStore: InMemoryCampaignProgressStore(
                 knownStages: OrionCampaign.stages,
               ),
@@ -1305,8 +1516,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetFromSettings(tester);
 
     expect(findOrionTitle('Reset Campaign'), findsOneWidget);
     expect(find.text('Clear all campaign progress?'), findsOneWidget);
@@ -1336,8 +1546,7 @@ void main() {
     });
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetFromSettings(tester);
 
     expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsOneWidget);
     expect(find.byType(OrionSurface), findsWidgets);
@@ -1947,8 +2156,7 @@ void main() {
       await tester.tap(find.byTooltip('World Map').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetFromSettings(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -2549,8 +2757,7 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetFromSettings(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -3340,8 +3547,7 @@ void main() {
       store.saveCompletions.single.complete();
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetFromSettings(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -3397,8 +3603,7 @@ void main() {
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetFromSettings(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -3418,8 +3623,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetFromSettings(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -3452,8 +3656,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetFromSettings(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -3468,9 +3671,11 @@ void main() {
     expect(find.byTooltip('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
 
-    final resetButton = find.byTooltip('Reset Campaign');
-    await tester.tap(resetButton);
-    await tester.pumpAndSettle();
+    // Resetting is single-flight: re-running the Settings -> Reset path pops
+    // the intent back to a _confirmResetCampaign that early-returns, so no
+    // second confirmation dialog and no second reset.
+    await openResetFromSettings(tester);
+    expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsNothing);
 
     // No second reset was triggered.
     expect(store.resetCalls, 1);
@@ -3663,31 +3868,36 @@ void main() {
     ]);
   });
 
-  testWidgets('Tech Tree button fires onOpenTechTree', (tester) async {
-    var tapped = 0;
+  testWidgets('menu shell Tech Tree tab reports the destination', (
+    tester,
+  ) async {
+    final destinations = <OrionMenuDestination>[];
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: WorldMapView(
+        home: OrionMenuShell(
+          destination: OrionMenuDestination.map,
+          onDestinationSelected: destinations.add,
+          medalRank: 0,
+          medalRankMax: 15,
+          researchPoints: 0,
+          child: WorldMapView(
             stages: const [],
             progress: CampaignProgress(),
             feedback: null,
             onStageSelected: (_) {},
-            onResetCampaign: () {},
-            onOpenTechTree: () => tapped++,
           ),
         ),
       ),
     );
 
-    // Wired callback → button is visible and tappable.
+    // Wired callback → tab is visible and tappable.
     await tester.tap(find.byTooltip('Tech Tree'));
-    expect(tapped, 1);
+    expect(destinations, [OrionMenuDestination.techTree]);
   });
 
-  testWidgets('Tech Tree button is hidden when onOpenTechTree is null', (
-    tester,
-  ) async {
+  testWidgets('bare WorldMapView renders no navigation chrome', (tester) async {
+    // The map body never owns the Tech Tree/Codex/Settings chrome; outside
+    // the shared menu shell none of those controls exist.
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -3696,13 +3906,14 @@ void main() {
             progress: CampaignProgress(),
             feedback: null,
             onStageSelected: (_) {},
-            onResetCampaign: () {},
           ),
         ),
       ),
     );
 
     expect(find.byTooltip('Tech Tree'), findsNothing);
+    expect(find.byTooltip('Codex'), findsNothing);
+    expect(find.byTooltip('Settings'), findsNothing);
   });
 
   testWidgets(
@@ -3750,7 +3961,6 @@ void main() {
             feedback: null,
             onStageSelected: (_) {},
             onLockedStageSelected: (_) {},
-            onResetCampaign: () {},
           ),
         ),
       ),
@@ -3788,7 +3998,6 @@ void main() {
             feedback: null,
             onStageSelected: (stage) => selected.add(stage.id),
             onLockedStageSelected: (stage) => locked.add(stage.id),
-            onResetCampaign: () {},
           ),
         ),
       ),
@@ -3818,7 +4027,6 @@ void main() {
             progress: CampaignProgress(),
             feedback: null,
             onStageSelected: (_) {},
-            onResetCampaign: () {},
           ),
         ),
       ),
@@ -3856,7 +4064,6 @@ void main() {
               isSavingProgress: true,
               onStageSelected: (stage) => selected.add(stage.id),
               onLockedStageSelected: (stage) => locked.add(stage.id),
-              onResetCampaign: () {},
             ),
           ),
         ),
@@ -4411,8 +4618,7 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetFromSettings(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -4612,8 +4818,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetFromSettings(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -4730,6 +4935,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: OrionGamePage(
+          startOnWorldMap: true,
           progressStore: InMemoryCampaignProgressStore(
             knownStages: OrionCampaign.stages,
           ),
@@ -4787,6 +4993,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: OrionGamePage(
+            startOnWorldMap: true,
             progressStore: InMemoryCampaignProgressStore(
               knownStages: OrionCampaign.stages,
             ),
@@ -4848,6 +5055,7 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: MaterialApp(
             home: OrionGamePage(
+              startOnWorldMap: true,
               progressStore: campaignStore,
               feedbackPreferencesStore: feedbackStore,
               gameFeedback: const NoOpGameFeedback(),
@@ -5469,6 +5677,7 @@ void main() {
           debugShowCheckedModeBanner: false,
           theme: orionThemeData,
           home: OrionGamePage(
+            startOnWorldMap: true,
             progressStore: _TestCampaignProgressStore(
               loadError: StateError('campaign load failed'),
             ),
@@ -5522,6 +5731,7 @@ void main() {
         debugShowCheckedModeBanner: false,
         theme: orionThemeData,
         home: OrionGamePage(
+          startOnWorldMap: true,
           onGameCreated: (value) => game = value,
           gameFeedback: const NoOpGameFeedback(),
         ),
@@ -5559,8 +5769,7 @@ void main() {
       await tester.pumpWidget(testGamePage(firstMissionGuideStore: guideStore));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetFromSettings(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -5600,8 +5809,7 @@ void main() {
       // The Alpha-result inference is frozen into the guide store at load.
       expect(guideStore.completed, isTrue);
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetFromSettings(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
       expect(guideStore.completed, isTrue);
