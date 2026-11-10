@@ -52,6 +52,8 @@ class EnemyComponent extends CircleComponent {
 
   static final EnemyOverlayRenderer _overlayRenderer = EnemyOverlayRenderer();
 
+  static const double spriteExtentFactor = 1.75;
+
   // read-through getters to logic
   double get health => logic.health;
   double get shield => logic.shield;
@@ -166,7 +168,7 @@ class EnemyComponent extends CircleComponent {
           .render(
             canvas,
             position: Vector2(radius, radius),
-            size: Vector2.all(radius * 2.4),
+            size: Vector2.all(radius * spriteExtentFactor * 2),
             anchor: Anchor.center,
           );
     } else if (spriteSheet != null) {
@@ -175,7 +177,7 @@ class EnemyComponent extends CircleComponent {
           .render(
             canvas,
             position: Vector2(radius, radius),
-            size: Vector2.all(radius * 2.4),
+            size: Vector2.all(radius * spriteExtentFactor * 2),
             anchor: Anchor.center,
           );
     } else {

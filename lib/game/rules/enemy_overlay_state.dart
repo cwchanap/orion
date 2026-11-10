@@ -257,24 +257,21 @@ class EnemyOverlayLayout {
   static const double _normalBadgeSizeFactor = 0.6363636364;
   static const double _expandedBadgeSizeFactor = 0.8181818182;
   static const double _badgeGapFactor = 0.1818181818;
-  static const double _normalBadgeAdvanceFactor = 0.8181818182;
-  static const double _expandedBadgeAdvanceFactor = 1;
   static const double _normalHealthBarHeightFactor = 0.2727272727;
   static const double _expandedHealthBarHeightFactor = 0.3636363636;
-  static const double _normalHealthBarAdvanceFactor = 0.3636363636;
-  static const double _expandedHealthBarAdvanceFactor = 0.4545454545;
   static const double _shieldBarHeightFactor = 0.2272727273;
   static const double _badgeCornerRadiusFactor = 0.1818181818;
   static const double _heavyBadgeCornerRadiusFactor = 0.1363636364;
   static const double _normalBarWidthFactor = 2.25;
   static const double _expandedBarWidthFactor = 2.8;
-  static const double _normalOriginFactor = 0.72;
-  static const double _expandedOriginFactor = 0.92;
+  static const double _spriteClearanceFactor = 2.25;
+  static const double _healthTrailingGapFactor = 0.0909090909;
+  static const double _badgeTrailingGapFactor = 0.1818181818;
   // EnemyComponent draws its sprite at 2.4 x radius (half-extent 1.2), so the
   // corrosion ring must exceed that to sit around the sprite instead of on
   // it; the slow ring is deliberately larger so both stay visible together.
-  static const double _corrodedRingRadiusFactor = 1.25;
-  static const double _slowedRingRadiusFactor = 1.45;
+  static const double _corrodedRingRadiusFactor = 1.9;
+  static const double _slowedRingRadiusFactor = 2.1;
 
   /// Top of the overlay region, measured relative to the enemy center.
   final double originY;
@@ -332,46 +329,34 @@ class EnemyOverlayLayout {
     }
 
     final isExpanded = state.isExpanded;
-    final originY =
-        -radius * (isExpanded ? _expandedOriginFactor : _normalOriginFactor);
+    final baseline = -radius * _spriteClearanceFactor;
     final corrodedRingRadius = state.isCorroded
         ? radius * _corrodedRingRadiusFactor
         : 0.0;
     final slowedRingRadius = state.isSlowed
         ? radius * _slowedRingRadiusFactor
         : 0.0;
-    var cursor = originY;
-    double? firstTop;
-    double lastBottom = originY;
+    var cursor = baseline;
+    var hasBelow = false;
 
-    double? badgesY;
-    double badgeSize = 0;
-    double badgeGap = 0;
-    double badgeCornerRadius = 0;
-    double heavyBadgeCornerRadius = 0;
-    if (state.badges.isNotEmpty) {
-      badgesY = cursor;
-      firstTop ??= cursor;
-      badgeSize =
+    double? shieldBarY;
+    double shieldBarWidth = 0;
+    double shieldBarHeight = 0;
+    if (state.showShieldBar) {
+      shieldBarWidth =
           radius *
-          (isExpanded ? _expandedBadgeSizeFactor : _normalBadgeSizeFactor);
-      badgeGap = radius * _badgeGapFactor;
-      badgeCornerRadius = radius * _badgeCornerRadiusFactor;
-      heavyBadgeCornerRadius = radius * _heavyBadgeCornerRadiusFactor;
-      lastBottom = cursor + badgeSize;
-      cursor +=
-          radius *
-          (isExpanded
-              ? _expandedBadgeAdvanceFactor
-              : _normalBadgeAdvanceFactor);
+          (isExpanded ? _expandedBarWidthFactor : _normalBarWidthFactor);
+      shieldBarHeight = radius * _shieldBarHeightFactor;
+      shieldBarY = cursor - shieldBarHeight;
+      cursor = shieldBarY;
+      hasBelow = true;
     }
 
     double? healthBarY;
     double healthBarWidth = 0;
     double healthBarHeight = 0;
     if (state.showHealthBar) {
-      healthBarY = cursor;
-      firstTop ??= cursor;
+      if (hasBelow) cursor -= radius * _healthTrailingGapFactor;
       healthBarWidth =
           radius *
           (isExpanded ? _expandedBarWidthFactor : _normalBarWidthFactor);
@@ -380,29 +365,31 @@ class EnemyOverlayLayout {
           (isExpanded
               ? _expandedHealthBarHeightFactor
               : _normalHealthBarHeightFactor);
-      lastBottom = cursor + healthBarHeight;
-      cursor +=
-          radius *
-          (isExpanded
-              ? _expandedHealthBarAdvanceFactor
-              : _normalHealthBarAdvanceFactor);
+      healthBarY = cursor - healthBarHeight;
+      cursor = healthBarY;
+      hasBelow = true;
     }
 
-    double? shieldBarY;
-    double shieldBarWidth = 0;
-    double shieldBarHeight = 0;
-    if (state.showShieldBar) {
-      shieldBarY = cursor;
-      firstTop ??= cursor;
-      shieldBarWidth =
+    double? badgesY;
+    double badgeSize = 0;
+    double badgeGap = 0;
+    double badgeCornerRadius = 0;
+    double heavyBadgeCornerRadius = 0;
+    if (state.badges.isNotEmpty) {
+      if (hasBelow) cursor -= radius * _badgeTrailingGapFactor;
+      badgeSize =
           radius *
-          (isExpanded ? _expandedBarWidthFactor : _normalBarWidthFactor);
-      shieldBarHeight = radius * _shieldBarHeightFactor;
-      lastBottom = cursor + shieldBarHeight;
+          (isExpanded ? _expandedBadgeSizeFactor : _normalBadgeSizeFactor);
+      badgeGap = radius * _badgeGapFactor;
+      badgeCornerRadius = radius * _badgeCornerRadiusFactor;
+      heavyBadgeCornerRadius = radius * _heavyBadgeCornerRadiusFactor;
+      badgesY = cursor - badgeSize;
     }
+
+    final firstTop = badgesY ?? healthBarY ?? shieldBarY;
 
     return EnemyOverlayLayout._(
-      originY: originY,
+      originY: firstTop ?? baseline,
       slowedRingRadius: slowedRingRadius,
       corrodedRingRadius: corrodedRingRadius,
       badgesY: badgesY,
@@ -416,7 +403,7 @@ class EnemyOverlayLayout {
       shieldBarY: shieldBarY,
       shieldBarWidth: shieldBarWidth,
       shieldBarHeight: shieldBarHeight,
-      height: firstTop == null ? 0 : lastBottom - firstTop,
+      height: firstTop == null ? 0 : baseline - firstTop,
     );
   }
 }

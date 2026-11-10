@@ -2300,6 +2300,155 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('World Map stays reachable while a build cell is selected', (
+    tester,
+  ) async {
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    await tester.pumpAndSettle();
+
+    const cell = GridPosition(7, 11);
+    game!.handleBoardTap(game!.boardCellCenter(cell));
+    await tester.pump();
+    expect(game!.snapshot.selectedCell, cell);
+    expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+
+    expect(
+      find.byTooltip('World Map'),
+      findsWidgets,
+      reason: 'selecting a build cell must not hide the only map exit',
+    );
+    await tester.tap(find.byTooltip('World Map').last);
+    await tester.pumpAndSettle();
+    expect(find.text('ORION SECTOR'), findsOneWidget);
+  });
+
+  testWidgets('an active wave exposes no actionable map exit', (tester) async {
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    await tester.pumpAndSettle();
+
+    game!.startWave();
+    await tester.pump();
+    expect(game!.snapshot.phase, GamePhase.wave);
+
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      final exits = find.bySemanticsLabel('World Map');
+      for (var index = 0; index < exits.evaluate().length; index += 1) {
+        expect(
+          tester.getSemantics(exits.at(index)),
+          matchesSemantics(
+            label: 'World Map',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: false,
+            hasTapAction: false,
+          ),
+          reason: 'an active wave must never offer an actionable map exit',
+        );
+      }
+    } finally {
+      handle.dispose();
+    }
+
+    final chip = find.byTooltip('World Map');
+    if (chip.evaluate().isNotEmpty) {
+      await tester.tap(chip.last, warnIfMissed: false);
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(game!.snapshot.phase, GamePhase.wave);
+  });
+
+  testWidgets('a paused wave exposes no actionable map exit', (tester) async {
+    OrionDefenseGame? game;
+    await tester.pumpWidget(
+      testGamePage(onGameCreated: (created) => game = created),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester);
+    await tester.pumpAndSettle();
+
+    game!.startWave();
+    game!.togglePause();
+    await tester.pump();
+    expect(game!.snapshot.phase, GamePhase.wave);
+    expect(game!.snapshot.isPaused, isTrue);
+
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pump();
+      final exits = find.bySemanticsLabel('World Map');
+      for (var index = 0; index < exits.evaluate().length; index += 1) {
+        expect(
+          tester.getSemantics(exits.at(index)),
+          matchesSemantics(
+            label: 'World Map',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: false,
+            hasTapAction: false,
+          ),
+          reason: 'a paused wave must never offer an actionable map exit',
+        );
+      }
+    } finally {
+      handle.dispose();
+    }
+
+    final chip = find.byTooltip('World Map');
+    if (chip.evaluate().isNotEmpty) {
+      await tester.tap(chip.last, warnIfMissed: false);
+      await tester.pumpAndSettle();
+    }
+    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(game!.snapshot.isPaused, isTrue);
+  });
+
+  testWidgets(
+    'endless waves past the scripted count still show no first-mission '
+    'guide',
+    (tester) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          firstMissionGuideStore: InMemoryFirstMissionGuideStore(
+            completed: false,
+          ),
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await tester.pumpAndSettle();
+      expect(game!.mode, RunMode.endless);
+      expect(find.byType(FirstMissionGuideCallout), findsNothing);
+
+      await publishEndlessWaveClear(tester, game!, 8);
+      await tester.pumpAndSettle();
+
+      expect(game!.snapshot.waveNumber, 9);
+      expect(game!.snapshot.missionWaveTotal, isNull);
+      expect(find.byType(FirstMissionGuideCallout), findsNothing);
+      expect(find.textContaining('Wave 9 of 8'), findsNothing);
+    },
+  );
+
   testWidgets('Mission failed exit leaves an unsaved breadcrumb', (
     tester,
   ) async {

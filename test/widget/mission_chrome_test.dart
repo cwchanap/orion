@@ -21,6 +21,7 @@ const _productViewport = Size(390, 844);
 Widget chromeHost(
   GameSnapshot snapshot, {
   VoidCallback? onBackgroundTap,
+  VoidCallback? onWorldMap,
   TextScaler textScaler = TextScaler.noScaling,
   Color? backgroundColor,
   ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
@@ -54,7 +55,7 @@ Widget chromeHost(
             child: MissionChrome(
               snapshot: snapshot,
               onBoardTapIntercept: (_) => false,
-              onWorldMap: () {},
+              onWorldMap: onWorldMap ?? () {},
               onStartWave: () {},
               onTogglePause: () {},
               onSpeedSelected: (_) {},
@@ -1158,4 +1159,210 @@ void main() {
       });
     },
   );
+
+  group('world map reachability (HPA-699)', () {
+    Future<void> expectWorldMapEnabled(WidgetTester tester) async {
+      expect(find.byTooltip('World Map'), findsOneWidget);
+      final handle = tester.ensureSemantics();
+      try {
+        await tester.pump();
+        expect(
+          tester.getSemantics(find.bySemanticsLabel('World Map')),
+          matchesSemantics(
+            label: 'World Map',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: true,
+            hasTapAction: true,
+          ),
+        );
+      } finally {
+        handle.dispose();
+      }
+    }
+
+    Future<void> expectNoWorldMapExit(WidgetTester tester) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await tester.pump();
+        final chip = find.bySemanticsLabel('World Map');
+        if (chip.evaluate().isEmpty) return;
+        expect(
+          tester.getSemantics(chip.first),
+          matchesSemantics(
+            label: 'World Map',
+            isButton: true,
+            hasEnabledState: true,
+            isEnabled: false,
+            hasTapAction: false,
+          ),
+          reason: 'an active wave must never offer an actionable map exit',
+        );
+      } finally {
+        handle.dispose();
+      }
+    }
+
+    testWidgets('build phase keeps World Map reachable with nothing selected', (
+      tester,
+    ) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      var mapTaps = 0;
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+          onWorldMap: () => mapTaps += 1,
+        ),
+      );
+      await tester.pump();
+
+      await expectWorldMapEnabled(tester);
+      await tester.tap(find.byTooltip('World Map'));
+      await tester.pump();
+      expect(mapTaps, 1);
+    });
+
+    testWidgets(
+      'build phase keeps World Map reachable with a build cell selected',
+      (tester) async {
+        tester.view.physicalSize = _productViewport;
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+
+        var mapTaps = 0;
+        await tester.pumpWidget(
+          chromeHost(
+            commandDeckSnapshot(
+              selectedCell: const GridPosition(2, 2),
+              nextWavePreview: commandDeckPreview(),
+            ),
+            onWorldMap: () => mapTaps += 1,
+          ),
+        );
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('command-dock-build')),
+          findsOneWidget,
+        );
+        await expectWorldMapEnabled(tester);
+        await tester.tap(find.byTooltip('World Map'));
+        await tester.pump();
+        expect(mapTaps, 1);
+      },
+    );
+
+    testWidgets('build phase keeps World Map reachable with a tower selected', (
+      tester,
+    ) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      const tower = PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(1, 1),
+      );
+      var mapTaps = 0;
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            selectedTower: tower,
+            selectedTowerStats: GameBalance.towerStats(
+              tower.type,
+              level: tower.level,
+            ),
+            nextWavePreview: commandDeckPreview(),
+          ),
+          onWorldMap: () => mapTaps += 1,
+        ),
+      );
+      await tester.pump();
+
+      await expectWorldMapEnabled(tester);
+      await tester.tap(find.byTooltip('World Map'));
+      await tester.pump();
+      expect(mapTaps, 1);
+    });
+
+    testWidgets('an active wave never exposes an actionable map exit', (
+      tester,
+    ) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      var mapTaps = 0;
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(phase: GamePhase.wave),
+          onWorldMap: () => mapTaps += 1,
+        ),
+      );
+      await tester.pump();
+
+      await expectNoWorldMapExit(tester);
+      final chip = find.byTooltip('World Map');
+      if (chip.evaluate().isNotEmpty) {
+        await tester.tap(chip, warnIfMissed: false);
+        await tester.pump();
+      }
+      expect(mapTaps, 0);
+    });
+
+    testWidgets('a paused wave never exposes an actionable map exit', (
+      tester,
+    ) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      var mapTaps = 0;
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(phase: GamePhase.wave, isPaused: true),
+          onWorldMap: () => mapTaps += 1,
+        ),
+      );
+      await tester.pump();
+
+      await expectNoWorldMapExit(tester);
+      final chip = find.byTooltip('World Map');
+      if (chip.evaluate().isNotEmpty) {
+        await tester.tap(chip, warnIfMissed: false);
+        await tester.pump();
+      }
+      expect(mapTaps, 0);
+    });
+
+    testWidgets('pre-wave intel shares the Start Wave band', (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+      );
+      await tester.pump();
+
+      final intel = tester.getRect(find.byType(NextWaveScanner));
+      final start = tester.getRect(find.byTooltip('Start Wave'));
+      expect(
+        (intel.center.dy - start.center.dy).abs(),
+        lessThan(40),
+        reason:
+            'the kit rows intel beside the Start action; the scanner still '
+            'sits in the top band while Start anchors the dock',
+      );
+      expect(
+        intel.right,
+        lessThanOrEqualTo(start.left + 8),
+        reason: 'the intel panel reads left of the Start action',
+      );
+    });
+  });
 }

@@ -16,7 +16,6 @@ Iterable<File> _libDartFiles() sync* {
 }
 
 const _rawColorAllowlist = <String>{
-  'lib/game/ui/mission_command_dock.dart',
   'lib/game/ui/mission_report_panel.dart',
   'lib/game/ui/next_wave_scanner.dart',
   'lib/game/ui/stage_briefing_sheet.dart',

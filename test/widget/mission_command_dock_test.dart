@@ -6,7 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_surface.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 
 import '../support/command_deck_fixtures.dart';
 import '../support/real_fonts.dart';
@@ -701,6 +703,62 @@ void main() {
     expect((pauseTaps, speed, autoTaps, startWaveTaps), (0, 2.0, 1, 1));
   });
 
+  testWidgets('the Start Wave action is the shared amber OrionPrimaryButton', (
+    tester,
+  ) async {
+    var startWaveTaps = 0;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: MissionCommandDock(
+          snapshot: commandDeckSnapshot(),
+          onTogglePause: () {},
+          onSpeedSelected: (_) {},
+          onToggleAutoStart: () {},
+          onStartWave: () => startWaveTaps += 1,
+          onPlaceTower: (_) {},
+          onUpgrade: () {},
+          onSpecialize: (_) {},
+          onTargetingChanged: (_) {},
+          onSell: () {},
+        ),
+      ),
+    );
+
+    final action = find.descendant(
+      of: find.byType(MissionCommandDock),
+      matching: find.byType(OrionPrimaryButton),
+    );
+    expect(
+      action,
+      findsOneWidget,
+      reason:
+          'the kit uses one shared amber primary action for Start Wave, '
+          'not a bespoke pill',
+    );
+    expect(
+      tester.widget<OrionPrimaryButton>(action).variant,
+      OrionButtonVariant.primary,
+    );
+
+    final rect = tester.getRect(action);
+    expect(rect.height, greaterThanOrEqualTo(48));
+    expect(find.byTooltip('Start Wave'), findsOneWidget);
+
+    final handle = tester.ensureSemantics();
+    try {
+      expect(
+        find.bySemanticsLabel('Start Wave'),
+        findsOneWidget,
+        reason: 'the shared button keeps the Start Wave accessible label',
+      );
+    } finally {
+      handle.dispose();
+    }
+
+    await tester.tap(find.byTooltip('Start Wave'));
+    expect(startWaveTaps, 1);
+  });
+
   testWidgets('idle dock shows Resume while paused', (tester) async {
     var pauseTaps = 0;
     await tester.pumpWidget(
@@ -1182,8 +1240,8 @@ void main() {
       );
 
       // Start Wave is the dominant, wide, filled action: 48-56dp tall,
-      // clearly wider than a quarter of the dock, filled cyan with dark
-      // content.
+      // clearly wider than a quarter of the dock, filled with the shared
+      // amber primary gradient and dark ink.
       final startRect = tester.getRect(find.byTooltip('Start Wave'));
       expect(
         startRect.height,
@@ -1212,11 +1270,7 @@ void main() {
       );
       final gradient =
           (fill.decoration as BoxDecoration).gradient! as LinearGradient;
-      expect(gradient.colors, const [
-        Color(0xFF7FF0FF),
-        Color(0xFF13B8E6),
-        Color(0xFF0A7EA3),
-      ]);
+      expect(gradient.colors, orionPrimaryFill.colors);
     },
   );
 

@@ -763,4 +763,28 @@ void main() {
       findsOneWidget,
     );
   });
+
+  testWidgets('endless intel past the scripted count shows scaling, not a '
+      'denominator', (tester) async {
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        scannerHost(
+          commandDeckPreview(
+            waveNumber: 9,
+            missionWaveTotal: null,
+            enemyHealthMultiplier: 1.6,
+          ),
+        ),
+      );
+      await tester.tap(find.byTooltip('Expand next-wave scanner'));
+      await tester.pumpAndSettle();
+
+      expect(find.bySemanticsLabel(RegExp('of 8')), findsNothing);
+      expect(find.bySemanticsLabel('Enemies +60% health'), findsOneWidget);
+      expect(find.text('ENEMIES +60% HEALTH'), findsOneWidget);
+    } finally {
+      handle.dispose();
+    }
+  });
 }

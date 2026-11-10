@@ -171,9 +171,17 @@ void main() {
         find.byKey(const ValueKey('next-wave-scanner-collapsed')),
       );
       expect(
-        bubble.top,
-        greaterThanOrEqualTo(scanner.bottom),
+        bubble.overlaps(scanner),
+        isFalse,
         reason: 'the bubble must not cover the scanner control',
+      );
+      final gap = bubble.top >= scanner.bottom
+          ? bubble.top - scanner.bottom
+          : scanner.top - bubble.bottom;
+      expect(
+        gap,
+        inInclusiveRange(0, 40),
+        reason: 'the bubble must sit against the scanner edge',
       );
     },
   );
@@ -1386,5 +1394,44 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
       await tester.pump(const Duration(milliseconds: 100));
     });
+  });
+
+  testWidgets('an endless build phase never projects the first-mission guide', (
+    tester,
+  ) async {
+    final ref = await _pumpMission(
+      tester,
+      guideStore: InMemoryFirstMissionGuideStore(completed: false),
+      progressStore: await harness.storeWithResults({
+        'outpost-alpha': const StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        ),
+      }),
+      actionLabel: 'Endless',
+    );
+
+    expect(ref.game!.snapshot.isEndless, isTrue);
+    expect(find.byType(FirstMissionGuideCallout), findsNothing);
+    expect(find.text('Skip tutorial'), findsNothing);
+
+    await _project(
+      tester,
+      ref.game!,
+      commandDeckSnapshot(
+        waveNumber: 9,
+        wavesCleared: 8,
+        missionWaveTotal: null,
+        nextWavePreview: commandDeckPreview(
+          waveNumber: 9,
+          missionWaveTotal: null,
+          enemyHealthMultiplier: 1.6,
+        ),
+      ),
+    );
+
+    expect(find.byType(FirstMissionGuideCallout), findsNothing);
+    expect(find.text('Skip tutorial'), findsNothing);
+    expect(find.textContaining('of 8'), findsNothing);
   });
 }

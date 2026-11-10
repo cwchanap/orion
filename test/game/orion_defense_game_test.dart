@@ -363,6 +363,41 @@ void main() {
         );
       });
 
+      test('past the scripted count the snapshot still previews real scaled '
+          'waves', () {
+        final game = OrionDefenseGame(
+          stage: stageWithWaveCount(8),
+          mode: RunMode.endless,
+        );
+        game.onGameResize(Vector2(800, 1200));
+
+        for (var cleared = 0; cleared < 8; cleared += 1) {
+          game.startWave();
+          game.update(0);
+          _selectPendingModuleIfNeeded(game);
+        }
+
+        expect(game.snapshot.wavesCleared, 8);
+        expect(game.snapshot.missionWaveTotal, isNull);
+
+        final preview = game.snapshot.nextWavePreview;
+        expect(preview, isNotNull);
+        expect(preview!.waveNumber, 9);
+        expect(preview.missionWaveTotal, isNull);
+        expect(
+          preview.enemyHealthMultiplier,
+          closeTo(GameBalance.endlessLoopHealthGrowth, 1e-9),
+        );
+
+        game.startWave();
+        game.update(0);
+        _selectPendingModuleIfNeeded(game);
+
+        expect(game.snapshot.wavesCleared, 9);
+        expect(game.snapshot.nextWavePreview!.waveNumber, 10);
+        expect(game.snapshot.missionWaveTotal, isNull);
+      });
+
       test('mission run never calls onEndlessWaveCleared', () {
         final clearedCounts = <int>[];
         var stageWonCalls = 0;

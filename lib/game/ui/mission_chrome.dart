@@ -98,6 +98,7 @@ class _MissionChromeState extends State<MissionChrome> {
   double _topReserve = 0;
   double _bottomReserve = 0;
   double _modulesReserve = 0;
+  bool _scannerDockMounted = false;
   Rect? _lastViewport;
 
   void _scheduleViewportMeasure() {
@@ -129,7 +130,7 @@ class _MissionChromeState extends State<MissionChrome> {
     // renders in any phase — reserve below the lowest top-band control so
     // the board viewport never starts under chrome.
     var top = 8.0;
-    for (final band in [hud, scanner]) {
+    for (final band in [hud, if (!_scannerDockMounted) scanner]) {
       if (band == null) continue;
       final edge =
           box
@@ -177,6 +178,30 @@ class _MissionChromeState extends State<MissionChrome> {
     final isIdle =
         widget.snapshot.selectedCell == null &&
         widget.snapshot.selectedTower == null;
+    final showScanner =
+        widget.snapshot.phase == GamePhase.build &&
+        widget.snapshot.nextWavePreview != null &&
+        widget.snapshot.pendingRunModuleOffer == null &&
+        !widget.snapshot.isEnded;
+    _scannerDockMounted = showScanner && isIdle;
+    NextWaveScanner buildScanner() => NextWaveScanner(
+      key: _scannerKey,
+      preview: widget.snapshot.nextWavePreview!,
+      onStartWave: widget.onStartWave,
+      modifierTitles: widget.snapshot.stageModifiers.isEmpty
+          ? [StageModifierMetadata.standardConditions.title]
+          : widget.snapshot.stageModifiers
+                .map(
+                  (modifier) =>
+                      StageModifierMetadata.forModifier(modifier).title,
+                )
+                .toList(growable: false),
+      collapseRequested:
+          widget.snapshot.selectedCell != null ||
+          widget.snapshot.selectedTower != null,
+      onCollapsedTapIntercept: widget.onBoardTapIntercept,
+      collapsedGuideAnchorKey: widget.scannerGuideAnchorKey,
+    );
     return LayoutBuilder(
       builder: (context, constraints) => Stack(
         children: [
@@ -215,31 +240,9 @@ class _MissionChromeState extends State<MissionChrome> {
                         ),
                       ),
                     ],
-                    if (widget.snapshot.phase == GamePhase.build &&
-                        widget.snapshot.nextWavePreview != null &&
-                        widget.snapshot.pendingRunModuleOffer == null &&
-                        !widget.snapshot.isEnded) ...[
+                    if (showScanner && !isIdle) ...[
                       const SizedBox(width: 6),
-                      NextWaveScanner(
-                        key: _scannerKey,
-                        preview: widget.snapshot.nextWavePreview!,
-                        onStartWave: widget.onStartWave,
-                        modifierTitles: widget.snapshot.stageModifiers.isEmpty
-                            ? [StageModifierMetadata.standardConditions.title]
-                            : widget.snapshot.stageModifiers
-                                  .map(
-                                    (modifier) =>
-                                        StageModifierMetadata.forModifier(
-                                          modifier,
-                                        ).title,
-                                  )
-                                  .toList(growable: false),
-                        collapseRequested:
-                            widget.snapshot.selectedCell != null ||
-                            widget.snapshot.selectedTower != null,
-                        onCollapsedTapIntercept: widget.onBoardTapIntercept,
-                        collapsedGuideAnchorKey: widget.scannerGuideAnchorKey,
-                      ),
+                      buildScanner(),
                     ],
                   ],
                 ),
@@ -311,6 +314,9 @@ class _MissionChromeState extends State<MissionChrome> {
                             enabled: widget.snapshot.phase == GamePhase.build,
                             onWorldMap: widget.onWorldMap,
                           ),
+                          nextWaveIntel: showScanner && isIdle
+                              ? buildScanner()
+                              : null,
                           onTogglePause: widget.onTogglePause,
                           onSpeedSelected: widget.onSpeedSelected,
                           onToggleAutoStart: widget.onToggleAutoStart,
