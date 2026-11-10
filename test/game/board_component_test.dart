@@ -1,7 +1,9 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
+import 'package:flame/flame.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/board_layout.dart';
@@ -38,6 +40,8 @@ Future<List<int>> _rgbaAt(Image image, int x, int y) async {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('BoardComponent.dashed', () {
     test('cuts a line into dash/gap segments', () {
       final result = BoardComponent.dashed(_line(100), dash: 10, gap: 10);
@@ -440,10 +444,12 @@ void main() {
       );
       expect(
         outside[3],
-        0,
+        lessThan(20),
         reason:
-            '0.72C from centre is outside a 1.35C marker; covering it '
-            'means the spawn inherited the core\'s larger size',
+            '0.72C from centre is outside a 1.35C marker: only the kit '
+            'halo\'s faint Gaussian tail may reach it now — an opaque disc '
+            'covering the probe still means the spawn inherited the '
+            'core\'s larger size',
       );
     });
 
@@ -468,8 +474,158 @@ void main() {
       );
       expect(
         outside[3],
-        0,
-        reason: '0.81C from centre is outside a 1.45C marker',
+        lessThan(20),
+        reason:
+            '0.81C from centre is outside a 1.45C marker: only the kit '
+            'halo\'s faint Gaussian tail may reach it now — an opaque disc '
+            'covering the probe still means the core grew past its kit '
+            'size',
+      );
+    });
+  });
+
+  group('BoardComponent board.js acceptance — gaussian lane halo and sprite '
+      'marker drop-shadows (fix round 2)', () {
+    // The binding kit cell size; the blur sigma and drop-shadow radii are
+    // specified in absolute pixels at this scale.
+    const cell = 46.75;
+
+    Future<Image> renderKitBoard({GameSpriteSheet? spriteSheet}) => _rasterize(
+      (BoardLayout.columns * cell).ceil(),
+      (BoardLayout.rows * cell).ceil(),
+      BoardComponent(
+        cellSize: cell,
+        pathCells: BoardLayout.pathCells,
+        spriteSheet: spriteSheet,
+      ).render,
+    );
+
+    test('the lane halo is a gaussian falloff past the .92C band, not four '
+        'hard-edged strokes that end at 0.65C', () async {
+      final image = await renderKitBoard();
+      final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+      int alphaAt(int x, int y) =>
+          data!.getUint8((y * image.width + x) * 4 + 3);
+
+      // Perpendicular scan off the horizontal (0,1)-(3,1) run at
+      // x = 1.25C: clear of the per-cell chevron glyphs (x = 1C/2C/3C),
+      // of both markers, and of the y = 1.0C field-grid line.
+      final x = (1.25 * cell).round();
+
+      // board.js blurs the .92C-wide @.22 glow with
+      // feGaussianBlur stdDeviation=6: the tail still emits a few
+      // percent alpha ~0.24C past the band edge, reaching ~0.85C.
+      // A stepped stack whose widest stroke is 1.30C goes dead at
+      // 0.65C + antialiasing, so rows y ∈ [0.62C, 0.79C] must be dark.
+      var tail = 0;
+      for (var y = (0.62 * cell).ceil(); y <= (0.79 * cell).floor(); y++) {
+        tail += alphaAt(x, y);
+      }
+      expect(
+        tail,
+        greaterThan(0),
+        reason:
+            'the kit halo is a σ=6 gaussian of the .92C stroke — a '
+            'faint cyan tail must still emit between 0.66C and 0.85C '
+            'from the centreline; four stair-stepped strokes end '
+            'hard at 0.65C',
+      );
+
+      // Inside the path-row band the probe sits on the opaque path fill,
+      // so only the tail zone is measurable — and a Gaussian tail decays
+      // with distance where a stepped or uniform band cannot. Compare two
+      // tail samples: nearer the centreline must read strictly stronger.
+      // (Measured under the real σ6 layer: ~8/255 at 0.60C, ~4 at 0.65C,
+      // 0 by 0.76C.)
+      final near = alphaAt(x, (0.90 * cell).round());
+      final far = alphaAt(x, (0.66 * cell).round());
+      expect(
+        near,
+        greaterThanOrEqualTo(5),
+        reason:
+            'the σ6 halo emits a few percent at 0.60C from the '
+            'centreline; a hard band emits nothing past its last stroke',
+      );
+      expect(
+        near,
+        greaterThan(far),
+        reason:
+            'the Gaussian falls off with distance (≈8/255 at 0.60C → 0 at '
+            '0.84C); any uniform-width stroke would read flat across both',
+      );
+    });
+
+    test('the spawn sprite casts the kit cyan drop-shadow beyond its art '
+        'rect', () async {
+      final sheet = GameSpriteSheet.fromImage(
+        await Flame.images.load(GameSpriteSheet.fileName),
+      );
+      final image = await renderKitBoard(spriteSheet: sheet);
+      final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+      int alphaAt(int x, int y) =>
+          data!.getUint8((y * image.width + x) * 4 + 3);
+      int redAt(int x, int y) => data!.getUint8((y * image.width + x) * 4);
+      int blueAt(int x, int y) => data!.getUint8((y * image.width + x) * 4 + 2);
+
+      // Spawn marker at (0.5C, 1.5C); its sprite is clipped to a
+      // 0.675C-radius rect (top edge y = 0.825C). The kit draws
+      // drop-shadow(0 0 12px rgba(70,230,255,.9)) — a strong cyan glow
+      // just past the sprite silhouette. Scan the column above the
+      // marker: the lane halo can only contribute ~2 alpha this far
+      // off the centreline, so ≥8 is the sprite's own shadow.
+      final x = (0.5 * cell).round();
+      var strongCyan = 0;
+      for (var y = (0.62 * cell).ceil(); y <= (0.81 * cell).floor(); y++) {
+        if (alphaAt(x, y) >= 8 && blueAt(x, y) > redAt(x, y)) {
+          strongCyan += 1;
+        }
+      }
+      expect(
+        strongCyan,
+        greaterThan(0),
+        reason:
+            'drop-shadow(0 0 12px rgba(70,230,255,.9)) must bloom the '
+            'spawn sprite cyan past its rect; the sprite is painted '
+            'bare today — no shadow rows found',
+      );
+    });
+
+    test('the core sprite casts the kit amber drop-shadow beyond its art '
+        'rect', () async {
+      final sheet = GameSpriteSheet.fromImage(
+        await Flame.images.load(GameSpriteSheet.fileName),
+      );
+      final image = await renderKitBoard(spriteSheet: sheet);
+
+      // Core marker at (7.5C, 10.5C); its sprite is clipped to a
+      // 0.725C-radius rect. The kit draws
+      // drop-shadow(0 0 16px rgba(255,200,87,.95)) — amber, which the
+      // cyan lane halo cannot fake (cyan reads blue>red). Probe the
+      // annulus off-lane: left, down-left and down of the marker, all
+      // outside the rect but inside the 16px shadow reach.
+      const centre = Offset(7.5 * cell, 10.5 * cell);
+      const dirs = [Offset(-1, 0), Offset(-0.707, 0.707), Offset(0, 1)];
+      var amberGlow = 0;
+      for (final dir in dirs) {
+        for (var r = 0.74; r <= 0.90; r += 0.04) {
+          final x = (centre.dx + dir.dx * r * cell).round();
+          final y = (centre.dy + dir.dy * r * cell).round();
+          if (x < 0 || y < 0 || x >= image.width || y >= image.height) {
+            continue;
+          }
+          final pixel = await _rgbaAt(image, x, y);
+          if (pixel[3] >= 4 && pixel[0] > pixel[2]) {
+            amberGlow += 1;
+          }
+        }
+      }
+      expect(
+        amberGlow,
+        greaterThan(0),
+        reason:
+            'drop-shadow(0 0 16px rgba(255,200,87,.95)) must bloom '
+            'the core sprite amber past its rect; nothing renders '
+            'outside the sprite clip today',
       );
     });
   });

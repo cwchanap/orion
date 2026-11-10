@@ -67,9 +67,23 @@ class BoardComponent extends PositionComponent {
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
   final Paint _pathPaint = Paint()..color = const Color(0xFF56616B);
+  // systemCyan. The lane is the one board element the artboard draws in the
+  // accent, and it is drawn rather than tiled: the path tile art is a
+  // full-cell panel with the channel baked in, so on any board skin the
+  // route reads as grey-on-grey and the player cannot see where enemies go.
+  //
+  // The artboard draws it as two polylines, and the split matters -- a single
+  // fat dashed stroke reads as a pipe, not a route:
+  //
+  //   bed   stroke rgba(70,230,255,.14)  width 28    (no dash)
+  //   core  stroke #46E6FF               width 3.4   dasharray 16 16
+  //         plus drop-shadow(0 0 4px #46E6FF)
+  //
+  // Against the artboard's 49.125px cell those are the _lane* fractions
+  // below. The bed is continuous: it is the channel the dashes travel down.
   // board.js's lane is one stroked path drawn four times, widest to
-  // narrowest: a cyan glow under a steel rim under the dark channel under
-  // the core line, then the flow chevrons on top.
+  // narrowest: a gaussian-blurred cyan halo under a steel rim under the
+  // dark channel under the core line, then the flow chevrons on top.
   final Paint _laneGlowPaint = Paint()
     ..color =
         const Color(0x3846E6FF) // #46E6FF @ 22%
@@ -220,6 +234,9 @@ class BoardComponent extends PositionComponent {
       outerRadiusFactor: _spawnMarkerFactor,
       innerRadiusFactor: 0.30,
       sprite: GameSprite.spawnGate,
+      // board.js: drop-shadow(0 0 12px rgba(70,230,255,.9)).
+      shadowColor: const Color(0xE646E6FF),
+      shadowSigma: 12,
     );
     _renderMarker(
       canvas,
@@ -228,6 +245,9 @@ class BoardComponent extends PositionComponent {
       outerRadiusFactor: _coreMarkerFactor,
       innerRadiusFactor: 0.38,
       sprite: GameSprite.baseReactor,
+      // board.js: drop-shadow(0 0 16px rgba(255,200,87,.95)).
+      shadowColor: const Color(0xF2FFC857),
+      shadowSigma: 16,
     );
 
     if (showsPlacementGrid) {
@@ -236,22 +256,22 @@ class BoardComponent extends PositionComponent {
   }
 
   static const double _kitCellSize = 46.75;
-  static const List<(double, double)> _laneGlowSteps = [
-    (1.30, 0.03),
-    (1.12, 0.07),
-    (1.00, 0.13),
-    (0.92, 0.22),
-  ];
+
+  /// The artboard's lane fractions, against its 49.125px cell.
   static const double _laneRimWidthFactor = 0.8;
   static const double _laneChannelWidthFactor = 0.72;
   static const double _laneCoreWidthFactor = 0.5;
   static const double _spawnMarkerFactor = 1.35 / 2;
   static const double _coreMarkerFactor = 1.45 / 2;
 
+  /// The artboard's lane: a wide, faint, continuous channel with a thin
+  /// bright dashed core running down it. Every dimension scales with
+  /// [cellSize] so the rhythm holds on any board size.
   /// board.js strokes the whole route four times, widest to narrowest, and
-  /// leads it in from the left edge. Its glow blur is drawn as a stepped
-  /// falloff of wider, fainter strokes instead of a mask filter — the same
-  /// soft halo with a bounded edge, and nothing blurred per frame.
+  /// leads it in from the left edge. Its widest pass is the .92C / .22 glow
+  /// under `feGaussianBlur stdDeviation=6` — rasterized once into a
+  /// board-sized layer ([_laneHaloImage]) and composited per frame, so the
+  /// mask filter never runs inside render.
   void _renderLane(Canvas canvas) {
     if (pathCells.length < 2) {
       return;
@@ -266,11 +286,9 @@ class BoardComponent extends PositionComponent {
       centreLine.lineTo(centre.dx, centre.dy);
     }
 
-    for (final (width, alpha) in _laneGlowSteps) {
-      _laneGlowPaint
-        ..strokeWidth = cellSize * width
-        ..color = const Color(0xFF46E6FF).withValues(alpha: alpha);
-      canvas.drawPath(centreLine, _laneGlowPaint);
+    if (cellSize > 0) {
+      final halo = _laneHaloImage ??= _rasterizeLaneHalo(centreLine);
+      canvas.drawImage(halo, Offset.zero, Paint());
     }
     _laneRimPaint.strokeWidth = cellSize * _laneRimWidthFactor;
     _laneChannelPaint.strokeWidth = cellSize * _laneChannelWidthFactor;
@@ -281,6 +299,36 @@ class BoardComponent extends PositionComponent {
       ..drawPath(centreLine, _laneCorePaint);
     _renderFlowChevrons(canvas);
   }
+
+  /// The lane halo layer: the kit's .92C / .22 stroke under its actual
+  /// σ=6 Gaussian (scaled by the board's cell size), baked into an image
+  /// the geometry of which never changes. Compositing the layer each frame
+  /// is a blit, so nothing blurs per frame.
+  Image? _laneHaloImage;
+
+  Image _rasterizeLaneHalo(Path centreLine) {
+    final kit = cellSize / _kitCellSize;
+    _laneGlowPaint
+      ..strokeWidth = cellSize * 0.92
+      ..color =
+          const Color(0x3846E6FF) // #46E6FF @ 22%
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 6 * kit);
+    final recorder = PictureRecorder();
+    Canvas(recorder).drawPath(centreLine, _laneGlowPaint);
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(
+      (BoardLayout.columns * cellSize).ceil(),
+      (BoardLayout.rows * cellSize).ceil(),
+    );
+    picture.dispose();
+    return image;
+  }
+
+  /// Cached drop-shadow layers for the two markers: a blurred silhouette
+  /// of the sprite's own alpha, tinted to the kit shadow color, keyed by
+  /// sprite (each marker uses a distinct sprite at a fixed cell). Like the
+  /// halo, each shadow blurs once and composites as a blit.
+  final Map<GameSprite, (Image, Offset)> _markerShadowCache = {};
 
   /// board.js's flow chevrons: `M -5 -7 L 4 0 L -5 7`, one per cell of each
   /// straight segment, rotated to the segment's direction and dimmed to 35%
@@ -433,6 +481,8 @@ class BoardComponent extends PositionComponent {
     required double outerRadiusFactor,
     required double innerRadiusFactor,
     required GameSprite sprite,
+    required Color shadowColor,
+    required double shadowSigma,
   }) {
     final spriteSheet = this.spriteSheet;
     if (spriteSheet != null) {
@@ -440,12 +490,62 @@ class BoardComponent extends PositionComponent {
         center: cellCenter(position),
         radius: cellSize * outerRadiusFactor,
       );
-      spriteSheet.sprite(sprite).renderRect(canvas, rect);
+      final flameSprite = spriteSheet.sprite(sprite);
+      final (shadow, shadowOffset) = _markerShadowCache.putIfAbsent(
+        sprite,
+        () => _rasterizeMarkerShadow(rect, shadowColor, shadowSigma),
+      );
+      canvas.drawImage(shadow, shadowOffset, Paint());
+      flameSprite.renderRect(canvas, rect);
       return;
     }
 
     final center = cellCenter(position);
     canvas.drawCircle(center, cellSize * outerRadiusFactor, paint);
     canvas.drawCircle(center, cellSize * innerRadiusFactor, _backgroundPaint);
+  }
+
+  /// The marker drop-shadow layer: a solid [shadowColor] silhouette of the
+  /// marker art — the kit sprites are round, so a disc the size of the
+  /// sprite rect is their silhouette — blurred at the kit radius scaled to
+  /// the board's cell size. The raster bounds the marker rect plus a 3σ
+  /// reach so the tail is not clipped.
+  (Image, Offset) _rasterizeMarkerShadow(
+    Rect rect,
+    Color shadowColor,
+    double shadowSigma,
+  ) {
+    final sigma = shadowSigma * cellSize / _kitCellSize;
+    final bounds = rect.inflate(sigma * 3 + 1);
+    final recorder = PictureRecorder();
+    // The cull rect is in the canvas's local (pre-translate) space: cull to
+    // the raster bounds, then shift the absolute-coord draw back to the
+    // image origin so compositing at [bounds.topLeft] lands the shadow over
+    // the marker again.
+    final offscreen = Canvas(recorder, Offset.zero & bounds.size)
+      ..translate(-bounds.left, -bounds.top);
+    offscreen.drawCircle(
+      rect.center,
+      rect.shortestSide / 2,
+      Paint()
+        ..color = shadowColor
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, sigma),
+    );
+    final picture = recorder.endRecording();
+    final image = picture.toImageSync(
+      bounds.width.ceil(),
+      bounds.height.ceil(),
+    );
+    picture.dispose();
+    return (image, bounds.topLeft);
+  }
+
+  @override
+  void onRemove() {
+    _laneHaloImage?.dispose();
+    for (final (image, _) in _markerShadowCache.values) {
+      image.dispose();
+    }
+    super.onRemove();
   }
 }

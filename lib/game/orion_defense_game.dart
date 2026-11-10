@@ -97,6 +97,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   int _spawnedCount = 0;
   int _activeGroupIndex = 0;
   int _spawnedInGroup = 0;
+  int _summonedCount = 0;
   int _nextEnemyId = 1;
   static const double defaultSpeedMultiplier = 1;
   static final Set<double> supportedSpeedMultipliers = Set.unmodifiable({
@@ -943,6 +944,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _spawnedCount = 0;
     _activeGroupIndex = 0;
     _spawnedInGroup = 0;
+    _summonedCount = 0;
   }
 
   bool _tickAutoStartCountdown(double dt) {
@@ -993,9 +995,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _spawnTimer -= dt;
     while (_spawnTimer <= 0 && _spawnedCount < wave.enemyCount) {
       final group = wave.groups[_activeGroupIndex];
-      _spawnEnemy(group.enemyStats);
+      // Count the spawn before _spawnEnemy runs: a boss publishes its
+      // arrival snapshot from inside _spawnEnemy, and the resolved
+      // projection must already include this enemy or the readout
+      // announces a hostile wave larger than scripted.
       _spawnedCount += 1;
       _spawnedInGroup += 1;
+      _spawnEnemy(group.enemyStats);
 
       if (_spawnedInGroup >= group.enemyCount) {
         _activeGroupIndex += 1;
@@ -1099,6 +1105,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _nextEnemyId += 1;
     _activeEnemyComponents[enemy.enemyId] = enemy;
     add(enemy);
+    // Summoned hostiles join the same projected wave state as scripted
+    // spawns: the count keeps resolved >= 0 and the republish makes the
+    // arrival visible to chrome instead of waiting for the next event.
+    _summonedCount += 1;
+    _publishSnapshot();
   }
 
   void _addCombatFeedback(CombatFeedbackComponent feedback) {
@@ -1320,7 +1331,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       speedMultiplier: _speedMultiplier,
       autoStartEnabled: _autoStartEnabled,
       autoStartCountdownRemaining: _autoStartCountdownRemaining,
-      waveEnemiesResolved: _spawnedCount - unresolvedActive,
+      waveEnemiesResolved: _spawnedCount + _summonedCount - unresolvedActive,
+      waveEnemiesSummoned: _summonedCount,
     );
   }
 

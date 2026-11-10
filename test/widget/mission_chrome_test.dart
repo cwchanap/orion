@@ -267,6 +267,105 @@ void main() {
     });
   }
 
+  testWidgets('compact expanded scanner lets the last counters scroll clear of '
+      'START WAVE', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await loadRealFonts();
+    OrionArtDescriptor.resetSpriteCache();
+    await tester.runAsync(() async {
+      await Flame.images.load(GameSpriteSheet.fileName);
+      await Flame.images.load(GameTowerVarietySheet.fileName);
+      await Flame.images.load('orion_boss_sheet.png');
+    });
+
+    // A tall intel scene — boss card, four recommended counters and
+    // modifier chips — so the compact 360x640 scroll really has content
+    // below the fold.
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          waveNumber: 8,
+          wavesCleared: 7,
+          stageModifiers: const [StageModifier.reinforcedArmor],
+          nextWavePreview: commandDeckPreview(
+            waveNumber: 8,
+            groups: [
+              WavePreviewGroup(
+                enemyCount: 18,
+                label: 'Swarm Drones',
+                traits: {EnemyTrait.swarm},
+              ),
+              WavePreviewGroup(
+                enemyCount: 1,
+                label: 'Relay Breaker',
+                traits: {
+                  EnemyTrait.armored,
+                  EnemyTrait.shielded,
+                  EnemyTrait.heavy,
+                },
+              ),
+            ],
+            recommendedTowerTypes: const [
+              TowerType.laser,
+              TowerType.railgun,
+              TowerType.ionChain,
+              TowerType.gravityWell,
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Expand next-wave scanner'));
+    await tester.pumpAndSettle();
+    expect(find.byType(WaveScannerScene), findsOneWidget);
+
+    // Scroll the scene's vertical list to the bottom, then require the
+    // last scrollable row — the final modifier chip — to read fully
+    // above the START WAVE call-to-action.
+    final verticalScroll = find.byWidgetPredicate(
+      (widget) =>
+          widget is SingleChildScrollView &&
+          widget.scrollDirection == Axis.vertical,
+    );
+    final scrollState = tester.state<ScrollableState>(
+      find.descendant(
+        of: verticalScroll,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Scrollable && widget.axis == Axis.vertical,
+        ),
+      ),
+    );
+    scrollState.position.jumpTo(scrollState.position.maxScrollExtent);
+    await tester.pump();
+    final cta = tester.getRect(find.text('START WAVE'));
+    final lastChip = tester.getRect(find.text('Reinforced Armor'));
+    final lastCounter = tester.getRect(find.text('Gravity Well'));
+    expect(
+      lastChip.bottom,
+      lessThanOrEqualTo(cta.top),
+      reason:
+          'the last scrollable row must clear the START WAVE CTA; '
+          'a card left half-hidden is unreadable intel',
+    );
+    expect(
+      lastCounter.bottom,
+      lessThanOrEqualTo(cta.top),
+      reason:
+          'the last recommended counter must scroll fully clear of '
+          'the START WAVE CTA at compact height',
+    );
+    expect(
+      lastCounter.bottom,
+      greaterThanOrEqualTo(cta.top - 140),
+      reason:
+          'clearance should be tight: if the counter now sits far '
+          'above the CTA the scroll overshot and hid content',
+    );
+  });
+
   testWidgets('mission actions render their labels fully at product width', (
     tester,
   ) async {
@@ -628,6 +727,83 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(viewport!.top, collapsedTop);
+    },
+  );
+
+  testWidgets(
+    'selecting a cell keeps the board viewport identical and never lets '
+    'the relocated scanner overlap it',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      final viewports = <Rect>[];
+      Widget host(GameSnapshot snapshot) =>
+          chromeHost(snapshot, onBoardViewportChanged: viewports.add);
+
+      final idle = commandDeckSnapshot(nextWavePreview: commandDeckPreview());
+      await tester.pumpWidget(host(idle));
+      await tester.pump();
+      await tester.pump();
+      final idleViewport = viewports.last;
+
+      var scannerRect = tester.getRect(find.byType(NextWaveScanner));
+      expect(
+        scannerRect.overlaps(idleViewport),
+        isFalse,
+        reason: 'the dock-mounted scanner must stay clear of the board',
+      );
+
+      // Selecting a build cell relocates the scanner out of the dock. The
+      // relocation is chrome's own problem: the board viewport must not
+      // shift or shrink while it happens.
+      await tester.pumpWidget(
+        host(
+          commandDeckSnapshot(
+            nextWavePreview: commandDeckPreview(),
+            selectedCell: const GridPosition(4, 5),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(
+        viewports.last,
+        idleViewport,
+        reason:
+            'the board must hold its viewport while the scanner relocates; '
+            'a reserve that grows the top edge shrinks the playfield',
+      );
+      scannerRect = tester.getRect(find.byType(NextWaveScanner));
+      expect(
+        scannerRect.overlaps(viewports.last),
+        isFalse,
+        reason:
+            'wherever the scanner lands during selection it must not '
+            'cover board cells',
+      );
+
+      await tester.pumpWidget(host(idle));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump();
+      expect(
+        viewports.last,
+        idleViewport,
+        reason:
+            'idle → selected → idle must return the exact viewport '
+            'rectangle',
+      );
+      scannerRect = tester.getRect(find.byType(NextWaveScanner));
+      expect(
+        scannerRect.overlaps(viewports.last),
+        isFalse,
+        reason:
+            'the scanner back in the dock must not cover board cells '
+            'either',
+      );
     },
   );
 
@@ -1457,8 +1633,8 @@ void main() {
     });
   });
 
-  testWidgets('idle, selected, then idle again restores the board viewport the '
-      'dock-mounted scanner gave up', (tester) async {
+  testWidgets('idle, selected, then idle again never moves the board '
+      'viewport while the scanner stays dock-hosted', (tester) async {
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -1485,7 +1661,13 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(find.byType(NextWaveScanner), findsOneWidget);
-    expect(viewports.last.top, greaterThan(idleViewport.top));
+    expect(
+      viewports.last,
+      idleViewport,
+      reason:
+          'the scanner stays dock-hosted through the selection now — '
+          'the board viewport must not move at all',
+    );
 
     await tester.pumpWidget(
       host(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),

@@ -148,9 +148,10 @@ class _MissionChromeState extends State<MissionChrome> {
                   )
                   .dy +
               8;
-    // The scanner's top-band mount is transient the same way: a selection
-    // moves it under the HUD, clearing the selection returns it to the dock,
-    // so its reserve must release instead of joining the baseline.
+    // The scanner lives inside the dock in every state now — idle it rides
+    // the idle bar, a selection parks it as a collapsed chip in the rail
+    // row — so it can never claim top-band reserve. The reserve math stays
+    // in case a future mount moves it back above the board.
     _scannerReserve = _scannerDockMounted || scanner == null
         ? 0
         : box
@@ -188,7 +189,7 @@ class _MissionChromeState extends State<MissionChrome> {
         widget.snapshot.nextWavePreview != null &&
         widget.snapshot.pendingRunModuleOffer == null &&
         !widget.snapshot.isEnded;
-    _scannerDockMounted = showScanner && isIdle;
+    _scannerDockMounted = showScanner;
     NextWaveScanner buildScanner() => NextWaveScanner(
       key: _scannerKey,
       preview: widget.snapshot.nextWavePreview!,
@@ -244,10 +245,6 @@ class _MissionChromeState extends State<MissionChrome> {
                           onExpandedChanged: (_) => _scheduleViewportMeasure(),
                         ),
                       ),
-                    ],
-                    if (showScanner && !isIdle) ...[
-                      const SizedBox(width: 6),
-                      buildScanner(),
                     ],
                   ],
                 ),
@@ -319,9 +316,7 @@ class _MissionChromeState extends State<MissionChrome> {
                             enabled: widget.snapshot.phase == GamePhase.build,
                             onWorldMap: widget.onWorldMap,
                           ),
-                          nextWaveIntel: showScanner && isIdle
-                              ? buildScanner()
-                              : null,
+                          nextWaveIntel: showScanner ? buildScanner() : null,
                           onTogglePause: widget.onTogglePause,
                           onSpeedSelected: widget.onSpeedSelected,
                           onToggleAutoStart: widget.onToggleAutoStart,

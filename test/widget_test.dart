@@ -12,8 +12,10 @@ import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
+import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
+import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
@@ -6134,6 +6136,189 @@ void main() {
         expect(topCell.dy, greaterThan(hudRect.bottom));
         expect(bottomCell.dy, lessThan(dockRect.top));
       }
+    });
+  }
+
+  // Fix-round-2 evidence: a live fighting boss, not a staged intel card.
+  // The fixture mounts a real OrionDefenseGame on a fixture stage whose
+  // wave one is the real GameBalance.relayBreaker inside the same
+  // GameWidget + MissionChrome composition the page builds, so the PNG
+  // shows a live EnemyComponent walking the lane — health and shield
+  // bars, trait badges, status rings — alongside its summoned minions.
+  for (final viewSize in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('capture fighting-boss evidence fixture $viewSize', (
+      tester,
+    ) async {
+      final boundaryKey = GlobalKey();
+      tester.view.physicalSize = viewSize;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      await _warmGameImages(tester);
+      addTearDown(() async {
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pump(const Duration(milliseconds: 100));
+      });
+
+      final game = OrionDefenseGame(
+        stage: StageDefinition(
+          id: 'boss-fight-fixture',
+          name: 'Boss Fight Fixture',
+          mapLabel: 'Boss',
+          description: 'Real summoning boss opening wave one',
+          pathCells: BoardLayout.pathCells,
+          waves: const [
+            WaveDefinition(
+              groups: [
+                WaveGroup(enemyCount: 1, enemyStats: GameBalance.relayBreaker),
+              ],
+              clearBonus: 40,
+            ),
+            // A trailing empty wave keeps the run open after the boss.
+            WaveDefinition(groups: [], clearBonus: 0),
+          ],
+          mapColumn: 0,
+          mapRow: 0,
+        ),
+      );
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: MaterialApp(
+            // The product app hides this banner; a fixture host must too.
+            debugShowCheckedModeBanner: false,
+            theme: orionThemeData,
+            home: Scaffold(
+              body: SafeArea(
+                child: ValueListenableBuilder<GameSnapshot>(
+                  valueListenable: game.stateNotifier,
+                  builder: (context, snapshot, _) => Stack(
+                    children: [
+                      Positioned.fill(child: GameWidget(game: game)),
+                      Positioned.fill(
+                        child: MissionChrome(
+                          snapshot: snapshot,
+                          onBoardTapIntercept: (_) => false,
+                          onWorldMap: game.returnToMap,
+                          onStartWave: game.startWave,
+                          onTogglePause: game.togglePause,
+                          onSpeedSelected: game.setSpeedMultiplier,
+                          onToggleAutoStart: game.toggleAutoStart,
+                          onPlaceTower: game.placeTower,
+                          onUpgrade: game.upgradeSelectedTower,
+                          onSpecialize: game.specializeSelectedTower,
+                          onTargetingChanged: game.setTargetingMode,
+                          onSell: game.sellSelectedTower,
+                          onBoardViewportChanged: (viewport) {
+                            if (!viewport.isEmpty) {
+                              game.setBoardViewport(viewport);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(game.isMounted, isTrue);
+
+      game.startWave();
+      await tester.pump();
+      expect(game.snapshot.phase, GamePhase.wave);
+
+      // Advance until Relay Breaker's first summon lands (its real
+      // firstDelay of 4s): the capture must show a live boss with real
+      // minions on the lane.
+      await advanceUntil(
+        tester,
+        game,
+        (snapshot) => game.children
+            .whereType<EnemyComponent>()
+            .where((enemy) => enemy.minionOf != null && !enemy.isResolved)
+            .isNotEmpty,
+      );
+      final enemies = game.children.whereType<EnemyComponent>().toList();
+      final boss = enemies.singleWhere(
+        (enemy) => enemy.stats is BossDefinition,
+      );
+      expect(boss.isAlive, isTrue, reason: 'the boss must be fighting');
+      expect(
+        boss.overlayState.shouldRender,
+        isTrue,
+        reason: 'a live boss paints its overlay chrome',
+      );
+      expect(
+        boss.overlayState.showShieldBar && boss.overlayState.shieldRatio > 0,
+        isTrue,
+        reason:
+            'Relay Breaker enters shielded: the fixture must show its '
+            'live shield bar, not a generic health bar alone',
+      );
+      expect(boss.overlayState.showHealthBar, isTrue);
+      expect(
+        boss.stats.traits,
+        containsAll(<EnemyTrait>{
+          EnemyTrait.armored,
+          EnemyTrait.shielded,
+          EnemyTrait.heavy,
+        }),
+        reason: 'the real trait set feeds the overlay badges and rings',
+      );
+      expect(
+        enemies
+            .where((enemy) => enemy.minionOf != null && !enemy.isResolved)
+            .length,
+        greaterThan(0),
+        reason: 'real summoned minions share the lane in the fixture',
+      );
+
+      // Geometry evidence beside the PNG: the HUD clears every top-row
+      // cell, the dock clears every bottom-row cell, and the fighting
+      // boss sits inside the reported board viewport band.
+      final hudRect = tester.getRect(
+        find.byKey(const ValueKey('mission-status-hud')),
+      );
+      final dockRect = tester.getRect(find.byType(MissionCommandDock));
+      final gameRect = tester.getRect(find.bySubtype<GameWidget>());
+      for (var column = 0; column < BoardLayout.columns; column++) {
+        final topCell =
+            gameRect.topLeft + game.boardCellCenter(GridPosition(column, 0));
+        final bottomCell =
+            gameRect.topLeft +
+            game.boardCellCenter(GridPosition(column, BoardLayout.rows - 1));
+        expect(topCell.dy, greaterThan(hudRect.bottom));
+        expect(bottomCell.dy, lessThan(dockRect.top));
+      }
+      final bossCell = game.boardCellAt(boss.position.toOffset());
+      expect(
+        bossCell,
+        isNotNull,
+        reason: 'the live boss must be walking the lane',
+      );
+      final bossPoint = gameRect.topLeft + game.boardCellCenter(bossCell!);
+      expect(
+        bossPoint.dy > hudRect.bottom && bossPoint.dy < dockRect.top,
+        isTrue,
+        reason:
+            'the fighting boss renders inside the board band, clear of '
+            'the chrome the PNG photographs it under',
+      );
+
+      final suffix = viewSize.height < 700 ? '-compact' : '';
+      // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
+      // real async engine work and deadlocks the FakeAsync zone otherwise.
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundaryKey,
+          'fixture-boss-fight$suffix.png',
+        ),
+      );
     });
   }
 }

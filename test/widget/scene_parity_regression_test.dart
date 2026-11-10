@@ -567,7 +567,7 @@ void main() {
           () => captureReactorRimFixture(boundary, 'mounted-radial.png'),
         );
         if (action == 'gap tap') {
-          const cell = GridPosition(2, 2);
+          const cell = GridPosition(2, 3);
           final point = game.boardCellCenter(cell);
           expect(rect.contains(point), isTrue);
           for (final element

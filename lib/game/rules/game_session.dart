@@ -136,6 +136,7 @@ class GameSession {
     bool autoStartEnabled = false,
     double? autoStartCountdownRemaining,
     int waveEnemiesResolved = 0,
+    int waveEnemiesSummoned = 0,
   }) {
     final waveNumber = mode == RunMode.endless
         ? _waveIndex + 1
@@ -165,9 +166,11 @@ class GameSession {
       waveNumber: waveNumber,
       missionWaveTotal: missionWaveTotal,
       wavesCleared: clearedWaveCount,
-      waveHostilesTotal: waveRunning ? wave.enemyCount : null,
+      waveHostilesTotal: waveRunning
+          ? wave.enemyCount + waveEnemiesSummoned
+          : null,
       waveHostilesRemaining: waveRunning
-          ? wave.enemyCount - waveEnemiesResolved
+          ? wave.enemyCount + waveEnemiesSummoned - waveEnemiesResolved
           : null,
       waveClearBonus: waveRunning
           ? _effectiveClearBonus(wave.clearBonus)
