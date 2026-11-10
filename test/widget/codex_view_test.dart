@@ -141,9 +141,6 @@ void main() {
   testWidgets('the shared shell shows a Codex tab that reports selection', (
     tester,
   ) async {
-    // Codex navigation moved off the map's utility rail into the shared
-    // menu shell's tab bar: tapping the Codex tab reports the destination
-    // for the page to switch views.
     final selected = <OrionMenuDestination>[];
     await tester.pumpWidget(
       MaterialApp(

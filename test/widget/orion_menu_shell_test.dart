@@ -47,8 +47,6 @@ void main() {
       ),
     );
 
-    // The shared campaign readouts live in the top chrome on every
-    // destination — not per-view.
     expect(find.text('4/15'), findsOneWidget);
     expect(find.text('7'), findsOneWidget);
     expect(find.bySemanticsLabel('4 of 15 campaign medals'), findsOneWidget);
@@ -82,8 +80,6 @@ void main() {
       OrionMenuDestination.sectors,
     ]);
 
-    // The active destination reads as selected in the semantics tree so
-    // assistive tech can announce it.
     expect(
       tester
           .widget<Semantics>(
@@ -112,14 +108,11 @@ void main() {
       ),
     );
 
-    // The tabs stay visible (the player can see where they are) but report
-    // nothing — navigation must not interleave with a campaign write.
     for (final tab in const ['Map', 'R&D', 'Codex']) {
       await tester.tap(find.byTooltip(tab));
     }
     expect(selected, isEmpty);
 
-    // The settings gear is independent of campaign busy state.
     await tester.tap(find.byTooltip('Settings'));
     expect(settingsTaps, 1);
   });
@@ -142,6 +135,32 @@ void main() {
     expect(selected, [OrionMenuDestination.codex]);
   });
 
+  testWidgets('landscape side insets reach the embedded destination view', (
+    tester,
+  ) async {
+    EdgeInsets? bodyPadding;
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          padding: EdgeInsets.only(left: 40, right: 20, top: 24),
+          viewPadding: EdgeInsets.only(left: 40, right: 20, top: 24),
+        ),
+        child: buildShell(
+          child: Builder(
+            builder: (context) {
+              bodyPadding = MediaQuery.paddingOf(context);
+              return const SizedBox.expand();
+            },
+          ),
+        ),
+      ),
+    );
+
+    expect(bodyPadding, isNotNull);
+    expect(bodyPadding!.left, 40);
+    expect(bodyPadding!.right, 20);
+  });
+
   testWidgets('the shared breadcrumb line renders between chrome and child', (
     tester,
   ) async {
@@ -161,7 +180,6 @@ void main() {
     final tabRect = tester.getRect(find.byTooltip('Map'));
     final childRect = tester.getRect(find.byKey(const ValueKey('shell-child')));
 
-    // Stacked in the fixed order: top bar, breadcrumb, child, tab bar.
     expect(feedbackRect.top, greaterThanOrEqualTo(gearRect.bottom));
     expect(childRect.top, greaterThanOrEqualTo(feedbackRect.bottom));
     expect(tabRect.top, greaterThanOrEqualTo(childRect.bottom));

@@ -119,13 +119,13 @@ class _WorldMapViewState extends State<WorldMapView> {
             child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
           ),
           Positioned.fill(
-            // The header stays fixed above the scrolling region — it must
-            // never scroll away, because the transient feedback line has to
-            // be reachable at every scroll offset. (An earlier revision put
-            // the header inside the scrollable flow, which also let the
-            // feedback line resize the chart each time it appeared.) Menu
-            // navigation lives in the shared shell's tabs, so there is no
-            // per-view utility rail here any more.
+            // The header and utility rail stay fixed above the scrolling
+            // region — they must never scroll away, because the transient
+            // feedback line and the Codex/Tech Tree/Reset/Settings controls
+            // have to be reachable at every scroll offset. (An earlier
+            // revision put the header inside the scrollable flow, which
+            // also let the feedback line resize the chart each time it
+            // appeared.)
             //
             // The chart and the destination footer share ONE vertical
             // scroll region. The plot is sized to the space the footer
@@ -263,11 +263,6 @@ class _WorldMapViewState extends State<WorldMapView> {
                                     14,
                                     12,
                                     14,
-                                    // The footer sits under the shell's own
-                                    // bottom chrome; its bottom pad stays
-                                    // tight so chart+footer still fits a
-                                    // common portrait height without
-                                    // scrolling.
                                     10,
                                   ),
                                   child: _MissionDestination(
@@ -432,10 +427,6 @@ class _SectorHeader extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // CSS flex-wrap analogue: title and badges flow inline until the
-        // row cannot hold them, then the trailing children wrap to a second
-        // line instead of overflowing — a two-badge + challenge state is
-        // wider than a 320px map even at 1x text.
         Wrap(
           spacing: 6,
           runSpacing: 4,
@@ -451,8 +442,6 @@ class _SectorHeader extends StatelessWidget {
               'Orion Sector',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              // Same dense-map clamp as the badges so an extreme system
-              // scale caps the wordmark instead of starving the badges.
               textScaler: MediaQuery.textScalerOf(
                 context,
               ).clamp(maxScaleFactor: 1.3),
@@ -611,10 +600,6 @@ class _HeaderBadge extends StatelessWidget {
   }
 }
 
-/// A star-chart node. Its layout box stays the exact rect SectorMapLayout
-/// assigns — route joins and tap targets never move — while the arcade
-/// chrome (NEXT flag, pulse rings, name chip, medal pips) is free to
-/// overhang the rect edges the way the mock's absolutely-placed layers do.
 class _IllustratedStageNode extends StatelessWidget {
   const _IllustratedStageNode({
     super.key,
@@ -631,9 +616,6 @@ class _IllustratedStageNode extends StatelessWidget {
   final StageProgressStatus status;
   final StageResult? result;
 
-  /// True when the shared recommender steers to this stage. Combined with
-  /// the unlocked status inside the node, so a cleared replay fallback
-  /// never wears the NEXT flag.
   final bool isNext;
   final bool isBusy;
   final ValueChanged<StageDefinition> onStageSelected;
@@ -721,11 +703,6 @@ class _IllustratedStageNode extends StatelessWidget {
                           left: 0,
                           right: 0,
                           child: Center(
-                            // scaleDown keeps the capsule at spec size for
-                            // normal text and shrinks it as a unit when a
-                            // large system scale would overflow the node's
-                            // aperture — the flag floats, so it may shrink,
-                            // never clip or push layout.
                             child: FittedBox(
                               fit: BoxFit.scaleDown,
                               child: _NextFlag(
@@ -832,9 +809,6 @@ class _IllustratedStageNode extends StatelessWidget {
   }
 }
 
-/// Static pulse ring around the recommended node's orb (the mock draws a
-/// 108px and a 132px echo ring; animation stays out so reduced-motion
-/// players get the same readout).
 class _PulseRing extends StatelessWidget {
   const _PulseRing({required this.diameter, required this.width});
 
@@ -862,8 +836,6 @@ class _PulseRing extends StatelessWidget {
   }
 }
 
-/// The kit's `.tag` NEXT flag: a solid cyan capsule with dark ink, floating
-/// above the recommended node's orb.
 class _NextFlag extends StatelessWidget {
   const _NextFlag({super.key});
 
@@ -884,8 +856,6 @@ class _NextFlag extends StatelessWidget {
           const SizedBox(width: 2),
           Text(
             'NEXT',
-            // Same dense-map clamp as the name chip: the capsule is a
-            // fixed 20px flag, so unbounded system text would overflow it.
             textScaler: MediaQuery.textScalerOf(
               context,
             ).clamp(maxScaleFactor: 1.15),
@@ -900,8 +870,6 @@ class _NextFlag extends StatelessWidget {
   }
 }
 
-/// The kit's `.name` chip: a small dark pill carrying the sector number and
-/// the node's short label, edge-tinted for the recommended target.
 class _NodeNameChip extends StatelessWidget {
   const _NodeNameChip({
     required this.stage,
@@ -961,9 +929,6 @@ class _NodeNameChip extends StatelessWidget {
   }
 }
 
-/// Bronze/silver/gold pips under a cleared node's name chip: pip i fills
-/// when the earned medal rank covers tier i (clear = bronze, silver,
-/// gold), so a silver medal reads bronze+silver+empty like the kit's.
 class _MedalPips extends StatelessWidget {
   const _MedalPips({required this.rank});
 
@@ -996,10 +961,8 @@ class _MedalPips extends StatelessWidget {
   }
 }
 
-/// Star-chart crest orb: circular aperture holding the square-cropped
-/// stage key art, ringed by the status color with the kit's per-state
-/// glow — cleared reads gold, the recommended target reads cyan and
-/// oversized, an open side stage reads violet, locked stays dim steel.
+/// Star-chart crest node: a circular aperture holding the square-cropped
+/// stage key art, ringed by the integrated status/medal color (artboard 1f).
 class _StageOrb extends StatelessWidget {
   const _StageOrb({
     super.key,
@@ -1030,7 +993,6 @@ class _StageOrb extends StatelessWidget {
       size: Size.square(artSize),
     );
     if (isLocked) {
-      // grayscale(1) brightness(.45) from the kit's `.orb.locked img`.
       art = Stack(
         fit: StackFit.expand,
         children: [
@@ -1128,10 +1090,6 @@ class SectorRoutePainter extends CustomPainter {
       final to = nodeRects[route.to.id]?.topCenter.translate(0, 38);
       if (from == null || to == null) continue;
 
-      // Per-state routes from the kit: cleared legs run solid gold, the
-      // open main leg runs dashed cyan with a glow, an open side leg runs
-      // dashed violet, and locked legs stay dim steel. Routes are purely
-      // decorative conduits — the nodes remain the only hit targets.
       final isCleared = route.medal != null;
       final color = isCleared
           ? uiTheme.creditGold
@@ -1309,10 +1267,9 @@ class _MissionDestination extends StatelessWidget {
                       children: [
                         Text(
                           'SECTOR ${(stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
-                          // Two clamped lines, not one unclamped: at 3x
-                          // system text the single line ellipsized the
-                          // qualifier (the informative part) inside the
-                          // ~110px column.
+                          // Two clamped lines, not one unclamped: at 3x system
+                          // text the single line ellipsized the qualifier (the
+                          // informative part) inside the ~110px column.
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           textScaler: MediaQuery.textScalerOf(
@@ -1362,9 +1319,6 @@ class _MissionDestination extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 12),
-            // The kit's full-width Deploy action: the card as a whole stays
-            // one semantic 'Briefing' target, and the button is the visual
-            // call-out inside it.
             ExcludeSemantics(
               child: OrionPrimaryButton(
                 label: 'Deploy',

@@ -37,11 +37,7 @@ class OrionPrimaryButton extends StatefulWidget {
 
   final bool loading;
 
-  /// Minimum tappable height; the scene CTA default is 60, compact slots
-  /// (title card, map mission card) pass a smaller value.
   final double height;
-
-  /// microLabel size for the label text (13 default, 12 on compact slots).
   final double labelSize;
 
   @override

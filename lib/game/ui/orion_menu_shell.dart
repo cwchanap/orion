@@ -3,17 +3,8 @@ import 'package:flutter/material.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-/// The menu destinations the shared shell switches between. The page owns
-/// which view is mounted for each destination; the shell only reports taps
-/// and renders which destination is active.
 enum OrionMenuDestination { sectors, research, codex }
 
-/// Shared chrome around the map, R&D, and codex views: a top bar carrying
-/// the campaign resource chips plus the Settings action, a persistent
-/// breadcrumb line, and a bottom Map / R&D / Codex tab bar. One Scaffold
-/// owns the SafeArea insets so the embedded views stay flat bodies instead
-/// of nested scaffolds — a view's own SafeArea resolves to a no-op inside
-/// [child] because the shell strips ambient padding first.
 class OrionMenuShell extends StatelessWidget {
   const OrionMenuShell({
     super.key,
@@ -29,37 +20,24 @@ class OrionMenuShell extends StatelessWidget {
     this.feedback,
   });
 
-  /// Which tab reads as active; the page swaps [child] on selection.
   final OrionMenuDestination destination;
 
-  /// Campaign medals earned (main-path medal ranks total).
   final int medalEarned;
 
-  /// Campaign medals available (main-path count x3).
   final int medalTotal;
 
-  /// Unspent research points shown in the top bar.
   final int researchPoints;
 
-  /// Reports a tab tap; the page decides whether to switch views.
   final ValueChanged<OrionMenuDestination> onDestinationSelected;
 
-  /// Settings gear tap; null renders the gear disabled.
   final VoidCallback? onOpenSettings;
 
-  /// The view body for the active destination.
   final Widget child;
 
-  /// False while a campaign save/reset is in flight: the tabs stay visible
-  /// but inert so navigation cannot interleave with a write.
   final bool navigationEnabled;
 
-  /// False while a feedback-preferences save is in flight: only the
-  /// settings gear is inert — map destinations stay available.
   final bool settingsEnabled;
 
-  /// Transient status line shared by every destination (locked-stage,
-  /// persistence, and save breadcrumbs), rendered under the top bar.
   final String? feedback;
 
   @override
@@ -77,14 +55,10 @@ class OrionMenuShell extends StatelessWidget {
           ),
           if (feedback != null) _FeedbackLine(message: feedback!),
           Expanded(
-            // The shell's own SafeArea already consumed every ambient inset,
-            // so an embedded view's own SafeArea must not double-apply them.
             child: MediaQuery.removePadding(
               context: context,
               removeTop: true,
               removeBottom: true,
-              removeLeft: true,
-              removeRight: true,
               child: child,
             ),
           ),
@@ -99,8 +73,6 @@ class OrionMenuShell extends StatelessWidget {
   }
 }
 
-/// `.topbar` from the kit: a flat dark plate, resource chips left, the
-/// Settings gear pinned right.
 class _TopBar extends StatelessWidget {
   const _TopBar({
     required this.medalEarned,
@@ -153,8 +125,6 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-/// `.chip` from the kit: a compact rounded plate carrying one icon + a
-/// count. Shared by the shell's top bar and the title's campaign card.
 class OrionResourceChip extends StatelessWidget {
   const OrionResourceChip({
     super.key,
@@ -189,9 +159,6 @@ class OrionResourceChip extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 count,
-                // The chip is a fixed 28px slot; unbounded system text
-                // would burst the top bar. Same dense-chrome clamp the
-                // map uses.
                 textScaler: MediaQuery.textScalerOf(
                   context,
                 ).clamp(maxScaleFactor: 1.3),
@@ -205,8 +172,6 @@ class OrionResourceChip extends StatelessWidget {
   }
 }
 
-/// The small ghost-plate icon button used for the Settings gear. Kit's
-/// `.btn.ghost` compressed to a 40px square.
 class _GhostIconButton extends StatelessWidget {
   const _GhostIconButton({
     required this.tooltip,
@@ -252,8 +217,6 @@ class _GhostIconButton extends StatelessWidget {
   }
 }
 
-/// `.tabbar` from the kit: three tabs pinned to the bottom edge. The active
-/// tab takes the ghost plate; the rest stay quiet muted.
 class _TabBar extends StatelessWidget {
   const _TabBar({
     required this.destination,
@@ -370,17 +333,11 @@ class _Tab extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             label,
-                            // A third of the bar is ~97px on a phone; the
-                            // label clamps like the other dense-chrome text
-                            // instead of bleeding off its tab.
                             textScaler: MediaQuery.textScalerOf(
                               context,
                             ).clamp(maxScaleFactor: 1.3),
                             style: OrionTypography.microLabel(
                               size: 10.5,
-                              // microLabel is muted-only; the active tab
-                              // takes the system's navigation accent
-                              // instead of the kit's literal white.
                               color: selected
                                   ? uiTheme.systemCyan
                                   : uiTheme.textMuted,
@@ -400,8 +357,6 @@ class _Tab extends StatelessWidget {
   }
 }
 
-/// The persistent breadcrumb under the top bar — same role the map's old
-/// fixed-header feedback line played, now shared by every destination.
 class _FeedbackLine extends StatelessWidget {
   const _FeedbackLine({required this.message});
 

@@ -220,9 +220,6 @@ void main() {
   testWidgets(
     'tapping Reset Campaign pops the typed reset intent without saving',
     (tester) async {
-      // The sheet only reports intent: confirmation and the reset itself are
-      // orchestrated by the page, so the row carries the current draft along
-      // for the ordered save-then-reset flow.
       FeedbackSettingsResult? popped;
       await tester.pumpWidget(
         MaterialApp(
@@ -251,8 +248,6 @@ void main() {
       await tester.tap(find.text('Open'));
       await tester.pumpAndSettle();
 
-      // Draft edits ride along with the reset intent: the page saves them
-      // before the reset starts.
       await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
       await tester.pump();
       await tester.ensureVisible(find.text('Reset Campaign'));

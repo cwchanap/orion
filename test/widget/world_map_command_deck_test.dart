@@ -38,8 +38,6 @@ CampaignProgress mainCompleteProgress({
   },
 );
 
-/// The tooltips the shell's chrome exposes when [buildMap] mounts the map
-/// inside it: the three destination tabs plus the top-bar Settings gear.
 const shellControlTooltips = ['Map', 'R&D', 'Codex', 'Settings'];
 
 Widget buildMap({
@@ -88,9 +86,6 @@ Widget buildMap({
             data: MediaQuery.of(context).copyWith(textScaler: textScaler),
             child: child!,
           ),
-    // inShell mirrors production: the map is the shell's flat body between
-    // the resource top bar and the destination tabs. The bare path keeps
-    // map-internal geometry tests free of chrome chrome they do not own.
     home: inShell
         ? OrionMenuShell(
             destination: OrionMenuDestination.sectors,
@@ -126,8 +121,6 @@ void main() {
       );
       await tester.pump();
       final titleRect = tester.getRect(find.text('ORION SECTOR'));
-      // The shell's bottom Codex tab is the chrome control nearest the
-      // map title now that the utility rail is gone.
       final codexRect = tester.getRect(find.byTooltip('Codex'));
       final feedbackRect = tester.getRect(
         find.text('Singularity Core is locked.'),
@@ -393,12 +386,7 @@ void main() {
             );
           }
 
-          // The reached footer is functional, not merely painted. The card
-          // can be taller than the scroll viewport at extreme text scales,
-          // leaving its semantic center above the fold under the fixed
-          // header; a real player taps the Deploy action pinned at the
-          // card's bottom edge — which is the part now on screen. Both
-          // targets dispatch the same selection callback.
+          // The reached footer is functional, not merely painted.
           final briefingLabel = tester
               .widget<Semantics>(destination)
               .properties
@@ -1427,10 +1415,6 @@ void main() {
   testWidgets('shell chrome invokes navigation and settings callbacks', (
     tester,
   ) async {
-    // The utility rail is gone: Map/R&D/Codex moved into the shell's bottom
-    // tab bar (reported as destinations) and Settings into the top-bar gear.
-    // Reset Campaign no longer has a chrome button — it lives inside the
-    // Settings sheet.
     final destinations = <OrionMenuDestination>[];
     var settings = 0;
     await tester.pumpWidget(
