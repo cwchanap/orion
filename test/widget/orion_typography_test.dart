@@ -20,8 +20,6 @@ void main() {
   });
 
   test('the shared text shadow lives in the theme tokens', () {
-    // The one shadow every type role carries so contrast never depends on a
-    // surface fill; the literal color lives once in orion_ui_theme.dart.
     expect(
       OrionTypography.shadow,
       const Shadow(
@@ -41,8 +39,6 @@ void main() {
       expect(s.fontVariations, contains(const FontVariation('wght', 800)));
       expect(s.fontSize, 24);
       expect(s.shadows, isNotEmpty);
-      // Oxanium has no U+2192 glyph; Chakra Petch does, so comparison arrows
-      // ('18 → 20') must fall back per-style, not per call site.
       expect(s.fontFamilyFallback, ['ChakraPetch']);
     },
   );
@@ -59,8 +55,6 @@ void main() {
     final s = OrionTypography.microLabel();
     expect(s.fontFamily, 'ChakraPetch');
     expect(s.fontWeight, FontWeight.w700);
-    // The kit's type scale says "min 10px": the label role's default is the
-    // floor, never the old 8px step.
     expect(s.fontSize, 10);
     expect(s.letterSpacing! / s.fontSize!, inInclusiveRange(0.14, 0.24));
   });
@@ -123,9 +117,6 @@ void main() {
       return painter.width;
     }
 
-    // The bundled ChakraPetch-Bold owns the arrow Oxanium lacks, so a readout
-    // arrow must measure at Chakra Petch's advance — i.e. the fallback in the
-    // style, not whatever the engine would pick up next.
     final readoutArrow = widthOf(
       OrionTypography.readout(size: 24, color: const Color(0xFFF4F8FB)),
     );
@@ -140,9 +131,6 @@ void main() {
     expect(chakraArrow, greaterThan(0));
     expect(readoutArrow, closeTo(chakraArrow, 0.01));
 
-    // And the title role shares the same fallback, so '→' survives there
-    // too. The comparison style carries the title's tracking because
-    // letterSpacing is part of the advance, not the glyph.
     final titleArrow = widthOf(
       OrionTypography.title(size: 20, color: const Color(0xFFF4F8FB)),
     );

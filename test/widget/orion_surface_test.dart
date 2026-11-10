@@ -1,4 +1,8 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
@@ -36,11 +40,120 @@ BoxDecoration surfaceDecoration(WidgetTester tester) {
       as BoxDecoration;
 }
 
+typedef Shot = ({int width, int height, ByteData bytes});
+
+Future<Shot> shotOf(WidgetTester tester, GlobalKey key) async {
+  late Shot shot;
+  await tester.runAsync(() async {
+    final boundary =
+        key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: 1);
+    shot = (
+      width: image.width,
+      height: image.height,
+      bytes: (await image.toByteData(format: ui.ImageByteFormat.rawRgba))!,
+    );
+    image.dispose();
+  });
+  return shot;
+}
+
+int channel(Shot shot, int x, int y, int c) =>
+    shot.bytes.getUint8((y * shot.width + x) * 4 + c);
+
 void main() {
+  test('edge bands land inside the deflated frame', () async {
+    const size = Size(50, 30);
+    Future<ui.Image> paint({
+      Color? top,
+      double? tw,
+      Color? bottom,
+      double? bw,
+    }) {
+      final recorder = ui.PictureRecorder();
+      OrionInsetEdgePainter(
+        borderRadius: BorderRadius.circular(4),
+        inset: 2,
+        topColor: top,
+        topWidth: tw ?? 0,
+        bottomColor: bottom,
+        bottomWidth: bw ?? 0,
+      ).paint(Canvas(recorder), size);
+      return recorder.endRecording().toImage(
+        size.width.toInt(),
+        size.height.toInt(),
+      );
+    }
+
+    Future<int> alphaAt(ui.Image image, int x, int y) async {
+      final bytes = (await image.toByteData(
+        format: ui.ImageByteFormat.rawRgba,
+      ))!;
+      return bytes.getUint8((y * image.width + x) * 4 + 3);
+    }
+
+    final topImage = await paint(top: const Color(0xFF000000), tw: 2);
+    addTearDown(topImage.dispose);
+    expect(await alphaAt(topImage, 25, 3), 255);
+    final bottomImage = await paint(bottom: const Color(0xFF000000), bw: 4);
+    addTearDown(bottomImage.dispose);
+    expect(await alphaAt(bottomImage, 25, 24), 255);
+    expect(await alphaAt(bottomImage, 25, 25), 255);
+  });
+
+  testWidgets('card paints its lit top edge inside the frame', (t) async {
+    final key = GlobalKey();
+    await t.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: key,
+            child: OrionSurface(
+              role: OrionSurfaceRole.card,
+              radius: 8,
+              padding: EdgeInsets.zero,
+              child: const SizedBox(width: 80, height: 48),
+            ),
+          ),
+        ),
+      ),
+    );
+    final shot = await shotOf(t, key);
+    final x = shot.width ~/ 2;
+    expect(
+      channel(shot, x, 2, 0) - channel(shot, x, 6, 0),
+      greaterThan(4),
+      reason: 'the .card top glint must land inside the 1.5px frame',
+    );
+  });
+
+  testWidgets('sheet paints its lit top edge inside the frame', (t) async {
+    final key = GlobalKey();
+    await t.pumpWidget(
+      MaterialApp(
+        home: Center(
+          child: RepaintBoundary(
+            key: key,
+            child: OrionSurface(
+              role: OrionSurfaceRole.sheet,
+              radius: 8,
+              padding: EdgeInsets.zero,
+              child: const SizedBox(width: 80, height: 48),
+            ),
+          ),
+        ),
+      ),
+    );
+    final shot = await shotOf(t, key);
+    final x = shot.width ~/ 2;
+    expect(
+      channel(shot, x, 2, 0) - channel(shot, x, 6, 0),
+      greaterThan(4),
+      reason: 'the .panel top glint must land inside the 1.5px frame',
+    );
+  });
+
   test('exactly four semantic roles exist', () {
-    // The kit's surface vocabulary: floating controls on live art, content
-    // cards, scene-covering sheets and the dock shelf. The old t1-t4 blur
-    // tier names are gone for good.
     expect(OrionSurfaceRole.values, [
       OrionSurfaceRole.floating,
       OrionSurfaceRole.card,
@@ -89,7 +202,6 @@ void main() {
     final border = decoration.border! as Border;
     expect(border.top.color, orionCardEdge);
     expect(border.top.width, 1.5);
-    // The 0 3px 0 bottom lip is the card's depth cue.
     expect(
       decoration.boxShadow,
       contains(
@@ -114,7 +226,6 @@ void main() {
     expect(border.top.color, orionPanelEdge);
     expect(border.top.width, 1.5);
     expect(decoration.boxShadow, orionPanelShadow);
-    // The kit's restrained .br corner brackets ride on the framed panel.
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('surface')),
@@ -154,6 +265,9 @@ void main() {
       (decoration.gradient! as LinearGradient).colors,
       orionShelfFill.colors,
     );
+    // Border(top: ...) leaves left/right/bottom at BorderSide.none, unlike
+    // Border.fromBorderSide (the default), which sets all four sides equal
+    // to the same visible side.
     final border = decoration.border! as Border;
     expect(border.top.color, orionShelfEdge);
     expect(border.top.style, BorderStyle.solid);
@@ -174,8 +288,6 @@ void main() {
     );
     final decoration = surfaceDecoration(t);
     expect(decoration.borderRadius, BorderRadius.circular(10));
-    // The kit's border-box model: content sits `padding` inside the 1.5px
-    // frame, so 4/2 padding lands 5.5/3.5 in from the surface's outer edge.
     final surfaceRect = t.getRect(find.byKey(const ValueKey('surface')));
     final childRect = t.getRect(
       find.descendant(

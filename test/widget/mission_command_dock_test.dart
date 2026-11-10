@@ -448,8 +448,6 @@ void main() {
     await tester.pumpWidget(railHost());
 
     expect(find.byType(BackdropFilter), findsNothing);
-    // Each tile is a card surface; the rail itself stays unframed inside the
-    // dock shelf that already owns the scene's chrome.
     final tile = find.descendant(
       of: find.byKey(const ValueKey('tower-card-laser')),
       matching: find.byType(OrionSurface),
@@ -1175,8 +1173,6 @@ void main() {
 
       final dockRect = tester.getRect(find.byType(IdleCommandBar));
       expect(dockRect.height, lessThanOrEqualTo(80));
-      // The idle bar is unboxed: its controls ride on the dock shelf rather
-      // than carrying chrome of their own.
       expect(
         find.descendant(
           of: find.byType(IdleCommandBar),
