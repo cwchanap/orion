@@ -39,7 +39,6 @@ class BoardBackdropComponent extends PositionComponent {
       destination,
       Paint()
         ..colorFilter = const ColorFilter.matrix([
-          // brightness(.62) saturate(1.1), luma-weighted
           0.668794,
           -0.044341,
           -0.004453,
@@ -64,9 +63,6 @@ class BoardBackdropComponent extends PositionComponent {
     );
 
     final centre = destination.center;
-    // radial-gradient(75% 60% at 50% 50%, transparent 40%, rgba(3,6,10,.75)
-    // 100%): an ellipse whose radii are 75% of the width and 60% of the
-    // height, not a circle. The unit-radius gradient is scaled onto it.
     final vignette = Matrix4.identity()
       ..translateByDouble(centre.dx, centre.dy, 0, 1)
       ..scaleByDouble(destination.width * 0.75, destination.height * 0.6, 1, 1);

@@ -187,12 +187,6 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
 
-      // The expanded scanner's boss card over the mission chrome bands, at
-      // both target portraits. A live boss fight needs the full Alpha run to
-      // reach, so this captures the real boss-intel path: the real
-      // MissionChrome + NextWaveScanner + Relay Breaker preview group (the
-      // boss stage Alpha's final wave actually brings), art resolved from
-      // the real sprite sheets.
       await loadRealFonts();
       OrionArtDescriptor.resetSpriteCache();
       await tester.runAsync(() async {
@@ -244,16 +238,12 @@ void main() {
       await tester.pump();
 
       final suffix = viewSize.height < 700 ? '-compact' : '';
-      // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
-      // real async engine work and deadlocks the FakeAsync zone otherwise.
       await tester.runAsync(
         () => captureReactorRimFixture(
           boundaryKey,
           'fixture-boss-intel$suffix.png',
         ),
       );
-      // The expanded scanner is a full-field overlay, so clearance evidence
-      // is that its boss card reads fully inside the viewport at both sizes.
       for (final finder in [
         find.bySemanticsLabel('Relay Breaker'),
         find.textContaining('BOSS'),
@@ -280,9 +270,6 @@ void main() {
       await Flame.images.load('orion_boss_sheet.png');
     });
 
-    // A tall intel scene — boss card, four recommended counters and
-    // modifier chips — so the compact 360x640 scroll really has content
-    // below the fold.
     await tester.pumpWidget(
       chromeHost(
         commandDeckSnapshot(
@@ -322,9 +309,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(WaveScannerScene), findsOneWidget);
 
-    // Scroll the scene's vertical list to the bottom, then require the
-    // last scrollable row — the final modifier chip — to read fully
-    // above the START WAVE call-to-action.
     final verticalScroll = find.byWidgetPredicate(
       (widget) =>
           widget is SingleChildScrollView &&
@@ -755,9 +739,6 @@ void main() {
         reason: 'the dock-mounted scanner must stay clear of the board',
       );
 
-      // Selecting a build cell relocates the scanner out of the dock. The
-      // relocation is chrome's own problem: the board viewport must not
-      // shift or shrink while it happens.
       await tester.pumpWidget(
         host(
           commandDeckSnapshot(
@@ -988,9 +969,6 @@ void main() {
       addTearDown(tester.view.reset);
       final semantics = tester.ensureSemantics();
       try {
-        // Review ruling: selection collapses AND disables the scanner — it
-        // must not be re-enabled while a cell or tower is selected — and the
-        // board viewport must not move across select/deselect.
         final viewports = <Rect>[];
         Widget host(GameSnapshot snapshot) =>
             chromeHost(snapshot, onBoardViewportChanged: viewports.add);
@@ -1019,7 +997,6 @@ void main() {
         final idleViewport = viewports.last;
         await expectScannerEnabled(true);
 
-        // Idle control really toggles: expand, then collapse back down.
         await tester.tap(find.byTooltip('Expand next-wave scanner'));
         await tester.pumpAndSettle();
         expect(
@@ -1043,8 +1020,6 @@ void main() {
             findsNothing,
           );
           await expectScannerEnabled(false);
-          // The pointer layer must agree with semantics: the collapsed
-          // control sits under an active IgnorePointer.
           final scanner = find.byType(NextWaveScanner);
           final blocker = find.descendant(
             of: scanner,
@@ -1057,7 +1032,6 @@ void main() {
             findsOneWidget,
             reason: 'a selected cell must leave the scanner untappable',
           );
-          // A real tap attempt cannot expand it either.
           await tester.tap(
             find.byTooltip('Expand next-wave scanner'),
             warnIfMissed: false,
@@ -1070,7 +1044,6 @@ void main() {
           );
         }
 
-        // A build-cell selection collapses and disables it.
         await tester.pumpWidget(
           host(
             commandDeckSnapshot(
@@ -1089,7 +1062,6 @@ void main() {
           reason: 'selection must not move or resize the board viewport',
         );
 
-        // A tower selection keeps the same disabled contract.
         const tower = PlacedTower(
           id: 1,
           type: TowerType.laser,
@@ -1117,7 +1089,6 @@ void main() {
           reason: 'tower selection must not move the viewport either',
         );
 
-        // Deselecting restores the enabled, expandable scanner.
         await tester.pumpWidget(host(idle));
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 400));
