@@ -55,6 +55,7 @@ Widget testGamePage({
   ModuleOfferPicker? moduleOfferPicker,
   ValueChanged<OrionDefenseGame>? onGameCreated,
   GameFeedback gameFeedback = const NoOpGameFeedback(),
+  bool startOnWorldMap = true,
 }) {
   return MaterialApp(
     // The product app hides this banner; a fixture host must too, or the
@@ -66,6 +67,10 @@ Widget testGamePage({
     // match the shipped app.
     theme: orionThemeData,
     home: OrionGamePage(
+      // Map-first by default: the shipped game boots into the title, but
+      // this suite's fixtures were authored map-first. Title coverage opts
+      // out explicitly (see title_screen_test).
+      startOnWorldMap: startOnWorldMap,
       progressStore: progressStore,
       progressStoreLoader: progressStoreLoader,
       feedbackPreferencesStore: feedbackPreferencesStore,
@@ -81,6 +86,16 @@ Widget testGamePage({
       gameFeedback: gameFeedback,
     ),
   );
+}
+
+/// Opens the Settings sheet and taps its 'Reset Campaign' row, leaving the
+/// reset confirmation dialog on screen. The shared shell owns Settings now;
+/// reset no longer has a direct map rail button.
+Future<void> openResetCampaignDialog(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Settings'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Reset Campaign'));
+  await tester.pumpAndSettle();
 }
 
 Future<void> startStageFromBriefing(
@@ -634,6 +649,7 @@ void main() {
               child: child!,
             ),
             home: OrionGamePage(
+              startOnWorldMap: true,
               progressStore: InMemoryCampaignProgressStore(
                 knownStages: OrionCampaign.stages,
               ),
@@ -1305,8 +1321,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
 
     expect(findOrionTitle('Reset Campaign'), findsOneWidget);
     expect(find.text('Clear all campaign progress?'), findsOneWidget);
@@ -1336,8 +1351,7 @@ void main() {
     });
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
 
     expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsOneWidget);
     expect(find.byType(OrionSurface), findsWidgets);
@@ -1947,8 +1961,7 @@ void main() {
       await tester.tap(find.byTooltip('World Map').last);
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetCampaignDialog(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -1997,7 +2010,7 @@ void main() {
     await tester.tap(find.byTooltip('World Map').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
     if (find.text('Purchase').evaluate().isEmpty) {
       await tester.tap(
@@ -2549,8 +2562,7 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -2558,6 +2570,7 @@ void main() {
     expect(store.progress.isCleared('outpost-alpha'), isFalse);
 
     // Without the committed clear the briefing no longer offers Endless.
+    await tester.ensureVisible(find.text('Alpha'));
     await tester.tap(find.text('Alpha'));
     await tester.pumpAndSettle();
     expect(find.byTooltip('Start Mission'), findsOneWidget);
@@ -3149,7 +3162,7 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
     if (find.text('Purchase').evaluate().isEmpty) {
       await tester.tap(
@@ -3160,18 +3173,21 @@ void main() {
     await tester.tap(find.text('Purchase'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    await tester.tap(find.byTooltip('Back'));
+    // The shell's destination tabs are inert while the purchase write is in
+    // flight, so the map — and therefore any stage launch — stays unreachable.
+    await tester.tap(find.byTooltip('Map'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Relay'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('ORION SECTOR'), findsNothing);
     expect(find.byTooltip('Start Wave'), findsNothing);
     expect(find.byTooltip('Start Mission'), findsNothing);
     expect(find.byTooltip('Replay Mission'), findsNothing);
 
     store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    // Once the write settles, navigation is restored and the stage launches.
+    await tester.tap(find.byTooltip('Map'));
     await tester.pumpAndSettle();
 
     await startStageFromBriefing(
@@ -3198,7 +3214,7 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
       if (find.text('Purchase').evaluate().isEmpty) {
         await tester.tap(
@@ -3240,7 +3256,7 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
       if (find.text('Purchase').evaluate().isEmpty) {
         await tester.tap(
@@ -3321,7 +3337,7 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
       if (find.text('Purchase').evaluate().isEmpty) {
         await tester.tap(
@@ -3332,7 +3348,7 @@ void main() {
       await tester.tap(find.text('Purchase'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-      await tester.tap(find.byTooltip('Back'));
+      await tester.tap(find.byTooltip('Map'));
       await tester.pumpAndSettle();
 
       // The Reset button is disabled while the save is in flight. Drain the
@@ -3340,8 +3356,7 @@ void main() {
       store.saveCompletions.single.complete();
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetCampaignDialog(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -3378,7 +3393,7 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
     if (find.text('Purchase').evaluate().isEmpty) {
       await tester.tap(
@@ -3389,7 +3404,7 @@ void main() {
     await tester.tap(find.text('Purchase'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byTooltip('Map'));
     await tester.pumpAndSettle();
 
     // Drain the pending save first; the Reset button is disabled while
@@ -3397,8 +3412,7 @@ void main() {
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -3418,8 +3432,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -3452,8 +3465,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -3468,9 +3480,7 @@ void main() {
     expect(find.byTooltip('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
 
-    final resetButton = find.byTooltip('Reset Campaign');
-    await tester.tap(resetButton);
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
 
     // No second reset was triggered.
     expect(store.resetCalls, 1);
@@ -3501,7 +3511,7 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
 
       if (find.text('Purchase').evaluate().isEmpty) {
@@ -3519,7 +3529,7 @@ void main() {
       expect(find.text('Purchase'), findsOneWidget);
 
       // _mapFeedback: return to the map and confirm the breadcrumb survives.
-      await tester.tap(find.byTooltip('Back'));
+      await tester.tap(find.byTooltip('Map'));
       await tester.pumpAndSettle();
 
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
@@ -3545,7 +3555,7 @@ void main() {
       await tester.pumpWidget(testGamePage(progressStore: store));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
 
       // First purchase attempt fails (save index 0).
@@ -3584,7 +3594,7 @@ void main() {
       // Round-4 review P2: the failed purchase also wrote the breadcrumb into
       // _mapFeedback. Returning to the world map after the successful retry
       // must NOT still show the stale failure.
-      await tester.tap(find.byTooltip('Back'));
+      await tester.tap(find.byTooltip('Map'));
       await tester.pumpAndSettle();
 
       expect(find.text('ORION SECTOR'), findsOneWidget);
@@ -3663,67 +3673,26 @@ void main() {
     ]);
   });
 
-  testWidgets('Tech Tree button fires onOpenTechTree', (tester) async {
-    var tapped = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: WorldMapView(
-            stages: const [],
-            progress: CampaignProgress(),
-            feedback: null,
-            onStageSelected: (_) {},
-            onResetCampaign: () {},
-            onOpenTechTree: () => tapped++,
-          ),
-        ),
-      ),
-    );
-
-    // Wired callback → button is visible and tappable.
-    await tester.tap(find.byTooltip('Tech Tree'));
-    expect(tapped, 1);
-  });
-
-  testWidgets('Tech Tree button is hidden when onOpenTechTree is null', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: WorldMapView(
-            stages: const [],
-            progress: CampaignProgress(),
-            feedback: null,
-            onStageSelected: (_) {},
-            onResetCampaign: () {},
-          ),
-        ),
-      ),
-    );
-
-    expect(find.byTooltip('Tech Tree'), findsNothing);
-  });
-
   testWidgets(
-    'tapping Tech Tree button opens TechTreeView and back returns to map',
+    'tapping the R&D tab opens TechTreeView and the Map tab returns',
     (tester) async {
       await tester.pumpWidget(testGamePage());
       await tester.pumpAndSettle();
 
-      // Sanity: button is present on the world map header.
-      expect(find.byTooltip('Tech Tree'), findsOneWidget);
+      // The shared shell's tab bar is present on the world map.
+      expect(find.byTooltip('R&D'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
 
       // TechTreeView is now rendered (T12): its header appears and the
-      // world-map header is replaced.
+      // world-map header is replaced; the shell's tabs persist.
       expect(findOrionTitle('R & D'), findsOneWidget);
       expect(find.text('ORION SECTOR'), findsNothing);
+      expect(find.byTooltip('Map'), findsOneWidget);
 
-      // The back arrow returns the player to the world map.
-      await tester.tap(find.byTooltip('Back'));
+      // The Map tab returns the player to the world map.
+      await tester.tap(find.byTooltip('Map'));
       await tester.pumpAndSettle();
 
       expect(find.text('ORION SECTOR'), findsOneWidget);
@@ -3750,7 +3719,6 @@ void main() {
             feedback: null,
             onStageSelected: (_) {},
             onLockedStageSelected: (_) {},
-            onResetCampaign: () {},
           ),
         ),
       ),
@@ -3788,7 +3756,6 @@ void main() {
             feedback: null,
             onStageSelected: (stage) => selected.add(stage.id),
             onLockedStageSelected: (stage) => locked.add(stage.id),
-            onResetCampaign: () {},
           ),
         ),
       ),
@@ -3818,7 +3785,6 @@ void main() {
             progress: CampaignProgress(),
             feedback: null,
             onStageSelected: (_) {},
-            onResetCampaign: () {},
           ),
         ),
       ),
@@ -3856,7 +3822,6 @@ void main() {
               isSavingProgress: true,
               onStageSelected: (stage) => selected.add(stage.id),
               onLockedStageSelected: (stage) => locked.add(stage.id),
-              onResetCampaign: () {},
             ),
           ),
         ),
@@ -4411,8 +4376,7 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetCampaignDialog(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -4546,12 +4510,16 @@ void main() {
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
-    // The save is still pending: the Settings button is disabled and the
-    // prior effective value is untouched.
-    IconButton settingsButton() => tester.widget<IconButton>(
-      find.widgetWithIcon(IconButton, Icons.settings_rounded),
+    // The save is still pending: the Settings gear is disabled and the
+    // prior effective value is untouched. The shell's gear is a custom
+    // ghost-plate InkWell under its Tooltip, not an IconButton.
+    InkWell settingsGear() => tester.widget<InkWell>(
+      find.descendant(
+        of: find.byTooltip('Settings'),
+        matching: find.byType(InkWell),
+      ),
     );
-    expect(settingsButton().onPressed, isNull);
+    expect(settingsGear().onTap, isNull);
     expect(
       feedbackStore.value,
       const FeedbackPreferences(
@@ -4560,11 +4528,11 @@ void main() {
       ),
     );
 
-    // Release the save; the button re-enables and the new value is
+    // Release the save; the gear re-enables and the new value is
     // effective in the reopened sheet.
     feedbackStore.saveCompletions.single.complete();
     await tester.pumpAndSettle();
-    expect(settingsButton().onPressed, isNotNull);
+    expect(settingsGear().onTap, isNotNull);
 
     await tester.tap(find.byTooltip('Settings'));
     await tester.pumpAndSettle();
@@ -4612,8 +4580,7 @@ void main() {
       findsOneWidget,
     );
 
-    await tester.tap(find.byTooltip('Reset Campaign'));
-    await tester.pumpAndSettle();
+    await openResetCampaignDialog(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await tester.pumpAndSettle();
 
@@ -4636,6 +4603,142 @@ void main() {
       ),
     );
   });
+
+  testWidgets(
+    'a changed settings draft finishes saving before the reset dialog '
+    'opens',
+    (tester) async {
+      // Ordered intents (Task 2): the Reset Campaign row carries the draft
+      // out of the sheet, the page commits the preference save FIRST, and
+      // only then does the reset confirmation appear — the reset's queue
+      // drain can never race an in-flight preference write.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+      );
+      final feedbackStore = _DelayedFeedbackPreferencesStore(
+        value: const FeedbackPreferences(hapticsEnabled: false),
+      );
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          feedbackPreferencesStore: feedbackStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
+      await tester.pump();
+      await tester.tap(find.text('Reset Campaign'));
+      await tester.pumpAndSettle();
+
+      // The preference save is in flight: no confirmation dialog yet, and
+      // no reset has run.
+      expect(feedbackStore.saveCompletions, hasLength(1));
+      expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsNothing);
+      expect(store.resetCalls, 0);
+
+      // Releasing the save lets the flow reach the confirmation.
+      feedbackStore.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('reset-campaign-dialog')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+
+      expect(store.resetCalls, 1);
+      expect(
+        feedbackStore.value,
+        const FeedbackPreferences(hapticsEnabled: true),
+      );
+      expect(find.text('Campaign reset.'), findsOneWidget);
+    },
+  );
+
+  testWidgets(
+    'a failed settings save shows the error and never opens the reset '
+    'dialog',
+    (tester) async {
+      // Save failure vetoes the reset flow: showing the reset confirmation
+      // after the write failed would look like the preference change went
+      // through. The draft is discarded; the error breadcrumb surfaces.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+      );
+      final feedbackStore = _FailingFeedbackPreferencesStore();
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          feedbackPreferencesStore: feedbackStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
+      await tester.pump();
+      await tester.tap(find.text('Reset Campaign'));
+      await tester.pumpAndSettle();
+
+      // Save failed: the breadcrumb is up, and the confirmation never
+      // opened — no reset ran.
+      expect(find.text('Could not save feedback settings.'), findsOneWidget);
+      expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsNothing);
+      expect(store.resetCalls, 0);
+    },
+  );
+
+  testWidgets(
+    'cancelling the reset dialog keeps the already-saved preferences',
+    (tester) async {
+      // The preference save commits before the confirmation opens; a later
+      // Cancel abandons only the reset intent, never the persisted draft.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+      );
+      final feedbackStore = InMemoryFeedbackPreferencesStore(
+        value: const FeedbackPreferences(hapticsEnabled: false),
+      );
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          feedbackPreferencesStore: feedbackStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
+      await tester.pump();
+      await tester.tap(find.text('Reset Campaign'));
+      await tester.pumpAndSettle();
+
+      // The draft already committed; the dialog is the only remaining gate.
+      expect(
+        find.byKey(const ValueKey('reset-campaign-dialog')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(store.resetCalls, 0);
+      expect(
+        feedbackStore.value,
+        const FeedbackPreferences(hapticsEnabled: true),
+      );
+      expect(find.text('Campaign reset.'), findsNothing);
+    },
+  );
 
   testWidgets('feedback preferences load failure falls back to defaults', (
     tester,
@@ -4730,6 +4833,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: OrionGamePage(
+          startOnWorldMap: true,
           progressStore: InMemoryCampaignProgressStore(
             knownStages: OrionCampaign.stages,
           ),
@@ -4787,6 +4891,7 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: OrionGamePage(
+            startOnWorldMap: true,
             progressStore: InMemoryCampaignProgressStore(
               knownStages: OrionCampaign.stages,
             ),
@@ -4848,6 +4953,7 @@ void main() {
           data: const MediaQueryData(disableAnimations: true),
           child: MaterialApp(
             home: OrionGamePage(
+              startOnWorldMap: true,
               progressStore: campaignStore,
               feedbackPreferencesStore: feedbackStore,
               gameFeedback: const NoOpGameFeedback(),
@@ -4893,6 +4999,7 @@ void main() {
           data: const MediaQueryData(disableAnimations: false),
           child: MaterialApp(
             home: OrionGamePage(
+              startOnWorldMap: true,
               progressStore: campaignStore,
               feedbackPreferencesStore: feedbackStore,
               gameFeedback: const NoOpGameFeedback(),
@@ -5469,6 +5576,7 @@ void main() {
           debugShowCheckedModeBanner: false,
           theme: orionThemeData,
           home: OrionGamePage(
+            startOnWorldMap: true,
             progressStore: _TestCampaignProgressStore(
               loadError: StateError('campaign load failed'),
             ),
@@ -5522,6 +5630,7 @@ void main() {
         debugShowCheckedModeBanner: false,
         theme: orionThemeData,
         home: OrionGamePage(
+          startOnWorldMap: true,
           onGameCreated: (value) => game = value,
           gameFeedback: const NoOpGameFeedback(),
         ),
@@ -5559,8 +5668,7 @@ void main() {
       await tester.pumpWidget(testGamePage(firstMissionGuideStore: guideStore));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetCampaignDialog(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
 
@@ -5600,8 +5708,7 @@ void main() {
       // The Alpha-result inference is frozen into the guide store at load.
       expect(guideStore.completed, isTrue);
 
-      await tester.tap(find.byTooltip('Reset Campaign'));
-      await tester.pumpAndSettle();
+      await openResetCampaignDialog(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
       expect(guideStore.completed, isTrue);

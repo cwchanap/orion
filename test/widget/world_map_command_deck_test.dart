@@ -10,6 +10,7 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/campaign_presentation.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_menu_shell.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/world_map_view.dart';
@@ -37,22 +38,45 @@ CampaignProgress mainCompleteProgress({
   },
 );
 
+/// The tooltips the shell's chrome exposes when [buildMap] mounts the map
+/// inside it: the three destination tabs plus the top-bar Settings gear.
+const shellControlTooltips = ['Map', 'R&D', 'Codex', 'Settings'];
+
 Widget buildMap({
   required CampaignProgress progress,
   List<StageDefinition>? stages,
   CampaignModifiers? campaignModifiers,
   ValueChanged<StageDefinition>? onStageSelected,
   ValueChanged<StageDefinition>? onLockedStageSelected,
-  VoidCallback? onResetCampaign,
-  VoidCallback? onOpenTechTree,
-  VoidCallback? onOpenCodex,
+  ValueChanged<OrionMenuDestination>? onDestinationSelected,
   VoidCallback? onOpenSettings,
   String? feedback,
   bool isSavingProgress = false,
   bool isResetting = false,
   bool isSavingFeedback = false,
+  bool inShell = false,
   TextScaler? textScaler,
 }) {
+  final resolvedStages = stages ?? OrionCampaign.stages;
+  final map = WorldMapView(
+    stages: resolvedStages,
+    progress: progress,
+    // Production always derives modifiers from progress; default to the
+    // same derivation so fixture headers (e.g. the Challenge Badge) match
+    // what players see. Explicit modifiers still override this default.
+    campaignModifiers:
+        campaignModifiers ??
+        CampaignModifiers.fromProgress(
+          progress,
+          resolvedStages,
+          CampaignTechTree(),
+        ),
+    feedback: feedback,
+    isSavingProgress: isSavingProgress,
+    isResetting: isResetting,
+    onStageSelected: onStageSelected ?? (_) {},
+    onLockedStageSelected: onLockedStageSelected,
+  );
   return MaterialApp(
     // The product app hides this banner; a fixture host must too, or the
     // parity evidence carries a stripe the shipped game never shows.
@@ -64,32 +88,23 @@ Widget buildMap({
             data: MediaQuery.of(context).copyWith(textScaler: textScaler),
             child: child!,
           ),
-    home: Scaffold(
-      body: WorldMapView(
-        stages: stages ?? OrionCampaign.stages,
-        progress: progress,
-        // Production always derives modifiers from progress; default to the
-        // same derivation so fixture headers (e.g. the Challenge Badge) match
-        // what players see. Explicit modifiers still override this default.
-        campaignModifiers:
-            campaignModifiers ??
-            CampaignModifiers.fromProgress(
-              progress,
-              stages ?? OrionCampaign.stages,
-              CampaignTechTree(),
-            ),
-        feedback: feedback,
-        isSavingProgress: isSavingProgress,
-        isResetting: isResetting,
-        isSavingFeedback: isSavingFeedback,
-        onStageSelected: onStageSelected ?? (_) {},
-        onLockedStageSelected: onLockedStageSelected,
-        onResetCampaign: onResetCampaign ?? () {},
-        onOpenTechTree: onOpenTechTree ?? () {},
-        onOpenCodex: onOpenCodex ?? () {},
-        onOpenSettings: onOpenSettings ?? () {},
-      ),
-    ),
+    // inShell mirrors production: the map is the shell's flat body between
+    // the resource top bar and the destination tabs. The bare path keeps
+    // map-internal geometry tests free of chrome chrome they do not own.
+    home: inShell
+        ? OrionMenuShell(
+            destination: OrionMenuDestination.sectors,
+            medalEarned: CampaignTechTree.totalMedalRank(progress),
+            medalTotal:
+                resolvedStages.where((stage) => stage.isMainPath).length * 3,
+            researchPoints: CampaignTechTree().unspentPoints(progress),
+            navigationEnabled: !(isSavingProgress || isResetting),
+            settingsEnabled: !isSavingFeedback,
+            onDestinationSelected: onDestinationSelected ?? (_) {},
+            onOpenSettings: onOpenSettings ?? () {},
+            child: map,
+          )
+        : Scaffold(body: map),
   );
 }
 
@@ -105,11 +120,14 @@ void main() {
         buildMap(
           progress: CampaignProgress(),
           feedback: 'Singularity Core is locked.',
+          inShell: true,
           textScaler: const TextScaler.linear(3),
         ),
       );
       await tester.pump();
       final titleRect = tester.getRect(find.text('ORION SECTOR'));
+      // The shell's bottom Codex tab is the chrome control nearest the
+      // map title now that the utility rail is gone.
       final codexRect = tester.getRect(find.byTooltip('Codex'));
       final feedbackRect = tester.getRect(
         find.text('Singularity Core is locked.'),
@@ -227,6 +245,7 @@ void main() {
             buildMap(
               progress: progress,
               feedback: feedback,
+              inShell: true,
               textScaler: const TextScaler.linear(3),
               onStageSelected: (stage) => selected.add(stage.id),
             ),
@@ -238,12 +257,7 @@ void main() {
           expect(tester.takeException(), isNull);
 
           final railControls = <Rect>[
-            for (final tooltip in [
-              'Codex',
-              'Tech Tree',
-              'Reset Campaign',
-              'Settings',
-            ])
+            for (final tooltip in shellControlTooltips)
               tester.getRect(find.byTooltip(tooltip)),
           ];
 
@@ -365,12 +379,7 @@ void main() {
           );
           expect(footerRect.overlaps(alphaRect), isFalse);
           final screenRect = Offset.zero & size;
-          for (final tooltip in [
-            'Codex',
-            'Tech Tree',
-            'Reset Campaign',
-            'Settings',
-          ]) {
+          for (final tooltip in shellControlTooltips) {
             final controlRect = tester.getRect(find.byTooltip(tooltip));
             expect(
               screenRect.contains(controlRect.topLeft),
@@ -384,7 +393,12 @@ void main() {
             );
           }
 
-          // The reached footer is functional, not merely painted.
+          // The reached footer is functional, not merely painted. The card
+          // can be taller than the scroll viewport at extreme text scales,
+          // leaving its semantic center above the fold under the fixed
+          // header; a real player taps the Deploy action pinned at the
+          // card's bottom edge — which is the part now on screen. Both
+          // targets dispatch the same selection callback.
           final briefingLabel = tester
               .widget<Semantics>(destination)
               .properties
@@ -392,7 +406,7 @@ void main() {
           final expected = OrionCampaign.stages.firstWhere(
             (candidate) => briefingLabel.endsWith(candidate.name),
           );
-          await tester.tap(destination);
+          await tester.tap(find.text('Deploy'));
           expect(selected.last, expected.id);
 
           // find.text only matches the widget's data string, not what the
@@ -1410,30 +1424,37 @@ void main() {
     expect(find.text('Route recalculated.'), findsNothing);
   });
 
-  testWidgets('utility rail invokes every existing callback', (tester) async {
-    var codex = 0;
-    var techTree = 0;
+  testWidgets('shell chrome invokes navigation and settings callbacks', (
+    tester,
+  ) async {
+    // The utility rail is gone: Map/R&D/Codex moved into the shell's bottom
+    // tab bar (reported as destinations) and Settings into the top-bar gear.
+    // Reset Campaign no longer has a chrome button — it lives inside the
+    // Settings sheet.
+    final destinations = <OrionMenuDestination>[];
     var settings = 0;
-    var reset = 0;
     await tester.pumpWidget(
       buildMap(
         progress: CampaignProgress(),
-        onOpenCodex: () => codex += 1,
-        onOpenTechTree: () => techTree += 1,
+        inShell: true,
+        onDestinationSelected: destinations.add,
         onOpenSettings: () => settings += 1,
-        onResetCampaign: () => reset += 1,
       ),
     );
 
     await tester.tap(find.byTooltip('Codex'));
-    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.tap(find.byTooltip('R&D'));
     await tester.tap(find.byTooltip('Settings'));
-    await tester.tap(find.byTooltip('Reset Campaign'));
 
-    expect((codex, techTree, settings, reset), (1, 1, 1, 1));
+    expect(destinations, [
+      OrionMenuDestination.codex,
+      OrionMenuDestination.research,
+    ]);
+    expect(settings, 1);
+    expect(find.byTooltip('Reset Campaign'), findsNothing);
   });
 
-  testWidgets('save and reset busy states disable stage and utility actions', (
+  testWidgets('save and reset busy states disable stage and tab actions', (
     tester,
   ) async {
     for (final busyState in [
@@ -1444,14 +1465,12 @@ void main() {
       await tester.pumpWidget(
         buildMap(
           progress: clearedCampaignProgress(),
+          inShell: true,
           isSavingProgress: busyState.isSavingProgress,
           isResetting: busyState.isResetting,
           onStageSelected: (_) => actions += 1,
           onLockedStageSelected: (_) => actions += 1,
-          onOpenCodex: () => actions += 1,
-          onOpenTechTree: () => actions += 1,
-          onOpenSettings: () => actions += 1,
-          onResetCampaign: () => actions += 1,
+          onDestinationSelected: (_) => actions += 1,
         ),
       );
 
@@ -1463,28 +1482,24 @@ void main() {
         find.byKey(const ValueKey('sector-stage-outpost-alpha')),
       );
       await tester.tap(find.byTooltip('Codex'));
-      await tester.tap(find.byTooltip('Tech Tree'));
-      await tester.tap(find.byTooltip('Settings'));
-      await tester.tap(find.byTooltip('Reset Campaign'));
+      await tester.tap(find.byTooltip('R&D'));
+      await tester.tap(find.byTooltip('Map'));
       expect(actions, 0);
     }
   });
 
   testWidgets('feedback save disables Settings only', (tester) async {
     var stage = 0;
-    var codex = 0;
-    var techTree = 0;
+    var destinations = 0;
     var settings = 0;
-    var reset = 0;
     await tester.pumpWidget(
       buildMap(
         progress: clearedCampaignProgress(),
+        inShell: true,
         isSavingFeedback: true,
         onStageSelected: (_) => stage += 1,
-        onOpenCodex: () => codex += 1,
-        onOpenTechTree: () => techTree += 1,
+        onDestinationSelected: (_) => destinations += 1,
         onOpenSettings: () => settings += 1,
-        onResetCampaign: () => reset += 1,
       ),
     );
 
@@ -1494,11 +1509,10 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
     await tester.tap(find.byTooltip('Codex'));
-    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.tap(find.byTooltip('R&D'));
     await tester.tap(find.byTooltip('Settings'));
-    await tester.tap(find.byTooltip('Reset Campaign'));
 
-    expect((stage, codex, techTree, settings, reset), (1, 1, 1, 0, 1));
+    expect((stage, destinations, settings), (1, 2, 0));
   });
 
   testWidgets('busy-derived feedback and challenge semantics remain exact', (
@@ -1561,7 +1575,6 @@ void main() {
               progress: clearedCampaignProgress(),
               feedback: null,
               onStageSelected: (_) {},
-              onResetCampaign: () {},
             ),
           ),
         ),

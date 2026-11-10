@@ -8,6 +8,7 @@ import '../campaign/stage_definition.dart';
 import '../campaign/stage_reward_label.dart';
 import 'campaign_presentation.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_primary_button.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
@@ -42,13 +43,8 @@ class WorldMapView extends StatefulWidget {
     required this.feedback,
     this.isSavingProgress = false,
     this.isResetting = false,
-    this.isSavingFeedback = false,
     required this.onStageSelected,
     this.onLockedStageSelected,
-    required this.onResetCampaign,
-    this.onOpenTechTree,
-    this.onOpenCodex,
-    this.onOpenSettings,
   });
 
   final List<StageDefinition> stages;
@@ -57,13 +53,8 @@ class WorldMapView extends StatefulWidget {
   final String? feedback;
   final bool isSavingProgress;
   final bool isResetting;
-  final bool isSavingFeedback;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
-  final VoidCallback onResetCampaign;
-  final VoidCallback? onOpenTechTree;
-  final VoidCallback? onOpenCodex;
-  final VoidCallback? onOpenSettings;
 
   @override
   State<WorldMapView> createState() => _WorldMapViewState();
@@ -117,12 +108,6 @@ class _WorldMapViewState extends State<WorldMapView> {
           feedback: _effectiveFeedback,
           hasChallengeBadge:
               widget.campaignModifiers?.hasChallengeBadge == true,
-          isBusy: _isBusy,
-          isSavingFeedback: widget.isSavingFeedback,
-          onOpenCodex: widget.onOpenCodex,
-          onOpenTechTree: widget.onOpenTechTree,
-          onResetCampaign: widget.onResetCampaign,
-          onOpenSettings: widget.onOpenSettings,
         ),
       );
     }
@@ -134,13 +119,13 @@ class _WorldMapViewState extends State<WorldMapView> {
             child: _WorldMapBackdrop(key: ValueKey('world-map-backdrop')),
           ),
           Positioned.fill(
-            // The header and utility rail stay fixed above the scrolling
-            // region — they must never scroll away, because the transient
-            // feedback line and the Codex/Tech Tree/Reset/Settings controls
-            // have to be reachable at every scroll offset. (An earlier
-            // revision put the header inside the scrollable flow, which
-            // also let the feedback line resize the chart each time it
-            // appeared.)
+            // The header stays fixed above the scrolling region — it must
+            // never scroll away, because the transient feedback line has to
+            // be reachable at every scroll offset. (An earlier revision put
+            // the header inside the scrollable flow, which also let the
+            // feedback line resize the chart each time it appeared.) Menu
+            // navigation lives in the shared shell's tabs, so there is no
+            // per-view utility rail here any more.
             //
             // The chart and the destination footer share ONE vertical
             // scroll region. The plot is sized to the space the footer
@@ -171,18 +156,6 @@ class _WorldMapViewState extends State<WorldMapView> {
                         hasChallengeBadge:
                             widget.campaignModifiers?.hasChallengeBadge == true,
                         feedback: _effectiveFeedback,
-                      ),
-                      const SizedBox(height: 16),
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: _UtilityRail(
-                          isBusy: _isBusy,
-                          isSavingFeedback: widget.isSavingFeedback,
-                          onOpenCodex: widget.onOpenCodex,
-                          onOpenTechTree: widget.onOpenTechTree,
-                          onResetCampaign: widget.onResetCampaign,
-                          onOpenSettings: widget.onOpenSettings,
-                        ),
                       ),
                     ],
                   ),
@@ -237,6 +210,11 @@ class _WorldMapViewState extends State<WorldMapView> {
                                 stage: stage,
                                 status: widget.progress.statusFor(stage),
                                 result: widget.progress.resultFor(stage.id),
+                                isNext:
+                                    widget.progress
+                                        .recommendedStage(widget.stages)
+                                        ?.id ==
+                                    stage.id,
                                 isBusy: _isBusy,
                                 onStageSelected: widget.onStageSelected,
                                 onLockedStageSelected:
@@ -285,7 +263,12 @@ class _WorldMapViewState extends State<WorldMapView> {
                                     14,
                                     12,
                                     14,
-                                    18,
+                                    // The footer sits under the shell's own
+                                    // bottom chrome; its bottom pad stays
+                                    // tight so chart+footer still fits a
+                                    // common portrait height without
+                                    // scrolling.
+                                    10,
                                   ),
                                   child: _MissionDestination(
                                     stages: widget.stages,
@@ -351,19 +334,7 @@ class _WorldMapBackdrop extends StatelessWidget {
         ),
         const DecoratedBox(
           key: ValueKey('world-map-scrim'),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xAA05080D),
-                Color(0x3305080D),
-                Color(0x4405080D),
-                Color(0x8805080D),
-              ],
-              stops: [0, 0.28, 0.72, 1],
-            ),
-          ),
+          decoration: BoxDecoration(gradient: orionMapScrim),
         ),
       ],
     );
@@ -375,23 +346,11 @@ class _EmptySectorMap extends StatelessWidget {
     required this.uiTheme,
     required this.feedback,
     required this.hasChallengeBadge,
-    required this.isBusy,
-    required this.isSavingFeedback,
-    required this.onOpenCodex,
-    required this.onOpenTechTree,
-    required this.onResetCampaign,
-    required this.onOpenSettings,
   });
 
   final OrionUiTheme uiTheme;
   final String? feedback;
   final bool hasChallengeBadge;
-  final bool isBusy;
-  final bool isSavingFeedback;
-  final VoidCallback? onOpenCodex;
-  final VoidCallback? onOpenTechTree;
-  final VoidCallback onResetCampaign;
-  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
@@ -414,32 +373,15 @@ class _EmptySectorMap extends StatelessWidget {
           left: SectorMapLayout.horizontalPadding,
           top: 8,
           right: SectorMapLayout.horizontalPadding,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _SectorHeader(
-                mainCleared: 0,
-                mainTotal: 0,
-                optionalCleared: 0,
-                optionalTotal: 0,
-                mainComplete: false,
-                fullySecured: false,
-                hasChallengeBadge: hasChallengeBadge,
-                feedback: feedback,
-              ),
-              const SizedBox(height: 16),
-              Align(
-                alignment: Alignment.centerRight,
-                child: _UtilityRail(
-                  isBusy: isBusy,
-                  isSavingFeedback: isSavingFeedback,
-                  onOpenCodex: onOpenCodex,
-                  onOpenTechTree: onOpenTechTree,
-                  onResetCampaign: onResetCampaign,
-                  onOpenSettings: onOpenSettings,
-                ),
-              ),
-            ],
+          child: _SectorHeader(
+            mainCleared: 0,
+            mainTotal: 0,
+            optionalCleared: 0,
+            optionalTotal: 0,
+            mainComplete: false,
+            fullySecured: false,
+            hasChallengeBadge: hasChallengeBadge,
+            feedback: feedback,
           ),
         ),
       ],
@@ -490,7 +432,14 @@ class _SectorHeader extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
+        // CSS flex-wrap analogue: title and badges flow inline until the
+        // row cannot hold them, then the trailing children wrap to a second
+        // line instead of overflowing — a two-badge + challenge state is
+        // wider than a 320px map even at 1x text.
+        Wrap(
+          spacing: 6,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Icon(
               Icons.public,
@@ -498,20 +447,23 @@ class _SectorHeader extends StatelessWidget {
               color: uiTheme.systemCyan,
               shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
             ),
-            const SizedBox(width: 6),
-            Expanded(
-              child: OrionTitle(
-                'Orion Sector',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                color: uiTheme.textPrimary,
-              ),
+            OrionTitle(
+              'Orion Sector',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              // Same dense-map clamp as the badges so an extreme system
+              // scale caps the wordmark instead of starving the badges.
+              textScaler: MediaQuery.textScalerOf(
+                context,
+              ).clamp(maxScaleFactor: 1.3),
+              color: uiTheme.textPrimary,
             ),
             Semantics(
               label: summary,
               child: ExcludeSemantics(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                child: Wrap(
+                  spacing: 5,
+                  runSpacing: 4,
                   children: [
                     _HeaderBadge(
                       icon: mainComplete
@@ -522,20 +474,17 @@ class _SectorHeader extends StatelessWidget {
                           ? uiTheme.creditGold
                           : uiTheme.systemCyan,
                     ),
-                    if (showOptionalBadge) ...[
-                      const SizedBox(width: 5),
+                    if (showOptionalBadge)
                       _HeaderBadge(
                         icon: Icons.alt_route_rounded,
                         label: 'OPTIONAL $optionalCleared/$optionalTotal',
                         color: uiTheme.systemViolet,
                       ),
-                    ],
                   ],
                 ),
               ),
             ),
-            if (hasChallengeBadge) ...[
-              const SizedBox(width: 5),
+            if (hasChallengeBadge)
               Semantics(
                 label: 'Challenge Badge Earned - All side stages cleared',
                 child: ExcludeSemantics(
@@ -549,7 +498,6 @@ class _SectorHeader extends StatelessWidget {
                   ),
                 ),
               ),
-            ],
           ],
         ),
         if (mainComplete) ...[
@@ -663,100 +611,17 @@ class _HeaderBadge extends StatelessWidget {
   }
 }
 
-class _UtilityRail extends StatelessWidget {
-  const _UtilityRail({
-    required this.isBusy,
-    required this.isSavingFeedback,
-    required this.onOpenCodex,
-    required this.onOpenTechTree,
-    required this.onResetCampaign,
-    required this.onOpenSettings,
-  });
-
-  final bool isBusy;
-  final bool isSavingFeedback;
-  final VoidCallback? onOpenCodex;
-  final VoidCallback? onOpenTechTree;
-  final VoidCallback onResetCampaign;
-  final VoidCallback? onOpenSettings;
-
-  @override
-  Widget build(BuildContext context) {
-    // Lower-noise chrome: the rail is a bare column of 48dp buttons over the
-    // backdrop instead of a framed plate (artboard 1f has no utility rail).
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (onOpenCodex != null)
-          _RailButton(
-            tooltip: 'Codex',
-            icon: Icons.menu_book_rounded,
-            onPressed: isBusy ? null : onOpenCodex,
-          ),
-        if (onOpenTechTree != null)
-          _RailButton(
-            tooltip: 'Tech Tree',
-            icon: Icons.account_tree_rounded,
-            onPressed: isBusy ? null : onOpenTechTree,
-          ),
-        _RailButton(
-          tooltip: 'Reset Campaign',
-          icon: Icons.restart_alt_rounded,
-          isDestructive: true,
-          onPressed: isBusy ? null : onResetCampaign,
-        ),
-        if (onOpenSettings != null)
-          _RailButton(
-            tooltip: 'Settings',
-            icon: Icons.settings_rounded,
-            onPressed: isBusy || isSavingFeedback ? null : onOpenSettings,
-          ),
-      ],
-    );
-  }
-}
-
-class _RailButton extends StatelessWidget {
-  const _RailButton({
-    required this.tooltip,
-    required this.icon,
-    required this.onPressed,
-    this.isDestructive = false,
-  });
-
-  final String tooltip;
-  final IconData icon;
-  final VoidCallback? onPressed;
-  final bool isDestructive;
-
-  @override
-  Widget build(BuildContext context) {
-    final uiTheme = OrionUiTheme.of(context);
-    final enabled = onPressed != null;
-    final activeColor = isDestructive ? uiTheme.dangerRed : uiTheme.systemCyan;
-    return IconButton(
-      tooltip: tooltip,
-      constraints: const BoxConstraints.tightFor(width: 48, height: 48),
-      padding: EdgeInsets.zero,
-      visualDensity: VisualDensity.compact,
-      color: enabled ? activeColor : uiTheme.textMuted,
-      disabledColor: uiTheme.frameSteel,
-      onPressed: onPressed,
-      icon: Icon(
-        icon,
-        size: 21,
-        shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
-      ),
-    );
-  }
-}
-
+/// A star-chart node. Its layout box stays the exact rect SectorMapLayout
+/// assigns — route joins and tap targets never move — while the arcade
+/// chrome (NEXT flag, pulse rings, name chip, medal pips) is free to
+/// overhang the rect edges the way the mock's absolutely-placed layers do.
 class _IllustratedStageNode extends StatelessWidget {
   const _IllustratedStageNode({
     super.key,
     required this.stage,
     required this.status,
     required this.result,
+    required this.isNext,
     required this.isBusy,
     required this.onStageSelected,
     required this.onLockedStageSelected,
@@ -765,6 +630,11 @@ class _IllustratedStageNode extends StatelessWidget {
   final StageDefinition stage;
   final StageProgressStatus status;
   final StageResult? result;
+
+  /// True when the shared recommender steers to this stage. Combined with
+  /// the unlocked status inside the node, so a cleared replay fallback
+  /// never wears the NEXT flag.
+  final bool isNext;
   final bool isBusy;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
@@ -773,15 +643,19 @@ class _IllustratedStageNode extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final isLocked = status == StageProgressStatus.locked;
-    final isAvailable = status == StageProgressStatus.unlocked;
-    final statusColor = _statusColor(uiTheme, status, result);
-    final rewardLabel = stageRewardLabel(
-      stage,
-      isCleared: status == StageProgressStatus.cleared,
-    );
+    final isCleared = status == StageProgressStatus.cleared;
+    final isOpen = status == StageProgressStatus.unlocked;
+    final isRecommended = isNext && isOpen;
+    final isSideOpen = isOpen && !isRecommended && !stage.isMainPath;
+    final statusColor = isRecommended
+        ? uiTheme.systemCyan
+        : isSideOpen
+        ? uiTheme.systemViolet
+        : _statusColor(uiTheme, status, result);
+    final rewardLabel = stageRewardLabel(stage, isCleared: isCleared);
     // A committed clear is the only path to owning the stage's blueprint,
     // so the node's own cleared status is the Recovered/Locked signal.
-    final blueprintRecovered = status == StageProgressStatus.cleared;
+    final blueprintRecovered = isCleared;
     final blueprintLabel = stage.blueprint == null
         ? null
         : blueprintRecovered
@@ -790,7 +664,7 @@ class _IllustratedStageNode extends StatelessWidget {
     final semanticsLabel = [
       stage.name,
       stage.isMainPath ? 'Main mission' : 'Optional mission',
-      if (status == StageProgressStatus.cleared && result != null)
+      if (isCleared && result != null)
         'Medal • ${result!.medal.label}'
       else
         _statusLabel(status),
@@ -814,25 +688,61 @@ class _IllustratedStageNode extends StatelessWidget {
             borderRadius: BorderRadius.circular(28),
             splashColor: statusColor.withValues(alpha: 0.20),
             highlightColor: statusColor.withValues(alpha: 0.10),
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
+            child: Stack(
+              clipBehavior: Clip.none,
               children: [
-                SizedBox(
-                  key: ValueKey('stage-crest-${stage.id}'),
-                  width: 72,
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
                   height: 76,
                   child: Stack(
+                    key: ValueKey('stage-crest-${stage.id}'),
+                    clipBehavior: Clip.none,
                     fit: StackFit.expand,
                     children: [
+                      if (isRecommended) ...const [
+                        Center(child: _PulseRing(diameter: 108, width: 2)),
+                        Center(child: _PulseRing(diameter: 132, width: 1.5)),
+                      ],
                       Center(
-                        child: _StageCrestAperture(
+                        child: _StageOrb(
                           key: ValueKey('stage-status-ring-${stage.id}'),
                           stage: stage,
                           isLocked: isLocked,
-                          isAvailable: isAvailable,
+                          isRecommended: isRecommended,
+                          isSideOpen: isSideOpen,
                           ringColor: statusColor,
                         ),
                       ),
+                      if (isRecommended)
+                        Positioned(
+                          top: -24,
+                          left: 0,
+                          right: 0,
+                          child: Center(
+                            // scaleDown keeps the capsule at spec size for
+                            // normal text and shrinks it as a unit when a
+                            // large system scale would overflow the node's
+                            // aperture — the flag floats, so it may shrink,
+                            // never clip or push layout.
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: _NextFlag(
+                                key: ValueKey('stage-open-${stage.id}'),
+                              ),
+                            ),
+                          ),
+                        )
+                      else if (isOpen)
+                        Align(
+                          alignment: Alignment.bottomCenter,
+                          child: _NodeGlyph(
+                            key: ValueKey('stage-open-${stage.id}'),
+                            icon: Icons.bolt_rounded,
+                            color: uiTheme.systemViolet,
+                          ),
+                        ),
                       if (result != null)
                         Align(
                           alignment: Alignment.topRight,
@@ -847,7 +757,7 @@ class _IllustratedStageNode extends StatelessWidget {
                           alignment: Alignment.bottomRight,
                           child: _NodeGlyph(
                             icon: rewardIcon(stage.reward!),
-                            color: status == StageProgressStatus.cleared
+                            color: isCleared
                                 ? uiTheme.naniteGreen
                                 : uiTheme.textMuted,
                           ),
@@ -862,44 +772,46 @@ class _IllustratedStageNode extends StatelessWidget {
                                 : uiTheme.textMuted,
                           ),
                         ),
-                      if (isAvailable)
-                        Align(
-                          alignment: Alignment.bottomCenter,
-                          child: _NodeGlyph(
-                            key: ValueKey('stage-open-${stage.id}'),
-                            icon: Icons.play_arrow_rounded,
-                            color: uiTheme.systemCyan,
-                          ),
-                        ),
                       if (isLocked)
                         Center(
-                          child: Icon(
-                            Icons.lock_rounded,
-                            size: 17,
-                            color: uiTheme.textPrimary,
-                            shadows: const [
-                              Shadow(color: Colors.black, blurRadius: 4),
-                            ],
+                          child: Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: uiTheme.hullBlack,
+                              border: Border.all(
+                                color: uiTheme.frameSteel,
+                                width: 2,
+                              ),
+                            ),
+                            child: Icon(
+                              Icons.lock_rounded,
+                              size: 13,
+                              color: uiTheme.textMuted,
+                            ),
                           ),
                         ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 2),
-                Expanded(
-                  child: Center(
-                    child: Text(
-                      stage.mapLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      textScaler: MediaQuery.textScalerOf(
-                        context,
-                      ).clamp(maxScaleFactor: 1.15),
-                      style: OrionTypography.microLabel(
+                Positioned(
+                  top: 74,
+                  left: -20,
+                  right: -20,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      _NodeNameChip(
+                        stage: stage,
+                        isRecommended: isRecommended,
                         color: isLocked ? uiTheme.textMuted : statusColor,
                       ),
-                    ),
+                      if (isCleared && result != null) ...[
+                        const SizedBox(height: 4),
+                        _MedalPips(rank: result!.medal.rank),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -920,45 +832,217 @@ class _IllustratedStageNode extends StatelessWidget {
   }
 }
 
-/// Star-chart crest node: a circular aperture holding the square-cropped
-/// stage key art, ringed by the integrated status/medal color (artboard 1f).
-class _StageCrestAperture extends StatelessWidget {
-  const _StageCrestAperture({
+/// Static pulse ring around the recommended node's orb (the mock draws a
+/// 108px and a 132px echo ring; animation stays out so reduced-motion
+/// players get the same readout).
+class _PulseRing extends StatelessWidget {
+  const _PulseRing({required this.diameter, required this.width});
+
+  final double diameter;
+  final double width;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return IgnorePointer(
+      child: Container(
+        width: diameter,
+        height: diameter,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: uiTheme.systemCyan.withValues(
+              alpha: width > 1.5 ? 0.45 : 0.18,
+            ),
+            width: width,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The kit's `.tag` NEXT flag: a solid cyan capsule with dark ink, floating
+/// above the recommended node's orb.
+class _NextFlag extends StatelessWidget {
+  const _NextFlag({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Container(
+      height: 20,
+      padding: const EdgeInsets.symmetric(horizontal: 7),
+      decoration: BoxDecoration(
+        color: uiTheme.systemCyan,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bolt_rounded, size: 11, color: uiTheme.voidBlack),
+          const SizedBox(width: 2),
+          Text(
+            'NEXT',
+            // Same dense-map clamp as the name chip: the capsule is a
+            // fixed 20px flag, so unbounded system text would overflow it.
+            textScaler: MediaQuery.textScalerOf(
+              context,
+            ).clamp(maxScaleFactor: 1.15),
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: uiTheme.voidBlack,
+            ).copyWith(letterSpacing: 1.2, shadows: const []),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The kit's `.name` chip: a small dark pill carrying the sector number and
+/// the node's short label, edge-tinted for the recommended target.
+class _NodeNameChip extends StatelessWidget {
+  const _NodeNameChip({
+    required this.stage,
+    required this.isRecommended,
+    required this.color,
+  });
+
+  final StageDefinition stage;
+  final bool isRecommended;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final order = stage.mainPathOrder;
+    final labelStyle = OrionTypography.microLabel(
+      size: 11,
+      color: color,
+    ).copyWith(letterSpacing: 1.3);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+      decoration: BoxDecoration(
+        color: uiTheme.voidBlack.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: isRecommended ? uiTheme.systemCyan : orionPanelEdge,
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (order != null) ...[
+            Text(
+              '${order.toString().padLeft(2, '0')} ·',
+              textScaler: MediaQuery.textScalerOf(
+                context,
+              ).clamp(maxScaleFactor: 1.15),
+              style: labelStyle,
+            ),
+            const SizedBox(width: 4),
+          ],
+          Flexible(
+            child: Text(
+              stage.mapLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              textScaler: MediaQuery.textScalerOf(
+                context,
+              ).clamp(maxScaleFactor: 1.15),
+              style: labelStyle,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Bronze/silver/gold pips under a cleared node's name chip: pip i fills
+/// when the earned medal rank covers tier i (clear = bronze, silver,
+/// gold), so a silver medal reads bronze+silver+empty like the kit's.
+class _MedalPips extends StatelessWidget {
+  const _MedalPips({required this.rank});
+
+  final int rank;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final tiers = [
+      uiTheme.medalBronze,
+      uiTheme.medalSilver,
+      uiTheme.creditGold,
+    ];
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < 3; i += 1) ...[
+          if (i > 0) const SizedBox(width: 4),
+          Container(
+            width: 15,
+            height: 15,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: i < rank ? tiers[i] : orionPipEmpty,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// Star-chart crest orb: circular aperture holding the square-cropped
+/// stage key art, ringed by the status color with the kit's per-state
+/// glow — cleared reads gold, the recommended target reads cyan and
+/// oversized, an open side stage reads violet, locked stays dim steel.
+class _StageOrb extends StatelessWidget {
+  const _StageOrb({
     super.key,
     required this.stage,
     required this.isLocked,
-    required this.isAvailable,
+    required this.isRecommended,
+    required this.isSideOpen,
     required this.ringColor,
   });
 
   final StageDefinition stage;
   final bool isLocked;
-  final bool isAvailable;
+  final bool isRecommended;
+  final bool isSideOpen;
   final Color ringColor;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final diameter = isAvailable
-        ? 68.0
+    final diameter = isRecommended
+        ? (stage.isMainPath ? 80.0 : 72.0)
         : stage.isMainPath
-        ? 62.0
-        : 52.0;
-    final artSize = diameter - 4;
+        ? 68.0
+        : 60.0;
+    final artSize = diameter - 6;
     Widget art = OrionAtlasSprite(
       art: OrionArt.crestFor(stage),
       size: Size.square(artSize),
     );
     if (isLocked) {
-      art = Opacity(
-        opacity: 0.38,
-        child: ColorFiltered(
-          colorFilter: const ColorFilter.mode(
-            Colors.grey,
-            BlendMode.saturation,
+      // grayscale(1) brightness(.45) from the kit's `.orb.locked img`.
+      art = Stack(
+        fit: StackFit.expand,
+        children: [
+          ColorFiltered(
+            colorFilter: const ColorFilter.mode(
+              Colors.grey,
+              BlendMode.saturation,
+            ),
+            child: art,
           ),
-          child: art,
-        ),
+          ColoredBox(color: uiTheme.voidBlack.withValues(alpha: 0.55)),
+        ],
       );
     }
 
@@ -969,20 +1053,34 @@ class _StageCrestAperture extends StatelessWidget {
         shape: BoxShape.circle,
         color: uiTheme.hullBlack,
         border: Border.all(
-          color: isLocked
-              ? uiTheme.frameSteel.withValues(alpha: 0.85)
-              : ringColor,
-          width: isAvailable ? 2.4 : 1.6,
+          color: isLocked ? uiTheme.frameSteel : ringColor,
+          width: 3,
         ),
-        boxShadow: isAvailable
+        boxShadow: isRecommended
             ? [
                 BoxShadow(
-                  color: ringColor.withValues(alpha: 0.35),
-                  blurRadius: 12,
-                  spreadRadius: 1,
+                  color: ringColor.withValues(alpha: 0.22),
+                  spreadRadius: 4,
+                ),
+                BoxShadow(
+                  color: ringColor.withValues(alpha: 0.7),
+                  blurRadius: 30,
                 ),
               ]
-            : const [],
+            : isSideOpen
+            ? [
+                BoxShadow(
+                  color: ringColor.withValues(alpha: 0.45),
+                  blurRadius: 18,
+                ),
+              ]
+            : [
+                BoxShadow(
+                  color: uiTheme.voidBlack.withValues(alpha: 0.6),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
       ),
       child: ClipOval(child: Center(child: art)),
     );
@@ -1030,26 +1128,49 @@ class SectorRoutePainter extends CustomPainter {
       final to = nodeRects[route.to.id]?.topCenter.translate(0, 38);
       if (from == null || to == null) continue;
 
-      final color = route.isActive ? uiTheme.systemCyan : uiTheme.frameSteel;
-      final glow = Paint()
-        ..color = color.withValues(alpha: route.isActive ? 0.16 : 0.08)
-        ..strokeCap = StrokeCap.round
-        ..strokeWidth = 7;
+      // Per-state routes from the kit: cleared legs run solid gold, the
+      // open main leg runs dashed cyan with a glow, an open side leg runs
+      // dashed violet, and locked legs stay dim steel. Routes are purely
+      // decorative conduits — the nodes remain the only hit targets.
+      final isCleared = route.medal != null;
+      final color = isCleared
+          ? uiTheme.creditGold
+          : route.isActive
+          ? (route.isOptional ? uiTheme.systemViolet : uiTheme.systemCyan)
+          : orionRouteDim;
       final line = Paint()
-        ..color = color.withValues(alpha: route.isActive ? 0.88 : 0.72)
+        ..color = color.withValues(
+          alpha: isCleared
+              ? 0.85
+              : route.isActive
+              ? 0.9
+              : 0.7,
+        )
         ..strokeCap = StrokeCap.round
-        ..strokeWidth = route.isOptional ? 1.5 : 2.2;
+        ..strokeWidth = isCleared
+            ? 3
+            : route.isActive
+            ? (route.isOptional ? 2.5 : 3)
+            : 2;
 
-      if (route.isOptional) {
-        _drawDashedLine(canvas, from, to, glow, dash: 5, gap: 5);
-        _drawDashedLine(canvas, from, to, line, dash: 5, gap: 5);
+      if (isCleared) {
+        final glow = Paint()
+          ..color = color.withValues(alpha: 0.35)
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 5;
+        canvas.drawLine(from, to, glow);
+        canvas.drawLine(from, to, line);
+      } else if (!route.isActive) {
+        _drawDashedLine(canvas, from, to, line, dash: 4, gap: 7);
+      } else if (route.isOptional) {
+        _drawDashedLine(canvas, from, to, line, dash: 7, gap: 6);
       } else {
-        _drawDashedLine(canvas, from, to, glow, dash: 5, gap: 7);
-        _drawDashedLine(canvas, from, to, line, dash: 5, gap: 7);
-      }
-
-      if (route.medal == StageMedal.gold) {
-        canvas.drawCircle(to, 4, Paint()..color = uiTheme.creditGold);
+        final glow = Paint()
+          ..color = color.withValues(alpha: 0.45)
+          ..strokeCap = StrokeCap.round
+          ..strokeWidth = 6;
+        _drawDashedLine(canvas, from, to, glow, dash: 9, gap: 6);
+        _drawDashedLine(canvas, from, to, line, dash: 9, gap: 6);
       }
     }
   }
@@ -1154,93 +1275,108 @@ class _MissionDestination extends StatelessWidget {
         enabled: onStageSelected != null,
         excludeSemantics: true,
         onTap: onStageSelected == null ? null : () => onStageSelected!(stage),
-        child: InkWell(
-          onTap: onStageSelected == null ? null : () => onStageSelected!(stage),
-          child: Row(
-            children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: OrionAtlasSprite(
-                  art: OrionArt.stage(stage, crop: OrionStageArtCrop.mapSquare),
-                  size: const Size.square(78),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'SECTOR ${(stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
-                      // Two clamped lines, not one unclamped: at 3x system
-                      // text the single line ellipsized the qualifier (the
-                      // informative part) inside the ~110px column.
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textScaler: MediaQuery.textScalerOf(
-                        context,
-                      ).clamp(maxScaleFactor: 1.3),
-                      style: OrionTypography.microLabel(
-                        color: theme.systemCyan,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            InkWell(
+              onTap: onStageSelected == null
+                  ? null
+                  : () => onStageSelected!(stage),
+              child: Row(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        border: Border.all(color: orionArtFrame, width: 1.5),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: OrionAtlasSprite(
+                        art: OrionArt.stage(
+                          stage,
+                          crop: OrionStageArtCrop.mapSquare,
+                        ),
+                        size: const Size.square(80),
                       ),
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      stage.name.toUpperCase(),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      textScaler: MediaQuery.textScalerOf(
-                        context,
-                      ).clamp(maxScaleFactor: 1.3),
-                      style: OrionTypography.readout(
-                        size: 18,
-                        color: theme.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.waves, color: theme.textMuted, size: 18),
-                        const SizedBox(width: 5),
                         Text(
-                          '${stage.waves.length}',
-                          style: OrionTypography.readout(
-                            size: 12,
-                            color: theme.textMuted,
+                          'SECTOR ${(stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
+                          // Two clamped lines, not one unclamped: at 3x
+                          // system text the single line ellipsized the
+                          // qualifier (the informative part) inside the
+                          // ~110px column.
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textScaler: MediaQuery.textScalerOf(
+                            context,
+                          ).clamp(maxScaleFactor: 1.3),
+                          style: OrionTypography.microLabel(
+                            color: theme.systemCyan,
                           ),
                         ),
-                        const SizedBox(width: 10),
-                        Icon(
-                          Icons.shield_outlined,
-                          color: theme.systemCyan,
-                          size: 18,
+                        const SizedBox(height: 5),
+                        Text(
+                          stage.name.toUpperCase(),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          textScaler: MediaQuery.textScalerOf(
+                            context,
+                          ).clamp(maxScaleFactor: 1.3),
+                          style: OrionTypography.readout(
+                            size: 18,
+                            color: theme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.waves, color: theme.textMuted, size: 18),
+                            const SizedBox(width: 5),
+                            Text(
+                              '${stage.waves.length}',
+                              style: OrionTypography.readout(
+                                size: 12,
+                                color: theme.textMuted,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Icon(
+                              Icons.shield_outlined,
+                              color: theme.systemCyan,
+                              size: 18,
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 56,
-                height: 56,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [theme.systemCyan, theme.systemCyanStrong],
                   ),
-                ),
-                child: Icon(
-                  Icons.play_arrow_rounded,
-                  size: 30,
-                  color: theme.voidBlack,
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            // The kit's full-width Deploy action: the card as a whole stays
+            // one semantic 'Briefing' target, and the button is the visual
+            // call-out inside it.
+            ExcludeSemantics(
+              child: OrionPrimaryButton(
+                label: 'Deploy',
+                icon: Icons.play_arrow_rounded,
+                height: 48,
+                labelSize: 12,
+                onPressed: onStageSelected == null
+                    ? null
+                    : () => onStageSelected!(stage),
+              ),
+            ),
+          ],
         ),
       ),
     );

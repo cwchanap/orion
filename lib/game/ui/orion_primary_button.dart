@@ -26,6 +26,8 @@ class OrionPrimaryButton extends StatefulWidget {
     required this.onPressed,
     this.variant = OrionButtonVariant.primary,
     this.loading = false,
+    this.height = 60,
+    this.labelSize = 13,
   });
 
   final String label;
@@ -34,6 +36,13 @@ class OrionPrimaryButton extends StatefulWidget {
   final OrionButtonVariant variant;
 
   final bool loading;
+
+  /// Minimum tappable height; the scene CTA default is 60, compact slots
+  /// (title card, map mission card) pass a smaller value.
+  final double height;
+
+  /// microLabel size for the label text (13 default, 12 on compact slots).
+  final double labelSize;
 
   @override
   State<OrionPrimaryButton> createState() => _OrionPrimaryButtonState();
@@ -146,7 +155,7 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
         child: TextButton.icon(
           onPressed: enabled ? widget.onPressed : null,
           style: TextButton.styleFrom(
-            minimumSize: const Size.fromHeight(60),
+            minimumSize: Size.fromHeight(widget.height),
             foregroundColor: spec.ink,
             disabledForegroundColor: spec.ink,
             shape: RoundedRectangleBorder(borderRadius: borderRadius),
@@ -162,7 +171,10 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
               : Icon(widget.icon, size: 24),
           label: Text(
             widget.label,
-            style: OrionTypography.microLabel(size: 13, color: spec.ink),
+            style: OrionTypography.microLabel(
+              size: widget.labelSize,
+              color: spec.ink,
+            ),
           ),
         ),
       ),

@@ -103,6 +103,7 @@ class OrionTitle extends StatelessWidget {
     super.key,
     required this.color,
     this.size = 15,
+    this.shadows,
     this.textAlign,
     this.maxLines,
     this.overflow,
@@ -112,6 +113,10 @@ class OrionTitle extends StatelessWidget {
   final String data;
   final Color color;
   final double size;
+
+  /// Overrides the title role's default lift shadow. The title-screen
+  /// wordmark stacks a glow and a solid lip instead of the small lift.
+  final List<Shadow>? shadows;
   final TextAlign? textAlign;
   final int? maxLines;
   final TextOverflow? overflow;
@@ -119,6 +124,7 @@ class OrionTitle extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final style = OrionTypography.title(color: color, size: size);
     return Semantics(
       label: data,
       child: ExcludeSemantics(
@@ -128,7 +134,7 @@ class OrionTitle extends StatelessWidget {
           maxLines: maxLines,
           overflow: overflow,
           textScaler: textScaler,
-          style: OrionTypography.title(color: color, size: size),
+          style: shadows == null ? style : style.copyWith(shadows: shadows),
         ),
       ),
     );

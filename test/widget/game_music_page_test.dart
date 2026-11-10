@@ -221,7 +221,11 @@ void main() {
       secondGame.returnToMap();
       await tester.pump();
       expect(player.calls.last, 'play:music_map.wav');
-      await tester.tap(find.byTooltip('Reset Campaign'));
+      // Reset lives inside the Settings sheet now: gear -> Reset Campaign
+      // row -> confirmation.
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Reset Campaign'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Reset'));
       await tester.pumpAndSettle();
@@ -248,6 +252,7 @@ void main() {
         MaterialApp(
           theme: orionThemeData,
           home: OrionGamePage(
+            startOnWorldMap: true,
             progressStore: InMemoryCampaignProgressStore(
               knownStages: OrionCampaign.stages,
             ),
@@ -301,6 +306,7 @@ Future<void> _mountPage(
     MaterialApp(
       theme: orionThemeData,
       home: OrionGamePage(
+        startOnWorldMap: true,
         progressStore: InMemoryCampaignProgressStore(
           knownStages: OrionCampaign.stages,
         ),

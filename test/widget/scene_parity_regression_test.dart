@@ -240,10 +240,6 @@ void main() {
               progress: CampaignProgress(),
               feedback: null,
               onStageSelected: (_) {},
-              onResetCampaign: () {},
-              onOpenTechTree: () {},
-              onOpenCodex: () {},
-              onOpenSettings: () {},
             );
           default:
             throw StateError('Unknown review scene: $scene');

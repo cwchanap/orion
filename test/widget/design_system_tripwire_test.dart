@@ -20,8 +20,6 @@ const _rawColorAllowlist = <String>{
   'lib/game/ui/mission_report_panel.dart',
   'lib/game/ui/next_wave_scanner.dart',
   'lib/game/ui/stage_briefing_sheet.dart',
-  'lib/game/ui/tech_tree_view.dart',
-  'lib/game/ui/world_map_view.dart',
 };
 
 void main() {

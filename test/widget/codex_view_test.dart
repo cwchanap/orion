@@ -9,7 +9,7 @@ import 'package:orion/game/campaign/stage_reward_label.dart';
 import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/codex_view.dart';
-import 'package:orion/game/ui/world_map_view.dart';
+import 'package:orion/game/ui/orion_menu_shell.dart';
 
 void main() {
   testWidgets('renders the four section chips and Towers content by default', (
@@ -138,28 +138,29 @@ void main() {
     expect(pressed, isTrue);
   });
 
-  testWidgets('world map shows a Codex button that fires onOpenCodex', (
+  testWidgets('the shared shell shows a Codex tab that reports selection', (
     tester,
   ) async {
-    var pressed = false;
+    // Codex navigation moved off the map's utility rail into the shared
+    // menu shell's tab bar: tapping the Codex tab reports the destination
+    // for the page to switch views.
+    final selected = <OrionMenuDestination>[];
     await tester.pumpWidget(
       MaterialApp(
-        home: Scaffold(
-          body: WorldMapView(
-            stages: OrionCampaign.stages,
-            progress: CampaignProgress(),
-            feedback: null,
-            onStageSelected: (_) {},
-            onResetCampaign: () {},
-            onOpenTechTree: () {},
-            onOpenCodex: () => pressed = true,
-          ),
+        home: OrionMenuShell(
+          destination: OrionMenuDestination.sectors,
+          medalEarned: 0,
+          medalTotal: 15,
+          researchPoints: 0,
+          onDestinationSelected: selected.add,
+          onOpenSettings: () {},
+          child: const SizedBox.expand(),
         ),
       ),
     );
     expect(find.byTooltip('Codex'), findsOneWidget);
     await tester.tap(find.byTooltip('Codex'));
-    expect(pressed, isTrue);
+    expect(selected, [OrionMenuDestination.codex]);
   });
 
   testWidgets('renders every section without overflow on a narrow surface', (
