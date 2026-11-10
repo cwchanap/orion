@@ -29,7 +29,7 @@ class RunModuleDraftPanel extends StatelessWidget {
     final uiTheme = OrionUiTheme.of(context);
     final frame = OrionSurface(
       key: const ValueKey('run-module-draft-frame'),
-      tier: OrionSurfaceTier.t3,
+      role: OrionSurfaceRole.sheet,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -107,8 +107,8 @@ class _RunModuleCard extends StatelessWidget {
           '${runContext == null ? '' : '. $runContext'}',
       onTap: onPressed,
       excludeSemantics: true,
-      child: OrionInnerSurface(
-        tier: OrionSurfaceTier.t3,
+      child: OrionSurface(
+        role: OrionSurfaceRole.card,
         padding: EdgeInsets.zero,
         child: ClipRRect(
           borderRadius: BorderRadius.circular(18),
@@ -134,7 +134,7 @@ class _RunModuleCard extends StatelessWidget {
                     Text(
                       definition.effectText,
                       style: OrionTypography.microLabel(
-                        size: 9,
+                        size: 10,
                         color: uiTheme.textMuted,
                       ),
                     ),
@@ -150,7 +150,7 @@ class _RunModuleCard extends StatelessWidget {
                       Text(
                         runContext,
                         style: OrionTypography.microLabel(
-                          size: 9,
+                          size: 10,
                           color: uiTheme.textMuted,
                         ),
                       ),
@@ -194,13 +194,13 @@ class _AcquiredModuleLabel extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     return OrionSurface(
-      tier: OrionSurfaceTier.t2,
+      role: OrionSurfaceRole.card,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
       child: Text(
         '${definition.title} — ${definition.effectText}',
         maxLines: 2,
         overflow: TextOverflow.ellipsis,
-        style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
+        style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
       ),
     );
   }

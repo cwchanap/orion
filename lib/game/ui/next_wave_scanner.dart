@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import '../util/format.dart';
-import 'mission_surface.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
@@ -171,53 +170,31 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
             child: SizedBox.square(
               key: const ValueKey('next-wave-scanner-collapsed'),
               dimension: 48,
-              child: MissionSurface(
+              child: OrionSurface(
+                role: OrionSurfaceRole.floating,
                 padding: const EdgeInsets.all(_radarInset),
                 radius: 12,
-                emphasized: !widget.collapseRequested,
-                // The inner tile sat directly inside the outer
-                // MissionSurface's already-blurred fill, so its own
-                // BackdropFilter blurred a backdrop that was already
-                // blurred — a second blur pass that was visually almost a
-                // no-op. This DecoratedBox reproduces OrionSurfaceTier.t2's
-                // exact fill and border (see OrionSurface.build) without
-                // paying for that blur again; padding and rounding are
-                // unchanged.
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          uiTheme.panelRaised.withValues(alpha: 0.66),
-                          uiTheme.hullBlack.withValues(alpha: 0.76),
-                        ],
+                child: OrionSurface(
+                  role: OrionSurfaceRole.card,
+                  padding: EdgeInsets.zero,
+                  radius: 8,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Icon(
+                        Icons.radar,
+                        color: widget.collapseRequested
+                            ? uiTheme.textMuted
+                            : uiTheme.systemCyan,
+                        size: 27,
                       ),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.fromBorderSide(
-                        BorderSide(color: uiTheme.frameSteel),
-                      ),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Icon(
-                          Icons.radar,
-                          color: widget.collapseRequested
-                              ? uiTheme.textMuted
-                              : uiTheme.systemCyan,
-                          size: 27,
+                      if (_hasUnreadPreview)
+                        Positioned(
+                          top: 5,
+                          right: 5,
+                          child: _UnreadBeacon(color: uiTheme.warningOrange),
                         ),
-                        if (_hasUnreadPreview)
-                          Positioned(
-                            top: 5,
-                            right: 5,
-                            child: _UnreadBeacon(color: uiTheme.warningOrange),
-                          ),
-                      ],
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -321,7 +298,7 @@ class WaveScannerScene extends StatelessWidget {
                             OrionText.micro(
                               'INBOUND',
                               color: t.warningOrange,
-                              size: 9,
+                              size: 10,
                             ),
                             Semantics(
                               label: previewWaveTotal == null
@@ -350,7 +327,7 @@ class WaveScannerScene extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         OrionSurface(
-                          tier: OrionSurfaceTier.t2,
+                          role: OrionSurfaceRole.card,
                           padding: EdgeInsets.zero,
                           radius: 20,
                           child: Column(
@@ -469,7 +446,7 @@ class WaveScannerScene extends StatelessWidget {
                           Padding(
                             padding: const EdgeInsets.only(top: 16),
                             child: OrionSurface(
-                              tier: OrionSurfaceTier.t2,
+                              role: OrionSurfaceRole.card,
                               child: Row(
                                 children: [
                                   OrionAtlasSprite(
@@ -485,7 +462,7 @@ class WaveScannerScene extends StatelessWidget {
                                         OrionText.micro(
                                           'WAVE ${preview.waveNumber} · BOSS',
                                           color: t.systemViolet,
-                                          size: 9,
+                                          size: 10,
                                         ),
                                         OrionTitle(
                                           boss.label,
@@ -521,7 +498,7 @@ class WaveScannerScene extends StatelessWidget {
                                   SizedBox(
                                     width: 108,
                                     child: OrionSurface(
-                                      tier: OrionSurfaceTier.t2,
+                                      role: OrionSurfaceRole.card,
                                       padding: const EdgeInsets.all(8),
                                       child: Column(
                                         children: [
@@ -540,7 +517,7 @@ class WaveScannerScene extends StatelessWidget {
                                           OrionText.micro(
                                             type.label,
                                             color: t.textMuted,
-                                            size: 9,
+                                            size: 10,
                                           ),
                                         ],
                                       ),
@@ -563,7 +540,7 @@ class WaveScannerScene extends StatelessWidget {
                                     OrionText.micro(
                                       title,
                                       color: t.warningOrange,
-                                      size: 9,
+                                      size: 10,
                                     ),
                                 ],
                               ),

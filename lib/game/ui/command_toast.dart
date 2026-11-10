@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import 'mission_surface.dart';
+import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
@@ -171,11 +171,11 @@ class _CommandToastMessageState extends State<_CommandToastMessage> {
 
   @override
   Widget build(BuildContext context) {
-    return MissionSurface(
+    return OrionSurface(
       key: const ValueKey('command-toast'),
+      role: OrionSurfaceRole.floating,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       radius: 12,
-      emphasized: true,
       child: _renderText
           ? Semantics(
               container: true,

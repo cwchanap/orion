@@ -143,7 +143,7 @@ class MissionCommandDock extends StatelessWidget {
 
     // One full-width shelf groups every dock state.
     return OrionSurface(
-      tier: OrionSurfaceTier.t4,
+      role: OrionSurfaceRole.shelf,
       radius: 0,
       topBorderOnly: true,
       padding: const EdgeInsets.fromLTRB(0, 8, 0, 12),
@@ -733,10 +733,9 @@ class _TowerBuildCard extends StatelessWidget {
         key: ValueKey('tower-card-${type.name}'),
         width: baseWidth * scaleFactor,
         height: baseHeight * scaleFactor,
-        // Flat: the rail around these tiles is already one blurred row, and
-        // blurring each tile inside it is the anti-pattern OrionSurface names.
-        child: OrionInnerSurface(
-          tier: OrionSurfaceTier.t2,
+        // A card tile riding on the rail's shelf chrome.
+        child: OrionSurface(
+          role: OrionSurfaceRole.card,
           // Keep room for the sprite above the cost and name.
           padding: EdgeInsets.zero,
           radius: 16,
@@ -835,7 +834,7 @@ class _TowerBuildCard extends StatelessWidget {
                       // cost carries the affordability signal now, so the
                       // name does not need to.
                       style: OrionTypography.microLabel(
-                        size: 8,
+                        size: 10,
                         color: uiTheme.textMuted,
                       ),
                     ),
@@ -936,8 +935,8 @@ class _TowerBuildCard extends StatelessWidget {
     return SizedBox(
       width: baseWidth * scaleFactor,
       height: baseHeight * scaleFactor,
-      child: OrionInnerSurface(
-        tier: OrionSurfaceTier.t2,
+      child: OrionSurface(
+        role: OrionSurfaceRole.card,
         padding: const EdgeInsets.all(2),
         radius: 10,
         child: Center(

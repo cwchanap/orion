@@ -6,7 +6,6 @@ import 'acquired_run_module_control.dart';
 import 'command_toast.dart';
 import 'mission_command_dock.dart';
 import 'mission_command_hud.dart';
-import 'mission_surface.dart';
 import 'next_wave_scanner.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
@@ -376,7 +375,8 @@ class WorldMapAction extends StatelessWidget {
           child: SizedBox.square(
             key: const ValueKey('world-map-action'),
             dimension: 48,
-            child: MissionSurface(
+            child: OrionSurface(
+              role: OrionSurfaceRole.floating,
               padding: const EdgeInsets.all(10),
               radius: 12,
               child: Icon(
@@ -466,7 +466,7 @@ class TowerRadialActions extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 OrionSurface(
-                  tier: OrionSurfaceTier.t1,
+                  role: OrionSurfaceRole.floating,
                   radius: 28,
                   padding: EdgeInsets.zero,
                   child: SizedBox.square(
@@ -511,7 +511,7 @@ class TowerRadialActions extends StatelessWidget {
     final tower = snapshot.selectedTower!;
     final build = snapshot.phase == GamePhase.build;
     return OrionSurface(
-      tier: OrionSurfaceTier.t1,
+      role: OrionSurfaceRole.floating,
       radius: 28,
       padding: EdgeInsets.zero,
       child: IconButton(
@@ -548,7 +548,7 @@ class TowerRadialActions extends StatelessWidget {
         stats != null &&
         snapshot.gold >= stats.upgradeCost;
     return OrionSurface(
-      tier: OrionSurfaceTier.t1,
+      role: OrionSurfaceRole.floating,
       radius: 28,
       padding: EdgeInsets.zero,
       child: IconButton(

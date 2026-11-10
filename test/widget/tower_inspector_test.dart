@@ -469,9 +469,7 @@ void main() {
     );
   });
 
-  testWidgets('inspector is surfaced with MissionSurface, a t2 tier', (
-    tester,
-  ) async {
+  testWidgets('inspector is a scene-covering sheet surface', (tester) async {
     const tower = PlacedTower(
       id: 7,
       type: TowerType.laser,
@@ -497,11 +495,9 @@ void main() {
       ),
     );
 
-    // MissionSurface is a thin deprecated adapter now, delegating to an
-    // unemphasized (t2) OrionSurface internally.
     expect(
-      tester.widget<OrionSurface>(find.byType(OrionSurface)).tier,
-      OrionSurfaceTier.t3,
+      tester.widget<OrionSurface>(find.byType(OrionSurface)).role,
+      OrionSurfaceRole.sheet,
     );
     expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });

@@ -5,7 +5,6 @@ import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
@@ -734,7 +733,8 @@ void main() {
     'scanner opens a full scene and keeps its close action available',
     (tester) async {
       await tester.pumpWidget(scannerHost(commandDeckPreview()));
-      expect(find.byType(MissionSurface), findsOneWidget);
+      // The collapsed scanner is a floating control holding its radar card.
+      expect(find.byType(OrionSurface), findsWidgets);
       await tester.tap(find.byTooltip('Expand next-wave scanner'));
       await tester.pumpAndSettle();
       expect(find.byType(WaveScannerScene), findsOneWidget);

@@ -8,17 +8,20 @@ import 'orion_ui_theme.dart';
 /// carries every label. Nothing in the game UI reads Material's [TextTheme].
 abstract final class OrionTypography {
   /// Shadow applied to all roles so contrast never depends on a surface fill.
-  static const shadow = Shadow(
-    color: Color(0xE605080D),
-    offset: Offset(0, 1),
-    blurRadius: 4,
-  );
+  /// The literal lives once in [orionTextShadow].
+  static const shadow = orionTextShadow;
+
+  /// Oxanium has no U+2192 glyph; Chakra Petch does. The two Oxanium roles
+  /// carry this fallback so a comparison arrow ('18 → 20') renders in the
+  /// bundled face that owns it rather than whatever the engine picks next.
+  static const _oxaniumFallback = ['ChakraPetch'];
 
   /// Resource, hull, wave, cost and count numerals. The sheet's hero range is
   /// 22–40; smaller sizes are the same role used inline.
   static TextStyle readout({double size = 24, required Color color}) =>
       TextStyle(
         fontFamily: 'Oxanium',
+        fontFamilyFallback: _oxaniumFallback,
         fontVariations: const [FontVariation('wght', 800)],
         fontSize: size,
         height: 1,
@@ -35,6 +38,7 @@ abstract final class OrionTypography {
   /// Tracking scales with the size so the caps keep their measured rhythm.
   static TextStyle title({required Color color, double size = 15}) => TextStyle(
     fontFamily: 'Oxanium',
+    fontFamilyFallback: _oxaniumFallback,
     fontVariations: const [FontVariation('wght', 800)],
     fontSize: size,
     height: 1,
@@ -45,28 +49,30 @@ abstract final class OrionTypography {
 
   /// Every label. Muted by construction: the sheet says "muted, never white".
   ///
-  /// The sheet describes this role as a 7-9px range, but there is no role
-  /// above [title] for a label bigger than that, so the migration also
-  /// reaches for [microLabel] at larger sizes the sheet never wrote down.
-  /// Each step below is deliberate and reviewed; this list exists so the
-  /// next feature copies from it instead of picking a new number:
+  /// The kit's type scale declares a 10px floor for labels ("Type scale —
+  /// min 10px"), so the default step *is* the floor and explicit sizes may
+  /// only climb. There is no role above [title] for a label bigger than the
+  /// steps below, so the migration reaches for [microLabel] at larger sizes
+  /// too. Each step is deliberate and reviewed; this list exists so the next
+  /// feature copies from it instead of picking a new number:
   ///
-  ///  - 8 (the default) — the base label size for the tightest chrome:
-  ///    tower-build cards, dock pills, chips, and other high-density
-  ///    controls.
-  ///  - 9 — supporting/secondary text one step up from the base: a subtitle
-  ///    under a title (e.g. "Level 3 • Piercing") and feedback text.
-  ///  - 10 — a card title with a little more room to read; currently only
-  ///    the tech-tree node label inside its fixed-width card.
+  ///  - 10 (the default and the floor) — the base label size for the
+  ///    tightest chrome: tower-build cards, dock pills, chips, supporting
+  ///    subtitles and other high-density controls.
   ///  - 11 — section and detail labels inside expanded panels, and the
   ///    caption beside a numeral-heavy [readout] (e.g. "Targeting",
   ///    "SPECIALIZE - LV 4", a cost figure's label).
-  ///  - 13 — a primary, tappable call-to-action label inside a t3 sheet
+  ///  - 13 — a primary, tappable call-to-action label inside a sheet
   ///    (e.g. the stage-briefing Launch/Retry button); the largest step,
   ///    reserved for the one label per sheet that reads as an action.
   ///
   /// Do not add a new size without updating this list.
-  static TextStyle microLabel({Color? color, double size = 8}) {
+  static TextStyle microLabel({Color? color, double size = 10}) {
+    assert(
+      size >= 10,
+      'microLabel has a 10px floor; the kit scale has no '
+      'legible label below it.',
+    );
     final resolved = color ?? OrionUiTheme.dark.textMuted;
     if (resolved == OrionUiTheme.dark.textPrimary) {
       throw ArgumentError.value(
@@ -132,7 +138,7 @@ class OrionTitle extends StatelessWidget {
 
 /// A micro-label. Exists so call sites read as intent, not as styling.
 class OrionText extends StatelessWidget {
-  const OrionText.micro(this.data, {super.key, this.color, this.size = 8});
+  const OrionText.micro(this.data, {super.key, this.color, this.size = 10});
 
   final String data;
   final Color? color;

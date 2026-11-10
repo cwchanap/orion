@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/mission_command_hud.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
@@ -159,7 +158,7 @@ void main() {
     // Countdowns run during GamePhase.build, so pausing must work there.
     await tester.tap(find.byTooltip('Pause'));
     expect(pauseTaps, 1);
-    expect(find.text('Auto 5s'), findsOneWidget);
+    expect(find.text('5s'), findsOneWidget);
   });
 
   testWidgets('the phase pair is green while building, muted in a wave', (
@@ -381,7 +380,13 @@ void main() {
       findsNothing,
       reason: 'the status band is unboxed; a pill per readout is the old look',
     );
-    expect(find.byType(MissionSurface), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('mission-status-hud')),
+        matching: find.byType(BackdropFilter),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets(

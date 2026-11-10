@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_typography.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 
@@ -16,31 +15,88 @@ Iterable<File> _libDartFiles() sync* {
   }
 }
 
+/// Screens that still carry raw `Color(0x...)` literals while they wait for
+/// their own restyle task. This list only ever shrinks: each entry leaves as
+/// its screen moves to theme tokens, and it must be empty by Task 5.
+const _rawColorAllowlist = <String>{
+  'lib/game/ui/mission_command_dock.dart',
+  'lib/game/ui/mission_report_panel.dart',
+  'lib/game/ui/next_wave_scanner.dart',
+  'lib/game/ui/stage_briefing_sheet.dart',
+  'lib/game/ui/tech_tree_view.dart',
+  'lib/game/ui/world_map_view.dart',
+};
+
 void main() {
-  test('ImageFilter.blur is centralised in OrionSurface', () {
-    final filesWithBlur = <String>{
+  test('no game UI file blurs a backdrop', () {
+    final offenders = [
       for (final file in _libDartFiles())
-        if (file.readAsStringSync().contains('ImageFilter.blur'))
+        if (file.readAsStringSync().contains('BackdropFilter') ||
+            file.readAsStringSync().contains('ImageFilter.blur'))
           _posixPath(file),
-    };
+    ];
     expect(
-      filesWithBlur,
-      {'lib/game/ui/orion_surface.dart'},
+      offenders,
+      isEmpty,
       reason:
-          'every blur must go through OrionSurface, the one place the blur '
-          'budget is enforced; a second call site can drift from the four '
-          'sanctioned sigmas unnoticed — and an empty set here would mean '
-          'the sanctioned call itself was deleted, not just moved',
+          'the arcade command deck renders solid panels only; the blur tier '
+          'is retired, so neither BackdropFilter nor ImageFilter.blur may '
+          'appear anywhere in lib/',
     );
   });
 
-  test('only the four sanctioned blur values exist in lib/', () {
-    expect(OrionSurfaceTier.values.map((t) => t.blur).toSet(), {
-      6.0,
-      7.0,
-      12.0,
-      14.0,
-    }, reason: 'the system sheet ships four blur values; a fifth is a bug');
+  test('the retired surface APIs are gone', () {
+    final offenders = [
+      for (final file in _libDartFiles())
+        if (file.readAsStringSync().contains('OrionSurfaceTier') ||
+            file.readAsStringSync().contains('OrionInnerSurface') ||
+            file.readAsStringSync().contains('MissionSurface'))
+          _posixPath(file),
+    ];
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'one surface API remains: OrionSurface with a semantic role. The '
+          'blur-tier enum and both adapters were removed in the foundation '
+          'change; do not reintroduce them',
+    );
+  });
+
+  test('raw colors stay inside orion_ui_theme.dart in game UI', () {
+    final rawColor = RegExp(r'Color\(0x');
+    final offenders = <String>[
+      for (final file in _libDartFiles())
+        if (_posixPath(file).contains('/game/ui/') &&
+            !_posixPath(file).endsWith('orion_ui_theme.dart') &&
+            rawColor.hasMatch(file.readAsStringSync()))
+          _posixPath(file),
+    ]..sort();
+    expect(
+      offenders.toSet(),
+      _rawColorAllowlist,
+      reason:
+          'game UI consumes theme roles; a raw Color(0x...) literal belongs '
+          'in orion_ui_theme.dart. Files awaiting their restyle task sit in '
+          '_rawColorAllowlist, which only shrinks until Task 5 empties it',
+    );
+  });
+
+  test('every allowlisted file still needs the exception', () {
+    final rawColor = RegExp(r'Color\(0x');
+    final stale = [
+      for (final path in _rawColorAllowlist)
+        if (!File(path).existsSync() ||
+            !rawColor.hasMatch(File(path).readAsStringSync()))
+          path,
+    ];
+    expect(
+      stale,
+      isEmpty,
+      reason:
+          'an allowlist entry whose file no longer holds raw colors is '
+          'stale; remove it so the list keeps shrinking to zero',
+    );
   });
 
   test('the chamfered CommandFrame primitive is gone', () {

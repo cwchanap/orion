@@ -402,7 +402,7 @@ class _EmptySectorMap extends StatelessWidget {
         ),
         Center(
           child: OrionSurface(
-            tier: OrionSurfaceTier.t2,
+            role: OrionSurfaceRole.card,
             child: OrionText.micro(
               'No stages available',
               color: uiTheme.textMuted,
@@ -1144,7 +1144,7 @@ class _MissionDestination extends StatelessWidget {
         ? (stage.isMainPath ? 'NEXT MAIN' : 'OPTIONAL')
         : 'REPLAY';
     return OrionSurface(
-      tier: OrionSurfaceTier.t3,
+      role: OrionSurfaceRole.sheet,
       padding: const EdgeInsets.all(14),
       radius: 20,
       child: Semantics(

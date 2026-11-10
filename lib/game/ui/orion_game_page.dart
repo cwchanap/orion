@@ -1633,7 +1633,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
             constraints: const BoxConstraints(maxWidth: 380),
             child: OrionSurface(
               key: const ValueKey('reset-campaign-dialog'),
-              tier: OrionSurfaceTier.t3,
+              role: OrionSurfaceRole.sheet,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1657,7 +1657,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   OrionText.micro(
                     'Clear all campaign progress?',
                     color: uiTheme.textMuted,
-                    size: 9,
+                    size: 10,
                   ),
                   const SizedBox(height: 16),
                   Row(

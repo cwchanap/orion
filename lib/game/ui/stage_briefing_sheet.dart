@@ -348,7 +348,7 @@ class StageBriefingSheet extends StatelessWidget {
               top: 12,
               left: 14,
               child: OrionSurface(
-                tier: OrionSurfaceTier.t1,
+                role: OrionSurfaceRole.floating,
                 padding: EdgeInsets.zero,
                 radius: 14,
                 child: IconButton(
@@ -452,7 +452,7 @@ class _BriefingThreatProfile extends StatelessWidget {
     final threat = _StageThreat.of(stage);
 
     return OrionSurface(
-      tier: OrionSurfaceTier.t2,
+      role: OrionSurfaceRole.card,
       padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -743,7 +743,7 @@ class _BriefingStatTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final tile = OrionSurface(
-      tier: OrionSurfaceTier.t2,
+      role: OrionSurfaceRole.card,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
       child: Column(
         mainAxisSize: MainAxisSize.min,
@@ -817,7 +817,7 @@ class _BriefingModifierTile extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: OrionTypography.microLabel(
-                    size: 9,
+                    size: 10,
                     color: uiTheme.warningOrange,
                   ),
                 ),
@@ -877,7 +877,7 @@ class _BriefingIntelRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     return OrionSurface(
-      tier: OrionSurfaceTier.t2,
+      role: OrionSurfaceRole.card,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -896,7 +896,7 @@ class _BriefingIntelRow extends StatelessWidget {
                 Text(
                   detail,
                   style: OrionTypography.microLabel(
-                    size: 9,
+                    size: 10,
                     color: uiTheme.textMuted,
                   ),
                 ),

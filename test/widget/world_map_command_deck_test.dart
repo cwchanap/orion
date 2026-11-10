@@ -858,8 +858,8 @@ void main() {
       findsOneWidget,
     );
     expect(
-      tester.widget<OrionSurface>(find.byType(OrionSurface)).tier,
-      OrionSurfaceTier.t3,
+      tester.widget<OrionSurface>(find.byType(OrionSurface)).role,
+      OrionSurfaceRole.sheet,
     );
   });
 

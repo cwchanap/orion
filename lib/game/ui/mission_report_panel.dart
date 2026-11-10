@@ -352,7 +352,7 @@ class _ReportBody extends StatelessWidget {
             child: Text(
               content.comparisonText!,
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),
@@ -362,7 +362,7 @@ class _ReportBody extends StatelessWidget {
           title: OrionText.micro(
             'MISSION DETAILS',
             color: uiTheme.textMuted,
-            size: 9,
+            size: 10,
           ),
           children: [
             Align(
@@ -370,7 +370,7 @@ class _ReportBody extends StatelessWidget {
               child: Text(
                 content.outcomeText,
                 style: OrionTypography.microLabel(
-                  size: 9,
+                  size: 10,
                   color: uiTheme.textMuted,
                 ),
               ),
@@ -382,7 +382,7 @@ class _ReportBody extends StatelessWidget {
               Text(
                 content.emptyModulesText!,
                 style: OrionTypography.microLabel(
-                  size: 9,
+                  size: 10,
                   color: uiTheme.textMuted,
                 ),
               ),
@@ -399,7 +399,7 @@ class _ReportBody extends StatelessWidget {
                 subtitle: Text(
                   reward.detail,
                   style: OrionTypography.microLabel(
-                    size: 9,
+                    size: 10,
                     color: uiTheme.textMuted,
                   ),
                 ),
@@ -407,7 +407,7 @@ class _ReportBody extends StatelessWidget {
             Text(
               content.nextOpportunityText,
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),
@@ -447,7 +447,7 @@ class _ReportStat extends StatelessWidget {
   final OrionArtDescriptor? art;
   @override
   Widget build(BuildContext context) => OrionSurface(
-    tier: OrionSurfaceTier.t2,
+    role: OrionSurfaceRole.card,
     padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 14),
     child: Column(
       children: [
@@ -464,7 +464,7 @@ class _ReportStat extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 6),
-        OrionText.micro(label, size: 8),
+        OrionText.micro(label, size: 10),
       ],
     ),
   );
@@ -510,7 +510,7 @@ class _SaveStateRow extends StatelessWidget {
         Expanded(
           child: Text(
             text,
-            style: OrionTypography.microLabel(size: 9, color: stateColor),
+            style: OrionTypography.microLabel(size: 10, color: stateColor),
           ),
         ),
       ],
@@ -578,45 +578,24 @@ class _MissionActionButton extends StatelessWidget {
     return Tooltip(
       message: action.label,
       child: OrionSurface(
-        tier: enabled ? OrionSurfaceTier.t3 : OrionSurfaceTier.t2,
+        role: enabled ? OrionSurfaceRole.sheet : OrionSurfaceRole.card,
         padding: const EdgeInsets.all(3),
-        // The inner tile sat directly inside the outer OrionSurface's
-        // already-blurred fill, so its own BackdropFilter blurred a
-        // backdrop that was already blurred — a second blur pass that was
-        // visually almost a no-op. This DecoratedBox reproduces
-        // OrionSurfaceTier.t2's exact fill, border and radius (see
-        // OrionSurface.build) without paying for that blur again; padding
-        // is unchanged (zero).
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(18),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  uiTheme.panelRaised.withValues(alpha: 0.66),
-                  uiTheme.hullBlack.withValues(alpha: 0.76),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.fromBorderSide(
-                BorderSide(color: uiTheme.frameSteel),
-              ),
+        child: OrionSurface(
+          role: OrionSurfaceRole.card,
+          padding: EdgeInsets.zero,
+          radius: 18,
+          child: IconButton(
+            onPressed: action.onPressed,
+            style: IconButton.styleFrom(
+              foregroundColor: foreground,
+              disabledForegroundColor: uiTheme.textMuted,
+              backgroundColor: Colors.transparent,
+              disabledBackgroundColor: Colors.transparent,
+              overlayColor: accent.withValues(alpha: enabled ? 0.16 : 0),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              minimumSize: const Size(48, 48),
             ),
-            child: IconButton(
-              onPressed: action.onPressed,
-              style: IconButton.styleFrom(
-                foregroundColor: foreground,
-                disabledForegroundColor: uiTheme.textMuted,
-                backgroundColor: Colors.transparent,
-                disabledBackgroundColor: Colors.transparent,
-                overlayColor: accent.withValues(alpha: enabled ? 0.16 : 0),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                minimumSize: const Size(48, 48),
-              ),
-              icon: icon,
-            ),
+            icon: icon,
           ),
         ),
       ),
