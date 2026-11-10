@@ -12,6 +12,16 @@ import '../assets/game_sprite_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/board_layout.dart';
 
+@visibleForTesting
+enum MarkerDecoderStage { buffer, descriptor, codec, frame }
+
+@visibleForTesting
+abstract interface class MarkerDecoderProbe {
+  Future<T> run<T>(MarkerDecoderStage stage, Future<T> Function() operation);
+
+  void didDispose(MarkerDecoderStage stage, Object resource);
+}
+
 class BoardComponent extends PositionComponent {
   BoardComponent({
     required this.cellSize,
@@ -21,6 +31,7 @@ class BoardComponent extends PositionComponent {
     this.pathTiles,
     @visibleForTesting this.markerReadback,
     @visibleForTesting this.markerUpload,
+    @visibleForTesting this.markerDecoderProbe,
     super.position,
     super.priority,
   }) : assert(pathCells.isNotEmpty, 'BoardComponent requires path cells.'),
@@ -39,6 +50,8 @@ class BoardComponent extends PositionComponent {
   final Future<ByteData?> Function(Image)? markerReadback;
   @visibleForTesting
   final Future<Image> Function(Uint8List, int, int)? markerUpload;
+  @visibleForTesting
+  final MarkerDecoderProbe? markerDecoderProbe;
   GridPosition? selectedCell;
   double selectedRange = 0;
 
@@ -626,15 +639,84 @@ class BoardComponent extends PositionComponent {
     if (upload != null) {
       return (await upload(blurred, width, height), bounds.topLeft);
     }
-    final completer = Completer<Image>();
-    decodeImageFromPixels(
-      blurred,
-      width,
-      height,
-      PixelFormat.rgba8888,
-      completer.complete,
-    );
-    return (await completer.future, bounds.topLeft);
+    return (await _decodeMarkerPixels(blurred, width, height), bounds.topLeft);
+  }
+
+  Future<T> _runMarkerDecoderStage<T>(
+    MarkerDecoderStage stage,
+    Future<T> Function() operation,
+  ) {
+    final probe = markerDecoderProbe;
+    return probe == null ? operation() : probe.run(stage, operation);
+  }
+
+  void _disposeMarkerDecoderResource(
+    MarkerDecoderStage stage,
+    Object resource,
+    void Function() dispose,
+  ) {
+    dispose();
+    markerDecoderProbe?.didDispose(stage, resource);
+  }
+
+  Future<Image> _decodeMarkerPixels(
+    Uint8List pixels,
+    int width,
+    int height,
+  ) async {
+    Image? image;
+    try {
+      final buffer = await _runMarkerDecoderStage(
+        MarkerDecoderStage.buffer,
+        () => ImmutableBuffer.fromUint8List(pixels),
+      );
+      try {
+        final descriptor = await _runMarkerDecoderStage(
+          MarkerDecoderStage.descriptor,
+          () async => ImageDescriptor.raw(
+            buffer,
+            width: width,
+            height: height,
+            pixelFormat: PixelFormat.rgba8888,
+          ),
+        );
+        try {
+          final codec = await _runMarkerDecoderStage(
+            MarkerDecoderStage.codec,
+            descriptor.instantiateCodec,
+          );
+          try {
+            final frame = await _runMarkerDecoderStage(
+              MarkerDecoderStage.frame,
+              codec.getNextFrame,
+            );
+            image = frame.image;
+          } finally {
+            _disposeMarkerDecoderResource(
+              MarkerDecoderStage.codec,
+              codec,
+              codec.dispose,
+            );
+          }
+        } finally {
+          _disposeMarkerDecoderResource(
+            MarkerDecoderStage.descriptor,
+            descriptor,
+            descriptor.dispose,
+          );
+        }
+      } finally {
+        _disposeMarkerDecoderResource(
+          MarkerDecoderStage.buffer,
+          buffer,
+          buffer.dispose,
+        );
+      }
+    } catch (_) {
+      image?.dispose();
+      rethrow;
+    }
+    return image;
   }
 
   static Uint8List _blurAlpha(
