@@ -325,6 +325,74 @@ void main() {
     await tester.pump();
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('inspector sell stays fixed in the header while the body '
+      'scrolls', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(0, 0),
+        level: 2,
+      ),
+    );
+
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('tower-inspector-scroll')),
+        matching: find.byKey(const ValueKey('tower-sell')),
+      ),
+      findsNothing,
+    );
+
+    final before = tester.getRect(find.byKey(const ValueKey('tower-sell')));
+    expect(before.top, greaterThanOrEqualTo(0));
+    expect(before.bottom, lessThanOrEqualTo(640));
+
+    await tester.drag(
+      find.byKey(const ValueKey('tower-inspector-scroll')),
+      const Offset(0, -300),
+    );
+    await tester.pump();
+    expect(
+      tester.getRect(find.byKey(const ValueKey('tower-sell'))),
+      before,
+      reason: 'the header Sell must not ride the scrolling body',
+    );
+  });
+
+  testWidgets('header sell completes the hold gesture without scrolling', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await _pumpStageWithSelectedTower(
+      tester,
+      const PlacedTower(
+        id: 1,
+        type: TowerType.laser,
+        position: GridPosition(0, 0),
+        level: 2,
+      ),
+    );
+
+    final sellRect = tester.getRect(find.byKey(const ValueKey('tower-sell')));
+    expect(sellRect.bottom, lessThanOrEqualTo(640));
+    final hold = await tester.startGesture(sellRect.center);
+    await tester.pump(const Duration(milliseconds: 150));
+    await tester.pump(const Duration(milliseconds: 900));
+    await hold.up();
+    await tester.pump();
+
+    expect(find.text('Select a tower first.'), findsOneWidget);
+  });
 }
 
 /// Pumps [OrionGamePage], enters the first stage, and drives the panel with a

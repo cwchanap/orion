@@ -467,11 +467,9 @@ class TowerRadialActions extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                OrionSurface(
-                  role: OrionSurfaceRole.floating,
-                  radius: 28,
-                  padding: EdgeInsets.zero,
-                  child: SizedBox.square(
+                _radialFab(
+                  t,
+                  SizedBox.square(
                     dimension: 56,
                     child: IconButton(
                       tooltip: 'Inspect tower',
@@ -507,16 +505,25 @@ class TowerRadialActions extends StatelessWidget {
     );
   }
 
+  Widget _radialFab(OrionUiTheme t, Widget child) => Container(
+    decoration: BoxDecoration(
+      color: t.hullBlack.withValues(alpha: .88),
+      borderRadius: BorderRadius.circular(999),
+      border: Border.all(color: t.frameSteel.withValues(alpha: .9), width: 1.5),
+      boxShadow: [BoxShadow(color: t.voidBlack, offset: const Offset(0, 3))],
+    ),
+    child: child,
+  );
+
   /// The bottom targeting action, unchanged; split out only so the
   /// optional contextual-tip anchor can wrap it.
   Widget _targetingSurface(OrionUiTheme t, TextStyle labelStyle) {
     final tower = snapshot.selectedTower!;
     final build = snapshot.phase == GamePhase.build;
-    return OrionSurface(
-      role: OrionSurfaceRole.floating,
-      radius: 28,
-      padding: EdgeInsets.zero,
-      child: IconButton(
+    final ink = build ? t.systemCyan : t.textMuted;
+    return _radialFab(
+      t,
+      IconButton(
         constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
         tooltip: 'Targeting: ${tower.targetingMode.label}. Change targeting',
         onPressed: build
@@ -528,10 +535,10 @@ class TowerRadialActions extends StatelessWidget {
         icon: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.my_location, color: t.systemCyan, size: 22),
+            Icon(Icons.my_location, color: ink, size: 22),
             Text(
               tower.targetingMode.label.toUpperCase(),
-              style: labelStyle.copyWith(color: t.systemCyan),
+              style: labelStyle.copyWith(color: ink),
             ),
           ],
         ),
@@ -549,11 +556,10 @@ class TowerRadialActions extends StatelessWidget {
         tower.canUpgrade &&
         stats != null &&
         snapshot.gold >= stats.upgradeCost;
-    return OrionSurface(
-      role: OrionSurfaceRole.floating,
-      radius: 28,
-      padding: EdgeInsets.zero,
-      child: IconButton(
+    final actionEnabled = tower.canUpgrade ? canUpgrade : tower.canSpecialize;
+    return _radialFab(
+      t,
+      IconButton(
         constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
         tooltip: tower.canUpgrade
             ? 'Upgrade ${stats?.upgradeCost ?? ''}'
@@ -574,11 +580,16 @@ class TowerRadialActions extends StatelessWidget {
                   : tower.canSpecialize
                   ? Icons.auto_awesome
                   : Icons.check,
-              color: t.systemCyan,
+              color: actionEnabled ? t.systemCyan : t.textMuted,
               size: 22,
             ),
             if (tower.canUpgrade && stats != null)
-              Text('${stats.upgradeCost}', style: labelStyle),
+              Text(
+                '${stats.upgradeCost}',
+                style: labelStyle.copyWith(
+                  color: actionEnabled ? t.creditGold : t.textMuted,
+                ),
+              ),
           ],
         ),
       ),

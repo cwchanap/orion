@@ -4147,13 +4147,13 @@ void main() {
       for (final mode in TowerTargetingMode.values) {
         expect(find.text(mode.label), findsOneWidget);
       }
-      final strongestChip = tester.widget<ChoiceChip>(
-        find.ancestor(
-          of: find.text('Strongest'),
-          matching: find.byType(ChoiceChip),
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-target-strongest')),
+          matching: find.byIcon(Icons.check),
         ),
+        findsOneWidget,
       );
-      expect(strongestChip.selected, isTrue);
     },
   );
 
@@ -4198,10 +4198,13 @@ void main() {
     await tester.tap(find.byTooltip('Inspect tower'));
     await tester.pump();
 
-    final firstChip = tester.widget<ChoiceChip>(
-      find.ancestor(of: find.text('First'), matching: find.byType(ChoiceChip)),
+    final firstCell = tester.widget<InkWell>(
+      find.descendant(
+        of: find.byKey(const ValueKey('tower-target-first')),
+        matching: find.byType(InkWell),
+      ),
     );
-    expect(firstChip.onSelected, isNull);
+    expect(firstCell.onTap, isNull);
   });
 
   testWidgets('tapping a targeting chip invokes game.setTargetingMode', (

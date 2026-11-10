@@ -175,108 +175,85 @@ class _ReportBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final reward = content.reward;
-    final accent = _reportAccent(uiTheme, content);
     final result = content.result;
 
     final snapshot = content.snapshot;
-    final medalColor = result == null
-        ? uiTheme.dangerRed
-        : _medalColor(uiTheme, result.medal);
+    final isEndless = snapshot.isEndless;
+    final outcomeColor = content.didWin
+        ? uiTheme.creditGold
+        : uiTheme.dangerRed;
+    final outcomeSemantics = content.didWin
+        ? 'Victory'
+        : isEndless
+        ? 'Endless Run Over'
+        : 'Mission Failed';
+
+    Widget resultArt = ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Image.asset(
+        'assets/images/${OrionArt.result(result).fileName}',
+        key: const ValueKey('mission-report-result-art'),
+        height: 150,
+        width: double.infinity,
+        fit: BoxFit.cover,
+        alignment: Alignment.center,
+        errorBuilder: (context, error, stackTrace) => SizedBox(
+          height: 150,
+          child: Center(
+            child: Icon(
+              OrionArt.result(result).fallbackIcon,
+              color: uiTheme.systemCyan.withValues(alpha: 0.6),
+              size: 32,
+            ),
+          ),
+        ),
+      ),
+    );
+    if (result == null) {
+      resultArt = Semantics(
+        label: isEndless ? 'Endless run over' : 'Mission failed',
+        excludeSemantics: true,
+        child: resultArt,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 32),
-        Semantics(
-          label: content.didWin
-              ? 'Victory'
-              : snapshot.isEndless
-              ? 'Endless Run Over'
-              : 'Mission Failed',
-          excludeSemantics: true,
-          child: Center(
+        const SizedBox(height: 24),
+        if (content.didWin) ...[
+          Center(
             child: OrionText.micro(
-              content.didWin
-                  ? 'SECTOR SECURED'
-                  : snapshot.isEndless
-                  ? 'ENDLESS RUN OVER'
-                  : 'MISSION FAILED',
+              'SECTOR SECURED',
               size: 11,
-              color: accent,
+              color: outcomeColor,
             ),
           ),
-        ),
-        const SizedBox(height: 12),
+          const SizedBox(height: 8),
+        ],
         OrionTitle(
           content.stageName,
-          size: 28,
+          size: 26,
           textAlign: TextAlign.center,
           color: uiTheme.textPrimary,
         ),
-        const SizedBox(height: 60),
-        Center(
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: .85, end: 1),
-            duration: orionMotionDuration(
-              context,
-              const Duration(milliseconds: 500),
-            ),
-            builder: (context, scale, child) =>
-                Transform.scale(scale: scale, child: child),
-            child: Semantics(
-              label: result == null
-                  ? snapshot.isEndless
-                        ? 'Endless run over'
-                        : 'Mission failed'
-                  : '${result.medal.label} medal',
-              excludeSemantics: true,
-              child: ClipPath(
-                clipper: _MedalClipper(),
-                child: Container(
-                  width: 112,
-                  height: 132,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Color.lerp(medalColor, Colors.white, .5)!,
-                        medalColor,
-                        Color.lerp(medalColor, Colors.black, .35)!,
-                      ],
-                    ),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    result == null ? '×' : '${result.medal.rank}',
-                    style: OrionTypography.readout(
-                      size: 44,
-                      color: uiTheme.hullBlack,
-                    ).copyWith(shadows: const []),
-                  ),
-                ),
-              ),
-            ),
-          ),
+        const SizedBox(height: 14),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            resultArt,
+            _OutcomeRibbon(text: outcomeSemantics, accent: outcomeColor),
+          ],
         ),
-        const SizedBox(height: 32),
-        if (result != null)
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              for (var i = 0; i < result.medal.rank; i++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: ClipPath(
-                    clipper: _MedalClipper(),
-                    child: ColoredBox(
-                      color: medalColor,
-                      child: const SizedBox(width: 20, height: 24),
-                    ),
-                  ),
-                ),
-            ],
+        if (result != null) ...[
+          const SizedBox(height: 18),
+          Semantics(
+            label: '${result.medal.label} medal',
+            excludeSemantics: true,
+            child: _MedalCriteriaRow(medal: result.medal),
           ),
-        const SizedBox(height: 28),
+        ],
+        const SizedBox(height: 20),
         Row(
           children: [
             Expanded(
@@ -307,7 +284,7 @@ class _ReportBody extends StatelessWidget {
                 icon: Icons.hexagon,
               ),
             ),
-            if (!snapshot.isEndless) ...[
+            if (!isEndless) ...[
               const SizedBox(width: 8),
               Expanded(
                 child: _ReportStat(
@@ -321,27 +298,6 @@ class _ReportBody extends StatelessWidget {
               ),
             ],
           ],
-        ),
-        const SizedBox(height: 18),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(20),
-          child: Image.asset(
-            'assets/images/${OrionArt.result(result).fileName}',
-            key: const ValueKey('mission-report-result-art'),
-            height: 120,
-            fit: BoxFit.cover,
-            alignment: Alignment.center,
-            errorBuilder: (context, error, stackTrace) => SizedBox(
-              height: 120,
-              child: Center(
-                child: Icon(
-                  OrionArt.result(result).fallbackIcon,
-                  color: uiTheme.systemCyan.withValues(alpha: 0.6),
-                  size: 32,
-                ),
-              ),
-            ),
-          ),
         ),
         const SizedBox(height: 14),
         if (content.saveText != null)
@@ -357,6 +313,12 @@ class _ReportBody extends StatelessWidget {
               ),
             ),
           ),
+        if (content.didWin &&
+            !isEndless &&
+            (content.medalPoints > 0 || reward != null)) ...[
+          const SizedBox(height: 14),
+          _RewardsPanel(medalPoints: content.medalPoints, reward: reward),
+        ],
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
           title: OrionText.micro(
@@ -386,24 +348,6 @@ class _ReportBody extends StatelessWidget {
                   color: uiTheme.textMuted,
                 ),
               ),
-            if (reward != null)
-              ListTile(
-                contentPadding: EdgeInsets.zero,
-                title: Text(
-                  reward.title,
-                  style: OrionTypography.microLabel(
-                    size: 11,
-                    color: uiTheme.creditGold,
-                  ),
-                ),
-                subtitle: Text(
-                  reward.detail,
-                  style: OrionTypography.microLabel(
-                    size: 10,
-                    color: uiTheme.textMuted,
-                  ),
-                ),
-              ),
             Text(
               content.nextOpportunityText,
               style: OrionTypography.microLabel(
@@ -418,18 +362,238 @@ class _ReportBody extends StatelessWidget {
   }
 }
 
-class _MedalClipper extends CustomClipper<Path> {
+class _OutcomeRibbon extends StatelessWidget {
+  const _OutcomeRibbon({required this.text, required this.accent});
+
+  final String text;
+  final Color accent;
+
   @override
-  Path getClip(Size s) => Path()
-    ..moveTo(s.width / 2, 0)
-    ..lineTo(s.width, s.height * .22)
-    ..lineTo(s.width, s.height)
-    ..lineTo(s.width / 2, s.height * .78)
-    ..lineTo(0, s.height)
-    ..lineTo(0, s.height * .22)
-    ..close();
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Transform(
+      transform: Matrix4.skewX(-0.05),
+      alignment: Alignment.center,
+      child: Container(
+        width: double.infinity,
+        height: 56,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(4),
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color.lerp(accent, Colors.white, .15)!,
+              Color.lerp(accent, uiTheme.voidBlack, .25)!,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: uiTheme.voidBlack.withValues(alpha: .6),
+              offset: const Offset(0, 4),
+              blurRadius: 10,
+            ),
+          ],
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: OrionTitle(text, size: 30, color: uiTheme.voidBlack),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _MedalCriteriaRow extends StatelessWidget {
+  const _MedalCriteriaRow({required this.medal});
+
+  final StageMedal medal;
+
   @override
-  bool shouldReclip(_MedalClipper oldClipper) => false;
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final criteria = [
+      (tier: 1, label: 'CLEARED', color: uiTheme.medalBronze),
+      (
+        tier: 2,
+        label: '${GameBalance.silverMedalThreshold}+ HULL',
+        color: uiTheme.medalSilver,
+      ),
+      (tier: 3, label: 'NO LEAKS', color: uiTheme.creditGold),
+    ];
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        for (final criterion in criteria)
+          _MedalCriterion(
+            label: criterion.label,
+            tier: criterion.tier,
+            earned: medal.rank >= criterion.tier,
+            color: criterion.color,
+          ),
+      ],
+    );
+  }
+}
+
+class _MedalCriterion extends StatelessWidget {
+  const _MedalCriterion({
+    required this.label,
+    required this.tier,
+    required this.earned,
+    required this.color,
+  });
+
+  final String label;
+  final int tier;
+  final bool earned;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 54,
+          height: 54,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: earned ? color : uiTheme.hullBlack,
+            border: Border.all(
+              width: 3,
+              color: earned ? color : uiTheme.frameSteel.withValues(alpha: .6),
+            ),
+            boxShadow: earned
+                ? [
+                    BoxShadow(
+                      color: color.withValues(alpha: .35),
+                      blurRadius: 12,
+                    ),
+                  ]
+                : null,
+          ),
+          alignment: Alignment.center,
+          child: Text(
+            '$tier',
+            style: OrionTypography.readout(
+              size: 20,
+              color: earned ? uiTheme.voidBlack : uiTheme.textDim,
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          label,
+          style: OrionTypography.microLabel(
+            size: 10,
+            color: earned ? color : uiTheme.textDim,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RewardsPanel extends StatelessWidget {
+  const _RewardsPanel({required this.medalPoints, required this.reward});
+
+  final int medalPoints;
+  final MissionRewardFact? reward;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final reward = this.reward;
+    return OrionSurface(
+      role: OrionSurfaceRole.card,
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OrionText.micro('REWARDS', color: uiTheme.creditGold, size: 10),
+          const SizedBox(height: 8),
+          if (medalPoints > 0) ...[
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.hexagon_outlined,
+                  color: uiTheme.systemViolet,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '+$medalPoints R&D',
+                        style: OrionTypography.readout(
+                          size: 15,
+                          color: uiTheme.systemViolet,
+                        ),
+                      ),
+                      Text(
+                        'Spend it in the R&D lab',
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (reward != null) ...[
+            if (medalPoints > 0) const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  color: uiTheme.creditGold,
+                  size: 18,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        reward.title,
+                        style: OrionTypography.microLabel(
+                          size: 11,
+                          color: uiTheme.creditGold,
+                        ),
+                      ),
+                      Text(
+                        reward.detail,
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 }
 
 class _ReportStat extends StatelessWidget {
@@ -468,14 +632,6 @@ class _ReportStat extends StatelessWidget {
       ],
     ),
   );
-}
-
-Color _medalColor(OrionUiTheme uiTheme, StageMedal medal) {
-  return switch (medal) {
-    StageMedal.gold => uiTheme.creditGold,
-    StageMedal.silver => uiTheme.textMuted,
-    StageMedal.clear => uiTheme.systemCyan,
-  };
 }
 
 class _SaveStateRow extends StatelessWidget {
@@ -539,75 +695,21 @@ class _MissionActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final uiTheme = OrionUiTheme.of(context);
-    if (action.tonal) {
-      return Tooltip(
-        message: action.label,
-        child: OrionPrimaryButton(
-          label: action.label,
-          icon: action.icon,
-          onPressed: action.onPressed,
-        ),
-      );
-    }
-    final enabled = action.onPressed != null;
-    final accent = enabled
-        ? (action.tonal ? uiTheme.creditGold : uiTheme.systemCyan)
-        : uiTheme.frameSteel;
-    final foreground = enabled ? uiTheme.textPrimary : uiTheme.textMuted;
-    final icon = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(action.icon, color: foreground),
-        const SizedBox(height: 2),
-        Text(
-          action.label,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          // Labels are muted-only under the system sheet; the enabled state
-          // reads via its accent instead of the forbidden near-white that
-          // the icon above still carries.
-          style: OrionTypography.microLabel(
-            color: enabled ? accent : uiTheme.textMuted,
-          ),
-        ),
-      ],
-    );
-
     return Tooltip(
       message: action.label,
-      child: OrionSurface(
-        role: enabled ? OrionSurfaceRole.sheet : OrionSurfaceRole.card,
-        padding: const EdgeInsets.all(3),
-        child: OrionSurface(
-          role: OrionSurfaceRole.card,
-          padding: EdgeInsets.zero,
-          radius: 18,
-          child: IconButton(
-            onPressed: action.onPressed,
-            style: IconButton.styleFrom(
-              foregroundColor: foreground,
-              disabledForegroundColor: uiTheme.textMuted,
-              backgroundColor: Colors.transparent,
-              disabledBackgroundColor: Colors.transparent,
-              overlayColor: accent.withValues(alpha: enabled ? 0.16 : 0),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              minimumSize: const Size(48, 48),
-            ),
-            icon: icon,
-          ),
-        ),
+      child: OrionPrimaryButton(
+        label: action.label,
+        icon: action.icon,
+        onPressed: action.onPressed,
+        variant: action.tonal
+            ? OrionButtonVariant.primary
+            : OrionButtonVariant.secondary,
+        height: 54,
+        // Labels are muted-only under the system sheet; the enabled state
+        // reads via its accent instead of the forbidden near-white that
+        // the icon above still carries.
+        labelSize: 11,
       ),
     );
   }
-}
-
-Color _reportAccent(OrionUiTheme uiTheme, MissionReportContent content) {
-  if (!content.didWin) return uiTheme.dangerRed;
-  return switch (content.saveState) {
-    MissionSaveState.saving => uiTheme.systemCyan,
-    MissionSaveState.failed => uiTheme.dangerRed,
-    MissionSaveState.saved || null => uiTheme.creditGold,
-  };
 }

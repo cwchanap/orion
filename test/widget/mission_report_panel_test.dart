@@ -2,16 +2,21 @@ import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/orion_defense_game.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../support/orion_finders.dart';
 import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
+import '../widget_test.dart' as fixtures;
 
 void main() {
   testWidgets('saving victory shows save copy and disables both exits', (
@@ -34,10 +39,10 @@ void main() {
     expect(find.text('Replay Mission'), findsOneWidget);
     expect(find.text('World Map'), findsOneWidget);
 
-    final replayButton = tester.widget<IconButton>(
+    final replayButton = tester.widget<TextButton>(
       find.descendant(
         of: find.byTooltip('Replay Mission'),
-        matching: find.byType(IconButton),
+        matching: find.byType(TextButton),
       ),
     );
     final mapButton = tester.widget<TextButton>(
@@ -195,10 +200,10 @@ void main() {
       expect(find.text('Replay Mission'), findsOneWidget);
       expect(find.text('World Map'), findsOneWidget);
 
-      final replayButton = tester.widget<IconButton>(
+      final replayButton = tester.widget<TextButton>(
         find.descendant(
           of: find.byTooltip('Replay Mission'),
-          matching: find.byType(IconButton),
+          matching: find.byType(TextButton),
         ),
       );
       final mapButton = tester.widget<TextButton>(
@@ -248,7 +253,7 @@ void main() {
     final replayRect = tester.getRect(
       find.descendant(
         of: find.byTooltip('Replay Mission'),
-        matching: find.byType(IconButton),
+        matching: find.byType(TextButton),
       ),
     );
     final mapRect = tester.getRect(
@@ -496,10 +501,10 @@ void main() {
       );
 
       expect(find.text('Saving result…'), findsOneWidget);
-      final replayButton = tester.widget<IconButton>(
+      final replayButton = tester.widget<TextButton>(
         find.descendant(
           of: find.byTooltip('Replay Endless'),
-          matching: find.byType(IconButton),
+          matching: find.byType(TextButton),
         ),
       );
       final mapButton = tester.widget<TextButton>(
@@ -680,6 +685,301 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     }
+  });
+
+  group('command-deck report hierarchy (HPA-699)', () {
+    Finder criterion(String label) => find.textContaining(
+      RegExp(RegExp.escape(label), caseSensitive: false),
+      findRichText: true,
+    );
+
+    testWidgets('victory carries an outcome ribbon and all three medal '
+        'criteria', (tester) async {
+      await _pumpPanel(tester, _victoryContent(MissionSaveState.saved));
+
+      expect(find.text('VICTORY'), findsOneWidget);
+      for (final label in ['Cleared', '10+ hull', 'No leaks']) {
+        expect(criterion(label), findsOneWidget, reason: label);
+      }
+    });
+
+    testWidgets('a clear-only victory still shows all three medal criteria', (
+      tester,
+    ) async {
+      await _pumpPanel(
+        tester,
+        projectVictoryReport(
+          snapshot: _syntheticSnapshot(),
+          result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 8),
+          priorSavedResult: null,
+          saveState: MissionSaveState.saved,
+        ),
+      );
+
+      for (final label in ['Cleared', '10+ hull', 'No leaks']) {
+        expect(criterion(label), findsOneWidget, reason: label);
+      }
+    });
+
+    testWidgets('defeat reports render no medal treatment', (tester) async {
+      for (final content in [
+        _lossContent(),
+        _endlessContent(MissionSaveState.saved),
+      ]) {
+        await _pumpPanel(tester, content);
+        expect(find.text('×'), findsNothing);
+        for (final label in ['Cleared', '10+ hull', 'No leaks']) {
+          expect(
+            criterion(label),
+            findsNothing,
+            reason:
+                '$label (${content.snapshot.isEndless ? 'endless' : 'mission'})',
+          );
+        }
+      }
+    });
+
+    testWidgets('a reward fact renders in the report body, not only in '
+        'details', (tester) async {
+      await _pumpPanel(
+        tester,
+        _victoryContent(
+          MissionSaveState.saved,
+          reward: const MissionRewardFact(
+            title: 'Blueprint fragment',
+            detail: 'Unlocks a new blueprint after saving.',
+          ),
+        ),
+      );
+
+      expect(find.text('Blueprint fragment'), findsOneWidget);
+      expect(
+        find.text('Unlocks a new blueprint after saving.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('an endless report never surfaces rewards even when content '
+        'carries one', (tester) async {
+      final content = MissionReportContent(
+        snapshot: _syntheticSnapshot(
+          phase: GamePhase.lost,
+          baseHealth: 0,
+          missionWaveTotal: null,
+          wavesCleared: 4,
+        ),
+        stageId: 'outpost-alpha',
+        stageName: 'Outpost Alpha',
+        didWin: false,
+        outcomeText: 'Survived 4 waves',
+        moduleIds: const [],
+        saveState: MissionSaveState.saved,
+        saveText: 'Saved.',
+        reward: const MissionRewardFact(
+          title: 'Blueprint fragment',
+          detail: 'Unlocks a new blueprint after saving.',
+        ),
+        nextOpportunityText:
+            'Replay for a better result or continue on the World Map.',
+      );
+      await _pumpPanel(tester, content);
+      await _openDetails(tester);
+
+      expect(find.text('Blueprint fragment'), findsNothing);
+    });
+
+    testWidgets('report actions are shared OrionPrimaryButtons', (
+      tester,
+    ) async {
+      Future<void> expectShared(String label, {bool? primary}) async {
+        final button = find.ancestor(
+          of: find.text(label),
+          matching: find.byType(OrionPrimaryButton),
+        );
+        expect(button, findsOneWidget, reason: label);
+        final widget = tester.widget<OrionPrimaryButton>(button);
+        if (primary == true) {
+          expect(widget.variant, OrionButtonVariant.primary, reason: label);
+        } else if (primary == false) {
+          expect(
+            widget.variant,
+            isNot(OrionButtonVariant.primary),
+            reason: label,
+          );
+        }
+      }
+
+      await _pumpPanel(
+        tester,
+        _victoryContent(MissionSaveState.saved),
+        onReplay: () {},
+        onReturnToMap: () {},
+      );
+      await expectShared('World Map', primary: true);
+      await expectShared('Replay Mission', primary: false);
+
+      await _pumpPanel(
+        tester,
+        _lossContent(),
+        onReplay: () {},
+        onReturnToMap: () {},
+      );
+      await expectShared('Retry', primary: false);
+      await expectShared('World Map', primary: true);
+
+      await _pumpPanel(
+        tester,
+        _victoryContent(MissionSaveState.failed),
+        onRetrySave: () {},
+        onReturnToMap: () {},
+      );
+      await expectShared('Retry Save', primary: false);
+      await expectShared('World Map (Unsaved)');
+
+      await _pumpPanel(
+        tester,
+        _endlessContent(MissionSaveState.saved),
+        onReplay: () {},
+        onReturnToMap: () {},
+      );
+      await expectShared('Replay Endless', primary: false);
+    });
+
+    testWidgets('saving keeps both shared actions disabled', (tester) async {
+      await _pumpPanel(
+        tester,
+        _victoryContent(MissionSaveState.saving),
+        onReplay: () {},
+        onReturnToMap: () {},
+      );
+
+      for (final label in ['Replay Mission', 'World Map']) {
+        final button = find.ancestor(
+          of: find.text(label),
+          matching: find.byType(OrionPrimaryButton),
+        );
+        expect(button, findsOneWidget, reason: label);
+        expect(
+          tester.widget<OrionPrimaryButton>(button).onPressed,
+          isNull,
+          reason: label,
+        );
+      }
+    });
+
+    testWidgets('no report state exposes a Continue or next-stage action', (
+      tester,
+    ) async {
+      for (final content in [
+        _victoryContent(MissionSaveState.saving),
+        _victoryContent(MissionSaveState.saved),
+        _victoryContent(MissionSaveState.failed),
+        _lossContent(),
+        _endlessContent(MissionSaveState.saving),
+        _endlessContent(MissionSaveState.saved),
+        _endlessContent(MissionSaveState.failed),
+        _endlessContent(
+          MissionSaveState.saved,
+          waveNumber: 1,
+          wavesCleared: 0,
+          priorBest: null,
+          savedBest: null,
+        ),
+      ]) {
+        await _pumpPanel(tester, content);
+        expect(find.text('Continue'), findsNothing);
+        expect(find.text('Next'), findsNothing);
+      }
+    });
+
+    testWidgets('zero-wave endless defeat keeps both exits enabled', (
+      tester,
+    ) async {
+      var replayed = false;
+      var returned = false;
+      await _pumpPanel(
+        tester,
+        _endlessContent(
+          MissionSaveState.saved,
+          waveNumber: 1,
+          wavesCleared: 0,
+          priorBest: null,
+          savedBest: null,
+        ),
+        onReplay: () => replayed = true,
+        onReturnToMap: () => returned = true,
+      );
+
+      expect(find.text('0'), findsOneWidget);
+      expect(find.text('No result to save.'), findsOneWidget);
+      expect(find.text('Replay Endless'), findsOneWidget);
+      expect(find.text('World Map'), findsOneWidget);
+
+      await tester.tap(find.text('Replay Endless'));
+      await tester.tap(find.text('World Map'));
+      expect(replayed, isTrue);
+      expect(returned, isTrue);
+    });
+
+    testWidgets('an ordinary victory World Map exits to the sector map, '
+        'never a briefing', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        fixtures.testGamePage(onGameCreated: (created) => game = created),
+      );
+      await tester.pumpAndSettle();
+      await fixtures.startStageFromBriefing(tester);
+      await fixtures.publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue'), findsNothing);
+      await tester.tap(find.byTooltip('World Map'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+    });
+
+    testWidgets('a completed-campaign victory World Map exits to the sector '
+        'map', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await fixtures.storeWithResults({
+        for (final stage in OrionCampaign.stages)
+          stage.id: const StageResult(
+            medal: StageMedal.clear,
+            bestBaseHealth: 1,
+          ),
+      });
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        fixtures.testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await fixtures.startStageFromBriefing(
+        tester,
+        mapLabel: 'Core',
+        actionLabel: 'Replay Mission',
+      );
+      await fixtures.publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Continue'), findsNothing);
+      await tester.tap(find.byTooltip('World Map'));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+    });
   });
 }
 
