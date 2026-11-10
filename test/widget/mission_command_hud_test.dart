@@ -112,29 +112,52 @@ void main() {
     }
   });
 
-  testWidgets('pacing controls invoke existing control callbacks', (
-    tester,
-  ) async {
-    var pauseTaps = 0;
-    var autoTaps = 0;
-    double? speed;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: MissionPacingControls(
-          snapshot: commandDeckSnapshot(phase: GamePhase.wave),
-          onTogglePause: () => pauseTaps += 1,
-          onSpeedSelected: (value) => speed = value,
-          onToggleAutoStart: () => autoTaps += 1,
+  testWidgets(
+    'wave pacing exposes the segmented speed set, pause and auto once',
+    (tester) async {
+      var pauseTaps = 0;
+      var autoTaps = 0;
+      double? speed;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orionThemeData,
+          home: MissionPacingControls(
+            snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+            onTogglePause: () => pauseTaps += 1,
+            onSpeedSelected: (value) => speed = value,
+            onToggleAutoStart: () => autoTaps += 1,
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.byTooltip('Pause'));
-    // The speed button cycles: from the fixture's 1x, one tap selects 2x.
-    await tester.tap(find.byTooltip('Game speed'));
-    await tester.tap(find.byTooltip('Auto-start waves'));
-    expect((pauseTaps, speed, autoTaps), (1, 2.0, 1));
-  });
+      Finder speedLabel(String label) => find.byWidgetPredicate(
+        (widget) => widget is Text && widget.data == label,
+      );
+
+      expect(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Text && const {'1x', '2x', '3x'}.contains(widget.data),
+        ),
+        findsNWidgets(3),
+        reason:
+            'wave phase must present the kit segmented speed control: '
+            '1x, 2x and 3x as separately selectable cells',
+      );
+
+      // The speed button cycles: from the fixture's 1x, one tap selects 2x.
+      await tester.tap(speedLabel('2x'));
+      expect(speed, 2.0);
+      await tester.tap(speedLabel('3x'));
+      expect(speed, 3.0);
+      await tester.tap(speedLabel('1x'));
+      expect(speed, 1.0);
+
+      await tester.tap(find.byTooltip('Pause'));
+      await tester.tap(find.byTooltip('Auto-start waves'));
+      expect((pauseTaps, autoTaps), (1, 1));
+    },
+  );
 
   testWidgets('auto-start countdown keeps pause reachable during build', (
     tester,
@@ -193,7 +216,7 @@ void main() {
       MaterialApp(
         theme: orionThemeData,
         home: MissionPacingControls(
-          snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+          snapshot: commandDeckSnapshot(phase: GamePhase.build),
           onTogglePause: () {},
           onSpeedSelected: (_) {},
           onToggleAutoStart: () {},
@@ -242,7 +265,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: MissionPacingControls(
-          snapshot: commandDeckSnapshot(phase: GamePhase.wave),
+          snapshot: commandDeckSnapshot(phase: GamePhase.build),
           onTogglePause: () {},
           onSpeedSelected: (_) {},
           onToggleAutoStart: () {},
@@ -354,11 +377,14 @@ void main() {
     }
   });
 
-  testWidgets('status HUD is unboxed: three readouts, no surfaces', (
+  testWidgets('status HUD is one framed top bar holding all three readouts', (
     tester,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(home: MissionStatusHud(snapshot: commandDeckSnapshot())),
+      MaterialApp(
+        theme: orionThemeData,
+        home: MissionStatusHud(snapshot: commandDeckSnapshot()),
+      ),
     );
 
     expect(find.byKey(const ValueKey('mission-status-hud')), findsOneWidget);
@@ -372,13 +398,34 @@ void main() {
     // Artboard 1a floats these readouts on the live board rather than giving
     // each its own pill. Their contrast comes from the type roles' shadow,
     // which exists so it never depends on a surface fill.
+    final frame = find.ancestor(
+      of: find.byKey(const ValueKey('mission-status-hud')),
+      matching: find.byType(OrionSurface),
+    );
+    expect(
+      frame,
+      findsOneWidget,
+      reason: 'the status readouts must sit inside one framed top bar',
+    );
+    for (final key in [
+      'mission-status-base',
+      'mission-status-stage',
+      'mission-status-credits',
+    ]) {
+      expect(
+        find.descendant(of: frame, matching: find.byKey(ValueKey(key))),
+        findsOneWidget,
+        reason: '$key escaped the shared HUD frame',
+      );
+    }
+
     expect(
       find.descendant(
         of: find.byKey(const ValueKey('mission-status-hud')),
         matching: find.byType(OrionSurface),
       ),
       findsNothing,
-      reason: 'the status band is unboxed; a pill per readout is the old look',
+      reason: 'a pill per readout is the old look; one frame wraps them all',
     );
     expect(
       find.descendant(

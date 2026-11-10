@@ -840,6 +840,23 @@ void main() {
         expect(layout.slowedRingRadius, greaterThan(layout.corrodedRingRadius));
       });
 
+      test('status rings clear the board.js-scaled sprite half-extent', () {
+        final state = EnemyOverlayState(
+          shouldRender: true,
+          isExpanded: false,
+          isSlowed: true,
+          isCorroded: true,
+          healthRatio: 0.5,
+          shieldRatio: 0,
+          showHealthBar: true,
+          showShieldBar: false,
+          badges: const [],
+        );
+        final layout = EnemyOverlayLayout.compute(state, 20);
+        expect(layout.corrodedRingRadius, greaterThan(1.7 * 20));
+        expect(layout.slowedRingRadius, greaterThan(layout.corrodedRingRadius));
+      });
+
       test('resolved overlay exposes no status ring geometry', () {
         final state = EnemyOverlayState(
           shouldRender: false,
@@ -1008,6 +1025,58 @@ void main() {
           enemy.setInspected(true);
 
           expect(() => _renderEnemyToCanvas(enemy), returnsNormally);
+        },
+      );
+
+      test(
+        'the board.js silhouette reaches past the legacy 2.4r draw box',
+        () async {
+          final spriteSheet = GameSpriteSheet.fromImage(
+            await _blankImage(1024, 768),
+          );
+          const radius = 20.0;
+          final enemy = EnemyComponent(
+            enemyId: 1,
+            stats: const EnemyStats(
+              health: 100,
+              speed: 10,
+              baseDamage: 1,
+              goldReward: 1,
+            ),
+            logic: EnemyLogic(
+              enemyId: 1,
+              stats: const EnemyStats(
+                health: 100,
+                speed: 10,
+                baseDamage: 1,
+                goldReward: 1,
+              ),
+              waypoints: const [Offset(0, 0), Offset(1000, 0)],
+            ),
+            onKilled: (_) {},
+            onReachedBase: (_) {},
+            spriteSheet: spriteSheet,
+            radius: radius,
+          );
+
+          final recorder = ui.PictureRecorder();
+          enemy.render(ui.Canvas(recorder));
+          final picture = recorder.endRecording();
+          final image = await picture.toImage(80, 80);
+          picture.dispose();
+          final data = await image.toByteData(
+            format: ui.ImageByteFormat.rawRgba,
+          );
+
+          final x = (radius + radius * 1.5).round();
+          final index = (radius.round() * image.width + x) * 4;
+          expect(
+            data!.getUint8(index + 3),
+            greaterThan(0),
+            reason:
+                'the drawn sprite — not EnemyComponent.radius — carries '
+                'the enlargement',
+          );
         },
       );
 

@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/components/board_component.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/board_layout.dart';
 
 Path _line(double length) => Path()
   ..moveTo(0, 0)
@@ -11,6 +12,30 @@ Path _line(double length) => Path()
 
 double _totalLength(Path path) =>
     path.computeMetrics().fold<double>(0, (sum, metric) => sum + metric.length);
+
+Future<Image> _rasterize(
+  int width,
+  int height,
+  void Function(Canvas) draw,
+) async {
+  final recorder = PictureRecorder();
+  draw(Canvas(recorder));
+  final picture = recorder.endRecording();
+  final image = await picture.toImage(width, height);
+  picture.dispose();
+  return image;
+}
+
+Future<List<int>> _rgbaAt(Image image, int x, int y) async {
+  final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+  final index = (y * image.width + x) * 4;
+  return [
+    data!.getUint8(index),
+    data.getUint8(index + 1),
+    data.getUint8(index + 2),
+    data.getUint8(index + 3),
+  ];
+}
 
 void main() {
   group('BoardComponent.dashed', () {
@@ -170,6 +195,114 @@ void main() {
 
       expect(selected.showsSelectionHighlight, isTrue);
       expect(selected.showsPlacementGrid, isFalse);
+    });
+  });
+
+  group('BoardComponent board.js readability (HPA-699)', () {
+    const cell = 40.0;
+
+    BoardComponent board() =>
+        BoardComponent(cellSize: cell, pathCells: BoardLayout.pathCells);
+
+    Future<Image> renderBoard() => _rasterize(
+      (BoardLayout.columns * cell).ceil(),
+      (BoardLayout.rows * cell).ceil(),
+      board().render,
+    );
+
+    test('the lane corridor paints a dark channel inside the rim', () async {
+      final image = await renderBoard();
+      final pixel = await _rgbaAt(
+        image,
+        (2.5 * cell).round(),
+        (1.82 * cell).round(),
+      );
+      expect(pixel[0], lessThan(0x30));
+      expect(pixel[1], lessThan(0x45));
+      expect(pixel[2], lessThan(0x50));
+    });
+
+    test('the lane keeps a steel-cyan rim around the channel', () async {
+      final image = await renderBoard();
+      final pixel = await _rgbaAt(
+        image,
+        (2.5 * cell).round(),
+        (1.88 * cell).round(),
+      );
+      expect(pixel[0], lessThan(0x45));
+      expect(pixel[2], greaterThan(pixel[0]));
+    });
+
+    test('the centre line carries chevrons, not a cyan stripe', () async {
+      final image = await renderBoard();
+      final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+      final y = (1.5 * cell).round();
+      var cyanish = 0;
+      var samples = 0;
+      for (var x = (0.6 * cell).round(); x < (3.4 * cell).round(); x++) {
+        final index = (y * image.width + x) * 4;
+        final r = data!.getUint8(index);
+        final g = data.getUint8(index + 1);
+        final b = data.getUint8(index + 2);
+        final a = data.getUint8(index + 3);
+        if (a > 0) {
+          samples += 1;
+          if (g > 150 && b > 150 && r < 100) cyanish += 1;
+        }
+      }
+      expect(samples, greaterThan(0));
+      expect(
+        cyanish / samples,
+        lessThan(0.4),
+        reason:
+            'flow chevrons are sparse glyphs, so most of the centre line '
+            'stays the dark channel',
+      );
+    });
+
+    test('a faint always-on grid borders every cell', () async {
+      final image = await renderBoard();
+      final pixel = await _rgbaAt(image, cell.round(), (8.5 * cell).round());
+      expect(pixel[3], greaterThan(0));
+      expect(pixel[2], greaterThanOrEqualTo(pixel[0]));
+    });
+
+    test('the spawn marker reads larger than its cell', () async {
+      final image = await renderBoard();
+      final pixel = await _rgbaAt(
+        image,
+        (0.5 * cell).round(),
+        (1.0 * cell).round(),
+      );
+      expect(pixel[3], greaterThan(0));
+    });
+
+    test('the core marker reads larger than its cell', () async {
+      final image = await renderBoard();
+      final pixel = await _rgbaAt(
+        image,
+        (6.95 * cell).round(),
+        (10.5 * cell).round(),
+      );
+      expect(pixel[3], greaterThan(0));
+    });
+
+    test('cell geometry stays aligned with BoardLayout after the repaint', () {
+      final component = board();
+      for (final position in BoardLayout.pathCells) {
+        expect(
+          component.cellCenter(position),
+          BoardLayout.cellCenter(
+            position,
+            cellSize: cell,
+            boardOrigin: Offset.zero,
+          ),
+        );
+        expect(
+          component.cellRect(position).contains(component.cellCenter(position)),
+          isTrue,
+        );
+      }
     });
   });
 }

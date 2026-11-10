@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../models/game_models.dart';
 import 'mission_command_hud.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_primary_button.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
@@ -60,11 +61,13 @@ class MissionCommandDock extends StatelessWidget {
     required this.onSell,
     this.onPlacementPreviewEvent,
     this.worldMapAction,
+    this.nextWaveIntel,
     this.towerCardGuideAnchor,
     this.waveGuideAnchorKey,
   });
 
   final Widget? worldMapAction;
+  final Widget? nextWaveIntel;
 
   /// Card anchor for the first-mission/contextual guide; attached ONLY to
   /// the selected-cell rail (never the persistent idle rail — the same
@@ -94,21 +97,37 @@ class MissionCommandDock extends StatelessWidget {
   Widget build(BuildContext context) {
     final Widget content;
     final Key contentKey;
+    final worldMapAction = this.worldMapAction;
+    Widget railRow(TowerBuildRail rail) => Padding(
+      padding: const EdgeInsets.only(right: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(child: rail),
+          if (worldMapAction != null) ...[
+            const SizedBox(width: 8),
+            worldMapAction,
+          ],
+        ],
+      ),
+    );
     if (snapshot.selectedCell != null && snapshot.selectedTower == null) {
       contentKey = const ValueKey('command-dock-build');
-      content = TowerBuildRail(
-        phase: snapshot.phase,
-        gold: snapshot.gold,
-        unlockedTowerTypes: snapshot.unlockedTowerTypes,
-        onPlaceTower: onPlaceTower,
-        onPlacementPreviewEvent: onPlacementPreviewEvent,
-        // Selected-cell branch only: see [towerCardGuideAnchor].
-        towerCardGuideAnchor: towerCardGuideAnchor,
+      content = railRow(
+        TowerBuildRail(
+          phase: snapshot.phase,
+          gold: snapshot.gold,
+          unlockedTowerTypes: snapshot.unlockedTowerTypes,
+          onPlaceTower: onPlaceTower,
+          onPlacementPreviewEvent: onPlacementPreviewEvent,
+          // Selected-cell branch only: see [towerCardGuideAnchor].
+          towerCardGuideAnchor: towerCardGuideAnchor,
+        ),
       );
     } else {
       contentKey = const ValueKey('command-dock-idle');
       final idleBar = IdleCommandBar(
-        worldMapAction: worldMapAction,
+        nextWaveIntel: nextWaveIntel,
         snapshot: snapshot,
         onTogglePause: onTogglePause,
         onSpeedSelected: onSpeedSelected,
@@ -128,13 +147,15 @@ class MissionCommandDock extends StatelessWidget {
               children: [
                 idleBar,
                 const SizedBox(height: 8),
-                TowerBuildRail(
-                  key: const ValueKey('command-dock-persistent-rail'),
-                  phase: snapshot.phase,
-                  gold: snapshot.gold,
-                  unlockedTowerTypes: snapshot.unlockedTowerTypes,
-                  onPlaceTower: onPlaceTower,
-                  onPlacementPreviewEvent: onPlacementPreviewEvent,
+                railRow(
+                  TowerBuildRail(
+                    key: const ValueKey('command-dock-persistent-rail'),
+                    phase: snapshot.phase,
+                    gold: snapshot.gold,
+                    unlockedTowerTypes: snapshot.unlockedTowerTypes,
+                    onPlaceTower: onPlaceTower,
+                    onPlacementPreviewEvent: onPlacementPreviewEvent,
+                  ),
                 ),
               ],
             )
@@ -175,11 +196,11 @@ class IdleCommandBar extends StatelessWidget {
     required this.onSpeedSelected,
     required this.onToggleAutoStart,
     required this.onStartWave,
-    this.worldMapAction,
+    this.nextWaveIntel,
     this.waveGuideAnchorKey,
   });
 
-  final Widget? worldMapAction;
+  final Widget? nextWaveIntel;
   final GameSnapshot snapshot;
   final VoidCallback onTogglePause;
   final ValueChanged<double> onSpeedSelected;
@@ -214,9 +235,9 @@ class IdleCommandBar extends StatelessWidget {
               onToggleAutoStart: onToggleAutoStart,
             ),
           ),
-          if (worldMapAction != null) ...[
+          if (nextWaveIntel != null) ...[
             const SizedBox(width: 8),
-            worldMapAction!,
+            nextWaveIntel!,
           ],
           const SizedBox(width: 8),
           AnimatedSwitcher(
@@ -250,13 +271,30 @@ class IdleCommandBar extends StatelessWidget {
     required String tooltip,
     required String label,
   }) {
-    final pill = _PrimaryActionPill(
-      tooltip: tooltip,
-      label: label,
-      icon: snapshot.phase == GamePhase.wave
-          ? Icons.radar
-          : Icons.play_arrow_rounded,
-      onPressed: snapshot.canStartWave ? onStartWave : null,
+    final onPressed = snapshot.canStartWave ? onStartWave : null;
+    final pill = Tooltip(
+      message: tooltip,
+      excludeFromSemantics: true,
+      child: Semantics(
+        button: true,
+        enabled: onPressed != null,
+        label: tooltip,
+        onTap: onPressed,
+        excludeSemantics: true,
+        child: SizedBox(
+          width: 116,
+          height: 48,
+          child: OrionPrimaryButton(
+            label: label.toUpperCase(),
+            icon: snapshot.phase == GamePhase.wave
+                ? Icons.radar
+                : Icons.play_arrow_rounded,
+            onPressed: onPressed,
+            height: 48,
+            labelSize: 10,
+          ),
+        ),
+      ),
     );
     return KeyedSubtree(
       key: ValueKey(reactorLabel),
@@ -273,121 +311,6 @@ class IdleCommandBar extends StatelessWidget {
           : '${snapshot.waveNumber}/$missionWaveTotal';
     }
     return 'Start Wave';
-  }
-}
-
-/// Wide filled pill for the dock's single primary action: 48-56dp tall,
-/// filled cyan with dark content while enabled, and the dock's only glow.
-/// The wave-progress and countdown variants share the same footprint so the
-/// idle dock never reflows when the phase label changes.
-class _PrimaryActionPill extends StatelessWidget {
-  const _PrimaryActionPill({
-    required this.tooltip,
-    required this.label,
-    required this.icon,
-    required this.onPressed,
-  });
-
-  final String tooltip;
-  final String label;
-  final IconData icon;
-  final VoidCallback? onPressed;
-
-  static const double _width = 116;
-  static const double _height = 48;
-
-  @override
-  Widget build(BuildContext context) {
-    final uiTheme = OrionUiTheme.of(context);
-    final enabled = onPressed != null;
-    final foreground = enabled ? uiTheme.voidBlack : uiTheme.textMuted;
-    final accent = enabled ? uiTheme.systemCyanStrong : uiTheme.frameSteel;
-    final radius = BorderRadius.circular(_height / 2);
-
-    return Tooltip(
-      message: tooltip,
-      excludeFromSemantics: true,
-      child: Semantics(
-        button: true,
-        enabled: enabled,
-        label: tooltip,
-        onTap: onPressed,
-        excludeSemantics: true,
-        child: SizedBox(
-          width: _width,
-          height: _height,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              gradient: enabled
-                  ? const LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Color(0xFF7FF0FF),
-                        Color(0xFF13B8E6),
-                        Color(0xFF0A7EA3),
-                      ],
-                      stops: [0, 0.6, 1],
-                    )
-                  : null,
-              // The strongest glow in the idle dock is reserved for this
-              // one action; pacing and the shell carry none.
-              boxShadow: enabled
-                  ? [
-                      BoxShadow(
-                        color: uiTheme.systemCyanStrong.withValues(alpha: 0.30),
-                        blurRadius: 12,
-                      ),
-                    ]
-                  : null,
-            ),
-            child: Material(
-              color: enabled
-                  ? Colors.transparent
-                  : uiTheme.hullBlack.withValues(alpha: 0.55),
-              shape: RoundedRectangleBorder(
-                borderRadius: radius,
-                side: BorderSide(color: accent, width: 1),
-              ),
-              child: InkWell(
-                onTap: onPressed,
-                borderRadius: radius,
-                splashColor: uiTheme.voidBlack.withValues(alpha: 0.12),
-                highlightColor: uiTheme.voidBlack.withValues(alpha: 0.06),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, size: 18, color: foreground),
-                      const SizedBox(width: 2),
-                      Flexible(
-                        child: Text(
-                          // Caps to match the artboard's pill; the pill
-                          // already excludes its own semantics in favour of
-                          // `tooltip`, so the real copy is untouched.
-                          label.toUpperCase(),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          textScaler: MediaQuery.textScalerOf(
-                            context,
-                          ).clamp(maxScaleFactor: 1.15),
-                          style: OrionTypography.microLabel(
-                            color: foreground,
-                            size: 10,
-                          ).copyWith(shadows: const []),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
 

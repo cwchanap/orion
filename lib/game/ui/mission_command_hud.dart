@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
@@ -62,50 +63,55 @@ class MissionStatusHud extends StatelessWidget {
     // along a row. Still a Wrap, so a narrow viewport or a large text scale
     // reflows to a second run instead of overflowing; `spacing` is then the
     // minimum gap rather than the actual one.
-    return Wrap(
-      key: const ValueKey('mission-status-hud'),
-      alignment: WrapAlignment.spaceBetween,
-      spacing: 10,
-      runSpacing: 6,
-      children: [
-        Semantics(
-          container: true,
-          excludeSemantics: true,
-          label:
-              'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
-          child: _BaseHealthAnchor(
-            key: const ValueKey('mission-status-base'),
-            snapshot: snapshot,
-            uiTheme: uiTheme,
-            textScaler: textScaler,
+    return OrionSurface(
+      role: OrionSurfaceRole.floating,
+      radius: 16,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Wrap(
+        key: const ValueKey('mission-status-hud'),
+        alignment: WrapAlignment.spaceBetween,
+        spacing: 10,
+        runSpacing: 6,
+        children: [
+          Semantics(
+            container: true,
+            excludeSemantics: true,
+            label:
+                'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
+            child: _BaseHealthAnchor(
+              key: const ValueKey('mission-status-base'),
+              snapshot: snapshot,
+              uiTheme: uiTheme,
+              textScaler: textScaler,
+            ),
           ),
-        ),
-        Semantics(
-          container: true,
-          excludeSemantics: true,
-          label:
-              '${snapshot.stageName}. '
-              '$waveLabel, '
-              '${_missionPhaseLabel(snapshot)}',
-          child: _MissionStatusAnchor(
-            key: const ValueKey('mission-status-stage'),
-            snapshot: snapshot,
-            uiTheme: uiTheme,
-            textScaler: textScaler,
+          Semantics(
+            container: true,
+            excludeSemantics: true,
+            label:
+                '${snapshot.stageName}. '
+                '$waveLabel, '
+                '${_missionPhaseLabel(snapshot)}',
+            child: _MissionStatusAnchor(
+              key: const ValueKey('mission-status-stage'),
+              snapshot: snapshot,
+              uiTheme: uiTheme,
+              textScaler: textScaler,
+            ),
           ),
-        ),
-        Semantics(
-          container: true,
-          excludeSemantics: true,
-          label: 'Credits ${snapshot.gold}',
-          child: _CreditsAnchor(
-            key: const ValueKey('mission-status-credits'),
-            snapshot: snapshot,
-            uiTheme: uiTheme,
-            textScaler: textScaler,
+          Semantics(
+            container: true,
+            excludeSemantics: true,
+            label: 'Credits ${snapshot.gold}',
+            child: _CreditsAnchor(
+              key: const ValueKey('mission-status-credits'),
+              snapshot: snapshot,
+              uiTheme: uiTheme,
+              textScaler: textScaler,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -345,10 +351,15 @@ class MissionPacingControls extends StatelessWidget {
             active: snapshot.isPaused,
             onPressed: canTogglePause ? onTogglePause : null,
           ),
-          _SpeedCycleButton(
-            speed: snapshot.speedMultiplier,
-            onSelected: canUsePacing ? onSpeedSelected : null,
-          ),
+          snapshot.phase == GamePhase.wave
+              ? _SpeedSegments(
+                  speed: snapshot.speedMultiplier,
+                  onSelected: canUsePacing ? onSpeedSelected : null,
+                )
+              : _SpeedCycleButton(
+                  speed: snapshot.speedMultiplier,
+                  onSelected: canUsePacing ? onSpeedSelected : null,
+                ),
           AnimatedSwitcher(
             duration: orionMotionDuration(
               context,
@@ -518,6 +529,89 @@ class _SpeedCycleButton extends StatelessWidget {
       accent: uiTheme.systemCyan,
       active: speed > 1,
       onPressed: onSelected == null ? null : () => onSelected(_next),
+    );
+  }
+}
+
+class _SpeedSegments extends StatelessWidget {
+  const _SpeedSegments({required this.speed, required this.onSelected});
+
+  final double speed;
+  final ValueChanged<double>? onSelected;
+
+  static const List<double> _speeds = [1, 2, 3];
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final enabled = onSelected != null;
+    return Tooltip(
+      message: 'Game speed',
+      excludeFromSemantics: true,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 48),
+        child: Material(
+          color: uiTheme.hullBlack.withValues(alpha: 0.55),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: BorderSide(color: uiTheme.systemCyan.withValues(alpha: 0.3)),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Padding(
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final value in _speeds)
+                  _segment(context, uiTheme, value, enabled),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _segment(
+    BuildContext context,
+    OrionUiTheme uiTheme,
+    double value,
+    bool enabled,
+  ) {
+    final selected = speed == value;
+    final label = '${value.toStringAsFixed(0)}x';
+    final onSelected = this.onSelected;
+    return Semantics(
+      container: true,
+      button: true,
+      enabled: enabled,
+      selected: selected,
+      label: 'Speed $label',
+      onTap: enabled && onSelected != null ? () => onSelected(value) : null,
+      child: ExcludeSemantics(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: enabled && onSelected != null ? () => onSelected(value) : null,
+          child: Container(
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 6),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              gradient: selected ? orionSecondaryFill : null,
+              color: selected ? null : Colors.transparent,
+            ),
+            child: Center(
+              child: Text(
+                label,
+                maxLines: 1,
+                style: OrionTypography.microLabel(
+                  color: selected ? orionSecondaryInk : uiTheme.textMuted,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

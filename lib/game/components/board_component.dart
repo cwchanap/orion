@@ -61,6 +61,10 @@ class BoardComponent extends PositionComponent {
         const Color(0x2E7BE495) // naniteGreen @ 18%
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1;
+  final Paint _fieldGridPaint = Paint()
+    ..color = const Color(0xFF182430)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1;
   final Paint _pathPaint = Paint()..color = const Color(0xFF56616B);
   // systemCyan. The lane is the one board element the artboard draws in the
   // accent, and it is drawn rather than tiled: the path tile art is a
@@ -82,12 +86,22 @@ class BoardComponent extends PositionComponent {
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
-  final Paint _lanePaint = Paint()
+  final Paint _laneRimPaint = Paint()
+    ..color = const Color(0xFF1E3A4E)
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final Paint _laneChannelPaint = Paint()
+    ..color = const Color(0xFF0B1520)
+    ..style = PaintingStyle.stroke
+    ..strokeCap = StrokeCap.round
+    ..strokeJoin = StrokeJoin.round;
+  final Paint _laneChevronPaint = Paint()
     ..color = const Color(0xFF46E6FF)
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
     ..strokeJoin = StrokeJoin.round;
-  final Paint _laneGlowPaint = Paint()
+  final Paint _laneChevronGlowPaint = Paint()
     ..color = const Color(0x9946E6FF)
     ..style = PaintingStyle.stroke
     ..strokeCap = StrokeCap.round
@@ -151,6 +165,8 @@ class BoardComponent extends PositionComponent {
   void render(Canvas canvas) {
     super.render(canvas);
 
+    _renderFieldGrid(canvas);
+
     final pathTiles = this.pathTiles;
     for (final pathCell in pathCells) {
       final rect = cellRect(pathCell).deflate(1);
@@ -211,14 +227,14 @@ class BoardComponent extends PositionComponent {
       canvas,
       pathCells.first,
       _spawnPaint,
-      innerRadiusFactor: 0.22,
+      innerRadiusFactor: 0.30,
       sprite: GameSprite.spawnGate,
     );
     _renderMarker(
       canvas,
       pathCells.last,
       _basePaint,
-      innerRadiusFactor: 0.3,
+      innerRadiusFactor: 0.38,
       sprite: GameSprite.baseReactor,
     );
 
@@ -235,6 +251,14 @@ class BoardComponent extends PositionComponent {
   @visibleForTesting
   static const double laneDash = 16 / 49.125; // 0.326
 
+  static const double _laneRimWidthFactor = 0.86;
+  static const double _laneChannelWidthFactor = 0.70;
+  static const double _chevronSpacingFactor = 0.5;
+  static const double _chevronLeadFactor = 0.1;
+  static const double _chevronStartFactor = 0.28;
+  static const double _chevronSpreadRadians = 0.62;
+  static const double _markerOuterFactor = 0.62;
+
   /// The artboard's lane: a wide, faint, continuous channel with a thin
   /// bright dashed core running down it. Every dimension scales with
   /// [cellSize] so the rhythm holds on any board size.
@@ -250,27 +274,62 @@ class BoardComponent extends PositionComponent {
       centreLine.lineTo(centre.dx, centre.dy);
     }
 
-    final dashLength = cellSize * laneDash;
-    final core = dashed(centreLine, dash: dashLength, gap: dashLength);
-
-    // A hairline core would disappear on a small board, so hold a floor.
-    final coreWidth = math.max(cellSize * laneCoreWidth, 1.5);
     _laneBedPaint.color = previewActive
         ? const Color(0x40FF5D6C)
         : const Color(0x2446E6FF);
-    _lanePaint.color = previewActive
+    _laneRimPaint.color = previewActive
+        ? const Color(0xFF4E2430)
+        : const Color(0xFF1E3A4E);
+    _laneChannelPaint.color = previewActive
+        ? const Color(0xFF14090F)
+        : const Color(0xFF0B1520);
+    _laneChevronPaint.color = previewActive
         ? const Color(0xFFFF5D6C)
         : const Color(0xFF46E6FF);
-    _laneGlowPaint.color = previewActive
+    _laneChevronGlowPaint.color = previewActive
         ? const Color(0x66FF5D6C)
         : const Color(0x9946E6FF);
+    _laneRimPaint.strokeWidth = cellSize * _laneRimWidthFactor;
+    _laneChannelPaint.strokeWidth = cellSize * _laneChannelWidthFactor;
     _laneBedPaint.strokeWidth = cellSize * laneBedWidth;
-    _laneGlowPaint.strokeWidth = coreWidth * 2;
-    _lanePaint.strokeWidth = coreWidth;
     canvas
-      ..drawPath(centreLine, _laneBedPaint)
-      ..drawPath(core, _laneGlowPaint)
-      ..drawPath(core, _lanePaint);
+      ..drawPath(centreLine, _laneRimPaint)
+      ..drawPath(centreLine, _laneChannelPaint)
+      ..drawPath(centreLine, _laneBedPaint);
+    _renderFlowChevrons(canvas, centreLine);
+  }
+
+  void _renderFlowChevrons(Canvas canvas, Path centreLine) {
+    final spacing = cellSize * _chevronSpacingFactor;
+    if (spacing <= 0) {
+      return;
+    }
+    // A hairline core would disappear on a small board, so hold a floor.
+    final stroke = math.max(cellSize * laneCoreWidth, 1.5);
+    _laneChevronPaint.strokeWidth = stroke;
+    _laneChevronGlowPaint.strokeWidth = stroke * 2;
+    final lead = cellSize * _chevronLeadFactor;
+    final arm = cellSize * laneDash / 2;
+    for (final metric in centreLine.computeMetrics()) {
+      var distance = cellSize * _chevronStartFactor;
+      while (distance < metric.length) {
+        final tangent = metric.getTangentForOffset(distance);
+        if (tangent == null) {
+          break;
+        }
+        final tip =
+            tangent.position +
+            Offset(math.cos(tangent.angle), math.sin(tangent.angle)) * lead;
+        for (final sign in const [1.0, -1.0]) {
+          final angle = tangent.angle + math.pi + sign * _chevronSpreadRadians;
+          final end = tip + Offset(math.cos(angle), math.sin(angle)) * arm;
+          canvas
+            ..drawLine(tip, end, _laneChevronGlowPaint)
+            ..drawLine(tip, end, _laneChevronPaint);
+        }
+        distance += spacing;
+      }
+    }
   }
 
   /// [source] cut into [dash]-long segments separated by [gap].
@@ -330,6 +389,21 @@ class BoardComponent extends PositionComponent {
   @visibleForTesting
   Paint get gridPaint => _gridPaint;
 
+  void _renderFieldGrid(Canvas canvas) {
+    final boardWidth = BoardLayout.columns * cellSize;
+    final boardHeight = BoardLayout.rows * cellSize;
+
+    for (var column = 0; column <= BoardLayout.columns; column += 1) {
+      final x = column * cellSize;
+      canvas.drawLine(Offset(x, 0), Offset(x, boardHeight), _fieldGridPaint);
+    }
+
+    for (var row = 0; row <= BoardLayout.rows; row += 1) {
+      final y = row * cellSize;
+      canvas.drawLine(Offset(0, y), Offset(boardWidth, y), _fieldGridPaint);
+    }
+  }
+
   void _renderGrid(Canvas canvas) {
     final boardWidth = BoardLayout.columns * cellSize;
     final boardHeight = BoardLayout.rows * cellSize;
@@ -364,13 +438,16 @@ class BoardComponent extends PositionComponent {
   }) {
     final spriteSheet = this.spriteSheet;
     if (spriteSheet != null) {
-      final rect = cellRect(position).deflate(cellSize * 0.12);
+      final rect = Rect.fromCircle(
+        center: cellCenter(position),
+        radius: cellSize * _markerOuterFactor,
+      );
       spriteSheet.sprite(sprite).renderRect(canvas, rect);
       return;
     }
 
     final center = cellCenter(position);
-    canvas.drawCircle(center, cellSize * 0.38, paint);
+    canvas.drawCircle(center, cellSize * _markerOuterFactor, paint);
     canvas.drawCircle(center, cellSize * innerRadiusFactor, _backgroundPaint);
   }
 }

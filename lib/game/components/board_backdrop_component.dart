@@ -38,19 +38,19 @@ class BoardBackdropComponent extends PositionComponent {
       destination,
       Paint()
         ..colorFilter = const ColorFilter.matrix([
-          1.25,
+          0.62,
           0,
           0,
           0,
           0,
           0,
-          1.25,
+          0.62,
           0,
           0,
           0,
           0,
           0,
-          1.25,
+          0.62,
           0,
           0,
           0,
@@ -59,6 +59,19 @@ class BoardBackdropComponent extends PositionComponent {
           1,
           0,
         ]),
+    );
+
+    final centre = destination.center;
+    final vignetteRadius = destination.longestSide / 2;
+    canvas.drawRect(
+      destination,
+      Paint()
+        ..shader = Gradient.radial(
+          centre,
+          vignetteRadius,
+          const <Color>[Color(0x00000000), Color(0x78000000)],
+          const <double>[0.55, 1],
+        ),
     );
   }
 
