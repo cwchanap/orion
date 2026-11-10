@@ -490,15 +490,31 @@ void main() {
     // specified in absolute pixels at this scale.
     const cell = 46.75;
 
-    Future<Image> renderKitBoard({GameSpriteSheet? spriteSheet}) => _rasterize(
-      (BoardLayout.columns * cell).ceil(),
-      (BoardLayout.rows * cell).ceil(),
-      BoardComponent(
+    // [pad] adds a transparent margin so marker drop-shadows that bloom
+    // past the board edge (the core marker's 1.45C rect overflows the 8C
+    // board on its right) can still be probed.
+    Future<Image> renderKitBoard({
+      GameSpriteSheet? spriteSheet,
+      double pad = 0,
+    }) async {
+      final board = BoardComponent(
         cellSize: cell,
         pathCells: BoardLayout.pathCells,
         spriteSheet: spriteSheet,
-      ).render,
-    );
+      );
+      // Marker shadows rasterize their alpha blur through a fire-and-
+      // forget bake (onLoad/render kick it; the mount never waits on the
+      // read-back). Tests await the same dedup'd future directly.
+      await board.ensureMarkerShadows();
+      return _rasterize(
+        (BoardLayout.columns * cell + pad * 2).ceil(),
+        (BoardLayout.rows * cell + pad * 2).ceil(),
+        (canvas) {
+          canvas.translate(pad, pad);
+          board.render(canvas);
+        },
+      );
+    }
 
     test('the lane halo is a gaussian falloff past the .92C band, not four '
         'hard-edged strokes that end at 0.65C', () async {
@@ -626,6 +642,151 @@ void main() {
             'drop-shadow(0 0 16px rgba(255,200,87,.95)) must bloom '
             'the core sprite amber past its rect; nothing renders '
             'outside the sprite clip today',
+      );
+    });
+
+    test('the spawn shadow is the sprite alpha silhouette, not its padded '
+        'cell disc', () async {
+      final sheet = GameSpriteSheet.fromImage(
+        await Flame.images.load(GameSpriteSheet.fileName),
+      );
+      final image = await renderKitBoard(spriteSheet: sheet);
+      final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+      int alphaAt(int x, int y) =>
+          data!.getUint8((y * image.width + x) * 4 + 3);
+      int redAt(int x, int y) => data!.getUint8((y * image.width + x) * 4);
+      int blueAt(int x, int y) => data!.getUint8((y * image.width + x) * 4 + 2);
+      int cyanAt(int x, int y) =>
+          alphaAt(x, y) >= 4 && blueAt(x, y) > redAt(x, y) ? alphaAt(x, y) : 0;
+
+      // The spawn sprite's 362x362 sheet cell only has art in
+      // (85,20)-(336,268): its silhouette nearly reaches the cell's top
+      // edge but ends 26% above the cell's bottom edge. Mapped onto the
+      // 1.35C marker rect centred at (0.5C, 1.5C), the silhouette's
+      // bottom edge sits ~16px inside the rect — so the real
+      // drop-shadow must bloom visibly just above the rect and barely
+      // at all the same distance below it. A disc blurred at sigma 12
+      // is symmetric: it lights both probes equally. Scan a small
+      // window across the centre column because the silhouette's
+      // topmost art need not sit on the centre axis.
+      int bestCyanAt(double y) {
+        var best = 0;
+        for (var dx = -10; dx <= 10; dx += 2) {
+          final v = cyanAt((0.5 * cell).round() + dx, y.round());
+          if (v > best) best = v;
+        }
+        return best;
+      }
+
+      final rectTop = 1.5 * cell - 0.675 * cell;
+      final rectBottom = 1.5 * cell + 0.675 * cell;
+      final topCyan = bestCyanAt(rectTop - 10);
+      final bottomCyan = bestCyanAt(rectBottom + 10);
+      expect(
+        topCyan,
+        greaterThanOrEqualTo(20),
+        reason:
+            'the spawn alpha nearly reaches the cell top, so its '
+            'drop-shadow(0 0 12px rgba(70,230,255,.9)) must bloom '
+            'cyan visibly just above the marker rect',
+      );
+      expect(
+        bottomCyan,
+        lessThanOrEqualTo(25),
+        reason:
+            'the spawn alpha ends 26% above the cell bottom edge — '
+            '~16px plus 10px off-rect is ~2.2 sigma from the real '
+            'silhouette, so almost no cyan may reach the symmetric '
+            'bottom probe; a blurred disc lights it as strongly as '
+            'the top probe',
+      );
+      expect(
+        topCyan,
+        greaterThanOrEqualTo(bottomCyan * 2),
+        reason:
+            'the sprite silhouette is vertically asymmetric inside its '
+            'padded cell; only a disc makes the shadow symmetric',
+      );
+    });
+
+    test('the core shadow is the sprite alpha silhouette, not its padded '
+        'cell disc', () async {
+      final sheet = GameSpriteSheet.fromImage(
+        await Flame.images.load(GameSpriteSheet.fileName),
+      );
+      // The core marker's 1.45C rect spans past the board's right edge —
+      // pad the raster so its overhang bloom is capturable.
+      const pad = 44.0;
+      final image = await renderKitBoard(spriteSheet: sheet, pad: pad);
+      final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+      int alphaAt(int x, int y) =>
+          data!.getUint8((y * image.width + x) * 4 + 3);
+      int redAt(int x, int y) => data!.getUint8((y * image.width + x) * 4);
+      int blueAt(int x, int y) => data!.getUint8((y * image.width + x) * 4 + 2);
+      int amberAt(int x, int y) =>
+          alphaAt(x, y) >= 4 && redAt(x, y) > blueAt(x, y) ? alphaAt(x, y) : 0;
+
+      // The core sprite's 362x362 sheet cell has art in (79,11)-(314,268):
+      // ~9px right margin vs ~18px bottom margin once mapped onto the
+      // 1.45C rect. The lane's end-segment occupies the whole upper band
+      // of this marker (opaque channel + halo answer every above-rect
+      // probe, so a top probe can never isolate the shadow), while right
+      // and below are lane-free. Compare the shadow's reach off the right
+      // edge against below the bottom edge: the real silhouette hugs the
+      // right edge but dies ~17.6px before the rect bottom, a blurred
+      // rect-edge disc lights both equally.
+      int bestAmberRight(int dx) {
+        var best = 0;
+        for (
+          var y = (10.15 * cell + pad).round();
+          y <= (10.9 * cell + pad).round();
+          y += 2
+        ) {
+          final v = amberAt((8.225 * cell + pad).round() + dx, y);
+          if (v > best) best = v;
+        }
+        return best;
+      }
+
+      int bestAmberBelow(int dy) {
+        var best = 0;
+        for (
+          var x = (6.9 * cell + pad).round();
+          x <= (8.1 * cell + pad).round();
+          x += 2
+        ) {
+          final v = amberAt(x, (10.5 * cell + 0.725 * cell + pad).round() + dy);
+          if (v > best) best = v;
+        }
+        return best;
+      }
+
+      final rightAmber = bestAmberRight(4);
+      final bottomAmber = bestAmberBelow(10);
+      expect(
+        rightAmber,
+        greaterThanOrEqualTo(20),
+        reason:
+            'the core alpha ends ~9px inside the rect right edge, so its '
+            'drop-shadow(0 0 16px rgba(255,200,87,.95)) must bloom amber '
+            'visibly just off that edge — nothing outside the sprite '
+            'clip at all means the shadow is not the sprite silhouette',
+      );
+      expect(
+        bottomAmber,
+        lessThanOrEqualTo(15),
+        reason:
+            'the core alpha ends ~18px inside the rect bottom — plus '
+            '10px off-rect is ~1.75 sigma from the real silhouette, so '
+            'the tail must already be faint here; a blurred rect-edge '
+            'shape lights it as strongly as the right probe',
+      );
+      expect(
+        rightAmber,
+        greaterThanOrEqualTo(bottomAmber * 2),
+        reason:
+            'the sprite silhouette is asymmetric inside its padded cell; '
+            'only a rect-fitting shape makes the shadow symmetric',
       );
     });
   });

@@ -303,8 +303,8 @@ class IdleCommandBar extends StatelessWidget {
   ///
   /// Wide filled pill for the dock's single primary action: 48-56dp tall,
   /// filled cyan with dark content while enabled, and the dock's only glow.
-  /// The wave-progress and countdown variants share the same footprint so
-  /// the idle dock never reflows when the phase label changes.
+  /// The wave-progress and countdown variants share the same footprint so the
+  /// idle dock never reflows when the phase label changes.
   Widget _reactorPill({
     required String reactorLabel,
     required String tooltip,

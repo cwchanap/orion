@@ -980,6 +980,167 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a selection disables the collapsed scanner and deselection restores it',
+    (tester) async {
+      tester.view.physicalSize = _productViewport;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final semantics = tester.ensureSemantics();
+      try {
+        // Review ruling: selection collapses AND disables the scanner — it
+        // must not be re-enabled while a cell or tower is selected — and the
+        // board viewport must not move across select/deselect.
+        final viewports = <Rect>[];
+        Widget host(GameSnapshot snapshot) =>
+            chromeHost(snapshot, onBoardViewportChanged: viewports.add);
+        final idle = commandDeckSnapshot(nextWavePreview: commandDeckPreview());
+        const scannerSemantics = ValueKey(
+          'next-wave-scanner-collapsed-semantics',
+        );
+
+        Future<void> expectScannerEnabled(bool enabled) async {
+          final node = find.byKey(scannerSemantics);
+          expect(node, findsOneWidget);
+          expect(
+            tester.getSemantics(node),
+            matchesSemantics(
+              isButton: true,
+              hasEnabledState: true,
+              isEnabled: enabled,
+              hasTapAction: enabled,
+            ),
+          );
+        }
+
+        await tester.pumpWidget(host(idle));
+        await tester.pump();
+        await tester.pump();
+        final idleViewport = viewports.last;
+        await expectScannerEnabled(true);
+
+        // Idle control really toggles: expand, then collapse back down.
+        await tester.tap(find.byTooltip('Expand next-wave scanner'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('next-wave-scanner-expanded')),
+          findsOneWidget,
+        );
+        await tester.tap(find.byTooltip('Collapse next-wave scanner'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('next-wave-scanner-expanded')),
+          findsNothing,
+        );
+
+        Future<void> expectCollapsedAndDisabled() async {
+          expect(
+            find.byKey(const ValueKey('next-wave-scanner-collapsed')),
+            findsOneWidget,
+          );
+          expect(
+            find.byKey(const ValueKey('next-wave-scanner-expanded')),
+            findsNothing,
+          );
+          await expectScannerEnabled(false);
+          // The pointer layer must agree with semantics: the collapsed
+          // control sits under an active IgnorePointer.
+          final scanner = find.byType(NextWaveScanner);
+          final blocker = find.descendant(
+            of: scanner,
+            matching: find.byWidgetPredicate(
+              (widget) => widget is IgnorePointer && widget.ignoring,
+            ),
+          );
+          expect(
+            blocker,
+            findsOneWidget,
+            reason: 'a selected cell must leave the scanner untappable',
+          );
+          // A real tap attempt cannot expand it either.
+          await tester.tap(
+            find.byTooltip('Expand next-wave scanner'),
+            warnIfMissed: false,
+          );
+          await tester.pumpAndSettle();
+          expect(
+            find.byKey(const ValueKey('next-wave-scanner-expanded')),
+            findsNothing,
+            reason: 'the disabled scanner must ignore expand taps',
+          );
+        }
+
+        // A build-cell selection collapses and disables it.
+        await tester.pumpWidget(
+          host(
+            commandDeckSnapshot(
+              nextWavePreview: commandDeckPreview(),
+              selectedCell: const GridPosition(4, 5),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        await expectCollapsedAndDisabled();
+        expect(
+          viewports.last,
+          idleViewport,
+          reason: 'selection must not move or resize the board viewport',
+        );
+
+        // A tower selection keeps the same disabled contract.
+        const tower = PlacedTower(
+          id: 1,
+          type: TowerType.laser,
+          position: GridPosition(4, 5),
+        );
+        await tester.pumpWidget(
+          host(
+            commandDeckSnapshot(
+              nextWavePreview: commandDeckPreview(),
+              selectedTower: tower,
+              selectedTowerStats: GameBalance.towerStats(
+                tower.type,
+                level: tower.level,
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        await expectCollapsedAndDisabled();
+        expect(
+          viewports.last,
+          idleViewport,
+          reason: 'tower selection must not move the viewport either',
+        );
+
+        // Deselecting restores the enabled, expandable scanner.
+        await tester.pumpWidget(host(idle));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pump();
+        await expectScannerEnabled(true);
+        await tester.tap(find.byTooltip('Expand next-wave scanner'));
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('next-wave-scanner-expanded')),
+          findsOneWidget,
+          reason: 'the scanner must expand again once selection clears',
+        );
+        expect(
+          viewports.last,
+          idleViewport,
+          reason: 'idle → selected → idle must return the same viewport',
+        );
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+
   testWidgets('top panels leave the dock World Map action available', (
     tester,
   ) async {

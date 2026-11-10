@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flame/components.dart';
@@ -81,6 +83,7 @@ class BoardComponent extends PositionComponent {
   //
   // Against the artboard's 49.125px cell those are the _lane* fractions
   // below. The bed is continuous: it is the channel the dashes travel down.
+  // systemCyan @ 14%
   // board.js's lane is one stroked path drawn four times, widest to
   // narrowest: a gaussian-blurred cyan halo under a steel rim under the
   // dark channel under the core line, then the flow chevrons on top.
@@ -259,8 +262,8 @@ class BoardComponent extends PositionComponent {
 
   /// The artboard's lane fractions, against its 49.125px cell.
   static const double _laneRimWidthFactor = 0.8;
-  static const double _laneChannelWidthFactor = 0.72;
-  static const double _laneCoreWidthFactor = 0.5;
+  static const double _laneChannelWidthFactor = 0.72; // 0.570
+  static const double _laneCoreWidthFactor = 0.5; // 0.069
   static const double _spawnMarkerFactor = 1.35 / 2;
   static const double _coreMarkerFactor = 1.45 / 2;
 
@@ -324,11 +327,75 @@ class BoardComponent extends PositionComponent {
     return image;
   }
 
-  /// Cached drop-shadow layers for the two markers: a blurred silhouette
-  /// of the sprite's own alpha, tinted to the kit shadow color, keyed by
+  /// Cached drop-shadow layers for the two markers: the sprite's own alpha
+  /// blurred to the kit sigma and tinted to the kit shadow color, keyed by
   /// sprite (each marker uses a distinct sprite at a fixed cell). Like the
-  /// halo, each shadow blurs once and composites as a blit.
+  /// halo, each shadow rasterizes once and composites as a blit.
   final Map<GameSprite, (Image, Offset)> _markerShadowCache = {};
+
+  /// The single in-flight bake so render/onLoad never rasterize twice.
+  Future<void>? _markerShadowBake;
+
+  @override
+  void onLoad() {
+    super.onLoad();
+    // Fire-and-forget: the alpha read-back is real engine work, so the
+    // bake must never hold the mount queue — the shadow joins the render
+    // as soon as the raster resolves, typically within a frame.
+    unawaited(_bakeMarkerShadows());
+  }
+
+  /// Rasterizes both marker shadows ahead of the next painted frame.
+  /// Reading the sprite's alpha back for the blur is async, so the bake
+  /// is kicked (never awaited) from onLoad and from render() on cache
+  /// miss; tests may await it directly through [ensureMarkerShadows].
+  @visibleForTesting
+  Future<void> ensureMarkerShadows() => _bakeMarkerShadows();
+
+  Future<void> _bakeMarkerShadows() =>
+      _markerShadowBake ??= _bakeMarkerShadowsAsync();
+
+  Future<void> _bakeMarkerShadowsAsync() async {
+    final sheet = spriteSheet;
+    if (sheet == null) {
+      return;
+    }
+    for (final (position, factor, sprite, color, sigma) in _markerShadowSpecs) {
+      if (_markerShadowCache.containsKey(sprite)) {
+        continue;
+      }
+      _markerShadowCache[sprite] = await _rasterizeMarkerShadow(
+        sheet.sprite(sprite),
+        Rect.fromCircle(
+          center: cellCenter(position),
+          radius: cellSize * factor,
+        ),
+        color,
+        sigma,
+      );
+    }
+  }
+
+  /// (marker cell, outer radius factor, sprite, shadow color, shadow σ) —
+  /// the board.js spec shared by the bake and the render path so the
+  /// rasterized layer always matches the drawn sprite rect.
+  List<(GridPosition, double, GameSprite, Color, double)>
+  get _markerShadowSpecs => [
+    (
+      pathCells.first,
+      _spawnMarkerFactor,
+      GameSprite.spawnGate,
+      const Color(0xE646E6FF),
+      12,
+    ),
+    (
+      pathCells.last,
+      _coreMarkerFactor,
+      GameSprite.baseReactor,
+      const Color(0xF2FFC857),
+      16,
+    ),
+  ];
 
   /// board.js's flow chevrons: `M -5 -7 L 4 0 L -5 7`, one per cell of each
   /// straight segment, rotated to the segment's direction and dimmed to 35%
@@ -351,7 +418,7 @@ class BoardComponent extends PositionComponent {
       if (length <= 0) {
         continue;
       }
-      final count = math.max(1, (length / cellSize).round());
+      final count = math.max(1, (length / cellSize).round()); // 0.326
       final angle = math.atan2(b.dy - a.dy, b.dx - a.dx);
       final cos = math.cos(angle);
       final sin = math.sin(angle);
@@ -491,11 +558,12 @@ class BoardComponent extends PositionComponent {
         radius: cellSize * outerRadiusFactor,
       );
       final flameSprite = spriteSheet.sprite(sprite);
-      final (shadow, shadowOffset) = _markerShadowCache.putIfAbsent(
-        sprite,
-        () => _rasterizeMarkerShadow(rect, shadowColor, shadowSigma),
-      );
-      canvas.drawImage(shadow, shadowOffset, Paint());
+      final shadow = _markerShadowCache[sprite];
+      if (shadow == null) {
+        unawaited(_bakeMarkerShadows());
+      } else {
+        canvas.drawImage(shadow.$1, shadow.$2, Paint());
+      }
       flameSprite.renderRect(canvas, rect);
       return;
     }
@@ -505,16 +573,21 @@ class BoardComponent extends PositionComponent {
     canvas.drawCircle(center, cellSize * innerRadiusFactor, _backgroundPaint);
   }
 
-  /// The marker drop-shadow layer: a solid [shadowColor] silhouette of the
-  /// marker art — the kit sprites are round, so a disc the size of the
-  /// sprite rect is their silhouette — blurred at the kit radius scaled to
-  /// the board's cell size. The raster bounds the marker rect plus a 3σ
-  /// reach so the tail is not clipped.
-  (Image, Offset) _rasterizeMarkerShadow(
+  /// The marker drop-shadow layer: the sprite's own alpha — its source
+  /// rect mapped through the marker's draw transform — tinted to
+  /// [shadowColor] and Gaussian-blurred at the kit sigma scaled to the
+  /// board's cell size, the same silhouette CSS drop-shadow traces in
+  /// board.js. Rasterizers can blur shape coverage but not image alpha, so
+  /// the tinted silhouette is read back and convolved in [_blurAlpha]; the
+  /// read-back is async, which is why [_bakeMarkerShadows] runs ahead of
+  /// the frame. The raster bounds the marker rect plus a 3σ reach so the
+  /// tail is not clipped.
+  Future<(Image, Offset)> _rasterizeMarkerShadow(
+    Sprite flameSprite,
     Rect rect,
     Color shadowColor,
     double shadowSigma,
-  ) {
+  ) async {
     final sigma = shadowSigma * cellSize / _kitCellSize;
     final bounds = rect.inflate(sigma * 3 + 1);
     final recorder = PictureRecorder();
@@ -524,20 +597,93 @@ class BoardComponent extends PositionComponent {
     // the marker again.
     final offscreen = Canvas(recorder, Offset.zero & bounds.size)
       ..translate(-bounds.left, -bounds.top);
-    offscreen.drawCircle(
-      rect.center,
-      rect.shortestSide / 2,
-      Paint()
-        ..color = shadowColor
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, sigma),
+    offscreen.drawImageRect(
+      flameSprite.image,
+      flameSprite.src,
+      rect,
+      Paint()..colorFilter = ColorFilter.mode(shadowColor, BlendMode.srcIn),
     );
     final picture = recorder.endRecording();
-    final image = picture.toImageSync(
-      bounds.width.ceil(),
-      bounds.height.ceil(),
-    );
+    final width = bounds.width.ceil();
+    final height = bounds.height.ceil();
+    final silhouette = picture.toImageSync(width, height);
     picture.dispose();
-    return (image, bounds.topLeft);
+    final pixels = await silhouette.toByteData(format: ImageByteFormat.rawRgba);
+    silhouette.dispose();
+    final blurred = _blurAlpha(pixels!, width, height, sigma, shadowColor);
+    final completer = Completer<Image>();
+    decodeImageFromPixels(
+      blurred,
+      width,
+      height,
+      PixelFormat.rgba8888,
+      completer.complete,
+    );
+    return (await completer.future, bounds.topLeft);
+  }
+
+  /// Separable Gaussian blur of the alpha channel of [pixels]
+  /// (premultiplied RGBA, [width]×[height]). The shadow is a single color,
+  /// so only alpha needs convolving: output pixels are written
+  /// premultiplied with [color]'s channels. Zero-padded borders are safe —
+  /// the raster already carries a 3σ margin.
+  static Uint8List _blurAlpha(
+    ByteData pixels,
+    int width,
+    int height,
+    double sigma,
+    Color color,
+  ) {
+    final radius = math.max(1, (sigma * 3).ceil());
+    final kernel = Float64List(radius * 2 + 1);
+    var kernelSum = 0.0;
+    for (var i = -radius; i <= radius; i += 1) {
+      final weight = math.exp(-0.5 * (i / sigma) * (i / sigma));
+      kernel[i + radius] = weight;
+      kernelSum += weight;
+    }
+    for (var i = 0; i < kernel.length; i += 1) {
+      kernel[i] /= kernelSum;
+    }
+
+    final horizontal = Float64List(width * height);
+    for (var y = 0; y < height; y += 1) {
+      for (var x = 0; x < width; x += 1) {
+        var acc = 0.0;
+        for (var k = -radius; k <= radius; k += 1) {
+          final xx = x + k;
+          if (xx < 0 || xx >= width) {
+            continue;
+          }
+          acc += kernel[k + radius] * pixels.getUint8((y * width + xx) * 4 + 3);
+        }
+        horizontal[y * width + x] = acc;
+      }
+    }
+
+    final red = (color.r * 255).round();
+    final green = (color.g * 255).round();
+    final blue = (color.b * 255).round();
+    final blurred = Uint8List(width * height * 4);
+    for (var y = 0; y < height; y += 1) {
+      for (var x = 0; x < width; x += 1) {
+        var acc = 0.0;
+        for (var k = -radius; k <= radius; k += 1) {
+          final yy = y + k;
+          if (yy < 0 || yy >= height) {
+            continue;
+          }
+          acc += kernel[k + radius] * horizontal[yy * width + x];
+        }
+        final alpha = acc.round().clamp(0, 255);
+        final index = (y * width + x) * 4;
+        blurred[index] = red * alpha ~/ 255;
+        blurred[index + 1] = green * alpha ~/ 255;
+        blurred[index + 2] = blue * alpha ~/ 255;
+        blurred[index + 3] = alpha;
+      }
+    }
+    return blurred;
   }
 
   @override
