@@ -980,6 +980,220 @@ void main() {
       expect(find.text('ORION SECTOR'), findsOneWidget);
       expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
     });
+
+    group('rewards panel save-state copy (fix round 1)', () {
+      Finder rewardsCard(WidgetTester tester) {
+        final title = find.text('REWARDS');
+        expect(title, findsOneWidget);
+        final card = tester
+            .widgetList<OrionSurface>(
+              find.ancestor(of: title, matching: find.byType(OrionSurface)),
+            )
+            .singleWhere((surface) => surface.role == OrionSurfaceRole.card);
+        return find.byWidget(card);
+      }
+
+      testWidgets(
+        'saving victory qualifies projected R&D as pending, not spendable',
+        (tester) async {
+          await _pumpPanel(
+            tester,
+            _victoryContent(MissionSaveState.saving),
+            onReplay: () {},
+            onReturnToMap: () {},
+          );
+          expect(find.text('Saving result…'), findsOneWidget);
+
+          final panel = rewardsCard(tester);
+          expect(
+            find.descendant(of: panel, matching: find.text('+3 R&D')),
+            findsOneWidget,
+            reason: 'projected medal points still render while pending',
+          );
+          expect(
+            find.descendant(
+              of: panel,
+              matching: find.text('Spend it in the R&D lab'),
+            ),
+            findsNothing,
+            reason: 'uncommitted points must not read as spendable',
+          );
+          expect(
+            find.descendant(
+              of: panel,
+              matching: find.textContaining(
+                RegExp('pending', caseSensitive: false),
+              ),
+            ),
+            findsWidgets,
+            reason: 'the rewards panel must qualify the points as pending',
+          );
+
+          for (final label in ['Replay Mission', 'World Map']) {
+            final button = find.ancestor(
+              of: find.text(label),
+              matching: find.byType(OrionPrimaryButton),
+            );
+            expect(
+              tester.widget<OrionPrimaryButton>(button).onPressed,
+              isNull,
+              reason: label,
+            );
+          }
+        },
+      );
+
+      testWidgets('failed victory qualifies projected R&D as not awarded', (
+        tester,
+      ) async {
+        await _pumpPanel(
+          tester,
+          _victoryContent(MissionSaveState.failed),
+          onRetrySave: () {},
+          onReturnToMap: () {},
+        );
+        expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+        expect(find.text('Retry Save'), findsOneWidget);
+        expect(find.text('World Map (Unsaved)'), findsOneWidget);
+        expect(find.text('Replay Mission'), findsNothing);
+
+        final panel = rewardsCard(tester);
+        expect(
+          find.descendant(of: panel, matching: find.text('+3 R&D')),
+          findsOneWidget,
+          reason: 'projected medal points still render when unawarded',
+        );
+        expect(
+          find.descendant(
+            of: panel,
+            matching: find.text('Spend it in the R&D lab'),
+          ),
+          findsNothing,
+          reason: 'points are not awarded when the save failed',
+        );
+        expect(
+          find.descendant(
+            of: panel,
+            matching: find.textContaining(
+              RegExp(
+                'unawarded|not awarded|not committed',
+                caseSensitive: false,
+              ),
+            ),
+          ),
+          findsWidgets,
+          reason:
+              'the rewards panel must qualify the points as not '
+              'awarded',
+        );
+      });
+
+      testWidgets('saved victory keeps spendable R&D wording', (tester) async {
+        await _pumpPanel(tester, _victoryContent(MissionSaveState.saved));
+        expect(find.text('Saved.'), findsOneWidget);
+
+        final panel = rewardsCard(tester);
+        expect(
+          find.descendant(of: panel, matching: find.text('+3 R&D')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: panel,
+            matching: find.text('Spend it in the R&D lab'),
+          ),
+          findsOneWidget,
+        );
+      });
+
+      testWidgets(
+        'retained best awards no additional R&D but keeps reward copy',
+        (tester) async {
+          await _pumpPanel(
+            tester,
+            projectVictoryReport(
+              snapshot: _syntheticSnapshot(),
+              result: const StageResult(
+                medal: StageMedal.gold,
+                bestBaseHealth: 20,
+              ),
+              priorSavedResult: const StageResult(
+                medal: StageMedal.gold,
+                bestBaseHealth: 20,
+              ),
+              saveState: MissionSaveState.saved,
+              reward: const MissionRewardFact(
+                title: 'Blueprint fragment',
+                detail: 'Unlocks a new blueprint after saving.',
+              ),
+            ),
+          );
+          expect(
+            find.text('Saved best retained: Gold • 20 base health'),
+            findsOneWidget,
+          );
+          expect(find.text('Best result already saved.'), findsOneWidget);
+
+          final panel = rewardsCard(tester);
+          expect(
+            find.descendant(
+              of: panel,
+              matching: find.textContaining(RegExp(r'\+\d+ R&D')),
+            ),
+            findsNothing,
+            reason: 'a retained result awards zero additional points',
+          );
+          expect(
+            find.descendant(
+              of: panel,
+              matching: find.text('Blueprint fragment'),
+            ),
+            findsOneWidget,
+          );
+          expect(
+            find.descendant(
+              of: panel,
+              matching: find.text('Unlocks a new blueprint after saving.'),
+            ),
+            findsOneWidget,
+          );
+        },
+      );
+
+      testWidgets('reward copy stays identical across save states', (
+        tester,
+      ) async {
+        for (final state in MissionSaveState.values) {
+          await _pumpPanel(
+            tester,
+            _victoryContent(
+              state,
+              reward: const MissionRewardFact(
+                title: 'Blueprint fragment',
+                detail: 'Unlocks a new blueprint after saving.',
+              ),
+            ),
+          );
+          final panel = rewardsCard(tester);
+          expect(
+            find.descendant(
+              of: panel,
+              matching: find.text('Blueprint fragment'),
+            ),
+            findsOneWidget,
+            reason: state.name,
+          );
+          expect(
+            find.descendant(
+              of: panel,
+              matching: find.text('Unlocks a new blueprint after saving.'),
+            ),
+            findsOneWidget,
+            reason: state.name,
+          );
+        }
+      });
+    });
   });
 }
 

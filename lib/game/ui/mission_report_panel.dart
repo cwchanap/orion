@@ -317,7 +317,11 @@ class _ReportBody extends StatelessWidget {
             !isEndless &&
             (content.medalPoints > 0 || reward != null)) ...[
           const SizedBox(height: 14),
-          _RewardsPanel(medalPoints: content.medalPoints, reward: reward),
+          _RewardsPanel(
+            medalPoints: content.medalPoints,
+            reward: reward,
+            saveState: content.saveState,
+          ),
         ],
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
@@ -501,15 +505,25 @@ class _MedalCriterion extends StatelessWidget {
 }
 
 class _RewardsPanel extends StatelessWidget {
-  const _RewardsPanel({required this.medalPoints, required this.reward});
+  const _RewardsPanel({
+    required this.medalPoints,
+    required this.reward,
+    required this.saveState,
+  });
 
   final int medalPoints;
   final MissionRewardFact? reward;
+  final MissionSaveState? saveState;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final reward = this.reward;
+    final pointsDetail = switch (saveState) {
+      MissionSaveState.saved => 'Spend it in the R&D lab',
+      MissionSaveState.failed => 'Not awarded — save failed',
+      _ => 'Pending save',
+    };
     return OrionSurface(
       role: OrionSurfaceRole.card,
       padding: const EdgeInsets.all(12),
@@ -542,7 +556,7 @@ class _RewardsPanel extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'Spend it in the R&D lab',
+                        pointsDetail,
                         style: OrionTypography.microLabel(
                           size: 10,
                           color: uiTheme.textMuted,
