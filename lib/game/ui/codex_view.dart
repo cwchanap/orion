@@ -9,14 +9,10 @@ import 'orion_ui_theme.dart';
 import 'tower_icons.dart';
 
 class CodexView extends StatefulWidget {
-  const CodexView({super.key, required this.progress, this.onBack});
+  const CodexView({super.key, required this.progress, required this.onBack});
 
   final CampaignProgress progress;
-
-  /// Standalone mounts pass a callback and get the in-view back row. Inside
-  /// the shared menu shell it stays null — the shell's top bar owns the
-  /// title and back affordance.
-  final VoidCallback? onBack;
+  final VoidCallback onBack;
 
   @override
   State<CodexView> createState() => _CodexViewState();
@@ -84,9 +80,8 @@ class _CodexViewState extends State<CodexView> {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return Material(
-      color: uiTheme.voidBlack,
-      child: SafeArea(
+    return Scaffold(
+      body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -97,21 +92,20 @@ class _CodexViewState extends State<CodexView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  if (widget.onBack != null)
-                    Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Row(
-                        children: [
-                          IconButton(
-                            tooltip: 'Back',
-                            onPressed: widget.onBack,
-                            icon: const Icon(Icons.arrow_back),
-                          ),
-                          const SizedBox(width: 8),
-                          OrionTitle('Codex', color: uiTheme.textPrimary),
-                        ],
-                      ),
+                  Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Row(
+                      children: [
+                        IconButton(
+                          tooltip: 'Back',
+                          onPressed: widget.onBack,
+                          icon: const Icon(Icons.arrow_back),
+                        ),
+                        const SizedBox(width: 8),
+                        OrionTitle('Codex', color: uiTheme.textPrimary),
+                      ],
                     ),
+                  ),
                   // The chips join the field's tap region: mouse/stylus (and
                   // web touch) taps outside a TextField unfocus it on
                   // pointer-down, which would run before _selectSection's

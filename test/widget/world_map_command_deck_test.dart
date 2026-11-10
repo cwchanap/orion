@@ -7,7 +7,6 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
-import 'package:orion/game/ui/menu_shell.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/campaign_presentation.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
@@ -38,22 +37,20 @@ CampaignProgress mainCompleteProgress({
   },
 );
 
-/// Mounts the map the way production does now: inside the shared menu
-/// shell, which owns the top resource chips, Settings entry, and the
-/// Map/R&D/Codex tab bar. The map body keeps its own callbacks for stages;
-/// destination switching reports through [onDestinationSelected].
 Widget buildMap({
   required CampaignProgress progress,
   List<StageDefinition>? stages,
   CampaignModifiers? campaignModifiers,
   ValueChanged<StageDefinition>? onStageSelected,
   ValueChanged<StageDefinition>? onLockedStageSelected,
-  ValueChanged<OrionMenuDestination>? onDestinationSelected,
+  VoidCallback? onResetCampaign,
+  VoidCallback? onOpenTechTree,
+  VoidCallback? onOpenCodex,
   VoidCallback? onOpenSettings,
   String? feedback,
   bool isSavingProgress = false,
   bool isResetting = false,
-  bool navigationEnabled = true,
+  bool isSavingFeedback = false,
   TextScaler? textScaler,
 }) {
   return MaterialApp(
@@ -67,21 +64,13 @@ Widget buildMap({
             data: MediaQuery.of(context).copyWith(textScaler: textScaler),
             child: child!,
           ),
-    home: OrionMenuShell(
-      destination: OrionMenuDestination.map,
-      navigationEnabled: navigationEnabled && !isSavingProgress && !isResetting,
-      onDestinationSelected: onDestinationSelected ?? (_) {},
-      medalRank: CampaignTechTree.totalMedalRank(progress),
-      medalRankMax: (stages ?? OrionCampaign.stages).length * 3,
-      researchPoints: 0,
-      onOpenSettings: onOpenSettings,
-      child: WorldMapView(
+    home: Scaffold(
+      body: WorldMapView(
         stages: stages ?? OrionCampaign.stages,
         progress: progress,
         // Production always derives modifiers from progress; default to the
-        // same derivation so fixture headers (e.g. the Challenge Badge)
-        // match what players see. Explicit modifiers still override this
-        // default.
+        // same derivation so fixture headers (e.g. the Challenge Badge) match
+        // what players see. Explicit modifiers still override this default.
         campaignModifiers:
             campaignModifiers ??
             CampaignModifiers.fromProgress(
@@ -92,37 +81,43 @@ Widget buildMap({
         feedback: feedback,
         isSavingProgress: isSavingProgress,
         isResetting: isResetting,
+        isSavingFeedback: isSavingFeedback,
         onStageSelected: onStageSelected ?? (_) {},
         onLockedStageSelected: onLockedStageSelected,
+        onResetCampaign: onResetCampaign ?? () {},
+        onOpenTechTree: onOpenTechTree ?? () {},
+        onOpenCodex: onOpenCodex ?? () {},
+        onOpenSettings: onOpenSettings ?? () {},
       ),
     ),
   );
 }
 
 void main() {
-  testWidgets('enlarged map title and feedback stay clear of shell controls', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(390, 844);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-    await tester.runAsync(loadRealFonts);
-    await tester.pumpWidget(
-      buildMap(
-        progress: CampaignProgress(),
-        feedback: 'Singularity Core is locked.',
-        textScaler: const TextScaler.linear(3),
-      ),
-    );
-    await tester.pump();
-    final titleRect = tester.getRect(find.text('ORION SECTOR'));
-    final codexRect = tester.getRect(find.byTooltip('Codex'));
-    final feedbackRect = tester.getRect(
-      find.text('Singularity Core is locked.'),
-    );
-    expect(titleRect.overlaps(codexRect), isFalse);
-    expect(feedbackRect.overlaps(codexRect), isFalse);
-  });
+  testWidgets(
+    'enlarged map title and feedback stay clear of utility controls',
+    (tester) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(),
+          feedback: 'Singularity Core is locked.',
+          textScaler: const TextScaler.linear(3),
+        ),
+      );
+      await tester.pump();
+      final titleRect = tester.getRect(find.text('ORION SECTOR'));
+      final codexRect = tester.getRect(find.byTooltip('Codex'));
+      final feedbackRect = tester.getRect(
+        find.text('Singularity Core is locked.'),
+      );
+      expect(titleRect.overlaps(codexRect), isFalse);
+      expect(feedbackRect.overlaps(codexRect), isFalse);
+    },
+  );
 
   testWidgets(
     'common portrait screens fit the whole star chart without scrolling',
@@ -213,7 +208,7 @@ void main() {
   for (final size in const [Size(320, 568), Size(568, 320)]) {
     testWidgets(
       'compact ${size.width.toInt()}x${size.height.toInt()} map at 3x '
-      'system text keeps header, shell, nodes and footer clear of each '
+      'system text keeps header, rail, nodes and footer clear of each '
       'other',
       (tester) async {
         tester.view.physicalSize = size;
@@ -243,7 +238,12 @@ void main() {
           expect(tester.takeException(), isNull);
 
           final railControls = <Rect>[
-            for (final tooltip in ['Codex', 'Tech Tree', 'Sectors', 'Settings'])
+            for (final tooltip in [
+              'Codex',
+              'Tech Tree',
+              'Reset Campaign',
+              'Settings',
+            ])
               tester.getRect(find.byTooltip(tooltip)),
           ];
 
@@ -365,27 +365,26 @@ void main() {
           );
           expect(footerRect.overlaps(alphaRect), isFalse);
           final screenRect = Offset.zero & size;
-          for (final tooltip in ['Codex', 'Tech Tree', 'Sectors', 'Settings']) {
+          for (final tooltip in [
+            'Codex',
+            'Tech Tree',
+            'Reset Campaign',
+            'Settings',
+          ]) {
             final controlRect = tester.getRect(find.byTooltip(tooltip));
-            // Edge-inclusive: the shell's tab bar sits flush with the
-            // bottom edge, which a strict contains() would reject even
-            // though the control is fully visible.
             expect(
-              controlRect.top >= 0 && controlRect.left >= 0,
+              screenRect.contains(controlRect.topLeft),
               isTrue,
               reason: '$tooltip must stay on screen while scrolled',
             );
             expect(
-              controlRect.bottom <= screenRect.bottom &&
-                  controlRect.right <= screenRect.right,
+              screenRect.contains(controlRect.bottomRight),
               isTrue,
               reason: '$tooltip must stay on screen while scrolled',
             );
           }
 
-          // The reached footer is functional, not merely painted. Scroll it
-          // fully into view first: at landscape heights a partially-docked
-          // card's tap center can sit under the tab bar.
+          // The reached footer is functional, not merely painted.
           final briefingLabel = tester
               .widget<Semantics>(destination)
               .properties
@@ -393,16 +392,14 @@ void main() {
           final expected = OrionCampaign.stages.firstWhere(
             (candidate) => briefingLabel.endsWith(candidate.name),
           );
-          await tester.ensureVisible(destination);
-          await tester.pump();
           await tester.tap(destination);
           expect(selected.last, expected.id);
 
           // find.text only matches the widget's data string, not what the
           // paragraph painted; an ellipsized kicker would still pass. Prove
-          // the full 'SECTOR NN · QUALIFIER' fits its maxLines at the
+          // the full 'SECTOR NN / QUALIFIER' fits its maxLines at the
           // rendered width and scale, so the qualifier itself paints.
-          final kickerFinder = find.textContaining(' · ');
+          final kickerFinder = find.textContaining(' / ');
           final kicker = tester.widget<Text>(kickerFinder);
           final kickerParagraph = tester.renderObject<RenderParagraph>(
             kickerFinder,
@@ -847,7 +844,7 @@ void main() {
     );
   });
 
-  testWidgets('header and shell controls shed their command-frame chrome', (
+  testWidgets('header and utility controls shed their command-frame chrome', (
     tester,
   ) async {
     await tester.pumpWidget(buildMap(progress: CampaignProgress()));
@@ -1041,7 +1038,7 @@ void main() {
         ),
       );
 
-      expect(find.text('SECTOR 01 · NEXT MAIN'), findsOneWidget);
+      expect(find.text('SECTOR 01 / NEXT MAIN'), findsOneWidget);
       expect(
         tester
             .getSemantics(find.bySemanticsLabel('Briefing for Outpost Alpha'))
@@ -1049,9 +1046,9 @@ void main() {
         'NEXT MAIN',
       );
 
-      await tester.ensureVisible(find.text('SECTOR 01 · NEXT MAIN'));
+      await tester.ensureVisible(find.text('SECTOR 01 / NEXT MAIN'));
       await tester.pump();
-      await tester.tap(find.text('SECTOR 01 · NEXT MAIN'));
+      await tester.tap(find.text('SECTOR 01 / NEXT MAIN'));
       expect(selected, [OrionCampaign.stageOneId]);
     } finally {
       semantics.dispose();
@@ -1070,7 +1067,7 @@ void main() {
         ),
       );
 
-      expect(find.text('SECTOR 03 · OPTIONAL'), findsOneWidget);
+      expect(find.text('SECTOR 03 / OPTIONAL'), findsOneWidget);
       expect(
         tester
             .getSemantics(find.bySemanticsLabel('Briefing for Salvage Rift'))
@@ -1078,9 +1075,9 @@ void main() {
         'OPTIONAL',
       );
 
-      await tester.ensureVisible(find.text('SECTOR 03 · OPTIONAL'));
+      await tester.ensureVisible(find.text('SECTOR 03 / OPTIONAL'));
       await tester.pump();
-      await tester.tap(find.text('SECTOR 03 · OPTIONAL'));
+      await tester.tap(find.text('SECTOR 03 / OPTIONAL'));
       expect(selected, ['salvage-rift']);
     } finally {
       semantics.dispose();
@@ -1098,7 +1095,7 @@ void main() {
         ),
       );
 
-      expect(find.text('SECTOR 07 · REPLAY'), findsOneWidget);
+      expect(find.text('SECTOR 07 / REPLAY'), findsOneWidget);
       expect(
         tester
             .getSemantics(
@@ -1108,9 +1105,9 @@ void main() {
         'REPLAY',
       );
 
-      await tester.ensureVisible(find.text('SECTOR 07 · REPLAY'));
+      await tester.ensureVisible(find.text('SECTOR 07 / REPLAY'));
       await tester.pump();
-      await tester.tap(find.text('SECTOR 07 · REPLAY'));
+      await tester.tap(find.text('SECTOR 07 / REPLAY'));
       expect(selected, ['singularity-core']);
     } finally {
       semantics.dispose();
@@ -1128,9 +1125,9 @@ void main() {
       ),
     );
 
-    await tester.ensureVisible(find.text('SECTOR 03 · OPTIONAL'));
+    await tester.ensureVisible(find.text('SECTOR 03 / OPTIONAL'));
     await tester.pump();
-    await tester.tap(find.text('SECTOR 03 · OPTIONAL'));
+    await tester.tap(find.text('SECTOR 03 / OPTIONAL'));
     expect(selected, 0);
   });
 
@@ -1413,98 +1410,82 @@ void main() {
     expect(find.text('Route recalculated.'), findsNothing);
   });
 
-  testWidgets('menu shell reports destination taps and Settings', (
-    tester,
-  ) async {
-    final destinations = <OrionMenuDestination>[];
+  testWidgets('utility rail invokes every existing callback', (tester) async {
+    var codex = 0;
+    var techTree = 0;
     var settings = 0;
+    var reset = 0;
     await tester.pumpWidget(
       buildMap(
         progress: CampaignProgress(),
-        onDestinationSelected: destinations.add,
+        onOpenCodex: () => codex += 1,
+        onOpenTechTree: () => techTree += 1,
         onOpenSettings: () => settings += 1,
+        onResetCampaign: () => reset += 1,
       ),
     );
 
     await tester.tap(find.byTooltip('Codex'));
     await tester.tap(find.byTooltip('Tech Tree'));
-    await tester.tap(find.byTooltip('Sectors'));
     await tester.tap(find.byTooltip('Settings'));
+    await tester.tap(find.byTooltip('Reset Campaign'));
 
-    expect(destinations, [
-      OrionMenuDestination.codex,
-      OrionMenuDestination.techTree,
-      OrionMenuDestination.map,
-    ]);
-    expect(settings, 1);
+    expect((codex, techTree, settings, reset), (1, 1, 1, 1));
   });
 
-  testWidgets(
-    'save and reset busy states disable stage and destination actions',
-    (tester) async {
-      for (final busyState in [
-        (isSavingProgress: true, isResetting: false),
-        (isSavingProgress: false, isResetting: true),
-      ]) {
-        var actions = 0;
-        var settings = 0;
-        final destinations = <OrionMenuDestination>[];
-        await tester.pumpWidget(
-          buildMap(
-            progress: clearedCampaignProgress(),
-            isSavingProgress: busyState.isSavingProgress,
-            isResetting: busyState.isResetting,
-            onStageSelected: (_) => actions += 1,
-            onLockedStageSelected: (_) => actions += 1,
-            onDestinationSelected: destinations.add,
-            onOpenSettings: () => settings += 1,
-          ),
-        );
-
-        await tester.ensureVisible(
-          find.byKey(const ValueKey('sector-stage-outpost-alpha')),
-        );
-        await tester.pump();
-        await tester.tap(
-          find.byKey(const ValueKey('sector-stage-outpost-alpha')),
-        );
-        await tester.tap(find.byTooltip('Codex'));
-        await tester.tap(find.byTooltip('Tech Tree'));
-        await tester.tap(find.byTooltip('Sectors'));
-        await tester.tap(find.byTooltip('Settings'));
-        expect(actions, 0);
-        expect(destinations, isEmpty);
-        // Settings stays reachable while a save/reset is in flight —
-        // the page only gates the gear on feedback-preference state.
-        expect(settings, 1);
-      }
-    },
-  );
-
-  testWidgets('disabled Settings gear leaves navigation usable', (
+  testWidgets('save and reset busy states disable stage and utility actions', (
     tester,
   ) async {
-    // While the feedback-preference store is loading (or a preference save
-    // is in flight) the page passes no Settings callback: the gear renders
-    // disabled but stage taps and destination switching still work.
+    for (final busyState in [
+      (isSavingProgress: true, isResetting: false),
+      (isSavingProgress: false, isResetting: true),
+    ]) {
+      var actions = 0;
+      await tester.pumpWidget(
+        buildMap(
+          progress: clearedCampaignProgress(),
+          isSavingProgress: busyState.isSavingProgress,
+          isResetting: busyState.isResetting,
+          onStageSelected: (_) => actions += 1,
+          onLockedStageSelected: (_) => actions += 1,
+          onOpenCodex: () => actions += 1,
+          onOpenTechTree: () => actions += 1,
+          onOpenSettings: () => actions += 1,
+          onResetCampaign: () => actions += 1,
+        ),
+      );
+
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      await tester.pump();
+      await tester.tap(
+        find.byKey(const ValueKey('sector-stage-outpost-alpha')),
+      );
+      await tester.tap(find.byTooltip('Codex'));
+      await tester.tap(find.byTooltip('Tech Tree'));
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.tap(find.byTooltip('Reset Campaign'));
+      expect(actions, 0);
+    }
+  });
+
+  testWidgets('feedback save disables Settings only', (tester) async {
     var stage = 0;
-    final destinations = <OrionMenuDestination>[];
+    var codex = 0;
+    var techTree = 0;
+    var settings = 0;
+    var reset = 0;
     await tester.pumpWidget(
       buildMap(
         progress: clearedCampaignProgress(),
-        onOpenSettings: null,
+        isSavingFeedback: true,
         onStageSelected: (_) => stage += 1,
-        onDestinationSelected: destinations.add,
+        onOpenCodex: () => codex += 1,
+        onOpenTechTree: () => techTree += 1,
+        onOpenSettings: () => settings += 1,
+        onResetCampaign: () => reset += 1,
       ),
-    );
-
-    expect(
-      tester
-          .widget<IconButton>(
-            find.widgetWithIcon(IconButton, Icons.settings_rounded),
-          )
-          .onPressed,
-      isNull,
     );
 
     await tester.ensureVisible(
@@ -1514,12 +1495,10 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
     await tester.tap(find.byTooltip('Codex'));
     await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.tap(find.byTooltip('Reset Campaign'));
 
-    expect(stage, 1);
-    expect(destinations, [
-      OrionMenuDestination.codex,
-      OrionMenuDestination.techTree,
-    ]);
+    expect((stage, codex, techTree, settings, reset), (1, 1, 1, 0, 1));
   });
 
   testWidgets('busy-derived feedback and challenge semantics remain exact', (
@@ -1582,6 +1561,7 @@ void main() {
               progress: clearedCampaignProgress(),
               feedback: null,
               onStageSelected: (_) {},
+              onResetCampaign: () {},
             ),
           ),
         ),

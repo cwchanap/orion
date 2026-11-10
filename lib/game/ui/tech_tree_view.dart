@@ -19,7 +19,7 @@ class TechTreeView extends StatefulWidget {
     this.feedback,
     this.isSavingProgress = false,
     required this.onPurchase,
-    this.onBack,
+    required this.onBack,
   });
 
   final CampaignProgress progress;
@@ -32,10 +32,8 @@ class TechTreeView extends StatefulWidget {
   /// Invoked when the user taps an affordable upgrade's Purchase button.
   final ValueChanged<CampaignTechUpgrade> onPurchase;
 
-  /// Standalone mounts pass a callback and get the in-view header row (back
-  /// button, title, bank chip). Inside the shared menu shell it stays null —
-  /// the shell's top bar owns the title, chips, and back affordance.
-  final VoidCallback? onBack;
+  /// Invoked when the user taps the back button.
+  final VoidCallback onBack;
 
   @override
   State<TechTreeView> createState() => _TechTreeViewState();
@@ -67,9 +65,9 @@ class _TechTreeViewState extends State<TechTreeView> {
       [CampaignTechUpgrade.cryoCoolant],
     ];
 
-    return Material(
-      color: uiTheme.voidBlack,
-      child: Stack(
+    return Scaffold(
+      backgroundColor: uiTheme.voidBlack,
+      body: Stack(
         children: [
           const Positioned.fill(
             child: _TechTreeBackdrop(key: ValueKey('tech-tree-backdrop')),
@@ -78,32 +76,31 @@ class _TechTreeViewState extends State<TechTreeView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                if (widget.onBack != null)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          tooltip: 'Back',
-                          onPressed: widget.onBack,
-                          icon: const Icon(Icons.arrow_back),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(4, 4, 12, 0),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        tooltip: 'Back',
+                        onPressed: widget.onBack,
+                        icon: const Icon(Icons.arrow_back),
+                      ),
+                      Expanded(
+                        child: OrionTitle(
+                          'R & D',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          color: uiTheme.textPrimary,
                         ),
-                        Expanded(
-                          child: OrionTitle(
-                            'R & D',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            color: uiTheme.textPrimary,
-                          ),
-                        ),
-                        Semantics(
-                          label: 'Unspent: $unspent',
-                          excludeSemantics: true,
-                          child: _BankChip(unspent: unspent),
-                        ),
-                      ],
-                    ),
+                      ),
+                      Semantics(
+                        label: 'Unspent: $unspent',
+                        excludeSemantics: true,
+                        child: _BankChip(unspent: unspent),
+                      ),
+                    ],
                   ),
+                ),
                 if (widget.feedback != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),

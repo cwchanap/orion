@@ -38,7 +38,6 @@ void main() {
     expect(find.text('Music'), findsOneWidget);
     expect(find.text('Reduced Motion'), findsOneWidget);
     expect(find.text('Replay Tutorial'), findsOneWidget);
-    expect(find.text('Reset Campaign'), findsOneWidget);
     expect(find.text('Done'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
@@ -169,10 +168,8 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('tapping Done pops the final preferences without reset intent', (
-    tester,
-  ) async {
-    FeedbackSettingsResult? popped;
+  testWidgets('tapping Done pops the final preferences value', (tester) async {
+    FeedbackPreferences? popped;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -180,7 +177,7 @@ void main() {
             body: Center(
               child: FilledButton(
                 onPressed: () async {
-                  popped = await showModalBottomSheet<FeedbackSettingsResult>(
+                  popped = await showModalBottomSheet<FeedbackPreferences>(
                     context: context,
                     builder: (context) => const FeedbackSettingsSheet(
                       initialPreferences: FeedbackPreferences(),
@@ -206,72 +203,20 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(
-      popped?.preferences,
+      popped,
       const FeedbackPreferences(
         soundEffectsEnabled: true,
         hapticsEnabled: true,
         musicEnabled: false,
       ),
     );
-    expect(popped?.resetCampaign, isFalse);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('tapping Reset Campaign pops the draft with reset intent', (
-    tester,
-  ) async {
-    FeedbackSettingsResult? popped;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: Center(
-              child: FilledButton(
-                onPressed: () async {
-                  popped = await showModalBottomSheet<FeedbackSettingsResult>(
-                    context: context,
-                    builder: (context) => const FeedbackSettingsSheet(
-                      initialPreferences: FeedbackPreferences(
-                        musicEnabled: false,
-                      ),
-                      reduceMotion: false,
-                    ),
-                  );
-                },
-                child: const Text('Open'),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-    await tester.tap(find.text('Open'));
-    await tester.pumpAndSettle();
-
-    // The reset row carries whatever draft the player left behind — the
-    // page commits it before opening the confirmation dialog.
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Haptics'));
-    await tester.pump();
-    await tester.ensureVisible(find.text('Reset Campaign'));
-    await tester.tap(find.text('Reset Campaign'));
-    await tester.pumpAndSettle();
-
-    expect(
-      popped?.preferences,
-      const FeedbackPreferences(
-        soundEffectsEnabled: true,
-        hapticsEnabled: false,
-        musicEnabled: false,
-      ),
-    );
-    expect(popped?.resetCampaign, isTrue);
     expect(tester.takeException(), isNull);
   });
 
   testWidgets('dismissing via the barrier returns null (draft not persisted)', (
     tester,
   ) async {
-    FeedbackSettingsResult? popped;
+    FeedbackPreferences? popped;
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -279,7 +224,7 @@ void main() {
             body: Center(
               child: FilledButton(
                 onPressed: () async {
-                  popped = await showModalBottomSheet<FeedbackSettingsResult>(
+                  popped = await showModalBottomSheet<FeedbackPreferences>(
                     context: context,
                     builder: (context) => const FeedbackSettingsSheet(
                       initialPreferences: FeedbackPreferences(),
