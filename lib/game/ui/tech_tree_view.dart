@@ -32,8 +32,7 @@ class TechTreeView extends StatefulWidget {
   /// Invoked when the user taps an affordable upgrade's Purchase button.
   final ValueChanged<CampaignTechUpgrade> onPurchase;
 
-  /// Back action for standalone hosts. Null inside the shared menu shell —
-  /// the bottom tabs own navigation there, so no back button renders.
+  /// Invoked when the user taps the back button.
   final VoidCallback? onBack;
 
   @override
@@ -66,10 +65,6 @@ class _TechTreeViewState extends State<TechTreeView> {
       [CampaignTechUpgrade.cryoCoolant],
     ];
 
-    // A flat body, not a Scaffold: inside the shared menu shell the shell's
-    // Scaffold owns insets and chrome, and its MediaQuery.removePadding
-    // turns this view's own SafeArea into a no-op. Standalone test hosts
-    // still get the full layout.
     return Material(
       color: uiTheme.voidBlack,
       child: Stack(

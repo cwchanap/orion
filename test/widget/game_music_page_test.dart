@@ -221,8 +221,6 @@ void main() {
       secondGame.returnToMap();
       await tester.pump();
       expect(player.calls.last, 'play:music_map.wav');
-      // Reset lives inside the Settings sheet now: gear -> Reset Campaign
-      // row -> confirmation.
       await tester.tap(find.byTooltip('Settings'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Reset Campaign'));

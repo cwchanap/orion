@@ -114,8 +114,6 @@ class OrionTitle extends StatelessWidget {
   final Color color;
   final double size;
 
-  /// Overrides the title role's default lift shadow. The title-screen
-  /// wordmark stacks a glow and a solid lip instead of the small lift.
   final List<Shadow>? shadows;
   final TextAlign? textAlign;
   final int? maxLines;

@@ -67,9 +67,6 @@ Widget testGamePage({
     // match the shipped app.
     theme: orionThemeData,
     home: OrionGamePage(
-      // Map-first by default: the shipped game boots into the title, but
-      // this suite's fixtures were authored map-first. Title coverage opts
-      // out explicitly (see title_screen_test).
       startOnWorldMap: startOnWorldMap,
       progressStore: progressStore,
       progressStoreLoader: progressStoreLoader,
@@ -88,9 +85,6 @@ Widget testGamePage({
   );
 }
 
-/// Opens the Settings sheet and taps its 'Reset Campaign' row, leaving the
-/// reset confirmation dialog on screen. The shared shell owns Settings now;
-/// reset no longer has a direct map rail button.
 Future<void> openResetCampaignDialog(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Settings'));
   await tester.pumpAndSettle();
@@ -3173,8 +3167,6 @@ void main() {
     await tester.tap(find.text('Purchase'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    // The shell's destination tabs are inert while the purchase write is in
-    // flight, so the map — and therefore any stage launch — stays unreachable.
     await tester.tap(find.byTooltip('Map'));
     await tester.pumpAndSettle();
 
@@ -3186,7 +3178,6 @@ void main() {
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
 
-    // Once the write settles, navigation is restored and the stage launches.
     await tester.tap(find.byTooltip('Map'));
     await tester.pumpAndSettle();
 
@@ -3197,6 +3188,95 @@ void main() {
     );
 
     expect(find.byTooltip('Start Wave'), findsOneWidget);
+  });
+
+  testWidgets('R&D purchase and Settings stay disabled while a campaign '
+      'reset is in flight', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+      }),
+      delayResets: true,
+    );
+
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('R&D'));
+    await tester.pumpAndSettle();
+    if (find.text('Purchase').evaluate().isEmpty) {
+      await tester.tap(
+        find.byKey(const ValueKey('tech-node-solar-capacitors')),
+      );
+      await tester.pump();
+    }
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Purchase'))
+          .onPressed,
+      isNotNull,
+    );
+
+    await openResetCampaignDialog(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await _pumpUntil(tester, () => store.resetCompletions.isNotEmpty);
+    await tester.pump();
+
+    for (final button in tester.widgetList<FilledButton>(
+      find.widgetWithText(FilledButton, 'Purchase'),
+    )) {
+      expect(button.onPressed, isNull);
+    }
+    final settingsGear = tester.widget<InkWell>(
+      find.descendant(
+        of: find.byTooltip('Settings'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    expect(settingsGear.onTap, isNull);
+
+    store.resetCompletions.single.complete();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the Settings gear stays disabled while a campaign save is '
+      'in flight', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+      }),
+      delaySaves: true,
+    );
+
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('R&D'));
+    await tester.pumpAndSettle();
+    if (find.text('Purchase').evaluate().isEmpty) {
+      await tester.tap(
+        find.byKey(const ValueKey('tech-node-solar-capacitors')),
+      );
+      await tester.pump();
+    }
+    await tester.tap(find.text('Purchase'));
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    await tester.pump();
+
+    final settingsGear = tester.widget<InkWell>(
+      find.descendant(
+        of: find.byTooltip('Settings'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    expect(settingsGear.onTap, isNull);
+
+    store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets(
@@ -3480,7 +3560,13 @@ void main() {
     expect(find.byTooltip('Replay Mission'), findsNothing);
     expect(createdGame, isNull);
 
-    await openResetCampaignDialog(tester);
+    final settingsGear = tester.widget<InkWell>(
+      find.descendant(
+        of: find.byTooltip('Settings'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    expect(settingsGear.onTap, isNull);
 
     // No second reset was triggered.
     expect(store.resetCalls, 1);
@@ -3686,7 +3772,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // TechTreeView is now rendered (T12): its header appears and the
-      // world-map header is replaced; the shell's tabs persist.
+      // world-map header is replaced.
       expect(findOrionTitle('R & D'), findsOneWidget);
       expect(find.text('ORION SECTOR'), findsNothing);
       expect(find.byTooltip('Map'), findsOneWidget);
@@ -4510,9 +4596,8 @@ void main() {
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
-    // The save is still pending: the Settings gear is disabled and the
-    // prior effective value is untouched. The shell's gear is a custom
-    // ghost-plate InkWell under its Tooltip, not an IconButton.
+    // The save is still pending: the Settings button is disabled and the
+    // prior effective value is untouched.
     InkWell settingsGear() => tester.widget<InkWell>(
       find.descendant(
         of: find.byTooltip('Settings'),
@@ -4528,7 +4613,7 @@ void main() {
       ),
     );
 
-    // Release the save; the gear re-enables and the new value is
+    // Release the save; the button re-enables and the new value is
     // effective in the reopened sheet.
     feedbackStore.saveCompletions.single.complete();
     await tester.pumpAndSettle();
@@ -4608,10 +4693,6 @@ void main() {
     'a changed settings draft finishes saving before the reset dialog '
     'opens',
     (tester) async {
-      // Ordered intents (Task 2): the Reset Campaign row carries the draft
-      // out of the sheet, the page commits the preference save FIRST, and
-      // only then does the reset confirmation appear — the reset's queue
-      // drain can never race an in-flight preference write.
       final store = _TestCampaignProgressStore(
         progress: _progressWithResults({'outpost-alpha'}),
       );
@@ -4634,13 +4715,10 @@ void main() {
       await tester.tap(find.text('Reset Campaign'));
       await tester.pumpAndSettle();
 
-      // The preference save is in flight: no confirmation dialog yet, and
-      // no reset has run.
       expect(feedbackStore.saveCompletions, hasLength(1));
       expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsNothing);
       expect(store.resetCalls, 0);
 
-      // Releasing the save lets the flow reach the confirmation.
       feedbackStore.saveCompletions.single.complete();
       await tester.pumpAndSettle();
       expect(
@@ -4664,9 +4742,6 @@ void main() {
     'a failed settings save shows the error and never opens the reset '
     'dialog',
     (tester) async {
-      // Save failure vetoes the reset flow: showing the reset confirmation
-      // after the write failed would look like the preference change went
-      // through. The draft is discarded; the error breadcrumb surfaces.
       final store = _TestCampaignProgressStore(
         progress: _progressWithResults({'outpost-alpha'}),
       );
@@ -4687,8 +4762,6 @@ void main() {
       await tester.tap(find.text('Reset Campaign'));
       await tester.pumpAndSettle();
 
-      // Save failed: the breadcrumb is up, and the confirmation never
-      // opened — no reset ran.
       expect(find.text('Could not save feedback settings.'), findsOneWidget);
       expect(find.byKey(const ValueKey('reset-campaign-dialog')), findsNothing);
       expect(store.resetCalls, 0);
@@ -4698,8 +4771,6 @@ void main() {
   testWidgets(
     'cancelling the reset dialog keeps the already-saved preferences',
     (tester) async {
-      // The preference save commits before the confirmation opens; a later
-      // Cancel abandons only the reset intent, never the persisted draft.
       final store = _TestCampaignProgressStore(
         progress: _progressWithResults({'outpost-alpha'}),
       );
@@ -4722,7 +4793,6 @@ void main() {
       await tester.tap(find.text('Reset Campaign'));
       await tester.pumpAndSettle();
 
-      // The draft already committed; the dialog is the only remaining gate.
       expect(
         find.byKey(const ValueKey('reset-campaign-dialog')),
         findsOneWidget,

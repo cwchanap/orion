@@ -13,8 +13,6 @@ class CodexView extends StatefulWidget {
 
   final CampaignProgress progress;
 
-  /// Back action for standalone hosts. Null inside the shared menu shell —
-  /// the bottom tabs own navigation there, so no back button renders.
   final VoidCallback? onBack;
 
   @override
@@ -83,10 +81,6 @@ class _CodexViewState extends State<CodexView> {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    // A flat body, not a Scaffold: inside the shared menu shell the shell's
-    // Scaffold owns insets and chrome, and its MediaQuery.removePadding
-    // turns this view's own SafeArea into a no-op. Standalone test hosts
-    // still get the full layout.
     return Material(
       color: uiTheme.voidBlack,
       child: SafeArea(
