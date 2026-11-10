@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tech_tree_view.dart';
@@ -50,7 +51,15 @@ void main() {
     await tester.runAsync(
       () => captureReactorRimFixture(boundaryKey, 'fixture-1g-large-text.png'),
     );
-    final action = find.byType(FilledButton).first;
+    final action = find.byWidgetPredicate(
+      (widget) =>
+          widget is OrionPrimaryButton && widget.label.startsWith('Research'),
+    );
+    expect(
+      action,
+      findsOneWidget,
+      reason: 'the selected node pins a bottom detail action',
+    );
     await tester.ensureVisible(action);
     await tester.pumpAndSettle();
     expect(
@@ -121,12 +130,46 @@ void main() {
   Finder purchasedBadgeFinder(CampaignTechUpgrade upgrade) =>
       find.byKey(ValueKey('tech-node-purchased-${upgrade.id}'));
 
+  final conduitsFinder = find.byKey(const ValueKey('tech-tree-conduits'));
+
+  Finder researchActionFinder(CampaignTechUpgrade upgrade) => find.descendant(
+    of: detailFinder(upgrade),
+    matching: find.byWidgetPredicate(
+      (widget) =>
+          widget is OrionPrimaryButton && widget.label.startsWith('Research'),
+    ),
+  );
+
+  Finder detailActionFinder(CampaignTechUpgrade upgrade) => find.descendant(
+    of: detailFinder(upgrade),
+    matching: find.byType(OrionPrimaryButton),
+  );
+
   Future<void> selectNode(
     WidgetTester tester,
     CampaignTechUpgrade upgrade,
   ) async {
     await tester.ensureVisible(nodeFinder(upgrade));
     await tester.tap(nodeFinder(upgrade));
+    await tester.pump();
+  }
+
+  void expectDetailActionPinned(Finder actionFinder) {
+    expect(
+      actionFinder,
+      findsOneWidget,
+      reason: 'the selected node pins a bottom detail action',
+    );
+  }
+
+  OrionPrimaryButton detailAction(WidgetTester tester, Finder actionFinder) {
+    expectDetailActionPinned(actionFinder);
+    return tester.widget<OrionPrimaryButton>(actionFinder);
+  }
+
+  Future<void> tapDetailAction(WidgetTester tester, Finder actionFinder) async {
+    expectDetailActionPinned(actionFinder);
+    await tester.tap(actionFinder);
     await tester.pump();
   }
 
@@ -264,8 +307,7 @@ void main() {
         onBack: () async {},
       );
       await selectNode(tester, core);
-      await tester.tap(find.widgetWithText(FilledButton, 'Purchase'));
-      await tester.pump();
+      await tapDetailAction(tester, researchActionFinder(core));
       expect(purchases, 1);
 
       // Parent applies the optimistic purchase and republishes.
@@ -311,14 +353,9 @@ void main() {
     );
 
     expect(selectedRingFinder(crew), findsOneWidget);
-    final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Purchase'),
-    );
+    final button = detailAction(tester, researchActionFinder(crew));
     expect(button.onPressed, isNull);
-    await tester.tap(
-      find.widgetWithText(FilledButton, 'Purchase'),
-      warnIfMissed: false,
-    );
+    await tester.tap(researchActionFinder(crew), warnIfMissed: false);
     await tester.pump();
     expect(purchases, 0);
   });
@@ -337,8 +374,7 @@ void main() {
         onBack: () async {},
       );
       await selectNode(tester, core);
-      await tester.tap(find.widgetWithText(FilledButton, 'Purchase'));
-      await tester.pump();
+      await tapDetailAction(tester, researchActionFinder(core));
 
       // Optimistic purchase lands…
       await pumpTree(
@@ -365,9 +401,7 @@ void main() {
       expect(purchasedBadgeFinder(core), findsNothing);
       expect(selectedRingFinder(core), findsOneWidget);
       expect(detailFinder(core), findsOneWidget);
-      final button = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Purchase'),
-      );
+      final button = detailAction(tester, researchActionFinder(core));
       expect(button.onPressed, isNotNull);
     },
   );
@@ -434,7 +468,10 @@ void main() {
     // non-interactive "Purchased" state and no Purchase button exists.
     await selectNode(tester, CampaignTechUpgrade.solarCapacitors);
     expect(find.text('Purchased'), findsOneWidget);
-    expect(find.widgetWithText(FilledButton, 'Purchase'), findsNothing);
+    expect(
+      detailActionFinder(CampaignTechUpgrade.solarCapacitors),
+      findsNothing,
+    );
     await tester.tap(find.text('Purchased'));
     await tester.pump();
     expect(tapped, 0);
@@ -451,8 +488,10 @@ void main() {
       onBack: () async {},
     );
     await selectNode(tester, CampaignTechUpgrade.salvageCrew);
-    await tester.tap(find.widgetWithText(FilledButton, 'Purchase'));
-    await tester.pump();
+    await tapDetailAction(
+      tester,
+      researchActionFinder(CampaignTechUpgrade.salvageCrew),
+    );
     expect(tapped, 1);
   });
 
@@ -470,8 +509,9 @@ void main() {
     // many points are missing.
     await selectNode(tester, CampaignTechUpgrade.cryoCoolant);
     expect(find.textContaining('Need 5 more points'), findsOneWidget);
-    final button = tester.widget<FilledButton>(
-      find.widgetWithText(FilledButton, 'Need 5 more points'),
+    final button = detailAction(
+      tester,
+      detailActionFinder(CampaignTechUpgrade.cryoCoolant),
     );
     expect(button.onPressed, isNull);
   });
@@ -596,6 +636,296 @@ void main() {
       expect(heading.style!.color, isNot(equals(uiTheme.textPrimary)));
     },
   );
+
+  group('command-deck hex field and conduits (HPA-699)', () {
+    testWidgets('the five nodes sit in a fixed 1-2-2 hex field at 390x844', (
+      tester,
+    ) async {
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+
+      Rect rect(CampaignTechUpgrade u) => tester.getRect(nodeFinder(u));
+      final solar = rect(CampaignTechUpgrade.solarCapacitors);
+      final core = rect(CampaignTechUpgrade.hardenedCore);
+      final crew = rect(CampaignTechUpgrade.salvageCrew);
+      final laser = rect(CampaignTechUpgrade.laserTuning);
+      final cryo = rect(CampaignTechUpgrade.cryoCoolant);
+      final centerX = tester.getSize(find.byType(TechTreeView)).width / 2;
+
+      expect(solar.center.dx, closeTo(centerX, 40));
+      expect(core.center.dx, lessThan(centerX));
+      expect(crew.center.dx, greaterThan(centerX));
+      expect(laser.center.dx, lessThan(centerX));
+      expect(cryo.center.dx, greaterThan(centerX));
+
+      expect(core.top, closeTo(crew.top, 8));
+      expect(laser.top, closeTo(cryo.top, 8));
+      expect(core.top, greaterThan(solar.top));
+      expect(laser.top, greaterThan(core.top));
+
+      expect(laser.center.dx, closeTo(core.center.dx, 40));
+      expect(cryo.center.dx, closeTo(crew.center.dx, 40));
+    });
+
+    testWidgets('every node presents a clipped hex silhouette', (tester) async {
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      final hexClip = find.byWidgetPredicate(
+        (widget) => widget is ClipPath || widget is PhysicalShape,
+      );
+      for (final upgrade in CampaignTechUpgrade.values) {
+        expect(
+          find.descendant(of: nodeFinder(upgrade), matching: hexClip),
+          findsWidgets,
+          reason: '${upgrade.id} must render inside a hex silhouette',
+        );
+      }
+    });
+
+    testWidgets(
+      'decorative conduits add no hit targets and no semantics nodes',
+      (tester) async {
+        final semantics = tester.ensureSemantics();
+        try {
+          await pumpTree(
+            tester,
+            progress: CampaignProgress(),
+            techTree: CampaignTechTree(),
+            onPurchase: (_) {},
+            onBack: () async {},
+          );
+
+          expect(conduitsFinder, findsOneWidget);
+          expect(
+            find.descendant(
+              of: conduitsFinder,
+              matching: find.byType(CustomPaint),
+            ),
+            findsWidgets,
+          );
+
+          final pointerGuard = tester.widget<IgnorePointer>(
+            find
+                .ancestor(
+                  of: conduitsFinder,
+                  matching: find.byType(IgnorePointer),
+                )
+                .first,
+          );
+          expect(pointerGuard.ignoring, isTrue);
+          for (final interactive in [
+            GestureDetector,
+            InkWell,
+            InkResponse,
+            TextButton,
+            IconButton,
+          ]) {
+            expect(
+              find.descendant(
+                of: conduitsFinder,
+                matching: find.byType(interactive),
+              ),
+              findsNothing,
+            );
+          }
+
+          expect(
+            find.ancestor(
+              of: conduitsFinder,
+              matching: find.byType(ExcludeSemantics),
+            ),
+            findsWidgets,
+          );
+          expect(
+            find.descendant(
+              of: conduitsFinder,
+              matching: find.byType(Semantics),
+            ),
+            findsNothing,
+          );
+          expect(
+            find.bySemanticsLabel(
+              RegExp('conduit|connector', caseSensitive: false),
+            ),
+            findsNothing,
+          );
+
+          for (final pattern in [
+            'Requires',
+            'requires',
+            'Unlock',
+            'unlock',
+            'Prerequisite',
+            'first purchase',
+          ]) {
+            expect(find.textContaining(pattern), findsNothing);
+            expect(
+              find.bySemanticsLabel(RegExp(pattern, caseSensitive: false)),
+              findsNothing,
+            );
+          }
+        } finally {
+          semantics.dispose();
+        }
+      },
+    );
+
+    testWidgets('the conduit layer paints behind the node field', (
+      tester,
+    ) async {
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      expect(conduitsFinder, findsOneWidget);
+
+      final stacks = find
+          .ancestor(of: conduitsFinder, matching: find.byType(Stack))
+          .evaluate()
+          .toList();
+      stacks.sort((a, b) => b.depth.compareTo(a.depth));
+      final stack = stacks.first.widget as Stack;
+
+      int? layerIndex(Finder target) {
+        final targets = target.evaluate().map((e) => e.widget).toSet();
+        for (var i = 0; i < stack.children.length; i++) {
+          final child = stack.children[i];
+          if (targets.contains(child)) return i;
+          final hit = find
+              .descendant(of: find.byWidget(child), matching: target)
+              .evaluate();
+          if (hit.isNotEmpty) return i;
+        }
+        return null;
+      }
+
+      final conduitIndex = layerIndex(conduitsFinder);
+      final nodeIndex = layerIndex(
+        nodeFinder(CampaignTechUpgrade.solarCapacitors),
+      );
+      expect(conduitIndex, isNotNull);
+      expect(nodeIndex, isNotNull);
+      expect(
+        conduitIndex!,
+        lessThanOrEqualTo(nodeIndex!),
+        reason: 'conduits are decoration behind the interactive nodes',
+      );
+    });
+
+    testWidgets('tapping empty conduit space opens no detail', (tester) async {
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      final solar = tester.getRect(
+        nodeFinder(CampaignTechUpgrade.solarCapacitors),
+      );
+      final core = tester.getRect(nodeFinder(CampaignTechUpgrade.hardenedCore));
+      final point = Offset(solar.center.dx, (solar.bottom + core.top) / 2);
+      for (final upgrade in CampaignTechUpgrade.values) {
+        expect(
+          tester.getRect(nodeFinder(upgrade)).contains(point),
+          isFalse,
+          reason: 'test point must be clear of every node hit region',
+        );
+      }
+      await tester.tapAt(point);
+      await tester.pump();
+      for (final upgrade in CampaignTechUpgrade.values) {
+        expect(detailFinder(upgrade), findsNothing);
+        expect(selectedRingFinder(upgrade), findsNothing);
+      }
+    });
+
+    testWidgets(
+      'the selected node pins a bottom detail panel with a Research action',
+      (tester) async {
+        var purchases = 0;
+        await pumpTree(
+          tester,
+          progress: progressWithRanks(const [3, 3, 3, 3]),
+          techTree: CampaignTechTree(),
+          onPurchase: (_) => purchases++,
+          onBack: () async {},
+        );
+        final core = CampaignTechUpgrade.hardenedCore;
+        await selectNode(tester, core);
+
+        final viewportHeight = tester.getSize(find.byType(TechTreeView)).height;
+        final detailRect = tester.getRect(detailFinder(core));
+        expect(detailRect.top, greaterThan(viewportHeight / 2));
+        for (final upgrade in CampaignTechUpgrade.values) {
+          expect(
+            detailRect.top,
+            greaterThanOrEqualTo(
+              tester.getRect(nodeFinder(upgrade)).bottom - 0.01,
+            ),
+            reason: 'the detail panel belongs below the node field',
+          );
+        }
+        expect(
+          detailRect.bottom,
+          lessThanOrEqualTo(
+            tester.getRect(find.byKey(const ValueKey('tech-bank-bar'))).top,
+          ),
+        );
+
+        final action = detailAction(tester, researchActionFinder(core));
+        expect(action.variant, OrionButtonVariant.secondary);
+        expect(action.onPressed, isNotNull);
+        expect(
+          find.text('${core.cost}'),
+          findsWidgets,
+          reason: 'the detail shows the real current cost',
+        );
+        await tapDetailAction(tester, researchActionFinder(core));
+        expect(purchases, 1);
+      },
+    );
+
+    testWidgets('each of the five upgrades is an independent purchase', (
+      tester,
+    ) async {
+      final progress = progressWithRanks(const [3, 3, 3, 3, 3, 3, 3]);
+      final bought = <CampaignTechUpgrade>[];
+      await pumpTree(
+        tester,
+        progress: progress,
+        techTree: CampaignTechTree(),
+        onPurchase: bought.add,
+        onBack: () async {},
+      );
+      for (final upgrade in CampaignTechUpgrade.values) {
+        await selectNode(tester, upgrade);
+        final action = detailAction(tester, researchActionFinder(upgrade));
+        expect(
+          action.onPressed,
+          isNotNull,
+          reason:
+              '${upgrade.id} must be purchasable on its own — no other '
+              'upgrade may gate it',
+        );
+        await tapDetailAction(tester, researchActionFinder(upgrade));
+      }
+      expect(bought, CampaignTechUpgrade.values);
+    });
+  });
 
   testWidgets('capture scene 1g fixture', (tester) async {
     tester.view.physicalSize = const Size(390, 844);

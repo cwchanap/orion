@@ -6,6 +6,8 @@ import 'package:flutter_test/flutter_test.dart';
 import '../support/orion_finders.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/ui/feedback_settings_sheet.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
+import 'package:orion/game/ui/orion_surface.dart';
 
 void main() {
   Future<void> pumpSheet(
@@ -29,6 +31,54 @@ void main() {
       ),
     );
   }
+
+  group('command-deck kit adoption (HPA-699)', () {
+    testWidgets('the sheet content sits on a shared OrionSurface', (
+      tester,
+    ) async {
+      await pumpSheet(tester);
+      expect(
+        find.ancestor(
+          of: findOrionTitle('Settings'),
+          matching: find.byType(OrionSurface),
+        ),
+        findsOneWidget,
+        reason: 'settings rows must live on an OrionSurface sheet',
+      );
+      expect(
+        find.ancestor(
+          of: find.widgetWithText(SwitchListTile, 'Music'),
+          matching: find.byType(OrionSurface),
+        ),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('Done is the shared primary action, Reset the danger one', (
+      tester,
+    ) async {
+      await pumpSheet(tester);
+      final done = find.ancestor(
+        of: find.text('Done'),
+        matching: find.byType(OrionPrimaryButton),
+      );
+      expect(done, findsOneWidget);
+      expect(
+        tester.widget<OrionPrimaryButton>(done).variant,
+        OrionButtonVariant.primary,
+      );
+
+      final reset = find.ancestor(
+        of: find.text('Reset Campaign'),
+        matching: find.byType(OrionPrimaryButton),
+      );
+      expect(reset, findsOneWidget);
+      expect(
+        tester.widget<OrionPrimaryButton>(reset).variant,
+        OrionButtonVariant.danger,
+      );
+    });
+  });
 
   testWidgets('renders all labels', (tester) async {
     await pumpSheet(tester);

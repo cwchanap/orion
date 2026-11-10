@@ -4,6 +4,8 @@ import '../campaign/campaign_progress.dart';
 import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_primary_button.dart';
+import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
@@ -39,12 +41,155 @@ class TechTreeView extends StatefulWidget {
   State<TechTreeView> createState() => _TechTreeViewState();
 }
 
+/// Fixed five-node field, positioned to echo artboard 1g: the top node,
+/// a flanking pair, then two more — without any connector edges (the five
+/// upgrades are independent purchases).
+const _nodeAnchors = <CampaignTechUpgrade, (double, double)>{
+  CampaignTechUpgrade.solarCapacitors: (.5, 0),
+  CampaignTechUpgrade.hardenedCore: (.2667, 192),
+  CampaignTechUpgrade.salvageCrew: (.7333, 192),
+  CampaignTechUpgrade.laserTuning: (.2667, 346),
+  CampaignTechUpgrade.cryoCoolant: (.7333, 346),
+};
+
+const _nodeWidth = 130.0;
+const _nodeHeight = 138.0;
+const _fieldHeight = 484.0;
+
+Path _hexPath(Size size) {
+  final w = size.width;
+  final h = size.height;
+  return Path()
+    ..moveTo(w / 2, 0)
+    ..lineTo(w, h * .25)
+    ..lineTo(w, h * .75)
+    ..lineTo(w / 2, h)
+    ..lineTo(0, h * .75)
+    ..lineTo(0, h * .25)
+    ..close();
+}
+
+class _HexClipper extends CustomClipper<Path> {
+  const _HexClipper();
+
+  @override
+  Path getClip(Size size) => _hexPath(size);
+
+  @override
+  bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
+class _HexEdgePainter extends CustomPainter {
+  const _HexEdgePainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final path = _hexPath(size);
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5
+        ..maskFilter = const MaskFilter.blur(BlurStyle.outer, 6),
+    );
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_HexEdgePainter old) => old.color != color;
+}
+
+class _TechConduitPainter extends CustomPainter {
+  const _TechConduitPainter({required this.solid, required this.dashed});
+
+  final Color solid;
+  final Color dashed;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final mid = size.width / 2;
+    final left = size.width * .2667;
+    final right = size.width * .7333;
+    const r0Bottom = _nodeHeight;
+    const r1Top = 192.0;
+    const r1Bottom = r1Top + _nodeHeight;
+    const r2Top = 346.0;
+    final midY = (r0Bottom + r1Top) / 2;
+    canvas.drawPath(
+      Path()
+        ..moveTo(mid, r0Bottom + 2)
+        ..lineTo(mid, midY)
+        ..moveTo(left, midY)
+        ..lineTo(right, midY)
+        ..moveTo(left, midY)
+        ..lineTo(left, r1Top - 6)
+        ..moveTo(right, midY)
+        ..lineTo(right, r1Top - 6),
+      Paint()
+        ..color = solid
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3
+        ..strokeCap = StrokeCap.round,
+    );
+    final dashPaint = Paint()
+      ..color = dashed
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    final drops = Path()
+      ..moveTo(left, r1Bottom - 18)
+      ..lineTo(left, r2Top - 4)
+      ..moveTo(right, r1Bottom - 18)
+      ..lineTo(right, r2Top - 4);
+    for (final metric in drops.computeMetrics()) {
+      var distance = 0.0;
+      while (distance < metric.length) {
+        final end = (distance + 6).clamp(0, metric.length);
+        canvas.drawPath(
+          metric.extractPath(distance, end.toDouble()),
+          dashPaint,
+        );
+        distance = end + 6;
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(_TechConduitPainter old) =>
+      old.solid != solid || old.dashed != dashed;
+}
+
 class _TechTreeViewState extends State<TechTreeView> {
   /// Presentation-only selection: which node's detail is on screen. Never
   /// persisted and never read by the parent; real node/detail state (purchased,
   /// affordable, saving) is always derived from [TechTreeView] props on
   /// rebuild so purchases and rollbacks flow through unchanged.
   CampaignTechUpgrade? _selected;
+
+  /// Lets a fresh selection scroll its detail panel into view on apertures
+  /// too short to show the node field and the panel together — a no-op when
+  /// the detail is already fully visible.
+  final GlobalKey _detailKey = GlobalKey();
+
+  void _select(CampaignTechUpgrade upgrade) {
+    setState(() => _selected = upgrade);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final detailContext = _detailKey.currentContext;
+      if (detailContext != null) {
+        Scrollable.ensureVisible(detailContext, alignment: 1.0);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -54,16 +199,6 @@ class _TechTreeViewState extends State<TechTreeView> {
     final earned = CampaignTechTree.totalMedalRank(progress);
     final spent = techTree.totalSpent;
     final unspent = techTree.unspentPoints(progress);
-
-    // Fixed five-node field, positioned to echo artboard 1g: the top node,
-    // a flanking pair, then two more — without any connector edges (the five
-    // upgrades are independent purchases).
-    const rows = [
-      [CampaignTechUpgrade.solarCapacitors],
-      [CampaignTechUpgrade.hardenedCore, CampaignTechUpgrade.salvageCrew],
-      [CampaignTechUpgrade.laserTuning],
-      [CampaignTechUpgrade.cryoCoolant],
-    ];
 
     return Material(
       color: uiTheme.voidBlack,
@@ -120,7 +255,9 @@ class _TechTreeViewState extends State<TechTreeView> {
                   ),
                 Expanded(
                   child: SingleChildScrollView(
-                    // Selecting a node opens its details at the top of this scrollable area.
+                    // The detail opens below the node field; on short
+                    // apertures this column scrolls so the field and the
+                    // pinned-detail copy never overlap the bank bar.
                     key: ValueKey(_selected),
                     padding: EdgeInsets.only(
                       top: _selected == null
@@ -134,42 +271,69 @@ class _TechTreeViewState extends State<TechTreeView> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        if (_selected != null)
-                          _TechDetail(
-                            key: ValueKey('tech-detail-${_selected!.id}'),
-                            upgrade: _selected!,
-                            progress: progress,
-                            techTree: techTree,
-                            isSavingProgress: widget.isSavingProgress,
-                            onPurchase: widget.onPurchase,
-                            onClose: () => setState(() => _selected = null),
+                        SizedBox(
+                          height: _fieldHeight,
+                          child: LayoutBuilder(
+                            builder: (context, constraints) {
+                              final fieldWidth = constraints.maxWidth;
+                              return Stack(
+                                children: [
+                                  Positioned.fill(
+                                    child: IgnorePointer(
+                                      child: ExcludeSemantics(
+                                        child: SizedBox(
+                                          key: const ValueKey(
+                                            'tech-tree-conduits',
+                                          ),
+                                          child: CustomPaint(
+                                            painter: _TechConduitPainter(
+                                              solid: uiTheme.systemViolet
+                                                  .withValues(alpha: .85),
+                                              dashed: uiTheme.systemCyan
+                                                  .withValues(alpha: .7),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  for (final entry in _nodeAnchors.entries)
+                                    Positioned(
+                                      left:
+                                          entry.value.$1 * fieldWidth -
+                                          _nodeWidth / 2,
+                                      top: entry.value.$2,
+                                      child: _TechNode(
+                                        upgrade: entry.key,
+                                        isSelected: entry.key == _selected,
+                                        isPurchased: techTree.isPurchased(
+                                          entry.key,
+                                        ),
+                                        canAfford: techTree.canPurchase(
+                                          entry.key,
+                                          progress,
+                                        ),
+                                        onSelect: () => _select(entry.key),
+                                      ),
+                                    ),
+                                ],
+                              );
+                            },
                           ),
-                        if (_selected != null) const SizedBox(height: 20),
-                        for (var i = 0; i < rows.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 18),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              for (var j = 0; j < rows[i].length; j++) ...[
-                                if (j > 0)
-                                  SizedBox(
-                                    width:
-                                        (MediaQuery.sizeOf(context).width * .15)
-                                            .clamp(16, 68),
-                                  ),
-                                _TechNode(
-                                  upgrade: rows[i][j],
-                                  isSelected: rows[i][j] == _selected,
-                                  isPurchased: techTree.isPurchased(rows[i][j]),
-                                  canAfford: techTree.canPurchase(
-                                    rows[i][j],
-                                    progress,
-                                  ),
-                                  onSelect: () =>
-                                      setState(() => _selected = rows[i][j]),
-                                ),
-                              ],
-                            ],
+                        ),
+                        if (_selected != null) ...[
+                          const SizedBox(height: 12),
+                          KeyedSubtree(
+                            key: _detailKey,
+                            child: _TechDetail(
+                              key: ValueKey('tech-detail-${_selected!.id}'),
+                              upgrade: _selected!,
+                              progress: progress,
+                              techTree: techTree,
+                              isSavingProgress: widget.isSavingProgress,
+                              onPurchase: widget.onPurchase,
+                              onClose: () => setState(() => _selected = null),
+                            ),
                           ),
                         ],
                       ],
@@ -308,6 +472,29 @@ class _BankBar extends StatelessWidget {
   }
 }
 
+const _lockedSpriteFilter = ColorFilter.matrix([
+  .36,
+  .26,
+  .18,
+  0,
+  0,
+  .36,
+  .26,
+  .18,
+  0,
+  0,
+  .36,
+  .26,
+  .18,
+  0,
+  0,
+  0,
+  0,
+  0,
+  .55,
+  0,
+]);
+
 class _TechNode extends StatelessWidget {
   const _TechNode({
     required this.upgrade,
@@ -333,6 +520,23 @@ class _TechNode extends StatelessWidget {
         ? uiTheme.systemCyan
         : uiTheme.textMuted;
 
+    final Decoration shell = BoxDecoration(
+      gradient: isPurchased
+          ? orionHexOwnShell
+          : canAfford || isSelected
+          ? orionHexAvailShell
+          : null,
+      color: isPurchased || canAfford || isSelected ? null : uiTheme.frameSteel,
+    );
+    final Decoration core = BoxDecoration(
+      gradient: isPurchased
+          ? orionHexOwnCore
+          : canAfford || isSelected
+          ? orionHexAvailCore
+          : null,
+      color: isPurchased || canAfford || isSelected ? null : orionHexLockCore,
+    );
+
     return Semantics(
       button: true,
       selected: isSelected,
@@ -348,64 +552,103 @@ class _TechNode extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
         child: SizedBox(
           key: ValueKey('tech-node-${upgrade.id}'),
-          width: (MediaQuery.sizeOf(context).width * .27).clamp(96, 120),
+          width: _nodeWidth,
+          height: _nodeHeight,
           child: Stack(
             children: [
-              Positioned.fill(
-                child: Container(
+              Positioned(
+                top: 0,
+                left: (_nodeWidth - 74) / 2,
+                child: SizedBox(
                   key: isSelected
                       ? ValueKey('tech-selected-ring-${upgrade.id}')
                       : null,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        isPurchased
-                            ? uiTheme.systemViolet.withValues(alpha: .5)
-                            : uiTheme.panelBlue.withValues(alpha: .85),
-                        uiTheme.hullBlack.withValues(alpha: .9),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(
-                      color: isSelected
-                          ? uiTheme.systemViolet
-                          : uiTheme.frameSteel,
-                      width: isSelected ? 2 : 1,
-                    ),
-                    boxShadow: isSelected
-                        ? [
-                            BoxShadow(
-                              color: uiTheme.systemViolet.withValues(
-                                alpha: 0.4,
+                  width: 74,
+                  height: 82,
+                  child: CustomPaint(
+                    foregroundPainter: isSelected
+                        ? _HexEdgePainter(uiTheme.systemCyan)
+                        : null,
+                    child: ClipPath(
+                      clipper: const _HexClipper(),
+                      child: DecoratedBox(
+                        decoration: shell,
+                        child: Padding(
+                          padding: const EdgeInsets.all(3),
+                          child: ClipPath(
+                            clipper: const _HexClipper(),
+                            child: DecoratedBox(
+                              decoration: core,
+                              child: Center(
+                                child: _nodeVisual(
+                                  upgrade,
+                                  accent,
+                                  iconSize: 30,
+                                  spriteSize: 40,
+                                  locked: !isPurchased && !canAfford,
+                                ),
                               ),
-                              blurRadius: 14,
-                              spreadRadius: 1,
                             ),
-                          ]
-                        : const [],
+                          ),
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.all(10),
+              if (isPurchased)
+                Positioned(
+                  top: 2,
+                  right: 22,
+                  child: DecoratedBox(
+                    key: ValueKey('tech-node-purchased-${upgrade.id}'),
+                    decoration: BoxDecoration(
+                      color: uiTheme.systemViolet,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: Center(
+                        child: Icon(
+                          Icons.check,
+                          size: 11,
+                          color: orionHexCheckInk,
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else if (!canAfford)
+                Positioned(
+                  top: 4,
+                  right: 24,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: orionHexLockBadge,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: uiTheme.frameSteel),
+                    ),
+                    child: SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: Center(
+                        child: Icon(
+                          Icons.lock,
+                          size: 10,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (upgrade == CampaignTechUpgrade.laserTuning ||
-                        upgrade == CampaignTechUpgrade.cryoCoolant)
-                      OrionAtlasSprite(
-                        art: OrionArt.tower(
-                          upgrade == CampaignTechUpgrade.laserTuning
-                              ? TowerType.laser
-                              : TowerType.cryo,
-                        ),
-                        size: const Size.square(36),
-                      )
-                    else
-                      Icon(_nodeIcon(upgrade), size: 36, color: accent),
-                    const SizedBox(height: 5),
                     Text(
                       upgrade.label,
                       maxLines: 2,
@@ -431,52 +674,45 @@ class _TechNode extends StatelessWidget {
                         context,
                       ).clamp(maxScaleFactor: 1.15),
                       style: OrionTypography.readout(
-                        size: 14,
+                        size: 13,
                         color: isPurchased || canAfford
                             ? uiTheme.naniteGreen
                             : uiTheme.textMuted,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.pentagon,
-                          size: 12,
-                          color: uiTheme.systemViolet,
-                        ),
-                        const SizedBox(width: 3),
-                        Text(
-                          '${upgrade.cost}',
-                          style: OrionTypography.readout(
-                            size: 11,
-                            color: uiTheme.creditGold,
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
               ),
-              if (isPurchased)
-                Positioned(
-                  top: 5,
-                  right: 5,
-                  child: Icon(
-                    Icons.check_circle,
-                    key: ValueKey('tech-node-purchased-${upgrade.id}'),
-                    size: 17,
-                    color: uiTheme.naniteGreen,
-                    shadows: const [Shadow(color: Colors.black, blurRadius: 4)],
-                  ),
-                ),
             ],
           ),
         ),
       ),
     );
   }
+}
+
+Widget _nodeVisual(
+  CampaignTechUpgrade upgrade,
+  Color iconColor, {
+  required double iconSize,
+  required double spriteSize,
+  bool locked = false,
+}) {
+  final type = switch (upgrade) {
+    CampaignTechUpgrade.laserTuning => TowerType.laser,
+    CampaignTechUpgrade.cryoCoolant => TowerType.cryo,
+    _ => null,
+  };
+  if (type != null) {
+    final sprite = OrionAtlasSprite(
+      art: OrionArt.tower(type),
+      size: Size.square(spriteSize),
+    );
+    return locked
+        ? ColorFiltered(colorFilter: _lockedSpriteFilter, child: sprite)
+        : sprite;
+  }
+  return Icon(_nodeIcon(upgrade), size: iconSize, color: iconColor);
 }
 
 class _TechDetail extends StatelessWidget {
@@ -512,33 +748,58 @@ class _TechDetail extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Container(
+      child: OrionSurface(
+        role: OrionSurfaceRole.sheet,
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: uiTheme.panelBlue.withValues(alpha: 0.94),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: uiTheme.systemViolet.withValues(alpha: 0.55),
-          ),
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               children: [
-                Expanded(
-                  child: Text(
-                    upgrade.label,
-                    // Detail-panel heading for the selected node; reuses the
-                    // panel's own systemViolet border accent rather than the
-                    // screen title role (already used once above) or the
-                    // forbidden textPrimary. Sized as the established sub-heading
-                    // scale, since its own description sits directly below it.
-                    style: OrionTypography.microLabel(
-                      size: 11,
-                      color: uiTheme.systemViolet,
+                OrionSurface(
+                  role: OrionSurfaceRole.card,
+                  padding: const EdgeInsets.all(10),
+                  radius: 14,
+                  child: SizedBox(
+                    width: 32,
+                    height: 32,
+                    child: FittedBox(
+                      child: _nodeVisual(
+                        upgrade,
+                        uiTheme.systemViolet,
+                        iconSize: 30,
+                        spriteSize: 40,
+                      ),
                     ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        upgrade.label,
+                        // Detail-panel heading for the selected node; reuses the
+                        // panel's own systemViolet border accent rather than the
+                        // screen title role (already used once above) or the
+                        // forbidden textPrimary. Sized as the established sub-heading
+                        // scale, since its own description sits directly below it.
+                        style: OrionTypography.microLabel(
+                          size: 11,
+                          color: uiTheme.systemViolet,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        upgrade.description,
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 IconButton(
@@ -548,15 +809,7 @@ class _TechDetail extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 2),
-            Text(
-              upgrade.description,
-              style: OrionTypography.microLabel(
-                size: 10,
-                color: uiTheme.textMuted,
-              ),
-            ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 10),
             Text(
               upgrade.effectLabel,
               style: OrionTypography.microLabel(
@@ -573,7 +826,40 @@ class _TechDetail extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            _buildAction(uiTheme, isPurchased, canPurchase, canAfford, unspent),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${upgrade.cost}',
+                      style: OrionTypography.readout(
+                        size: 22,
+                        color: uiTheme.creditGold,
+                      ),
+                    ),
+                    Text(
+                      'PTS',
+                      style: OrionTypography.microLabel(
+                        size: 10,
+                        color: uiTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildAction(
+                    uiTheme,
+                    isPurchased,
+                    canPurchase,
+                    canAfford,
+                    unspent,
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -594,9 +880,9 @@ class _TechDetail extends StatelessWidget {
           border: Border.all(color: uiTheme.naniteGreen),
         ),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.check_circle, size: 14, color: uiTheme.naniteGreen),
               const SizedBox(width: 5),
@@ -612,25 +898,40 @@ class _TechDetail extends StatelessWidget {
         ),
       );
     }
-    if (canPurchase) {
-      return FilledButton(
-        onPressed: () => onPurchase(upgrade),
-        child: const Text('Purchase'),
+    if (!canAfford) {
+      final needed = upgrade.cost - unspent;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          OrionPrimaryButton(
+            label: 'Research',
+            icon: Icons.diamond,
+            variant: OrionButtonVariant.secondary,
+            height: 52,
+            onPressed: null, // disabled
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Need $needed more points',
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: uiTheme.dangerRed,
+            ),
+          ),
+        ],
       );
     }
     // Affordable but a save is in flight — show a disabled Purchase button
     // rather than the "Need N more points" label, so the user sees the
     // correct reason (waiting on persistence, not lacking points).
-    if (canAfford) {
-      return FilledButton(
-        onPressed: null, // disabled while saving
-        child: const Text('Purchase'),
-      );
-    }
-    final needed = upgrade.cost - unspent;
-    return FilledButton(
-      onPressed: null, // disabled
-      child: Text('Need $needed more points'),
+    return OrionPrimaryButton(
+      label: 'Research',
+      icon: Icons.diamond,
+      variant: OrionButtonVariant.secondary,
+      height: 52,
+      onPressed: canPurchase
+          ? () => onPurchase(upgrade)
+          : null, // disabled while saving
     );
   }
 }

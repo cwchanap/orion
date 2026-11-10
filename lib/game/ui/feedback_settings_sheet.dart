@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../feedback/feedback_preferences.dart';
+import 'orion_primary_button.dart';
+import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
@@ -80,93 +82,117 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              OrionTitle('Settings', color: uiTheme.textPrimary),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                title: const Text('Sound Effects'),
-                value: _draft.soundEffectsEnabled,
-                onChanged: (enabled) {
-                  setState(() {
-                    _draft = _draft.copyWith(soundEffectsEnabled: enabled);
-                  });
-                },
-              ),
-              SwitchListTile(
-                title: const Text('Music'),
-                value: _draft.musicEnabled,
-                onChanged: (enabled) {
-                  setState(() {
-                    _draft = _draft.copyWith(musicEnabled: enabled);
-                  });
-                },
-              ),
-              SwitchListTile(
-                title: const Text('Haptics'),
-                value: _draft.hapticsEnabled,
-                onChanged: (enabled) {
-                  setState(() {
-                    _draft = _draft.copyWith(hapticsEnabled: enabled);
-                  });
-                },
-              ),
-              ListTile(
-                title: const Text('Reduced Motion'),
-                subtitle: Text(
-                  widget.reduceMotion
-                      ? 'Follows system • On'
-                      : 'Follows system • Off',
+          child: OrionSurface(
+            role: OrionSurfaceRole.sheet,
+            padding: const EdgeInsets.fromLTRB(8, 16, 8, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: OrionTitle('Settings', color: uiTheme.textPrimary),
                 ),
-                // Informational only: reduced motion follows the system
-                // MediaQuery setting and is not persisted. A plain ListTile
-                // with a status icon avoids the disabled-switch look.
-                trailing: Semantics(
-                  label: widget.reduceMotion
-                      ? 'Reduced motion on'
-                      : 'Reduced motion off',
-                  child: Icon(
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  title: const Text('Sound Effects'),
+                  value: _draft.soundEffectsEnabled,
+                  onChanged: (enabled) {
+                    setState(() {
+                      _draft = _draft.copyWith(soundEffectsEnabled: enabled);
+                    });
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Music'),
+                  value: _draft.musicEnabled,
+                  onChanged: (enabled) {
+                    setState(() {
+                      _draft = _draft.copyWith(musicEnabled: enabled);
+                    });
+                  },
+                ),
+                SwitchListTile(
+                  title: const Text('Haptics'),
+                  value: _draft.hapticsEnabled,
+                  onChanged: (enabled) {
+                    setState(() {
+                      _draft = _draft.copyWith(hapticsEnabled: enabled);
+                    });
+                  },
+                ),
+                ListTile(
+                  title: const Text('Reduced Motion'),
+                  subtitle: Text(
                     widget.reduceMotion
-                        ? Icons.check_circle_outline
-                        : Icons.radio_button_unchecked,
+                        ? 'Follows system • On'
+                        : 'Follows system • Off',
+                  ),
+                  // Informational only: reduced motion follows the system
+                  // MediaQuery setting and is not persisted. A plain ListTile
+                  // with a status icon avoids the disabled-switch look.
+                  trailing: Semantics(
+                    label: widget.reduceMotion
+                        ? 'Reduced motion on'
+                        : 'Reduced motion off',
+                    child: Icon(
+                      widget.reduceMotion
+                          ? Icons.check_circle_outline
+                          : Icons.radio_button_unchecked,
+                    ),
                   ),
                 ),
-              ),
-              ListTile(
-                title: const Text('Replay Tutorial'),
-                subtitle: _isReplayConfirmed
-                    ? const Text(
-                        'Tutorial will replay on your next Outpost Alpha run.',
-                      )
-                    : null,
-                enabled: canReplay,
-                onTap: canReplay ? _replayTutorial : null,
-              ),
-              ListTile(
-                title: Text(
-                  'Reset Campaign',
-                  style: TextStyle(color: uiTheme.dangerRed),
+                ListTile(
+                  title: const Text('Replay Tutorial'),
+                  subtitle: _isReplayConfirmed
+                      ? const Text(
+                          'Tutorial will replay on your next Outpost Alpha run.',
+                        )
+                      : null,
+                  enabled: canReplay,
+                  onTap: canReplay ? _replayTutorial : null,
                 ),
-                subtitle: const Text(
-                  'Clears every cleared sector, medal, and blueprint.',
-                ),
-                onTap: () => Navigator.of(context).pop(
-                  FeedbackSettingsResult(
-                    preferences: _draft,
-                    resetCampaignRequested: true,
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Text(
+                    'Clears every cleared sector, medal, and blueprint.',
+                    style: OrionTypography.microLabel(
+                      size: 10,
+                      color: uiTheme.textMuted,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              FilledButton(
-                onPressed: () => Navigator.of(
-                  context,
-                ).pop(FeedbackSettingsResult(preferences: _draft)),
-                child: const Text('Done'),
-              ),
-            ],
+                const SizedBox(height: 6),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: OrionPrimaryButton(
+                    label: 'Reset Campaign',
+                    icon: Icons.restart_alt,
+                    variant: OrionButtonVariant.danger,
+                    height: 48,
+                    onPressed: () => Navigator.of(context).pop(
+                      FeedbackSettingsResult(
+                        preferences: _draft,
+                        resetCampaignRequested: true,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: OrionPrimaryButton(
+                    label: 'Done',
+                    icon: Icons.done,
+                    height: 48,
+                    onPressed: () => Navigator.of(
+                      context,
+                    ).pop(FeedbackSettingsResult(preferences: _draft)),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

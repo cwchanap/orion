@@ -263,17 +263,7 @@ class WaveScannerScene extends StatelessWidget {
                 const SizedBox.shrink(),
           ),
           const DecoratedBox(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color(0x8005080D),
-                  Color(0x3305080D),
-                  Color(0xCC05080D),
-                ],
-              ),
-            ),
+            decoration: BoxDecoration(gradient: orionScannerScrim),
           ),
           SafeArea(
             child: Column(

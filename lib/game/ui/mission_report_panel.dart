@@ -147,19 +147,7 @@ class _ReportBackdrop extends StatelessWidget {
         ),
         const DecoratedBox(
           key: ValueKey('mission-report-scrim'),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                Color(0xAA05080D),
-                Color(0x3305080D),
-                Color(0x4405080D),
-                Color(0x8805080D),
-              ],
-              stops: [0, 0.28, 0.72, 1],
-            ),
-          ),
+          decoration: BoxDecoration(gradient: orionMapScrim),
         ),
       ],
     );

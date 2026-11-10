@@ -15,11 +15,7 @@ Iterable<File> _libDartFiles() sync* {
   }
 }
 
-const _rawColorAllowlist = <String>{
-  'lib/game/ui/mission_report_panel.dart',
-  'lib/game/ui/next_wave_scanner.dart',
-  'lib/game/ui/stage_briefing_sheet.dart',
-};
+const _rawColorAllowlist = <String>{};
 
 void main() {
   test('no game UI file blurs a backdrop', () {
@@ -73,6 +69,23 @@ void main() {
           'game UI consumes theme roles; a raw Color(0x...) literal belongs '
           'in orion_ui_theme.dart. Files awaiting their restyle task sit in '
           '_rawColorAllowlist, which only shrinks until Task 5 empties it',
+    );
+  });
+
+  test('no game UI label dips below the 10px floor', () {
+    final tiny = RegExp(r'(fontSize|size):\s*[89][.\s,);]');
+    final offenders = <String>[
+      for (final file in _libDartFiles())
+        if (_posixPath(file).contains('/game/ui/') &&
+            tiny.hasMatch(file.readAsStringSync()))
+          _posixPath(file),
+    ]..sort();
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'the kit scale has no legible label below 10px; route text '
+          'through OrionTypography roles at the 10px floor or above',
     );
   });
 

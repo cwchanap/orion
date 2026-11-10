@@ -9,7 +9,9 @@ import 'package:orion/game/campaign/stage_reward_label.dart';
 import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/codex_view.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_menu_shell.dart';
+import 'package:orion/game/ui/tower_stat_scale.dart';
 
 void main() {
   testWidgets('renders the four section chips and Towers content by default', (
@@ -917,5 +919,252 @@ void main() {
 
   testWidgets('drag on results dismisses the keyboard on ios', (tester) async {
     await verifyDragDismissesKeyboard(tester, TargetPlatform.iOS);
+  });
+
+  group('command-deck tabs, tiles and detail (HPA-699)', () {
+    Finder tabText(String label) => find.text(label);
+
+    Rect tabRect(WidgetTester tester, String label) =>
+        tester.getRect(tabText(label));
+
+    testWidgets('the four tabs form a single segmented row', (tester) async {
+      await pumpCodex(tester, size: const Size(390, 844));
+      const labels = ['Towers', 'Enemies', 'Effects', 'Stages'];
+
+      final top = tabRect(tester, labels.first).top;
+      for (final label in labels) {
+        expect(
+          tabRect(tester, label).top,
+          closeTo(top, 1),
+          reason: '$label must sit on the single tab row',
+        );
+      }
+
+      expect(
+        find.ancestor(of: tabText('Towers'), matching: find.byType(Wrap)),
+        findsNothing,
+        reason: 'the seg row keeps tabs on one line; Wrap may wrap them',
+      );
+      for (final label in labels) {
+        expect(
+          find.ancestor(
+            of: tabText(label),
+            matching: find.byWidgetPredicate(
+              (widget) => widget is Expanded || widget is Flexible,
+            ),
+          ),
+          findsWidgets,
+          reason: 'each seg cell takes an equal flex share (flex: 1)',
+        );
+      }
+    });
+
+    testWidgets('the tab row stays a single line at 360x640', (tester) async {
+      await pumpCodex(tester, size: const Size(360, 640));
+      const labels = ['Towers', 'Enemies', 'Effects', 'Stages'];
+      final top = tabRect(tester, labels.first).top;
+      for (final label in labels) {
+        expect(
+          tabRect(tester, label).top,
+          closeTo(top, 1),
+          reason: 'the seg row must not fold to a second line at 360 wide',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('tower entries render as sprite tiles in a grid', (
+      tester,
+    ) async {
+      await pumpCodex(tester, size: const Size(390, 844));
+
+      for (final type in TowerType.values) {
+        final tile = find.byKey(ValueKey('codex-tile-${type.name}'));
+        expect(tile, findsOneWidget, reason: '${type.name} tile missing');
+        expect(
+          find.descendant(of: tile, matching: find.byType(OrionAtlasSprite)),
+          findsWidgets,
+          reason: '${type.name} tile must show the atlas sprite',
+        );
+      }
+
+      Rect labelRect(TowerType type) => tester.getRect(find.text(type.label));
+      final firstRow = [
+        TowerType.laser,
+        TowerType.rocket,
+        TowerType.cryo,
+        TowerType.railgun,
+      ];
+      final rowTop = labelRect(firstRow.first).top;
+      for (final type in firstRow) {
+        expect(labelRect(type).top, closeTo(rowTop, 4));
+      }
+      expect(
+        labelRect(TowerType.nanite).top,
+        greaterThan(rowTop),
+        reason: 'the fifth tile belongs to the second grid row',
+      );
+
+      for (final type in TowerType.values) {
+        expect(
+          find.text('W${GameBalance.towerUnlockWave(type)}'),
+          findsWidgets,
+          reason: '${type.name} tile needs its W-wave badge',
+        );
+      }
+
+      expect(find.text('Range').evaluate().length, lessThanOrEqualTo(4));
+      expect(find.text('Damage').evaluate().length, lessThanOrEqualTo(4));
+    });
+
+    testWidgets('tapping a tile swaps the detail panel to that tower', (
+      tester,
+    ) async {
+      await pumpCodex(tester, size: const Size(390, 844));
+      final detail = find.byKey(const ValueKey('codex-detail'));
+      expect(detail, findsOneWidget);
+
+      for (final probe in ['Damage', 'Range']) {
+        expect(
+          find.descendant(of: detail, matching: find.text(probe)),
+          findsWidgets,
+        );
+      }
+      expect(
+        find.descendant(
+          of: detail,
+          matching: find.textContaining('Pulse Laser'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(
+          of: detail,
+          matching: find.textContaining('Siege Rocket'),
+        ),
+        findsNothing,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('codex-tile-rocket')));
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: detail,
+          matching: find.textContaining('Pulse Laser'),
+        ),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+          of: detail,
+          matching: find.textContaining('Siege Rocket'),
+        ),
+        findsOneWidget,
+      );
+      expect(find.text(TowerType.laser.label), findsOneWidget);
+    });
+
+    testWidgets('the selected tile reports selected: true in semantics', (
+      tester,
+    ) async {
+      final semantics = tester.ensureSemantics();
+      try {
+        await pumpCodex(tester, size: const Size(390, 844));
+        bool selected(String name) => find
+            .byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics &&
+                  widget.properties.selected == true &&
+                  (widget.properties.label ?? '').contains(name),
+            )
+            .evaluate()
+            .isNotEmpty;
+
+        expect(selected('Laser'), isTrue);
+        expect(selected('Rocket'), isFalse);
+
+        await tester.tap(find.byKey(const ValueKey('codex-tile-rocket')));
+        await tester.pump();
+        expect(selected('Rocket'), isTrue);
+        expect(selected('Laser'), isFalse);
+      } finally {
+        semantics.dispose();
+      }
+    });
+
+    testWidgets('the detail stat rows carry scale-derived bar fills', (
+      tester,
+    ) async {
+      await pumpCodex(tester, size: const Size(390, 844));
+      final detail = find.byKey(const ValueKey('codex-detail'));
+
+      List<double> barFills() {
+        final fills = <double>[];
+        final bars = find.descendant(
+          of: detail,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is LinearProgressIndicator ||
+                widget is FractionallySizedBox,
+          ),
+        );
+        for (final element in bars.evaluate()) {
+          final widget = element.widget;
+          if (widget is LinearProgressIndicator && widget.value != null) {
+            fills.add(widget.value!);
+          }
+          if (widget is FractionallySizedBox && widget.widthFactor != null) {
+            fills.add(widget.widthFactor!);
+          }
+        }
+        return fills;
+      }
+
+      final stats = GameBalance.towerStats(TowerType.laser, level: 1);
+      final scale = TowerStatScale.forType(TowerType.laser);
+      final fills = barFills();
+      expect(
+        fills.length,
+        greaterThanOrEqualTo(3),
+        reason: 'Damage, Fire rate and Range each carry a bar',
+      );
+      expect(
+        fills,
+        contains(closeTo(scale.damageFill(stats), 0.02)),
+        reason: 'damage bar fill must come from TowerStatScale',
+      );
+      expect(fills, contains(closeTo(scale.rangeFill(stats), 0.02)));
+    });
+
+    testWidgets('tiles and detail live inside the retained section list', (
+      tester,
+    ) async {
+      await pumpCodex(tester, size: const Size(390, 844));
+      expect(
+        find.ancestor(
+          of: find.byKey(const ValueKey('codex-tile-laser')),
+          matching: find.byKey(const PageStorageKey<int>(0)),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.ancestor(
+          of: find.byKey(const ValueKey('codex-detail')),
+          matching: find.byKey(const PageStorageKey<int>(0)),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('searching filters tiles, not just cards', (tester) async {
+      await pumpCodex(tester, size: const Size(390, 844));
+      await tester.enterText(searchField, 'gravity');
+      await tester.pump();
+      expect(
+        find.byKey(const ValueKey('codex-tile-gravityWell')),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('codex-tile-laser')), findsNothing);
+    });
   });
 }

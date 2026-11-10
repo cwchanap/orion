@@ -38,6 +38,7 @@ import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
@@ -2030,13 +2031,13 @@ void main() {
 
     await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
-    if (find.text('Purchase').evaluate().isEmpty) {
+    if (find.text('Research').evaluate().isEmpty) {
       await tester.tap(
         find.byKey(const ValueKey('tech-node-solar-capacitors')),
       );
       await tester.pump();
     }
-    await tester.tap(find.text('Purchase'));
+    await tester.tap(find.text('Research'));
     await _pumpUntil(tester, () => store.saveCompletions.length > 1);
     store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
@@ -3331,13 +3332,13 @@ void main() {
 
     await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
-    if (find.text('Purchase').evaluate().isEmpty) {
+    if (find.text('Research').evaluate().isEmpty) {
       await tester.tap(
         find.byKey(const ValueKey('tech-node-solar-capacitors')),
       );
       await tester.pump();
     }
-    await tester.tap(find.text('Purchase'));
+    await tester.tap(find.text('Research'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
     await tester.tap(find.byTooltip('Map'));
@@ -3379,7 +3380,7 @@ void main() {
 
     await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
-    if (find.text('Purchase').evaluate().isEmpty) {
+    if (find.text('Research').evaluate().isEmpty) {
       await tester.tap(
         find.byKey(const ValueKey('tech-node-solar-capacitors')),
       );
@@ -3387,7 +3388,9 @@ void main() {
     }
     expect(
       tester
-          .widget<FilledButton>(find.widgetWithText(FilledButton, 'Purchase'))
+          .widget<OrionPrimaryButton>(
+            find.widgetWithText(OrionPrimaryButton, 'Research'),
+          )
           .onPressed,
       isNotNull,
     );
@@ -3397,8 +3400,8 @@ void main() {
     await _pumpUntil(tester, () => store.resetCompletions.isNotEmpty);
     await tester.pump();
 
-    for (final button in tester.widgetList<FilledButton>(
-      find.widgetWithText(FilledButton, 'Purchase'),
+    for (final button in tester.widgetList<OrionPrimaryButton>(
+      find.widgetWithText(OrionPrimaryButton, 'Research'),
     )) {
       expect(button.onPressed, isNull);
     }
@@ -3430,13 +3433,13 @@ void main() {
 
     await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
-    if (find.text('Purchase').evaluate().isEmpty) {
+    if (find.text('Research').evaluate().isEmpty) {
       await tester.tap(
         find.byKey(const ValueKey('tech-node-solar-capacitors')),
       );
       await tester.pump();
     }
-    await tester.tap(find.text('Purchase'));
+    await tester.tap(find.text('Research'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
     await tester.pump();
 
@@ -3469,13 +3472,13 @@ void main() {
 
       await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
-      if (find.text('Purchase').evaluate().isEmpty) {
+      if (find.text('Research').evaluate().isEmpty) {
         await tester.tap(
           find.byKey(const ValueKey('tech-node-solar-capacitors')),
         );
         await tester.pump();
       }
-      await tester.tap(find.text('Purchase'));
+      await tester.tap(find.text('Research'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
@@ -3511,13 +3514,13 @@ void main() {
 
       await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
-      if (find.text('Purchase').evaluate().isEmpty) {
+      if (find.text('Research').evaluate().isEmpty) {
         await tester.tap(
           find.byKey(const ValueKey('tech-node-solar-capacitors')),
         );
         await tester.pump();
       }
-      await tester.tap(find.text('Purchase'));
+      await tester.tap(find.text('Research'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
@@ -3592,13 +3595,13 @@ void main() {
 
       await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
-      if (find.text('Purchase').evaluate().isEmpty) {
+      if (find.text('Research').evaluate().isEmpty) {
         await tester.tap(
           find.byKey(const ValueKey('tech-node-solar-capacitors')),
         );
         await tester.pump();
       }
-      await tester.tap(find.text('Purchase'));
+      await tester.tap(find.text('Research'));
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
       await tester.tap(find.byTooltip('Map'));
@@ -3648,13 +3651,13 @@ void main() {
 
     await tester.tap(find.byTooltip('R&D'));
     await tester.pumpAndSettle();
-    if (find.text('Purchase').evaluate().isEmpty) {
+    if (find.text('Research').evaluate().isEmpty) {
       await tester.tap(
         find.byKey(const ValueKey('tech-node-solar-capacitors')),
       );
       await tester.pump();
     }
-    await tester.tap(find.text('Purchase'));
+    await tester.tap(find.text('Research'));
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
     await tester.tap(find.byTooltip('Map'));
@@ -3773,19 +3776,19 @@ void main() {
       await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
 
-      if (find.text('Purchase').evaluate().isEmpty) {
+      if (find.text('Research').evaluate().isEmpty) {
         await tester.tap(
           find.byKey(const ValueKey('tech-node-solar-capacitors')),
         );
         await tester.pump();
       }
-      await tester.tap(find.text('Purchase'));
+      await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();
 
       // _techTreeFeedback: the tech tree view shows the failure inline.
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
       // Rollback: Solar Capacitors is still purchasable (not "Purchased").
-      expect(find.text('Purchase'), findsOneWidget);
+      expect(find.text('Research'), findsOneWidget);
 
       // _mapFeedback: return to the map and confirm the breadcrumb survives.
       await tester.tap(find.byTooltip('Map'));
@@ -3818,33 +3821,33 @@ void main() {
       await tester.pumpAndSettle();
 
       // First purchase attempt fails (save index 0).
-      if (find.text('Purchase').evaluate().isEmpty) {
+      if (find.text('Research').evaluate().isEmpty) {
         await tester.tap(
           find.byKey(const ValueKey('tech-node-solar-capacitors')),
         );
         await tester.pump();
       }
-      await tester.tap(find.text('Purchase'));
+      await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();
 
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
       // Rollback: still purchasable.
-      expect(find.text('Purchase'), findsOneWidget);
+      expect(find.text('Research'), findsOneWidget);
 
       // Second purchase attempt succeeds (save index 1).
-      if (find.text('Purchase').evaluate().isEmpty) {
+      if (find.text('Research').evaluate().isEmpty) {
         await tester.tap(
           find.byKey(const ValueKey('tech-node-solar-capacitors')),
         );
         await tester.pump();
       }
-      await tester.tap(find.text('Purchase'));
+      await tester.tap(find.text('Research'));
       await tester.pumpAndSettle();
 
       // Stale feedback must be cleared.
       expect(find.text('Could not save campaign progress.'), findsNothing);
       // The upgrade is now purchased.
-      expect(find.text('Purchase'), findsNothing);
+      expect(find.text('Research'), findsNothing);
       expect(
         store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
         isTrue,
