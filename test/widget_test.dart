@@ -1,5 +1,6 @@
 import 'package:orion/game/ui/tower_inspector.dart';
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
@@ -24,6 +25,7 @@ import 'package:orion/game/onboarding/contextual_tips.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
+import 'package:orion/game/rules/enemy_overlay_state.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
@@ -6150,6 +6152,7 @@ void main() {
       tester,
     ) async {
       final boundaryKey = GlobalKey();
+      Rect? reportedViewport;
       tester.view.physicalSize = viewSize;
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
@@ -6211,6 +6214,7 @@ void main() {
                           onSell: game.sellSelectedTower,
                           onBoardViewportChanged: (viewport) {
                             if (!viewport.isEmpty) {
+                              reportedViewport = viewport;
                               game.setBoardViewport(viewport);
                             }
                           },
@@ -6278,9 +6282,99 @@ void main() {
         reason: 'real summoned minions share the lane in the fixture',
       );
 
+      // boss.position is simulation space; the game renders it under
+      // _boardScale/_boardTranslation, so screen-space assertions must map
+      // through the real transform — never through boardCellAt (canvas
+      // space in) or the raw offset. The transform's inputs are public:
+      // game.size gives _layoutBoard's cellSize/boardOrigin and
+      // onBoardViewportChanged reports the live viewport rect.
+      final gameSize = game.size;
+      final simCellSize = math.min(
+        gameSize.x / BoardLayout.columns,
+        gameSize.y / BoardLayout.rows,
+      );
+      final simBoardWidth = BoardLayout.columns * simCellSize;
+      final simBoardHeight = BoardLayout.rows * simCellSize;
+      final simBoardOrigin = Offset(
+        (gameSize.x - simBoardWidth) / 2,
+        math.max(0, (gameSize.y - simBoardHeight - 176) / 2),
+      );
+      final viewport = reportedViewport;
+      expect(
+        viewport,
+        isNotNull,
+        reason:
+            'chrome must report its board viewport before geometry '
+            'assertions can map simulation points to the screen',
+      );
+      final boardScale = math.min(
+        1.0,
+        math.min(
+          viewport!.width / simBoardWidth,
+          viewport.height / simBoardHeight,
+        ),
+      );
+      final boardTranslation =
+          viewport.center -
+          (simBoardOrigin + Offset(simBoardWidth / 2, simBoardHeight / 2)) *
+              boardScale;
+      Offset simToCanvas(Offset sim) => sim * boardScale + boardTranslation;
+
+      GridPosition? bossSimCell() => BoardLayout.cellAt(
+        boss.position.toOffset(),
+        cellSize: simCellSize,
+        boardOrigin: simBoardOrigin,
+      );
+
+      // Walk the boss down the lane until it reaches a middle row so its
+      // overlay — bars and badges above, status rings around — sits fully
+      // inside the board band at both capture sizes.
+      await advanceUntil(
+        tester,
+        game,
+        (snapshot) => (bossSimCell()?.row ?? 0) >= 3,
+      );
+
+      // Real status application through the live component API: the
+      // overlay must show the slow and corrosion rings, which only paint
+      // with non-zero radii.
+      boss.applySlow(multiplier: 0.6, duration: 60);
+      boss.applyCorrosion(damagePerSecond: 1, duration: 60, armorShred: 0.1);
+      await tester.pump();
+      final overlayState = boss.overlayState;
+      expect(overlayState.isSlowed, isTrue, reason: 'applySlow is live');
+      expect(overlayState.isCorroded, isTrue, reason: 'applyCorrosion is live');
+      final overlayLayout = EnemyOverlayLayout.compute(
+        overlayState,
+        boss.radius,
+      );
+      expect(
+        overlayLayout.slowedRingRadius,
+        greaterThan(boss.radius),
+        reason:
+            'the slow ring must exceed the boss body to draw around it; '
+            'a zero radius means applySlow never reached the overlay',
+      );
+      expect(
+        overlayLayout.corrodedRingRadius,
+        greaterThan(boss.radius),
+        reason: 'the corrosion ring must exceed the boss body to draw',
+      );
+      expect(
+        overlayLayout.slowedRingRadius,
+        greaterThan(overlayLayout.corrodedRingRadius),
+        reason: 'both rings must stay visible when they coexist',
+      );
+      expect(
+        overlayLayout.originY,
+        lessThan(0),
+        reason: 'bars and badges hang above the boss, not on it',
+      );
+
       // Geometry evidence beside the PNG: the HUD clears every top-row
       // cell, the dock clears every bottom-row cell, and the fighting
-      // boss sits inside the reported board viewport band.
+      // boss's whole overlay — not a cell centre — sits inside the
+      // reported board viewport band.
       final hudRect = tester.getRect(
         find.byKey(const ValueKey('mission-status-hud')),
       );
@@ -6295,19 +6389,49 @@ void main() {
         expect(topCell.dy, greaterThan(hudRect.bottom));
         expect(bottomCell.dy, lessThan(dockRect.top));
       }
-      final bossCell = game.boardCellAt(boss.position.toOffset());
+      final bossCell = bossSimCell();
       expect(
         bossCell,
         isNotNull,
         reason: 'the live boss must be walking the lane',
       );
-      final bossPoint = gameRect.topLeft + game.boardCellCenter(bossCell!);
+      final bossCanvas = simToCanvas(boss.position.toOffset());
+      final bossScreen = gameRect.topLeft + bossCanvas;
       expect(
-        bossPoint.dy > hudRect.bottom && bossPoint.dy < dockRect.top,
+        bossScreen.dy > hudRect.bottom && bossScreen.dy < dockRect.top,
         isTrue,
         reason:
             'the fighting boss renders inside the board band, clear of '
             'the chrome the PNG photographs it under',
+      );
+      // The overlay's real screen bounds: its content spans originY
+      // above the boss centre down to the widest status ring below it.
+      final overlayTop = bossScreen.dy + overlayLayout.originY * boardScale;
+      final overlayBottom =
+          bossScreen.dy +
+          math.max(
+                overlayLayout.slowedRingRadius,
+                overlayLayout.corrodedRingRadius,
+              ) *
+              boardScale;
+      expect(
+        overlayTop,
+        greaterThan(hudRect.bottom),
+        reason:
+            'the overlay bars/badges must clear the status HUD at the '
+            'boss\'s live screen position',
+      );
+      expect(
+        overlayBottom,
+        lessThan(dockRect.top),
+        reason:
+            'the status rings must clear the command dock at the boss\'s '
+            'live screen position',
+      );
+      expect(
+        bossScreen.dx >= 0 && bossScreen.dx <= gameRect.width,
+        isTrue,
+        reason: 'the live boss must stay inside the board horizontally',
       );
 
       final suffix = viewSize.height < 700 ? '-compact' : '';
@@ -6324,10 +6448,9 @@ void main() {
 }
 
 /// Warms fonts and the game's sprite sheets into their process-global caches
-/// so a mounted game's onLoad resolves instantly, pumps [testGamePage] at
-/// [viewSize] (the 360x640 guided-path viewport by default), starts the
-/// stage named by [mapLabel] from its briefing, and returns the mounted
-/// game.
+/// so a mounted game's onLoad resolves instantly, pumps [testGamePage] at the
+/// 360x640 guided-path viewport, starts the stage named by [mapLabel] from
+/// its briefing, and returns the mounted game.
 Future<OrionDefenseGame> pumpMountedMission(
   WidgetTester tester, {
   String mapLabel = 'Alpha',
