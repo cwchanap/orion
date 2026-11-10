@@ -43,25 +43,6 @@ abstract final class OrionTypography {
     shadows: const [shadow],
   );
 
-  /// The title screen's ORION wordmark — display lettering, not the
-  /// per-screen [title] role. Sized and spaced to the artboard's `.logo`
-  /// mark, glow shadows included. The gradient fill is painted at the
-  /// call site — a `ShaderMask` fills the glyphs *and* these shadows,
-  /// which is the intended halo.
-  static TextStyle wordmark({required Color color}) => TextStyle(
-    fontFamily: 'Oxanium',
-    fontFamilyFallback: _oxaniumFallback,
-    fontVariations: const [FontVariation('wght', 800)],
-    fontSize: 84,
-    height: 0.95,
-    letterSpacing: 11.8,
-    color: color,
-    shadows: const [
-      Shadow(color: orionTitleGlow, blurRadius: 42, offset: Offset(0, 8)),
-      Shadow(color: Colors.black, blurRadius: 10, offset: Offset(0, 4)),
-    ],
-  );
-
   /// Every label. Muted by construction: the sheet says "muted, never white".
   ///
   /// The sheet describes this role as a 7-9px range, but there is no role

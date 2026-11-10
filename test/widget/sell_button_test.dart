@@ -342,10 +342,7 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   SharedPreferences.setMockInitialValues({});
   await tester.pumpWidget(
     MaterialApp(
-      home: OrionGamePage(
-        onGameCreated: (created) => game = created,
-        startOnWorldMap: true,
-      ),
+      home: OrionGamePage(onGameCreated: (created) => game = created),
     ),
   );
   await tester.pumpAndSettle();

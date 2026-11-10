@@ -616,7 +616,12 @@ class _BriefingLaunchAction extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(18),
-            gradient: orionLaunchFill,
+            gradient: const LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF7FF0FF), Color(0xFF13B8E6), Color(0xFF0A7EA3)],
+              stops: [0, 0.6, 1],
+            ),
             boxShadow: [
               BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 24),
             ],

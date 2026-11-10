@@ -221,8 +221,7 @@ void main() {
       secondGame.returnToMap();
       await tester.pump();
       expect(player.calls.last, 'play:music_map.wav');
-      await _openSettings(tester);
-      await tester.tap(find.text('Reset Campaign'));
+      await tester.tap(find.byTooltip('Reset Campaign'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Reset'));
       await tester.pumpAndSettle();
@@ -313,7 +312,6 @@ Future<void> _mountPage(
             controller ??
             (player == null ? null : GameMusicController(player: player)),
         onGameCreated: onGameCreated,
-        startOnWorldMap: true,
       ),
     ),
   );
