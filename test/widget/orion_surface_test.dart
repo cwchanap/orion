@@ -1,123 +1,224 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_surface.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
+
+Widget host({
+  required OrionSurfaceRole role,
+  double radius = 18,
+  EdgeInsetsGeometry? padding,
+  bool topBorderOnly = false,
+  Widget child = const SizedBox.shrink(),
+}) {
+  return MaterialApp(
+    home: Scaffold(
+      body: OrionSurface(
+        key: const ValueKey('surface'),
+        role: role,
+        radius: radius,
+        topBorderOnly: topBorderOnly,
+        padding: padding ?? const EdgeInsets.all(8),
+        child: child,
+      ),
+    ),
+  );
+}
+
+BoxDecoration surfaceDecoration(WidgetTester tester) {
+  return tester
+          .widget<Container>(
+            find.descendant(
+              of: find.byKey(const ValueKey('surface')),
+              matching: find.byType(Container),
+            ),
+          )
+          .decoration
+      as BoxDecoration;
+}
 
 void main() {
-  test('exactly four tiers exist, with the sheet blur values', () {
-    expect(OrionSurfaceTier.values.map((t) => t.blur).toList(), [
-      7.0,
-      6.0,
-      12.0,
-      14.0,
+  test('exactly four semantic roles exist', () {
+    // The kit's surface vocabulary: floating controls on live art, content
+    // cards, scene-covering sheets and the dock shelf. The old t1-t4 blur
+    // tier names are gone for good.
+    expect(OrionSurfaceRole.values, [
+      OrionSurfaceRole.floating,
+      OrionSurfaceRole.card,
+      OrionSurfaceRole.sheet,
+      OrionSurfaceRole.shelf,
     ]);
   });
 
-  testWidgets('every tier renders exactly one BackdropFilter', (t) async {
-    for (final tier in OrionSurfaceTier.values) {
-      await t.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: OrionSurface(tier: tier, child: const Text('x')),
-          ),
-        ),
-      );
+  testWidgets('no role renders a BackdropFilter', (t) async {
+    for (final role in OrionSurfaceRole.values) {
+      await t.pumpWidget(host(role: role));
       expect(
         find.byType(BackdropFilter),
-        findsOneWidget,
-        reason: 'tier $tier must blur its container, not its children',
+        findsNothing,
+        reason: 'role $role: surfaces are solid; the blur tier is retired',
       );
     }
   });
 
-  testWidgets('no tier is fully opaque', (t) async {
-    for (final tier in OrionSurfaceTier.values) {
-      await t.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: OrionSurface(tier: tier, child: const Text('x')),
-          ),
-        ),
-      );
-      final box = t.widget<DecoratedBox>(
-        find
-            .descendant(
-              of: find.byType(OrionSurface),
-              matching: find.byType(DecoratedBox),
-            )
-            .first,
-      );
-      final decoration = box.decoration as BoxDecoration;
+  testWidgets('every role is fully solid', (t) async {
+    for (final role in OrionSurfaceRole.values) {
+      await t.pumpWidget(host(role: role));
+      final decoration = surfaceDecoration(t);
       final colors = decoration.gradient is LinearGradient
           ? (decoration.gradient! as LinearGradient).colors
           : [decoration.color!];
       for (final c in colors) {
         expect(
           c.a,
-          lessThan(1.0),
-          reason: 'tier $tier: the art paid for is the art you see',
+          greaterThanOrEqualTo(0.85),
+          reason:
+              'role $role: the art stays visible behind the panel, not '
+              'through it',
         );
       }
     }
   });
 
-  testWidgets('topBorderOnly renders a top-only Border, not all four sides', (
-    t,
-  ) async {
-    await t.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: OrionSurface(
-            tier: OrionSurfaceTier.t4,
-            topBorderOnly: true,
-            child: const Text('x'),
-          ),
-        ),
+  testWidgets('card renders the kit .card chrome', (t) async {
+    await t.pumpWidget(host(role: OrionSurfaceRole.card));
+    final decoration = surfaceDecoration(t);
+    expect(
+      (decoration.gradient! as LinearGradient).colors,
+      orionCardFill.colors,
+    );
+    final border = decoration.border! as Border;
+    expect(border.top.color, orionCardEdge);
+    expect(border.top.width, 1.5);
+    // The 0 3px 0 bottom lip is the card's depth cue.
+    expect(
+      decoration.boxShadow,
+      contains(
+        isA<BoxShadow>()
+            .having((s) => s.color, 'color', orionCardLip)
+            .having((s) => s.offset, 'offset', const Offset(0, 3))
+            .having((s) => s.blurRadius, 'blurRadius', 0),
       ),
     );
-    final box = t.widget<DecoratedBox>(
-      find
-          .descendant(
-            of: find.byType(OrionSurface),
-            matching: find.byType(DecoratedBox),
-          )
-          .first,
+  });
+
+  testWidgets('sheet renders the kit .panel chrome with corner brackets', (
+    t,
+  ) async {
+    await t.pumpWidget(host(role: OrionSurfaceRole.sheet));
+    final decoration = surfaceDecoration(t);
+    expect(
+      (decoration.gradient! as LinearGradient).colors,
+      orionPanelFill.colors,
     );
-    // Border(top: ...) leaves left/right/bottom at BorderSide.none, unlike
-    // Border.fromBorderSide (the default), which sets all four sides equal
-    // to the same visible side.
-    final border = (box.decoration as BoxDecoration).border! as Border;
+    final border = decoration.border! as Border;
+    expect(border.top.color, orionPanelEdge);
+    expect(border.top.width, 1.5);
+    expect(decoration.boxShadow, orionPanelShadow);
+    // The kit's restrained .br corner brackets ride on the framed panel.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('surface')),
+        matching: find.byWidgetPredicate(
+          (w) => w is CustomPaint && w.foregroundPainter != null,
+        ),
+      ),
+      findsWidgets,
+    );
+  });
+
+  testWidgets('floating renders the kit fab chrome', (t) async {
+    await t.pumpWidget(host(role: OrionSurfaceRole.floating));
+    final decoration = surfaceDecoration(t);
+    expect(
+      decoration.color,
+      OrionUiTheme.dark.hullBlack.withValues(alpha: 0.88),
+    );
+    final border = decoration.border! as Border;
+    expect(border.top.color, orionFloatingEdge);
+    expect(
+      decoration.boxShadow,
+      contains(
+        isA<BoxShadow>()
+            .having((s) => s.color, 'color', OrionUiTheme.dark.voidBlack)
+            .having((s) => s.offset, 'offset', const Offset(0, 3)),
+      ),
+    );
+  });
+
+  testWidgets('shelf renders the dock tray chrome, top edge only', (t) async {
+    await t.pumpWidget(
+      host(role: OrionSurfaceRole.shelf, radius: 0, topBorderOnly: true),
+    );
+    final decoration = surfaceDecoration(t);
+    expect(
+      (decoration.gradient! as LinearGradient).colors,
+      orionShelfFill.colors,
+    );
+    final border = decoration.border! as Border;
+    expect(border.top.color, orionShelfEdge);
     expect(border.top.style, BorderStyle.solid);
-    expect(border.top.width, greaterThan(0));
     expect(border.left, BorderSide.none);
     expect(border.right, BorderSide.none);
     expect(border.bottom, BorderSide.none);
   });
 
-  testWidgets('MissionSurface delegates to a tiered OrionSurface', (t) async {
+  testWidgets('custom radius and padding are honored', (t) async {
+    const padding = EdgeInsets.symmetric(horizontal: 4, vertical: 2);
     await t.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(body: MissionSurface(child: Text('x'))),
+      host(
+        role: OrionSurfaceRole.card,
+        radius: 10,
+        padding: padding,
+        child: const SizedBox(width: 50, height: 50),
       ),
     );
-    expect(find.byType(OrionSurface), findsOneWidget);
-    expect(
-      t.widget<OrionSurface>(find.byType(OrionSurface)).tier,
-      OrionSurfaceTier.t2,
+    final decoration = surfaceDecoration(t);
+    expect(decoration.borderRadius, BorderRadius.circular(10));
+    // The kit's border-box model: content sits `padding` inside the 1.5px
+    // frame, so 4/2 padding lands 5.5/3.5 in from the surface's outer edge.
+    final surfaceRect = t.getRect(find.byKey(const ValueKey('surface')));
+    final childRect = t.getRect(
+      find.descendant(
+        of: find.byKey(const ValueKey('surface')),
+        matching: find.byType(SizedBox),
+      ),
     );
+    expect(childRect.left - surfaceRect.left, closeTo(5.5, 0.01));
+    expect(childRect.top - surfaceRect.top, closeTo(3.5, 0.01));
   });
 
-  testWidgets('an emphasized MissionSurface is a t3 sheet', (t) async {
-    await t.pumpWidget(
-      const MaterialApp(
-        home: Scaffold(
-          body: MissionSurface(emphasized: true, child: Text('x')),
+  testWidgets('introduces no gesture handling or semantics by itself', (
+    tester,
+  ) async {
+    Widget bareHost() {
+      return Directionality(
+        textDirection: TextDirection.ltr,
+        child: OrionSurface(
+          key: const ValueKey('surface'),
+          role: OrionSurfaceRole.card,
+          child: const SizedBox.shrink(),
         ),
-      ),
-    );
-    expect(
-      t.widget<OrionSurface>(find.byType(OrionSurface)).tier,
-      OrionSurfaceTier.t3,
-    );
+      );
+    }
+
+    await tester.pumpWidget(bareHost());
+    expect(find.byType(GestureDetector), findsNothing);
+    expect(find.byType(InkWell), findsNothing);
+
+    final handle = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(bareHost());
+      final renderObject = tester.renderObject<RenderObject>(
+        find.byKey(const ValueKey('surface')),
+      );
+      final root = renderObject.owner!.semanticsOwner!.rootSemanticsNode!;
+      expect(
+        root.childrenCount,
+        0,
+        reason: 'OrionSurface must not produce a semantics node by itself.',
+      );
+    } finally {
+      handle.dispose();
+    }
   });
 }

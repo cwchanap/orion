@@ -389,7 +389,7 @@ class _GuideCalloutState extends State<_GuideCallout> {
                   ),
                   child: OrionSurface(
                     key: _bubbleMeasureKey,
-                    tier: OrionSurfaceTier.t1,
+                    role: OrionSurfaceRole.floating,
                     radius: 16,
                     padding: const EdgeInsets.fromLTRB(14, 8, 6, 6),
                     child: Column(

@@ -200,7 +200,7 @@ class _HoldToSalvageState extends State<HoldToSalvage>
                                   child: OrionText.micro(
                                     'HOLD TO SALVAGE',
                                     color: t.dangerRed,
-                                    size: 9,
+                                    size: 10,
                                   ),
                                 ),
                                 const SizedBox(width: 8),

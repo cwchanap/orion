@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
-import 'package:orion/game/ui/mission_surface.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 
 import '../support/command_deck_fixtures.dart';
@@ -445,29 +444,18 @@ void main() {
     },
   );
 
-  testWidgets('the rail reuses its dock blur and its tiles are flat', (
-    tester,
-  ) async {
+  testWidgets('the rail renders its tiles as solid cards', (tester) async {
     await tester.pumpWidget(railHost());
 
     expect(find.byType(BackdropFilter), findsNothing);
-    // Each tile still carries tier chrome, but flat: blurring a child of a
-    // blurred container is the anti-pattern OrionSurface names, and eight
-    // blurred tiles are what pushed this scene past its 5-9 budget.
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('tower-card-laser')),
-        matching: find.byType(OrionInnerSurface),
-      ),
-      findsOneWidget,
+    // Each tile is a card surface; the rail itself stays unframed inside the
+    // dock shelf that already owns the scene's chrome.
+    final tile = find.descendant(
+      of: find.byKey(const ValueKey('tower-card-laser')),
+      matching: find.byType(OrionSurface),
     );
-    expect(
-      find.descendant(
-        of: find.byKey(const ValueKey('tower-card-laser')),
-        matching: find.byType(OrionSurface),
-      ),
-      findsNothing,
-    );
+    expect(tile, findsOneWidget);
+    expect(tester.widget<OrionSurface>(tile).role, OrionSurfaceRole.card);
   });
 
   testWidgets('idle dock surfaces carry no frame chrome', (tester) async {
@@ -494,14 +482,15 @@ void main() {
     );
 
     // Artboard 1a's dock is two rows during build -- pacing controls, then
-    // the tower rail -- so two surfaces, not one.
+    // the tower rail -- held on one shelf with a card per tower.
     await pumpIdle(commandDeckSnapshot());
-    expect(surfaces(), findsOneWidget);
-    final shelf = tester.widget<OrionSurface>(surfaces());
-    expect(shelf.tier, OrionSurfaceTier.t4);
+    final shelf = surfaces()
+        .evaluate()
+        .map((e) => e.widget as OrionSurface)
+        .singleWhere((s) => s.role == OrionSurfaceRole.shelf);
     expect(shelf.topBorderOnly, isTrue);
     expect(shelf.radius, 0);
-    expect(find.byType(BackdropFilter), findsOneWidget);
+    expect(find.byType(BackdropFilter), findsNothing);
     expect(
       find.byKey(const ValueKey('command-dock-persistent-rail')),
       findsOneWidget,
@@ -516,18 +505,16 @@ void main() {
       findsNothing,
     );
 
-    // The invariant this test exists for: the reactor button carries its own
-    // internal octagon frames, so no OrionSurface chrome may wrap a dock
-    // surface in either state.
-    for (final element in surfaces().evaluate()) {
-      expect(
-        find.ancestor(
-          of: find.byWidget(element.widget),
-          matching: find.byType(OrionSurface),
-        ),
-        findsNothing,
-      );
-    }
+    // The invariant this test exists for: the reactor button carries its
+    // own internal octagon frames, so no surface chrome may wrap it inside
+    // the bar -- the shelf is the only surface a dock control sits on.
+    expect(
+      find.descendant(
+        of: find.byType(IdleCommandBar),
+        matching: find.byType(OrionSurface),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('rail cards put the cost above the name', (tester) async {
@@ -1188,7 +1175,15 @@ void main() {
 
       final dockRect = tester.getRect(find.byType(IdleCommandBar));
       expect(dockRect.height, lessThanOrEqualTo(80));
-      expect(find.byType(MissionSurface), findsNothing);
+      // The idle bar is unboxed: its controls ride on the dock shelf rather
+      // than carrying chrome of their own.
+      expect(
+        find.descendant(
+          of: find.byType(IdleCommandBar),
+          matching: find.byType(OrionSurface),
+        ),
+        findsNothing,
+      );
 
       // Start Wave is the dominant, wide, filled action: 48-56dp tall,
       // clearly wider than a quarter of the dock, filled cyan with dark

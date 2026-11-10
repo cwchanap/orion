@@ -223,7 +223,7 @@ class _CodexViewState extends State<CodexView> {
                     Text(
                       ef.description,
                       style: OrionTypography.microLabel(
-                        size: 9,
+                        size: 10,
                         color: uiTheme.textMuted,
                       ),
                     ),
@@ -331,7 +331,7 @@ class _CodexViewState extends State<CodexView> {
               Text(
                 spec.description,
                 style: OrionTypography.microLabel(
-                  size: 9,
+                  size: 10,
                   color: uiTheme.textMuted,
                 ),
               ),
@@ -455,7 +455,7 @@ class _CodexViewState extends State<CodexView> {
             Text(
               e.roleDescription,
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),
@@ -499,7 +499,7 @@ class _CodexViewState extends State<CodexView> {
             Text(
               s.stage.description,
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),
@@ -515,7 +515,7 @@ class _CodexViewState extends State<CodexView> {
                 child: Text(
                   s.rewardLabel!,
                   style: OrionTypography.microLabel(
-                    size: 9,
+                    size: 10,
                     color: uiTheme.textMuted,
                   ),
                 ),
@@ -544,7 +544,7 @@ class _CodexViewState extends State<CodexView> {
             child: Text(
               key,
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),
@@ -553,7 +553,7 @@ class _CodexViewState extends State<CodexView> {
             child: Text(
               value,
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),

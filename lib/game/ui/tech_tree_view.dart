@@ -107,7 +107,7 @@ class _TechTreeViewState extends State<TechTreeView> {
                     child: Text(
                       widget.feedback!,
                       style: OrionTypography.microLabel(
-                        size: 9,
+                        size: 10,
                         color: uiTheme.dangerRed,
                       ),
                     ),
@@ -558,7 +558,7 @@ class _TechDetail extends StatelessWidget {
             Text(
               upgrade.description,
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),
@@ -574,7 +574,7 @@ class _TechDetail extends StatelessWidget {
             Text(
               'Cost: ${upgrade.cost} pts',
               style: OrionTypography.microLabel(
-                size: 9,
+                size: 10,
                 color: uiTheme.textMuted,
               ),
             ),

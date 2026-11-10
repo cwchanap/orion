@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
 import 'mission_collapsible.dart';
-import 'mission_surface.dart';
+import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
@@ -42,7 +42,7 @@ class AcquiredRunModuleControl extends StatelessWidget {
     final uiTheme = OrionUiTheme.of(context);
     // Labels are muted-only under the system sheet; the active (tappable)
     // state reads via the system-cyan accent instead of the forbidden
-    // near-white, mirroring the emphasized MissionSurface border below.
+    // near-white.
     final foreground = collapseRequested
         ? uiTheme.textMuted
         : uiTheme.systemCyan;
@@ -56,10 +56,10 @@ class AcquiredRunModuleControl extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: collapseRequested ? null : toggle,
-        child: MissionSurface(
+        child: OrionSurface(
+          role: OrionSurfaceRole.floating,
           padding: const EdgeInsets.symmetric(horizontal: 8),
           radius: 12,
-          emphasized: !collapseRequested,
           child: ConstrainedBox(
             constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             child: Center(
@@ -96,10 +96,10 @@ class AcquiredRunModuleControl extends StatelessWidget {
                 double.infinity,
               ),
             ),
-            child: MissionSurface(
+            child: OrionSurface(
+              role: OrionSurfaceRole.floating,
               padding: const EdgeInsets.all(8),
               radius: 12,
-              emphasized: true,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -142,7 +142,7 @@ class _AcquiredModuleRow extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           definition.effectText,
-          style: OrionTypography.microLabel(size: 9, color: uiTheme.textMuted),
+          style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
         ),
         const SizedBox(height: 2),
         Text(

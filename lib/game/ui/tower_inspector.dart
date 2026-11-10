@@ -42,7 +42,7 @@ class TowerInspector extends StatelessWidget {
       child: Align(
         alignment: Alignment.bottomCenter,
         child: OrionSurface(
-          tier: OrionSurfaceTier.t3,
+          role: OrionSurfaceRole.sheet,
           radius: 26,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           child: SizedBox(
@@ -166,7 +166,7 @@ class _InspectorBody extends StatelessWidget {
                         : 'Level ${tower.level} • '
                               '${tower.specialization!.label}',
                     color: uiTheme.textMuted,
-                    size: 9,
+                    size: 10,
                   ),
                 ],
               ),
@@ -383,7 +383,7 @@ class _StatPreview extends StatelessWidget {
                   TextSpan(
                     text: '${row.label.toUpperCase()} ',
                     style: OrionTypography.microLabel(
-                      size: 9,
+                      size: 10,
                       color: uiTheme.textMuted,
                     ),
                   ),
@@ -462,7 +462,7 @@ class _StatRow extends StatelessWidget {
             label.toUpperCase(),
             textAlign: TextAlign.center,
             style: OrionTypography.microLabel(
-              size: 8,
+              size: 10,
               color: uiTheme.textMuted,
             ),
           ),
@@ -677,7 +677,7 @@ class _SpecializationCard extends StatelessWidget {
                 specialization.role,
                 textAlign: TextAlign.center,
                 style: OrionTypography.microLabel(
-                  size: 9,
+                  size: 10,
                   color: uiTheme.textMuted,
                 ),
               ),
