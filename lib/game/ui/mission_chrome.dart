@@ -98,6 +98,7 @@ class _MissionChromeState extends State<MissionChrome> {
   double _topReserve = 0;
   double _bottomReserve = 0;
   double _modulesReserve = 0;
+  double _scannerReserve = 0;
   bool _scannerDockMounted = false;
   Rect? _lastViewport;
 
@@ -130,15 +131,9 @@ class _MissionChromeState extends State<MissionChrome> {
     // renders in any phase — reserve below the lowest top-band control so
     // the board viewport never starts under chrome.
     var top = 8.0;
-    for (final band in [hud, if (!_scannerDockMounted) scanner]) {
-      if (band == null) continue;
-      final edge =
-          box
-              .globalToLocal(band.localToGlobal(Offset(0, band.size.height)))
-              .dy +
-          8;
-      if (edge > top) top = edge;
-    }
+    final hudEdge =
+        box.globalToLocal(hud.localToGlobal(Offset(0, hud.size.height))).dy + 8;
+    if (hudEdge > top) top = hudEdge;
     if (top > _topReserve) _topReserve = top;
     // The modules panel expands in place on its own setState (which reaches
     // here through onExpandedChanged), so its edge is a transient reserve
@@ -153,9 +148,19 @@ class _MissionChromeState extends State<MissionChrome> {
                   )
                   .dy +
               8;
-    final topEdge = _topReserve > _modulesReserve
-        ? _topReserve
-        : _modulesReserve;
+    // The scanner's top-band mount is transient the same way: a selection
+    // moves it under the HUD, clearing the selection returns it to the dock,
+    // so its reserve must release instead of joining the baseline.
+    _scannerReserve = _scannerDockMounted || scanner == null
+        ? 0
+        : box
+                  .globalToLocal(
+                    scanner.localToGlobal(Offset(0, scanner.size.height)),
+                  )
+                  .dy +
+              8;
+    var topEdge = _topReserve > _modulesReserve ? _topReserve : _modulesReserve;
+    if (_scannerReserve > topEdge) topEdge = _scannerReserve;
     final bottom =
         box.size.height -
         box.globalToLocal(dock.localToGlobal(Offset.zero)).dy +

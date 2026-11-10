@@ -563,7 +563,12 @@ class _SpeedSegments extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 for (final value in _speeds)
-                  _segment(context, uiTheme, value, enabled),
+                  _SpeedSegment(
+                    value: value,
+                    selected: speed == value,
+                    enabled: enabled,
+                    onSelected: onSelected,
+                  ),
               ],
             ),
           ),
@@ -571,41 +576,90 @@ class _SpeedSegments extends StatelessWidget {
       ),
     );
   }
+}
 
-  Widget _segment(
-    BuildContext context,
-    OrionUiTheme uiTheme,
-    double value,
-    bool enabled,
-  ) {
-    final selected = speed == value;
-    final label = '${value.toStringAsFixed(0)}x';
-    final onSelected = this.onSelected;
+class _SpeedSegment extends StatefulWidget {
+  const _SpeedSegment({
+    required this.value,
+    required this.selected,
+    required this.enabled,
+    required this.onSelected,
+  });
+
+  final double value;
+  final bool selected;
+  final bool enabled;
+  final ValueChanged<double>? onSelected;
+
+  @override
+  State<_SpeedSegment> createState() => _SpeedSegmentState();
+}
+
+class _SpeedSegmentState extends State<_SpeedSegment> {
+  final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  @override
+  void dispose() {
+    _focusNode
+      ..removeListener(_onFocusChange)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onFocusChange() => setState(() {});
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final label = '${widget.value.toStringAsFixed(0)}x';
+    final onSelected = widget.onSelected;
+    final activate = widget.enabled && onSelected != null
+        ? () => onSelected(widget.value)
+        : null;
     return Semantics(
       container: true,
       button: true,
-      enabled: enabled,
-      selected: selected,
+      enabled: widget.enabled,
+      selected: widget.selected,
+      inMutuallyExclusiveGroup: true,
+      focused: _focusNode.hasPrimaryFocus,
       label: 'Speed $label',
-      onTap: enabled && onSelected != null ? () => onSelected(value) : null,
+      onTap: activate,
       child: ExcludeSemantics(
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: enabled && onSelected != null ? () => onSelected(value) : null,
+        child: InkResponse(
+          focusNode: _focusNode,
+          onTap: activate,
+          containedInkWell: true,
+          highlightShape: BoxShape.rectangle,
+          splashColor: uiTheme.systemCyan.withValues(alpha: 0.18),
+          focusColor: uiTheme.systemCyan.withValues(alpha: 0.22),
           child: Container(
-            constraints: const BoxConstraints(minWidth: 40, minHeight: 44),
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
             padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              gradient: selected ? orionSecondaryFill : null,
-              color: selected ? null : Colors.transparent,
+              border: _focusNode.hasPrimaryFocus
+                  ? Border.all(color: uiTheme.systemCyan, width: 1.5)
+                  : null,
+              gradient: widget.selected ? orionSecondaryFill : null,
+              color: widget.selected ? null : Colors.transparent,
             ),
             child: Center(
               child: Text(
                 label,
                 maxLines: 1,
                 style: OrionTypography.microLabel(
-                  color: selected ? orionSecondaryInk : uiTheme.textMuted,
+                  color: !widget.enabled
+                      ? uiTheme.textDim
+                      : widget.selected
+                      ? orionSecondaryInk
+                      : uiTheme.textMuted,
                 ),
               ),
             ),

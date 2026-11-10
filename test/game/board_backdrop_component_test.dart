@@ -71,6 +71,46 @@ void main() {
       );
     });
 
+    test('the vignette is the kit ellipse, not a generic round fade', () async {
+      final skin = await _solidImage(64, 64, const Color(0xFF808080));
+      final image = await _renderBackdrop(skin, 375, 667);
+
+      final center = await _rgbaAt(image, 187, 333);
+      expect(
+        center[0],
+        closeTo(0x4F, 6),
+        reason:
+            'radial-gradient(75% 60% at 50% 50%, transparent 40%) leaves '
+            'the middle untouched by the vignette',
+      );
+
+      final midEdge = await _rgbaAt(image, 373, 333);
+      expect(
+        midEdge[0],
+        inInclusiveRange(0x2E, 0x42),
+        reason:
+            'at the horizontal edge the kit ellipse is mid-ramp '
+            '(~u 0.66 -> ~0x36); a circular fade barely darkens there '
+            '(~0x4E)',
+      );
+
+      final corner = await _rgbaAt(image, 3, 3);
+      expect(
+        corner[0],
+        lessThan(0x20),
+        reason:
+            'corners sit outside the ellipse and take rgba(3,6,10,.75) '
+            'over the dimmed skin (~0x16), not a light haze',
+      );
+      expect(
+        corner[2],
+        greaterThan(corner[0]),
+        reason:
+            'the vignette colour is the near-black blue rgba(3,6,10,.75), '
+            'so blue stays above red at the edges',
+      );
+    });
+
     test('keeps painting the full-viewport fallback without a skin', () {
       final recorder = PictureRecorder();
       BoardBackdropComponent(

@@ -3,7 +3,10 @@ import 'dart:ui' show SemanticsAction;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/game_session.dart';
+import 'package:orion/game/rules/stage_modifier_rules.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
@@ -1240,8 +1243,8 @@ void main() {
       );
 
       // Start Wave is the dominant, wide, filled action: 48-56dp tall,
-      // clearly wider than a quarter of the dock, filled with the shared
-      // amber primary gradient and dark ink.
+      // clearly wider than a quarter of the dock, filled cyan with dark
+      // content.
       final startRect = tester.getRect(find.byTooltip('Start Wave'));
       expect(
         startRect.height,
@@ -1499,5 +1502,181 @@ void main() {
         expect(pixels(), afterUserScroll);
       },
     );
+  });
+
+  group('wave-phase status readouts', () {
+    Widget dockHost(GameSnapshot snapshot) => MaterialApp(
+      home: MissionCommandDock(
+        snapshot: snapshot,
+        onTogglePause: () {},
+        onSpeedSelected: (_) {},
+        onToggleAutoStart: () {},
+        onStartWave: () {},
+        onPlaceTower: (_) {},
+        onUpgrade: () {},
+        onSpecialize: (_) {},
+        onTargetingChanged: (_) {},
+        onSell: () {},
+      ),
+    );
+
+    GameSnapshot waveSnapshot({String stageId = 'outpost-alpha'}) {
+      final session = GameSession.initial(
+        stage: OrionCampaign.stageById(stageId),
+      );
+      session.startWave();
+      return session.snapshot();
+    }
+
+    testWidgets(
+      'an active wave exposes progress, hostiles-remaining and clear-bonus '
+      'readouts with live values',
+      (tester) async {
+        final wave = OrionCampaign.stageOne.waves.first;
+        await tester.pumpWidget(dockHost(waveSnapshot()));
+        await tester.pump();
+
+        expect(
+          find.byKey(const ValueKey('mission-wave-progress')),
+          findsOneWidget,
+          reason: 'the wave presentation must carry a live progress readout',
+        );
+        final hostiles = find.byKey(
+          const ValueKey('mission-hostiles-remaining'),
+        );
+        expect(hostiles, findsOneWidget);
+        expect(
+          find.descendant(
+            of: hostiles,
+            matching: find.textContaining('${wave.enemyCount}'),
+          ),
+          findsOneWidget,
+          reason:
+              'a fresh wave must show every hostile still unresolved, not '
+              'an invented count',
+        );
+
+        final bonus = find.byKey(const ValueKey('mission-clear-bonus'));
+        expect(bonus, findsOneWidget);
+        expect(
+          find.descendant(
+            of: bonus,
+            matching: find.textContaining('${wave.clearBonus}'),
+          ),
+          findsOneWidget,
+          reason:
+              'Outpost Alpha wave 1 clears for ${wave.clearBonus} gold and '
+              'the dock must show that reward while the wave runs',
+        );
+      },
+    );
+
+    testWidgets(
+      'the clear-bonus readout shows the effective modifier-adjusted reward',
+      (tester) async {
+        final stage = OrionCampaign.stageById('void-bastion');
+        final expected = StageModifierRules.effectiveClearBonus(
+          campaignAdjustedClearBonus: stage.waves.first.clearBonus,
+          stageModifiers: stage.modifiers,
+        );
+        expect(
+          stage.modifiers,
+          contains(StageModifier.enhancedClearBonus),
+          reason: 'fixture drift: this stage must keep the bonus modifier',
+        );
+        expect(
+          expected,
+          isNot(stage.waves.first.clearBonus),
+          reason: 'fixture drift: the modifier must change the reward',
+        );
+
+        await tester.pumpWidget(dockHost(waveSnapshot(stageId: stage.id)));
+        await tester.pump();
+
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('mission-clear-bonus')),
+            matching: find.textContaining('$expected'),
+          ),
+          findsOneWidget,
+          reason:
+              'enhancedClearBonus lifts wave 1 to $expected; the readout '
+              'must show the effective reward, not the script value',
+        );
+      },
+    );
+
+    testWidgets('the progress readout carries a semantic value', (
+      tester,
+    ) async {
+      await tester.pumpWidget(dockHost(waveSnapshot()));
+      await tester.pump();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('mission-wave-progress')),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics &&
+                (widget.properties.value?.isNotEmpty ?? false),
+          ),
+        ),
+        findsOneWidget,
+        reason:
+            'a bare gradient bar is unreadable to semantics; the progress '
+            'readout must expose its value',
+      );
+    });
+
+    testWidgets('endless waves keep all three readouts', (tester) async {
+      final session = GameSession.initial(mode: RunMode.endless);
+      session.startWave();
+      await tester.pumpWidget(dockHost(session.snapshot()));
+      await tester.pump();
+
+      for (final key in [
+        'mission-wave-progress',
+        'mission-hostiles-remaining',
+        'mission-clear-bonus',
+      ]) {
+        expect(
+          find.byKey(ValueKey(key)),
+          findsOneWidget,
+          reason:
+              'endless waves still have progress, unresolved hostiles and '
+              'a clear reward — $key must render',
+        );
+      }
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('mission-wave-progress')),
+          matching: find.textContaining(RegExp(r'/\s*\d')),
+        ),
+        findsNothing,
+        reason:
+            'endless has no scripted wave total; a finite "/N" denominator '
+            'would recycle stage-one pacing that does not exist here',
+      );
+    });
+
+    testWidgets('the readouts stay out of the build-phase dock', (
+      tester,
+    ) async {
+      await tester.pumpWidget(dockHost(commandDeckSnapshot()));
+      await tester.pump();
+
+      for (final key in [
+        'mission-wave-progress',
+        'mission-hostiles-remaining',
+        'mission-clear-bonus',
+      ]) {
+        expect(
+          find.byKey(ValueKey(key)),
+          findsNothing,
+          reason: '$key is wave-phase information, not build intel',
+        );
+      }
+    });
   });
 }

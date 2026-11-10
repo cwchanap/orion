@@ -304,5 +304,173 @@ void main() {
         );
       }
     });
+
+    test('the lane rim is the kit steel-cyan at the kit band', () async {
+      final image = await renderBoard();
+      final pixel = await _rgbaAt(
+        image,
+        (2.5 * cell).round(),
+        (1.88 * cell).round(),
+      );
+      expect(
+        pixel[0],
+        closeTo(0x2C, 4),
+        reason: 'board.js strokes the rim #2C6F86, not a fabricated hue',
+      );
+      expect(pixel[1], closeTo(0x6F, 4));
+      expect(pixel[2], closeTo(0x86, 4));
+    });
+
+    test('the lane channel is the kit dark blue at the kit band', () async {
+      final image = await renderBoard();
+      final pixel = await _rgbaAt(
+        image,
+        (2.5 * cell).round(),
+        (1.80 * cell).round(),
+      );
+      expect(pixel[0], closeTo(0x08, 3));
+      expect(pixel[1], closeTo(0x12, 3));
+      expect(pixel[2], closeTo(0x1B, 3));
+    });
+
+    test(
+      'the lane centre carries the kit core line between chevrons',
+      () async {
+        final image = await renderBoard();
+        final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+        final y = (1.5 * cell).round();
+        var matching = 0;
+        var samples = 0;
+        for (var x = (1.0 * cell).round(); x < (3.0 * cell).round(); x++) {
+          final index = (y * image.width + x) * 4;
+          final r = data!.getUint8(index);
+          final g = data.getUint8(index + 1);
+          final b = data.getUint8(index + 2);
+          final a = data.getUint8(index + 3);
+          if (a == 0 || (g > 150 && b > 150 && r < 100)) continue;
+          samples += 1;
+          if ((r - 0x0E).abs() <= 4 &&
+              (g - 0x22).abs() <= 4 &&
+              (b - 0x30).abs() <= 4) {
+            matching += 1;
+          }
+        }
+        expect(samples, greaterThan(10));
+        expect(
+          matching / samples,
+          greaterThan(0.8),
+          reason:
+              'board.js runs a #0E2230 lane core at C*.5 under the chevrons; '
+              'the bare centreline must read that value, not the channel',
+        );
+      },
+    );
+
+    test(
+      'the field grid is the kit cyan at seven percent, not opaque',
+      () async {
+        final image = await renderBoard();
+        final pixel = await _rgbaAt(image, cell.round(), (8.5 * cell).round());
+        expect(
+          pixel[3],
+          allOf(greaterThan(4), lessThan(64)),
+          reason:
+              'rgba(70,230,255,.07) composites to a faint line; an opaque '
+              'grid tile is off-kit',
+        );
+        expect(pixel[2], greaterThanOrEqualTo(pixel[0]));
+        expect(pixel[1], greaterThan(pixel[0]));
+      },
+    );
+
+    test('flow chevrons land one per cell along a straight run', () async {
+      final image = await renderBoard();
+      final data = await image.toByteData(format: ImageByteFormat.rawRgba);
+      final y = (1.5 * cell).round();
+      final runs = <int>[];
+      var inRun = false;
+      for (var x = (0.6 * cell).round(); x < (3.4 * cell).round(); x++) {
+        final index = (y * image.width + x) * 4;
+        final r = data!.getUint8(index);
+        final g = data.getUint8(index + 1);
+        final b = data.getUint8(index + 2);
+        final a = data.getUint8(index + 3);
+        final cyanish = a > 0 && g > 150 && b > 150 && r < 100;
+        if (cyanish && !inRun) {
+          runs.add(x);
+          inRun = true;
+        } else if (!cyanish) {
+          inRun = false;
+        }
+      }
+      expect(
+        runs.length,
+        3,
+        reason:
+            'board.js places one chevron per cell of segment length; '
+            '${runs.length} clusters on a 3-cell run is off-kit',
+      );
+      for (var i = 1; i < runs.length; i++) {
+        expect(
+          runs[i] - runs[i - 1],
+          closeTo(cell.round(), (0.3 * cell).round()),
+          reason: 'chevron pitch must be ~one cell, not a fabricated rhythm',
+        );
+      }
+    });
+
+    test('the spawn marker fills the kit 1.35C disc and no more', () async {
+      final image = await renderBoard();
+      final covered = await _rgbaAt(
+        image,
+        (0.5 * cell).round(),
+        (0.84 * cell).round(),
+      );
+      expect(
+        covered[3],
+        greaterThan(0),
+        reason:
+            'the kit spawn rift spans C*1.35; 0.66C from centre must still '
+            'be inside the disc',
+      );
+      final outside = await _rgbaAt(
+        image,
+        (0.5 * cell).round(),
+        (0.78 * cell).round(),
+      );
+      expect(
+        outside[3],
+        0,
+        reason:
+            '0.72C from centre is outside a 1.35C marker; covering it '
+            'means the spawn inherited the core\'s larger size',
+      );
+    });
+
+    test('the core marker fills the kit 1.45C disc and no more', () async {
+      final image = await renderBoard();
+      final covered = await _rgbaAt(
+        image,
+        (6.80 * cell).round(),
+        (10.5 * cell).round(),
+      );
+      expect(
+        covered[3],
+        greaterThan(0),
+        reason:
+            'the kit core spans C*1.45; 0.70C from centre must still be '
+            'inside the disc',
+      );
+      final outside = await _rgbaAt(
+        image,
+        (6.69 * cell).round(),
+        (10.5 * cell).round(),
+      );
+      expect(
+        outside[3],
+        0,
+        reason: '0.81C from centre is outside a 1.45C marker',
+      );
+    });
   });
 }

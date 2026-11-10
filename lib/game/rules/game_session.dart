@@ -135,6 +135,7 @@ class GameSession {
     double speedMultiplier = 1,
     bool autoStartEnabled = false,
     double? autoStartCountdownRemaining,
+    int waveEnemiesResolved = 0,
   }) {
     final waveNumber = mode == RunMode.endless
         ? _waveIndex + 1
@@ -144,6 +145,7 @@ class GameSession {
         : stage.waves.length;
     final unlockedTypes = unlockedTowerTypes;
     final wave = activeWave;
+    final waveRunning = _phase == GamePhase.wave && wave != null;
     final nextWavePreview = _phase == GamePhase.build && wave != null
         ? GameBalance.wavePreview(
             wave: wave,
@@ -163,6 +165,13 @@ class GameSession {
       waveNumber: waveNumber,
       missionWaveTotal: missionWaveTotal,
       wavesCleared: clearedWaveCount,
+      waveHostilesTotal: waveRunning ? wave.enemyCount : null,
+      waveHostilesRemaining: waveRunning
+          ? wave.enemyCount - waveEnemiesResolved
+          : null,
+      waveClearBonus: waveRunning
+          ? _effectiveClearBonus(wave.clearBonus)
+          : null,
       stageId: stage.id,
       stageName: stage.name,
       stageLabel: stage.mapLabel,
