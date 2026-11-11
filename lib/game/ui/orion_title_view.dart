@@ -198,7 +198,11 @@ class _TitleLockup extends StatelessWidget {
               ShaderMask(
                 blendMode: BlendMode.srcIn,
                 shaderCallback: orionWordmarkFill.createShader,
-                child: const OrionTitle('Orion', size: 84, color: Colors.white),
+                child: OrionTitle(
+                  'Orion',
+                  size: 84,
+                  color: uiTheme.textPrimary,
+                ),
               ),
             ],
           ),

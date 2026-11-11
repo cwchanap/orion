@@ -1,5 +1,9 @@
+import 'dart:ui' as ui;
+
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
@@ -99,20 +103,25 @@ void main() {
     bool isSavingProgress = false,
     required void Function(CampaignTechUpgrade) onPurchase,
     required VoidCallback onBack,
+    Size size = const Size(390, 844),
+    TextScaler? textScaler,
   }) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MaterialApp(
-        theme: orionThemeData,
-        home: TechTreeView(
-          progress: progress,
-          techTree: techTree,
-          feedback: feedback,
-          isSavingProgress: isSavingProgress,
-          onPurchase: onPurchase,
-          onBack: onBack,
+      MediaQuery(
+        data: MediaQueryData(textScaler: textScaler ?? TextScaler.noScaling),
+        child: MaterialApp(
+          theme: orionThemeData,
+          home: TechTreeView(
+            progress: progress,
+            techTree: techTree,
+            feedback: feedback,
+            isSavingProgress: isSavingProgress,
+            onPurchase: onPurchase,
+            onBack: onBack,
+          ),
         ),
       ),
     );
@@ -924,6 +933,459 @@ void main() {
         await tapDetailAction(tester, researchActionFinder(upgrade));
       }
       expect(bought, CampaignTechUpgrade.values);
+    });
+  });
+
+  group('command-deck fix round 1 (HPA-699)', () {
+    bool breaksInsideWord(
+      WidgetTester tester,
+      Finder textFinder,
+      TextScaler scaler,
+    ) {
+      final widget = tester.widget<Text>(textFinder);
+      final painter = TextPainter(
+        text: TextSpan(text: widget.data ?? '', style: widget.style),
+        textAlign: widget.textAlign ?? TextAlign.start,
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: widget.maxLines,
+        ellipsis: widget.overflow == TextOverflow.ellipsis ? '\u2026' : null,
+        locale: widget.locale,
+        strutStyle: widget.strutStyle,
+        textHeightBehavior: widget.textHeightBehavior,
+        textWidthBasis: widget.textWidthBasis ?? TextWidthBasis.parent,
+      )..layout(maxWidth: tester.getSize(textFinder).width);
+      final text = painter.text!.toPlainText();
+      var offset = 0;
+      while (offset < text.length) {
+        final line = painter.getLineBoundary(TextPosition(offset: offset));
+        if (line.isCollapsed || line.end >= text.length) {
+          return false;
+        }
+        final endsCleanly = text[line.end - 1] == ' ' || text[line.end] == ' ';
+        if (!endsCleanly) {
+          return true;
+        }
+        offset = line.end;
+      }
+      return false;
+    }
+
+    testWidgets('semantics activation selects every node independently', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await pumpTree(
+          tester,
+          progress: progressWithRanks(const [3, 3, 3, 3]),
+          techTree: CampaignTechTree(),
+          onPurchase: (_) {},
+          onBack: () async {},
+        );
+        for (final upgrade in CampaignTechUpgrade.values) {
+          final target = find.bySemanticsLabel(
+            RegExp(RegExp.escape(upgrade.label)),
+          );
+          expect(
+            target,
+            findsOneWidget,
+            reason: '${upgrade.id} must expose a named control',
+          );
+          final node = tester.getSemantics(target);
+          final data = node.getSemanticsData();
+          expect(
+            data.flagsCollection.isButton,
+            isTrue,
+            reason: '${upgrade.id} must announce as a button',
+          );
+          expect(
+            data.actions & SemanticsAction.tap.index,
+            isNot(0),
+            reason:
+                '${upgrade.id} must offer a semantics tap action — a label '
+                'without onTap is not activatable',
+          );
+          node.owner!.performAction(node.id, SemanticsAction.tap);
+          await tester.pump();
+          expect(
+            detailFinder(upgrade),
+            findsOneWidget,
+            reason: 'semantics tap must select ${upgrade.id}',
+          );
+        }
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets(
+      'the Research action and missing-points copy paint in full at tall text',
+      (tester) async {
+        final progress = progressWithRanks(const [3]);
+        await pumpTree(
+          tester,
+          progress: progress,
+          techTree: CampaignTechTree(),
+          onPurchase: (_) {},
+          onBack: () async {},
+          size: const Size(360, 640),
+          textScaler: const TextScaler.linear(3),
+        );
+
+        const affordable = CampaignTechUpgrade.solarCapacitors;
+        await selectNode(tester, affordable);
+        await tester.pump();
+        final research = find.text('Research');
+        expect(research, findsOneWidget);
+        final researchParagraph = tester.renderObject<RenderParagraph>(
+          research,
+        );
+        expect(
+          researchParagraph.didExceedMaxLines,
+          isFalse,
+          reason: "'Research' truncates inside its action at 360x640, 3x",
+        );
+        expect(
+          breaksInsideWord(tester, research, const TextScaler.linear(3)),
+          isFalse,
+          reason:
+              "'Research' breaks mid-word ('Researc'/'h') — the label must "
+              'reflow or stay one line',
+        );
+        expect(tester.takeException(), isNull);
+
+        const unaffordable = CampaignTechUpgrade.cryoCoolant;
+        await selectNode(tester, unaffordable);
+        await tester.pump();
+        final short =
+            unaffordable.cost - CampaignTechTree().unspentPoints(progress);
+        final need = find.text('Need $short more points');
+        expect(need, findsOneWidget);
+        final needParagraph = tester.renderObject<RenderParagraph>(need);
+        expect(
+          needParagraph.didExceedMaxLines,
+          isFalse,
+          reason:
+              'the missing-points hint truncates — the full affordance '
+              'explanation must render',
+        );
+        expect(
+          breaksInsideWord(tester, need, const TextScaler.linear(3)),
+          isFalse,
+          reason: 'the missing-points hint breaks mid-word at 3x text',
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+
+    for (final size in const [Size(390, 844), Size(360, 640)]) {
+      testWidgets('scrolling the node field keeps the detail pinned at '
+          '${size.width.toInt()}x${size.height.toInt()}', (tester) async {
+        await pumpTree(
+          tester,
+          progress: progressWithRanks(const [3, 3, 3, 3]),
+          techTree: CampaignTechTree(),
+          onPurchase: (_) {},
+          onBack: () async {},
+          size: size,
+        );
+        const upgrade = CampaignTechUpgrade.hardenedCore;
+        await selectNode(tester, upgrade);
+        await tester.pump();
+        final bankTop = tester
+            .getRect(find.byKey(const ValueKey('tech-bank-bar')))
+            .top;
+        final detailBefore = tester.getRect(detailFinder(upgrade));
+        final actionBefore = tester.getRect(researchActionFinder(upgrade));
+        final fieldScroll = find.ancestor(
+          of: nodeFinder(upgrade),
+          matching: find.byType(Scrollable),
+        );
+        expect(fieldScroll, findsWidgets);
+        final position = tester
+            .state<ScrollableState>(fieldScroll.first)
+            .position;
+        if (position.maxScrollExtent > 0) {
+          final nodeTopBefore = tester
+              .getRect(nodeFinder(CampaignTechUpgrade.solarCapacitors))
+              .top;
+          position.jumpTo(position.maxScrollExtent);
+          await tester.pump();
+          expect(
+            tester.getRect(nodeFinder(CampaignTechUpgrade.solarCapacitors)).top,
+            isNot(closeTo(nodeTopBefore, 0.5)),
+            reason:
+                'the scroll must actually move the node field for this '
+                'check to mean anything',
+          );
+          expect(
+            tester.getRect(detailFinder(upgrade)),
+            detailBefore,
+            reason:
+                'the selected detail must be pinned outside the field '
+                'scroll — scrolling the field displaced it at $size',
+          );
+          expect(
+            tester.getRect(researchActionFinder(upgrade)),
+            actionBefore,
+            reason: 'the Research action must stay put while the field scrolls',
+          );
+        }
+        expect(
+          tester.getRect(detailFinder(upgrade)).bottom,
+          lessThanOrEqualTo(bankTop + 0.5),
+          reason: 'the detail must stay above the bank bar at $size',
+        );
+        expect(
+          tester.getRect(researchActionFinder(upgrade)).bottom,
+          lessThanOrEqualTo(bankTop + 0.5),
+          reason: 'the Research action must stay above the bank bar',
+        );
+      });
+    }
+
+    testWidgets(
+      'a detail taller than the pinned band scrolls inside the band',
+      (tester) async {
+        await pumpTree(
+          tester,
+          progress: progressWithRanks(const [3, 3, 3, 3]),
+          techTree: CampaignTechTree(),
+          onPurchase: (_) {},
+          onBack: () async {},
+          size: const Size(360, 640),
+          textScaler: const TextScaler.linear(3),
+        );
+        const upgrade = CampaignTechUpgrade.hardenedCore;
+        await selectNode(tester, upgrade);
+        await tester.pump();
+        final bankTop = tester
+            .getRect(find.byKey(const ValueKey('tech-bank-bar')))
+            .top;
+        final detailRect = tester.getRect(detailFinder(upgrade));
+        expect(
+          detailRect.bottom,
+          lessThanOrEqualTo(bankTop + 0.5),
+          reason:
+              'the detail band must end above the bank bar, not overflow '
+              'into it',
+        );
+        final innerScroll = find.descendant(
+          of: detailFinder(upgrade),
+          matching: find.byType(Scrollable),
+        );
+        expect(
+          innerScroll,
+          findsWidgets,
+          reason:
+              'a detail taller than its pinned band must scroll inside the '
+              'band — there is no Scrollable inside the detail',
+        );
+        await tester.drag(innerScroll.first, const Offset(0, -300));
+        await tester.pump();
+        final actionRect = tester.getRect(researchActionFinder(upgrade));
+        expect(
+          actionRect.bottom,
+          lessThanOrEqualTo(bankTop + 0.5),
+          reason: 'the action must stay above the bank bar after scrolling',
+        );
+        expect(
+          actionRect.bottom,
+          lessThanOrEqualTo(detailRect.bottom + 0.5),
+          reason: 'the action must remain inside the pinned detail band',
+        );
+      },
+    );
+
+    testWidgets('conduit strokes paint only in the gaps between nodes', (
+      tester,
+    ) async {
+      await pumpTree(
+        tester,
+        progress: progressWithRanks(const [3, 3, 3, 3]),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      final conduits = find.byKey(const ValueKey('tech-tree-conduits'));
+      final conduitRect = tester.getRect(conduits);
+      final painter = tester
+          .widget<CustomPaint>(
+            find.descendant(of: conduits, matching: find.byType(CustomPaint)),
+          )
+          .painter!;
+      final nodeRects = [
+        for (final upgrade in CampaignTechUpgrade.values)
+          tester
+              .getRect(nodeFinder(upgrade))
+              .translate(-conduitRect.left, -conduitRect.top),
+      ];
+      await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        painter.paint(Canvas(recorder), conduitRect.size);
+        final width = conduitRect.width.ceil();
+        final height = conduitRect.height.ceil();
+        final image = await recorder.endRecording().toImage(width, height);
+        final data = await image.toByteData();
+        image.dispose();
+        expect(
+          data,
+          isNotNull,
+          reason: 'the conduit layer must rasterize for inspection',
+        );
+        final bytes = data!.buffer.asUint8List(
+          data.offsetInBytes,
+          data.lengthInBytes,
+        );
+        var painted = 0;
+        var insideNodes = 0;
+        for (var y = 0; y < height; y += 1) {
+          for (var x = 0; x < width; x += 1) {
+            if (bytes[(y * width + x) * 4 + 3] <= 24) {
+              continue;
+            }
+            painted += 1;
+            final point = Offset(x + 0.5, y + 0.5);
+            for (final rect in nodeRects) {
+              if (rect.contains(point)) {
+                insideNodes += 1;
+                break;
+              }
+            }
+          }
+        }
+        expect(
+          painted,
+          greaterThan(0),
+          reason: 'the decorative conduit layer must still paint strokes',
+        );
+        expect(
+          insideNodes,
+          0,
+          reason:
+              'conduit strokes must terminate at node edges — strokes '
+              'reaching inside a node read as prerequisite edges, which '
+              'this flat 1-2-2 field does not have',
+        );
+      });
+    });
+
+    testWidgets('conduit strokes keep a visible gap from every node edge', (
+      tester,
+    ) async {
+      await pumpTree(
+        tester,
+        progress: progressWithRanks(const [3, 3, 3, 3]),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      const clearance = 8.0;
+      final conduits = find.byKey(const ValueKey('tech-tree-conduits'));
+      final conduitRect = tester.getRect(conduits);
+      final painter = tester
+          .widget<CustomPaint>(
+            find.descendant(of: conduits, matching: find.byType(CustomPaint)),
+          )
+          .painter!;
+      final nodeRects = [
+        for (final upgrade in CampaignTechUpgrade.values)
+          tester
+              .getRect(nodeFinder(upgrade))
+              .inflate(clearance)
+              .translate(-conduitRect.left, -conduitRect.top),
+      ];
+      await tester.runAsync(() async {
+        final recorder = ui.PictureRecorder();
+        painter.paint(Canvas(recorder), conduitRect.size);
+        final width = conduitRect.width.ceil();
+        final height = conduitRect.height.ceil();
+        final image = await recorder.endRecording().toImage(width, height);
+        final data = await image.toByteData();
+        image.dispose();
+        expect(
+          data,
+          isNotNull,
+          reason: 'the conduit layer must rasterize for inspection',
+        );
+        final bytes = data!.buffer.asUint8List(
+          data.offsetInBytes,
+          data.lengthInBytes,
+        );
+        var painted = 0;
+        var nearNodes = 0;
+        for (var y = 0; y < height; y += 1) {
+          for (var x = 0; x < width; x += 1) {
+            if (bytes[(y * width + x) * 4 + 3] <= 24) {
+              continue;
+            }
+            painted += 1;
+            final point = Offset(x + 0.5, y + 0.5);
+            for (final rect in nodeRects) {
+              if (rect.contains(point)) {
+                nearNodes += 1;
+                break;
+              }
+            }
+          }
+        }
+        expect(
+          painted,
+          greaterThan(0),
+          reason: 'the decorative conduit layer must still paint strokes',
+        );
+        expect(
+          nearNodes,
+          0,
+          reason:
+              'strokes that touch a node edge draw a physical connection — '
+              'the five upgrades are independent purchases, so conduits '
+              'must stop visibly short of every node (>= ${clearance}px of '
+              'clear air) instead of linking parent to child',
+        );
+      });
+    });
+
+    testWidgets('a semantics-activated node purchases through its detail', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      try {
+        final bought = <CampaignTechUpgrade>[];
+        await pumpTree(
+          tester,
+          progress: progressWithRanks(const [3, 3, 3, 3]),
+          techTree: CampaignTechTree(),
+          onPurchase: bought.add,
+          onBack: () async {},
+        );
+        for (final upgrade in CampaignTechUpgrade.values) {
+          final node = tester.getSemantics(
+            find.bySemanticsLabel(RegExp(RegExp.escape(upgrade.label))),
+          );
+          node.owner!.performAction(node.id, SemanticsAction.tap);
+          await tester.pump();
+          expect(
+            detailFinder(upgrade),
+            findsOneWidget,
+            reason:
+                'semantics-activating the ${upgrade.label} node must open '
+                'its detail — a label without an onTap action swallows '
+                'the activation',
+          );
+          await tapDetailAction(tester, researchActionFinder(upgrade));
+        }
+        expect(
+          bought,
+          CampaignTechUpgrade.values,
+          reason:
+              'a screen-reader activation must open the same detail whose '
+              'Research action completes the purchase',
+        );
+      } finally {
+        handle.dispose();
+      }
     });
   });
 
