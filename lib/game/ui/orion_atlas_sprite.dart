@@ -28,12 +28,14 @@ final class OrionArtDescriptor {
     required this.sourceRectFor,
     required this.semanticLabel,
     required this.fallbackIcon,
+    this.filterQuality = FilterQuality.none,
   });
 
   final String fileName;
   final OrionSourceRectResolver sourceRectFor;
   final String semanticLabel;
   final IconData fallbackIcon;
+  final FilterQuality filterQuality;
 
   /// Memoised so repeated builds share one decode — with a bounded retry.
   ///
@@ -374,6 +376,7 @@ abstract final class OrionArt {
           _stageRectFor(crop, imageWidth: imageWidth, imageHeight: imageHeight),
       semanticLabel: '${stage.name} sector key art',
       fallbackIcon: Icons.landscape,
+      filterQuality: FilterQuality.medium,
     );
   }
 
@@ -457,7 +460,13 @@ class OrionAtlasSprite extends StatelessWidget {
             if (sprite == null) {
               return SizedBox.fromSize(size: size);
             }
-            return SpriteWidget(sprite: sprite, size: size);
+            return SpriteWidget(
+              sprite: sprite,
+              size: size,
+              paint: art.filterQuality == FilterQuality.none
+                  ? null
+                  : (Paint()..filterQuality = art.filterQuality),
+            );
           },
         ),
       ),

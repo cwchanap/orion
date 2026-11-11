@@ -705,18 +705,20 @@ class _TechNode extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text(
-                      _compactEffect(upgrade),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textScaler: MediaQuery.textScalerOf(
-                        context,
-                      ).clamp(maxScaleFactor: 1.15),
-                      style: OrionTypography.readout(
-                        size: 13,
-                        color: isPurchased || canAfford
-                            ? uiTheme.naniteGreen
-                            : uiTheme.textMuted,
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text(
+                        _compactEffect(upgrade),
+                        maxLines: 1,
+                        textScaler: MediaQuery.textScalerOf(
+                          context,
+                        ).clamp(maxScaleFactor: 1.15),
+                        style: OrionTypography.readout(
+                          size: 13,
+                          color: isPurchased || canAfford
+                              ? uiTheme.naniteGreen
+                              : uiTheme.textMuted,
+                        ),
                       ),
                     ),
                   ],
@@ -1047,13 +1049,13 @@ IconData _nodeIcon(CampaignTechUpgrade upgrade) {
 
 String _compactEffect(CampaignTechUpgrade upgrade) => switch (upgrade) {
   CampaignTechUpgrade.solarCapacitors =>
-    '+${GameBalance.solarCapacitorsGoldBonus} CR',
+    '+${GameBalance.solarCapacitorsGoldBonus} GOLD',
   CampaignTechUpgrade.hardenedCore =>
     '+${GameBalance.hardenedCoreHealthBonus} HULL',
   CampaignTechUpgrade.salvageCrew =>
-    '+${(GameBalance.salvageCrewClearBonusFraction * 100).round()}%',
+    '+${(GameBalance.salvageCrewClearBonusFraction * 100).round()}% WAVE GOLD',
   CampaignTechUpgrade.laserTuning =>
-    '+${(GameBalance.laserTuningDamageFraction * 100).round()}%',
+    '+${(GameBalance.laserTuningDamageFraction * 100).round()}% DAMAGE',
   CampaignTechUpgrade.cryoCoolant =>
-    '+${GameBalance.cryoCoolantSlowDurationBonus.toStringAsFixed(1)}s',
+    '+${GameBalance.cryoCoolantSlowDurationBonus.toStringAsFixed(1)}s SLOW',
 };

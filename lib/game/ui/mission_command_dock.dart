@@ -242,67 +242,74 @@ class IdleCommandBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final countdown = snapshot.autoStartCountdownRemaining;
-    final reactorLabel = _reactorLabel(snapshot, countdown);
-    final missionWaveTotal = snapshot.missionWaveTotal;
-    final reactorTooltip = snapshot.phase == GamePhase.wave
-        ? missionWaveTotal == null
-              ? 'Wave ${snapshot.waveNumber}'
-              : 'Wave ${snapshot.waveNumber} of $missionWaveTotal'
-        : reactorLabel;
+    final reactorLabel = countdown != null ? 'Start Now' : 'Start Wave';
+    final showReactor = snapshot.phase != GamePhase.wave || countdown != null;
+    final preview = snapshot.nextWavePreview;
+    final showIntel = nextWaveIntel != null && preview != null && showReactor;
+    final actionWidth = showIntel ? 96.0 : 116.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
-      child: Row(
-        children: [
-          // Pacing flexes and wraps on narrow viewports; the fixed-size
-          // primary action stays pinned to the dock's edge.
-          Expanded(
-            child: MissionPacingControls(
-              snapshot: snapshot,
-              onTogglePause: onTogglePause,
-              onSpeedSelected: onSpeedSelected,
-              onToggleAutoStart: onToggleAutoStart,
-            ),
-          ),
-          if (nextWaveIntel != null) ...[
-            const SizedBox(width: 8),
-            nextWaveIntel!,
-          ],
-          const SizedBox(width: 8),
-          AnimatedSwitcher(
-            key: const ValueKey('idle-command-reactor-transition'),
-            duration: orionMotionDuration(
-              context,
-              const Duration(milliseconds: 160),
-            ),
-            layoutBuilder: (currentChild, previousChildren) =>
-                currentChild ?? const SizedBox.shrink(),
-            child: _reactorPill(
-              reactorLabel: reactorLabel,
-              tooltip: reactorTooltip,
-              label: snapshot.canStartWave && countdown == null
-                  ? 'Wave ${snapshot.waveNumber}'
-                  : reactorLabel,
-            ),
-          ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Preserve the three 48dp pacing targets before using spare space
+          // for a visible summary beside the existing scanner.
+          final summaryWidth = showIntel
+              ? (constraints.maxWidth - 152 - 48 - actionWidth - 16).clamp(
+                  0.0,
+                  48.0,
+                )
+              : 0.0;
+          return Row(
+            children: [
+              Expanded(
+                child: MissionPacingControls(
+                  snapshot: snapshot,
+                  onTogglePause: onTogglePause,
+                  onSpeedSelected: onSpeedSelected,
+                  onToggleAutoStart: onToggleAutoStart,
+                ),
+              ),
+              if (nextWaveIntel != null) ...[
+                const SizedBox(width: 8),
+                nextWaveIntel!,
+              ],
+              if (summaryWidth >= 22)
+                SizedBox(
+                  width: summaryWidth,
+                  child: _IncomingSummary(preview: preview!),
+                ),
+              if (showReactor) ...[
+                const SizedBox(width: 8),
+                AnimatedSwitcher(
+                  key: const ValueKey('idle-command-reactor-transition'),
+                  duration: orionMotionDuration(
+                    context,
+                    const Duration(milliseconds: 160),
+                  ),
+                  layoutBuilder: (currentChild, previousChildren) =>
+                      currentChild ?? const SizedBox.shrink(),
+                  child: _reactorPill(
+                    reactorLabel: reactorLabel,
+                    tooltip: reactorLabel,
+                    width: actionWidth,
+                    label: 'START',
+                  ),
+                ),
+              ],
+            ],
+          );
+        },
       ),
     );
   }
 
-  /// The AnimatedSwitcher's direct child keeps ONE runtimeType and key —
-  /// the outer KeyedSubtree's [ValueKey] on the reactor label — whether or
-  /// not the guide anchor is attached, so toggling the guide never fires a
-  /// transition while label changes still do. The inner KeyedSubtree
-  /// carries the (possibly null) guide anchor key.
-  /// Wide filled pill for the dock's single primary action: 48-56dp tall,
-  /// filled cyan with dark content while enabled, and the dock's only glow.
-  /// The wave-progress and countdown variants share the same footprint so the
-  /// idle dock never reflows when the phase label changes.
+  /// The scanner remains the interactive, accessible details control.
   Widget _reactorPill({
     required String reactorLabel,
     required String tooltip,
     required String label,
+    required double width,
   }) {
     final onPressed = snapshot.canStartWave ? onStartWave : null;
     final pill = Tooltip(
@@ -314,19 +321,12 @@ class IdleCommandBar extends StatelessWidget {
         label: tooltip,
         onTap: onPressed,
         excludeSemantics: true,
-        // The strongest glow in the idle dock is reserved for this
-        // one action; pacing and the shell carry none.
         child: SizedBox(
-          width: 116,
+          width: width,
           height: 48,
           child: OrionPrimaryButton(
-            // Caps to match the artboard's pill; the pill
-            // already excludes its own semantics in favour of
-            // `tooltip`, so the real copy is untouched.
             label: label.toUpperCase(),
-            icon: snapshot.phase == GamePhase.wave
-                ? Icons.radar
-                : Icons.play_arrow_rounded,
+            icon: Icons.play_arrow_rounded,
             onPressed: onPressed,
             height: 48,
             labelSize: 10,
@@ -339,16 +339,45 @@ class IdleCommandBar extends StatelessWidget {
       child: KeyedSubtree(key: waveGuideAnchorKey, child: pill),
     );
   }
+}
 
-  static String _reactorLabel(GameSnapshot snapshot, double? countdown) {
-    if (countdown != null) return 'Start Now';
-    if (snapshot.phase == GamePhase.wave) {
-      final missionWaveTotal = snapshot.missionWaveTotal;
-      return missionWaveTotal == null
-          ? 'Wave ${snapshot.waveNumber}'
-          : '${snapshot.waveNumber}/$missionWaveTotal';
-    }
-    return 'Start Wave';
+class _IncomingSummary extends StatelessWidget {
+  const _IncomingSummary({required this.preview});
+
+  final WavePreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OrionUiTheme.of(context);
+    final total = preview.groups.fold<int>(
+      0,
+      (sum, group) => sum + group.enemyCount,
+    );
+    return ExcludeSemantics(
+      child: SizedBox(
+        key: const ValueKey('incoming-wave-summary'),
+        height: 48,
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$total',
+                style: OrionTypography.readout(
+                  size: 14,
+                  color: theme.textPrimary,
+                ),
+              ),
+              Text(
+                'FOES',
+                style: OrionTypography.microLabel(color: theme.textMuted),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

@@ -837,62 +837,42 @@ void main() {
     expect(startWaveTaps, 1);
   });
 
-  testWidgets('active wave reactor exposes progress and cannot start a wave', (
-    tester,
-  ) async {
-    var startWaveTaps = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: IdleCommandBar(
-          snapshot: commandDeckSnapshot(
-            phase: GamePhase.wave,
-            waveNumber: 3,
-            missionWaveTotal: 8,
+  for (final size in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('active wave pacing stays on one row at $size', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      var autoTaps = 0;
+      var pauseTaps = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Align(
+            alignment: Alignment.bottomCenter,
+            child: IdleCommandBar(
+              snapshot: commandDeckSnapshot(
+                phase: GamePhase.wave,
+                waveNumber: 12,
+                missionWaveTotal: null,
+              ),
+              onTogglePause: () => pauseTaps++,
+              onSpeedSelected: (_) {},
+              onToggleAutoStart: () => autoTaps++,
+              onStartWave: () => fail('Active wave cannot be started again'),
+            ),
           ),
-          onTogglePause: () {},
-          onSpeedSelected: (_) {},
-          onToggleAutoStart: () {},
-          onStartWave: () => startWaveTaps += 1,
         ),
-      ),
-    );
-
-    expect(find.text('3/8'), findsOneWidget);
-    await tester.tap(find.byTooltip('Wave 3 of 8'));
-    expect(startWaveTaps, 0);
-  });
-
-  testWidgets('endless active wave says Wave 12 in pill and tooltip', (
-    tester,
-  ) async {
-    var startWaveTaps = 0;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: IdleCommandBar(
-          snapshot: commandDeckSnapshot(
-            phase: GamePhase.wave,
-            waveNumber: 12,
-            missionWaveTotal: null,
-          ),
-          onTogglePause: () {},
-          onSpeedSelected: (_) {},
-          onToggleAutoStart: () {},
-          onStartWave: () => startWaveTaps += 1,
-        ),
-      ),
-    );
-
-    // The pill uppercases its label to match the artboard, so the visible
-    // copy is WAVE 12 — the bare number is not enough context on its own.
-    expect(find.text('WAVE 12'), findsOneWidget);
-    expect(find.text('12'), findsNothing);
-    expect(find.text('12/8'), findsNothing);
-    expect(find.textContaining('null'), findsNothing);
-    expect(find.byTooltip('Wave 12'), findsOneWidget);
-    expect(find.byTooltip('Wave 12 of 8'), findsNothing);
-    await tester.tap(find.byTooltip('Wave 12'));
-    expect(startWaveTaps, 0);
-  });
+      );
+      final pause = tester.getRect(find.byTooltip('Pause'));
+      final auto = tester.getRect(find.byTooltip('Auto-start waves'));
+      expect((pause.center.dy - auto.center.dy).abs(), lessThan(4));
+      expect(auto.width, greaterThanOrEqualTo(48));
+      expect(find.byTooltip('Wave 12'), findsNothing);
+      expect(find.byTooltip('Start Wave'), findsNothing);
+      await tester.tap(find.byTooltip('Pause'));
+      await tester.tap(find.byTooltip('Auto-start waves'));
+      expect((pauseTaps, autoTaps), (1, 1));
+    });
+  }
 
   testWidgets('attaching or detaching the wave guide anchor runs no reactor '
       'transition, while a label change still does', (tester) async {
@@ -1040,7 +1020,7 @@ void main() {
   });
 
   testWidgets(
-    'disabled primary and World Map actions carry no semantics tap action',
+    'active waves omit the duplicate action and disable World Map semantics',
     (tester) async {
       await tester.pumpWidget(
         MaterialApp(
@@ -1063,17 +1043,7 @@ void main() {
       final handle = tester.ensureSemantics();
       try {
         await tester.pump();
-        expect(
-          tester.getSemantics(find.bySemanticsLabel('Wave 1 of 8')),
-          matchesSemantics(
-            label: 'Wave 1 of 8',
-            tooltip: '',
-            isButton: true,
-            hasEnabledState: true,
-            isEnabled: false,
-            hasTapAction: false,
-          ),
-        );
+        expect(find.bySemanticsLabel('Wave 1 of 8'), findsNothing);
         expect(
           tester.getSemantics(find.bySemanticsLabel('World Map')),
           matchesSemantics(

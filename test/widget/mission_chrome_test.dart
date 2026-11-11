@@ -392,14 +392,12 @@ void main() {
     // Map is an icon-scale chip now; its label lives in tooltip/semantics.)
     // The pill displays the label in caps, which is wider than the title
     // case it replaced -- so this fit check matters more, not less.
-    final paragraph = tester.renderObject<RenderParagraph>(
-      find.text('START WAVE'),
-    );
+    final paragraph = tester.renderObject<RenderParagraph>(find.text('START'));
     expect(
       paragraph.didExceedMaxLines,
       isFalse,
       reason:
-          '"START WAVE" ellipsizes at 390px width; the primary mission '
+          '"START" ellipsizes at 390px width; the primary mission '
           'action must render its label without truncation.',
     );
   });
@@ -1760,6 +1758,13 @@ void main() {
 
       final intel = tester.getRect(find.byType(NextWaveScanner));
       final start = tester.getRect(find.byTooltip('Start Wave'));
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('incoming-wave-summary')),
+          matching: find.text('8'),
+        ),
+        findsOneWidget,
+      );
       expect(
         (intel.center.dy - start.center.dy).abs(),
         lessThan(40),
