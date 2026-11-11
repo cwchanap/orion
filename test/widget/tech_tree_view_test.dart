@@ -1387,6 +1387,123 @@ void main() {
         handle.dispose();
       }
     });
+
+    for (final size in const [Size(360, 640), Size(390, 844)]) {
+      testWidgets('the detail keeps a usable scroll viewport at '
+          '${size.width.toInt()}x${size.height.toInt()} text x3', (
+        tester,
+      ) async {
+        final progress = CampaignProgress();
+        final tree = CampaignTechTree();
+        await pumpTree(
+          tester,
+          progress: progress,
+          techTree: tree,
+          onPurchase: (_) {},
+          onBack: () async {},
+          size: size,
+          textScaler: const TextScaler.linear(3),
+        );
+        const upgrade = CampaignTechUpgrade.solarCapacitors;
+        await selectNode(tester, upgrade);
+        await tester.pump();
+        final detailRect = tester.getRect(detailFinder(upgrade));
+        final innerScroll = find.descendant(
+          of: detailFinder(upgrade),
+          matching: find.byType(Scrollable),
+        );
+        expect(
+          innerScroll,
+          findsWidgets,
+          reason: 'tall detail copy needs a band-local scroll viewport',
+        );
+        final viewportRect = tester.getRect(innerScroll.first);
+        final titleRect = tester.getRect(
+          find.descendant(
+            of: detailFinder(upgrade),
+            matching: find.text(upgrade.label),
+          ),
+        );
+        expect(
+          titleRect.bottom,
+          lessThanOrEqualTo(viewportRect.bottom + 0.5),
+          reason:
+              'the selected title must be fully readable in the '
+              'initial detail viewport at $size',
+        );
+        final closeRect = tester.getRect(
+          find.descendant(
+            of: detailFinder(upgrade),
+            matching: find.byTooltip('Close upgrade details'),
+          ),
+        );
+        expect(
+          closeRect.height,
+          greaterThanOrEqualTo(48),
+          reason: 'Close must keep a 48dp target',
+        );
+        expect(
+          closeRect.bottom,
+          lessThanOrEqualTo(detailRect.bottom + 0.5),
+          reason:
+              'the Close action must stay painted inside the detail '
+              'band at $size',
+        );
+        final researchRect = tester.getRect(researchActionFinder(upgrade));
+        expect(
+          researchRect.height,
+          greaterThanOrEqualTo(48),
+          reason: 'Research must keep a 48dp target',
+        );
+        expect(
+          researchRect.bottom,
+          lessThanOrEqualTo(detailRect.bottom + 0.5),
+          reason: 'Research must be painted inside the detail band',
+        );
+        expect(
+          viewportRect.height,
+          greaterThanOrEqualTo(96),
+          reason:
+              'the scroll body needs a useful viewport at $size — a '
+              'sliver cannot present readable copy',
+        );
+        final position = tester
+            .state<ScrollableState>(innerScroll.first)
+            .position;
+        position.jumpTo(position.maxScrollExtent);
+        await tester.pump();
+        final short = upgrade.cost - tree.unspentPoints(progress);
+        final lastCopy =
+            find
+                .descendant(
+                  of: detailFinder(upgrade),
+                  matching: find.text('Need $short more points'),
+                )
+                .evaluate()
+                .isNotEmpty
+            ? find.text('Need $short more points')
+            : find.text('Cost: ${upgrade.cost} pts');
+        expect(
+          tester
+              .getRect(
+                find.descendant(of: detailFinder(upgrade), matching: lastCopy),
+              )
+              .bottom,
+          lessThanOrEqualTo(viewportRect.bottom + 0.5),
+          reason:
+              'all detail copy must be reachable inside the scroll '
+              'viewport at $size',
+        );
+        expect(
+          tester.getRect(researchActionFinder(upgrade)).bottom,
+          lessThanOrEqualTo(
+            tester.getRect(find.byKey(const ValueKey('tech-bank-bar'))).top +
+                0.5,
+          ),
+          reason: 'Research must remain reachable after scrolling copy',
+        );
+      });
+    }
   });
 
   testWidgets('capture scene 1g fixture', (tester) async {

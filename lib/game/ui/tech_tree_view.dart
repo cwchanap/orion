@@ -52,7 +52,8 @@ const _nodeAnchors = <CampaignTechUpgrade, (double, double)>{
 const _nodeWidth = 130.0;
 const _nodeHeight = 138.0;
 const _fieldHeight = 484.0;
-const _detailScrollMaxHeight = 180.0;
+const _fieldMinViewport = 100.0;
+const _detailSurfaceChrome = 31.0;
 
 Path _hexPath(Size size) {
   final w = size.width;
@@ -236,81 +237,101 @@ class _TechTreeViewState extends State<TechTreeView> {
                     ),
                   ),
                 Expanded(
-                  child: SingleChildScrollView(
-                    // Selecting a node opens its details at the top of this scrollable area.
-                    key: ValueKey(_selected),
-                    padding: EdgeInsets.only(
-                      top: _selected == null
-                          ? (MediaQuery.sizeOf(context).height * .12).clamp(
-                              24,
-                              110,
-                            )
-                          : 12,
-                      bottom: 20,
-                    ),
-                    child: SizedBox(
-                      height: _fieldHeight,
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final fieldWidth = constraints.maxWidth;
-                          return Stack(
-                            children: [
-                              Positioned.fill(
-                                child: IgnorePointer(
-                                  child: ExcludeSemantics(
-                                    child: SizedBox(
-                                      key: const ValueKey('tech-tree-conduits'),
-                                      child: CustomPaint(
-                                        painter: _TechConduitPainter(
-                                          solid: uiTheme.systemViolet
-                                              .withValues(alpha: .85),
-                                          dashed: uiTheme.systemCyan.withValues(
-                                            alpha: .7,
+                  child: LayoutBuilder(
+                    builder: (context, region) {
+                      final detailMaxHeight =
+                          (region.maxHeight -
+                                  12 -
+                                  _fieldMinViewport -
+                                  _detailSurfaceChrome)
+                              .clamp(0.0, region.maxHeight);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: SingleChildScrollView(
+                              // Selecting a node opens its details at the top of this scrollable area.
+                              key: ValueKey(_selected),
+                              padding: EdgeInsets.only(
+                                top: _selected == null
+                                    ? (MediaQuery.sizeOf(context).height * .12)
+                                          .clamp(24, 110)
+                                    : 12,
+                                bottom: 20,
+                              ),
+                              child: SizedBox(
+                                height: _fieldHeight,
+                                child: LayoutBuilder(
+                                  builder: (context, constraints) {
+                                    final fieldWidth = constraints.maxWidth;
+                                    return Stack(
+                                      children: [
+                                        Positioned.fill(
+                                          child: IgnorePointer(
+                                            child: ExcludeSemantics(
+                                              child: SizedBox(
+                                                key: const ValueKey(
+                                                  'tech-tree-conduits',
+                                                ),
+                                                child: CustomPaint(
+                                                  painter: _TechConduitPainter(
+                                                    solid: uiTheme.systemViolet
+                                                        .withValues(alpha: .85),
+                                                    dashed: uiTheme.systemCyan
+                                                        .withValues(alpha: .7),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                  ),
+                                        for (final entry
+                                            in _nodeAnchors.entries)
+                                          Positioned(
+                                            left:
+                                                entry.value.$1 * fieldWidth -
+                                                _nodeWidth / 2,
+                                            top: entry.value.$2,
+                                            child: _TechNode(
+                                              upgrade: entry.key,
+                                              isSelected:
+                                                  entry.key == _selected,
+                                              isPurchased: techTree.isPurchased(
+                                                entry.key,
+                                              ),
+                                              canAfford: techTree.canPurchase(
+                                                entry.key,
+                                                progress,
+                                              ),
+                                              onSelect: () =>
+                                                  _select(entry.key),
+                                            ),
+                                          ),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ),
-                              for (final entry in _nodeAnchors.entries)
-                                Positioned(
-                                  left:
-                                      entry.value.$1 * fieldWidth -
-                                      _nodeWidth / 2,
-                                  top: entry.value.$2,
-                                  child: _TechNode(
-                                    upgrade: entry.key,
-                                    isSelected: entry.key == _selected,
-                                    isPurchased: techTree.isPurchased(
-                                      entry.key,
-                                    ),
-                                    canAfford: techTree.canPurchase(
-                                      entry.key,
-                                      progress,
-                                    ),
-                                    onSelect: () => _select(entry.key),
-                                  ),
-                                ),
-                            ],
-                          );
-                        },
-                      ),
-                    ),
+                            ),
+                          ),
+                          if (_selected != null) ...[
+                            const SizedBox(height: 12),
+                            _TechDetail(
+                              key: ValueKey('tech-detail-${_selected!.id}'),
+                              upgrade: _selected!,
+                              progress: progress,
+                              techTree: techTree,
+                              isSavingProgress: widget.isSavingProgress,
+                              onPurchase: widget.onPurchase,
+                              onClose: () => setState(() => _selected = null),
+                              maxHeight: detailMaxHeight,
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
-                if (_selected != null) ...[
-                  const SizedBox(height: 12),
-                  _TechDetail(
-                    key: ValueKey('tech-detail-${_selected!.id}'),
-                    upgrade: _selected!,
-                    progress: progress,
-                    techTree: techTree,
-                    isSavingProgress: widget.isSavingProgress,
-                    onPurchase: widget.onPurchase,
-                    onClose: () => setState(() => _selected = null),
-                  ),
-                ],
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                   child: _BankBar(
@@ -696,6 +717,7 @@ class _TechDetail extends StatelessWidget {
     required this.isSavingProgress,
     required this.onPurchase,
     required this.onClose,
+    required this.maxHeight,
   });
 
   final VoidCallback onClose;
@@ -704,6 +726,7 @@ class _TechDetail extends StatelessWidget {
   final CampaignTechTree techTree;
   final bool isSavingProgress;
   final ValueChanged<CampaignTechUpgrade> onPurchase;
+  final double maxHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -717,6 +740,46 @@ class _TechDetail extends StatelessWidget {
     // Purchases are disabled while a save is in flight so the button never
     // presents an enabled affordance that silently no-ops (round-3 review P3).
     final canPurchase = canAfford && !isSavingProgress;
+    final largeText = MediaQuery.textScalerOf(context).scale(10) > 15;
+    final headerIcon = OrionSurface(
+      role: OrionSurfaceRole.card,
+      padding: const EdgeInsets.all(10),
+      radius: 14,
+      child: SizedBox(
+        width: 32,
+        height: 32,
+        child: FittedBox(
+          child: _nodeVisual(
+            upgrade,
+            uiTheme.systemViolet,
+            iconSize: 30,
+            spriteSize: 40,
+          ),
+        ),
+      ),
+    );
+    final closeButton = SizedBox.square(
+      dimension: 48,
+      child: IconButton(
+        padding: EdgeInsets.zero,
+        tooltip: 'Close upgrade details',
+        onPressed: onClose,
+        icon: const Icon(Icons.close, size: 18),
+      ),
+    );
+    final titleText = Text(
+      upgrade.label,
+      // Detail-panel heading for the selected node; reuses the
+      // panel's own systemViolet border accent rather than the
+      // screen title role (already used once above) or the
+      // forbidden textPrimary. Sized as the established sub-heading
+      // scale, since its own description sits directly below it.
+      style: OrionTypography.microLabel(size: 11, color: uiTheme.systemViolet),
+    );
+    final descriptionText = Text(
+      upgrade.description,
+      style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -724,11 +787,32 @@ class _TechDetail extends StatelessWidget {
         role: OrionSurfaceRole.sheet,
         padding: const EdgeInsets.all(14),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: _detailScrollMaxHeight),
+          constraints: BoxConstraints(maxHeight: maxHeight),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (largeText)
+                Row(children: [headerIcon, const Spacer(), closeButton])
+              else
+                Row(
+                  children: [
+                    headerIcon,
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          titleText,
+                          const SizedBox(height: 2),
+                          descriptionText,
+                        ],
+                      ),
+                    ),
+                    closeButton,
+                  ],
+                ),
+              const SizedBox(height: 10),
               Flexible(
                 fit: FlexFit.loose,
                 child: SingleChildScrollView(
@@ -736,61 +820,12 @@ class _TechDetail extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        children: [
-                          OrionSurface(
-                            role: OrionSurfaceRole.card,
-                            padding: const EdgeInsets.all(10),
-                            radius: 14,
-                            child: SizedBox(
-                              width: 32,
-                              height: 32,
-                              child: FittedBox(
-                                child: _nodeVisual(
-                                  upgrade,
-                                  uiTheme.systemViolet,
-                                  iconSize: 30,
-                                  spriteSize: 40,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  upgrade.label,
-                                  // Detail-panel heading for the selected node; reuses the
-                                  // panel's own systemViolet border accent rather than the
-                                  // screen title role (already used once above) or the
-                                  // forbidden textPrimary. Sized as the established sub-heading
-                                  // scale, since its own description sits directly below it.
-                                  style: OrionTypography.microLabel(
-                                    size: 11,
-                                    color: uiTheme.systemViolet,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  upgrade.description,
-                                  style: OrionTypography.microLabel(
-                                    size: 10,
-                                    color: uiTheme.textMuted,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          IconButton(
-                            tooltip: 'Close upgrade details',
-                            onPressed: onClose,
-                            icon: const Icon(Icons.close, size: 18),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
+                      if (largeText) ...[
+                        titleText,
+                        const SizedBox(height: 2),
+                        descriptionText,
+                        const SizedBox(height: 10),
+                      ],
                       Text(
                         upgrade.effectLabel,
                         style: OrionTypography.microLabel(
@@ -806,12 +841,22 @@ class _TechDetail extends StatelessWidget {
                           color: uiTheme.textMuted,
                         ),
                       ),
+                      if (largeText && !isPurchased && !canAfford) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          'Need ${upgrade.cost - unspent} more points',
+                          style: OrionTypography.microLabel(
+                            size: 10,
+                            color: uiTheme.dangerRed,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
               ),
               const SizedBox(height: 10),
-              if (MediaQuery.textScalerOf(context).scale(10) > 15)
+              if (largeText)
                 _buildAction(
                   uiTheme,
                   isPurchased,
@@ -819,6 +864,7 @@ class _TechDetail extends StatelessWidget {
                   canAfford,
                   unspent,
                   compactLabel: true,
+                  showHint: false,
                 )
               else
                 Row(
@@ -867,6 +913,7 @@ class _TechDetail extends StatelessWidget {
     bool canAfford,
     int unspent, {
     bool compactLabel = false,
+    bool showHint = true,
   }) {
     if (isPurchased) {
       return DecoratedBox(
@@ -895,17 +942,21 @@ class _TechDetail extends StatelessWidget {
     }
     if (!canAfford) {
       final needed = upgrade.cost - unspent;
+      final button = OrionPrimaryButton(
+        label: 'Research',
+        icon: Icons.diamond,
+        variant: OrionButtonVariant.secondary,
+        height: 52,
+        labelSize: compactLabel ? 10 : 13,
+        onPressed: null, // disabled
+      );
+      if (!showHint) {
+        return button;
+      }
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          OrionPrimaryButton(
-            label: 'Research',
-            icon: Icons.diamond,
-            variant: OrionButtonVariant.secondary,
-            height: 52,
-            labelSize: compactLabel ? 10 : 13,
-            onPressed: null, // disabled
-          ),
+          button,
           const SizedBox(height: 6),
           Text(
             'Need $needed more points',

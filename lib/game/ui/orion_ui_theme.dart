@@ -359,8 +359,6 @@ const orionHexAvailCore = LinearGradient(
 
 const orionHexLockCore = Color(0xFF0C141D);
 
-// Locked sector art is desaturated through a saturation-blend filter; the
-// source colour must be achromatic for the artwork to go fully grey.
 const orionLockDesaturate = ColorFilter.mode(
   Color(0xFF9E9E9E),
   BlendMode.saturation,
