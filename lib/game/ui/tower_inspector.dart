@@ -36,7 +36,7 @@ class TowerInspector extends StatelessWidget {
     final tower = snapshot.selectedTower;
     if (tower == null) return const SizedBox.shrink();
 
-    final maxHeight = math.min(600.0, MediaQuery.sizeOf(context).height * .72);
+    final maxHeight = math.min(480.0, MediaQuery.sizeOf(context).height * .72);
     final uiTheme = OrionUiTheme.of(context);
     final canMutate = snapshot.phase == GamePhase.build;
     return FocusScope(

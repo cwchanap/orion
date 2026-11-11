@@ -314,6 +314,30 @@ const orionMapVignette = RadialGradient(
   colors: [Color(0x0005080D), Color(0x8C05080D)],
 );
 
+const orionReportScrim = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0x3305080D),
+    Color(0x4405080D),
+    Color(0xF005080D),
+    Color(0xFF05080D),
+  ],
+  stops: [0, 0.30, 0.43, 0.58],
+);
+
+const orionCodexScrim = LinearGradient(
+  begin: Alignment.topCenter,
+  end: Alignment.bottomCenter,
+  colors: [
+    Color(0x0005080D),
+    Color(0x0005080D),
+    Color(0xF205080D),
+    Color(0xF205080D),
+  ],
+  stops: [0, 0.6, 0.72, 1],
+);
+
 const orionTechTreeScrim = LinearGradient(
   begin: Alignment.topCenter,
   end: Alignment.bottomCenter,

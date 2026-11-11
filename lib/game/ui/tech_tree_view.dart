@@ -22,6 +22,7 @@ class TechTreeView extends StatefulWidget {
     this.isSavingProgress = false,
     required this.onPurchase,
     this.onBack,
+    this.embeddedInMenuShell = false,
   });
 
   final CampaignProgress progress;
@@ -36,6 +37,7 @@ class TechTreeView extends StatefulWidget {
 
   /// Invoked when the user taps the back button.
   final VoidCallback? onBack;
+  final bool embeddedInMenuShell;
 
   @override
   State<TechTreeView> createState() => _TechTreeViewState();
@@ -194,37 +196,56 @@ class _TechTreeViewState extends State<TechTreeView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    widget.onBack == null ? 12 : 4,
-                    4,
-                    12,
-                    0,
-                  ),
-                  child: Row(
-                    children: [
-                      if (widget.onBack != null)
-                        IconButton(
-                          tooltip: 'Back',
-                          onPressed: widget.onBack,
-                          icon: const Icon(Icons.arrow_back),
+                if (!widget.embeddedInMenuShell)
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      widget.onBack == null ? 12 : 4,
+                      4,
+                      12,
+                      0,
+                    ),
+                    child: Row(
+                      children: [
+                        if (widget.onBack != null)
+                          IconButton(
+                            tooltip: 'Back',
+                            onPressed: widget.onBack,
+                            icon: const Icon(Icons.arrow_back),
+                          ),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'CAMPAIGN UPGRADES',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textScaler: MediaQuery.textScalerOf(
+                                  context,
+                                ).clamp(maxScaleFactor: 1.3),
+                                style: OrionTypography.microLabel(
+                                  size: 10,
+                                  color: uiTheme.systemViolet,
+                                ),
+                              ),
+                              OrionTitle(
+                                'R & D',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                color: uiTheme.textPrimary,
+                              ),
+                            ],
+                          ),
                         ),
-                      Expanded(
-                        child: OrionTitle(
-                          'R & D',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          color: uiTheme.textPrimary,
+                        Semantics(
+                          label: 'Unspent: $unspent',
+                          excludeSemantics: true,
+                          child: _BankChip(unspent: unspent),
                         ),
-                      ),
-                      Semantics(
-                        label: 'Unspent: $unspent',
-                        excludeSemantics: true,
-                        child: _BankChip(unspent: unspent),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
                 if (widget.feedback != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
@@ -259,58 +280,82 @@ class _TechTreeViewState extends State<TechTreeView> {
                                     : 12,
                                 bottom: 20,
                               ),
-                              child: SizedBox(
-                                height: _fieldHeight,
-                                child: LayoutBuilder(
-                                  builder: (context, constraints) {
-                                    final fieldWidth = constraints.maxWidth;
-                                    return Stack(
-                                      children: [
-                                        Positioned.fill(
-                                          child: IgnorePointer(
-                                            child: ExcludeSemantics(
-                                              child: SizedBox(
-                                                key: const ValueKey(
-                                                  'tech-tree-conduits',
-                                                ),
-                                                child: CustomPaint(
-                                                  painter: _TechConduitPainter(
-                                                    solid: uiTheme.systemViolet
-                                                        .withValues(alpha: .85),
-                                                    dashed: uiTheme.systemCyan
-                                                        .withValues(alpha: .7),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    height: _fieldHeight,
+                                    child: LayoutBuilder(
+                                      builder: (context, constraints) {
+                                        final fieldWidth = constraints.maxWidth;
+                                        return Stack(
+                                          children: [
+                                            Positioned.fill(
+                                              child: IgnorePointer(
+                                                child: ExcludeSemantics(
+                                                  child: SizedBox(
+                                                    key: const ValueKey(
+                                                      'tech-tree-conduits',
+                                                    ),
+                                                    child: CustomPaint(
+                                                      painter:
+                                                          _TechConduitPainter(
+                                                            solid: uiTheme
+                                                                .systemViolet
+                                                                .withValues(
+                                                                  alpha: .85,
+                                                                ),
+                                                            dashed: uiTheme
+                                                                .systemCyan
+                                                                .withValues(
+                                                                  alpha: .7,
+                                                                ),
+                                                          ),
+                                                    ),
                                                   ),
                                                 ),
                                               ),
                                             ),
-                                          ),
-                                        ),
-                                        for (final entry
-                                            in _nodeAnchors.entries)
-                                          Positioned(
-                                            left:
-                                                entry.value.$1 * fieldWidth -
-                                                _nodeWidth / 2,
-                                            top: entry.value.$2,
-                                            child: _TechNode(
-                                              upgrade: entry.key,
-                                              isSelected:
-                                                  entry.key == _selected,
-                                              isPurchased: techTree.isPurchased(
-                                                entry.key,
+                                            for (final entry
+                                                in _nodeAnchors.entries)
+                                              Positioned(
+                                                left:
+                                                    entry.value.$1 *
+                                                        fieldWidth -
+                                                    _nodeWidth / 2,
+                                                top: entry.value.$2,
+                                                child: _TechNode(
+                                                  upgrade: entry.key,
+                                                  isSelected:
+                                                      entry.key == _selected,
+                                                  isPurchased: techTree
+                                                      .isPurchased(entry.key),
+                                                  canAfford: techTree
+                                                      .canPurchase(
+                                                        entry.key,
+                                                        progress,
+                                                      ),
+                                                  onSelect: () =>
+                                                      _select(entry.key),
+                                                ),
                                               ),
-                                              canAfford: techTree.canPurchase(
-                                                entry.key,
-                                                progress,
-                                              ),
-                                              onSelect: () =>
-                                                  _select(entry.key),
-                                            ),
-                                          ),
-                                      ],
-                                    );
-                                  },
-                                ),
+                                          ],
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  if (widget.embeddedInMenuShell)
+                                    Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 16,
+                                      ),
+                                      child: _BankBar(
+                                        unspent: unspent,
+                                        earned: earned,
+                                        spent: spent,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
                           ),
@@ -332,14 +377,15 @@ class _TechTreeViewState extends State<TechTreeView> {
                     },
                   ),
                 ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                  child: _BankBar(
-                    unspent: unspent,
-                    earned: earned,
-                    spent: spent,
+                if (!widget.embeddedInMenuShell)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+                    child: _BankBar(
+                      unspent: unspent,
+                      earned: earned,
+                      spent: spent,
+                    ),
                   ),
-                ),
               ],
             ),
           ),

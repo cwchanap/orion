@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
+import 'package:flame/flame.dart';
+import 'package:flame/widgets.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
@@ -10,6 +14,7 @@ import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
 import 'package:orion/game/orion_defense_game.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
@@ -17,6 +22,8 @@ import 'package:orion/game/ui/orion_title_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/orion_finders.dart';
+import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 Widget titleGamePage({
   CampaignProgressStore? progressStore,
@@ -131,6 +138,134 @@ void main() {
   });
 
   group('title screen', () {
+    testWidgets('title backdrop fills the full width with loaded artwork', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await loadRealFonts();
+      await tester.runAsync(() async {
+        await Flame.images.load('reactor_rim_ui/backdrops/command-center.png');
+        await Flame.images.load('reactor_rim_ui/stages/outpost-alpha.png');
+        await Flame.images.load('orion_sprite_sheet.png');
+        await Flame.images.load('orion_tower_variety_sheet.png');
+      });
+      OrionArtDescriptor.resetSpriteCache();
+      final boundaryKey = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(key: boundaryKey, child: titleGamePage()),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => precacheImage(
+          const AssetImage(
+            'assets/images/reactor_rim_ui/backdrops/command-center.png',
+          ),
+          tester.element(find.byType(OrionTitleView)),
+        ),
+      );
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('title-campaign-card')),
+          matching: find.byType(SpriteWidget),
+        ),
+        findsOneWidget,
+        reason: 'The campaign artwork must load before the screenshot.',
+      );
+      final boundary =
+          boundaryKey.currentContext!.findRenderObject()!
+              as RenderRepaintBoundary;
+      final pixels = await tester.runAsync(() async {
+        final image = await boundary.toImage(pixelRatio: 1);
+        final bytes = await image.toByteData(
+          format: ui.ImageByteFormat.rawRgba,
+        );
+        image.dispose();
+        return bytes!;
+      });
+      var bluePixels = 0;
+      for (var y = 30; y < 110; y++) {
+        for (var x = 280; x < 380; x++) {
+          final offset = (y * 390 + x) * 4;
+          final red = pixels!.getUint8(offset);
+          final blue = pixels.getUint8(offset + 2);
+          if (blue > 30 && blue > red + 5) bluePixels++;
+        }
+      }
+      expect(
+        bluePixels,
+        greaterThan(100),
+        reason: 'The command-center artwork must cover the right-hand side.',
+      );
+      await tester.runAsync(
+        () => captureReactorRimFixture(boundaryKey, 'title-shell-390x844.png'),
+      );
+      await tester.tap(find.byKey(const ValueKey('title-primary-cta')));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => precacheImage(
+          const AssetImage('assets/images/reactor_rim_ui/boards/nebula.png'),
+          tester.element(find.byKey(const ValueKey('stage-briefing'))),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('stage-briefing')),
+          matching: find.byType(InternalSpriteWidget),
+        ),
+        findsWidgets,
+        reason: 'Briefing artwork must be painted before capture.',
+      );
+      await tester.runAsync(
+        () =>
+            captureReactorRimFixture(boundaryKey, 'briefing-live-390x844.png'),
+      );
+    });
+
+    testWidgets('title places the four shortcuts on one row at 390x844', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(titleGamePage());
+      await tester.pumpAndSettle();
+
+      final shortcutRects = [
+        for (final tooltip in ['Sectors', 'R&D', 'Codex', 'Settings'])
+          tester.getRect(
+            find.descendant(
+              of: find.byTooltip(tooltip),
+              matching: find.byType(InkWell),
+            ),
+          ),
+      ];
+      for (final rect in shortcutRects) {
+        expect(rect.center.dy, closeTo(shortcutRects.first.center.dy, 1));
+        expect(rect.width, greaterThanOrEqualTo(48));
+        expect(rect.height, greaterThanOrEqualTo(48));
+      }
+      final kicker = tester.getRect(find.text('SPACE TOWER DEFENSE'));
+      final wordmark = tester.getRect(find.text('ORION').first);
+      expect(kicker.bottom, lessThanOrEqualTo(wordmark.top));
+      final card = find.byKey(const ValueKey('title-campaign-card'));
+      expect(
+        find.descendant(
+          of: card,
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is OrionAtlasSprite &&
+                widget.art.fileName ==
+                    'reactor_rim_ui/stages/outpost-alpha.png',
+          ),
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('the production page boots into the title, not the map', (
       tester,
     ) async {

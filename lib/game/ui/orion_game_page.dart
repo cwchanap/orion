@@ -594,11 +594,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
         isSavingProgress: _isBusy,
         onPurchase: _purchaseTech,
         onBack: null,
+        embeddedInMenuShell: true,
       ),
-      _ShellView.codex => CodexView(progress: _progress, onBack: null),
+      _ShellView.codex => CodexView(
+        progress: _progress,
+        onBack: null,
+        embeddedInMenuShell: true,
+      ),
       _ => WorldMapView(
         stages: OrionCampaign.stages,
         progress: _progress,
+        embeddedInMenuShell: true,
         campaignModifiers: CampaignModifiers.fromProgress(
           _progress,
           OrionCampaign.stages,

@@ -1,6 +1,7 @@
 import 'dart:ui' show Tristate;
 
 import 'package:flame/flame.dart';
+import 'package:flame/widgets.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
@@ -25,6 +26,31 @@ import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
+  testWidgets('tower detail leads with its portrait beside the heading', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(home: CodexView(progress: CampaignProgress())),
+    );
+    await tester.pumpAndSettle();
+    final detail = find.byKey(const ValueKey('codex-detail'));
+    final portrait = find
+        .descendant(of: detail, matching: find.byType(OrionAtlasSprite))
+        .first;
+    final heading = find.descendant(of: detail, matching: find.text('LASER'));
+    expect(
+      tester.getRect(heading).left,
+      greaterThanOrEqualTo(tester.getRect(portrait).right),
+    );
+    expect(
+      tester.getRect(heading).top,
+      lessThan(tester.getRect(portrait).bottom),
+    );
+  });
+
   testWidgets('renders the four section chips and Towers content by default', (
     tester,
   ) async {
@@ -1983,6 +2009,7 @@ void main() {
     OrionArtDescriptor.resetSpriteCache();
     await tester.runAsync(() async {
       await Flame.images.load('orion_sprite_sheet.png');
+      await Flame.images.load('orion_tower_variety_sheet.png');
     });
 
     final boundaryKey = GlobalKey();
@@ -2005,7 +2032,18 @@ void main() {
                     ).copyWith(textScaler: textScaler),
                     child: child!,
                   ),
-            home: CodexView(progress: CampaignProgress(), onBack: () {}),
+            home: OrionMenuShell(
+              destination: OrionMenuDestination.codex,
+              medalEarned: 0,
+              medalTotal: 21,
+              researchPoints: 0,
+              onDestinationSelected: (_) {},
+              onOpenSettings: () {},
+              child: CodexView(
+                progress: CampaignProgress(),
+                embeddedInMenuShell: true,
+              ),
+            ),
           ),
         ),
       );
@@ -2028,6 +2066,16 @@ void main() {
     await pumpScene(const Size(390, 844));
     await tapTile(const ValueKey('codex-tile-laser'));
     expect(find.byKey(const ValueKey('codex-detail')), findsOneWidget);
+    for (final type in TowerType.values) {
+      expect(
+        find.descendant(
+          of: find.byKey(ValueKey('codex-tile-${type.name}')),
+          matching: find.byType(SpriteWidget),
+        ),
+        findsOneWidget,
+        reason: '${type.label} artwork must load before the capture.',
+      );
+    }
     await tester.runAsync(
       () => captureReactorRimFixture(boundaryKey, 'fixture-codex-towers.png'),
     );

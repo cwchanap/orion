@@ -706,7 +706,7 @@ void main() {
     expect(_resultArt('reactor_rim_ui/results/victory.png'), findsOneWidget);
     expect(_resultArt('reactor_rim_ui/results/defeat.png'), findsNothing);
 
-    expect(find.text('3'), findsOneWidget);
+    expect(find.byIcon(Icons.emoji_events_rounded), findsOneWidget);
     expect(find.text('SECTOR SECURED'), findsOneWidget);
     expect(findOrionTitle('Outpost Alpha'), findsOneWidget);
     expect(find.text('Gold medal • Base 20/20'), findsOneWidget);
@@ -1063,10 +1063,49 @@ void main() {
   });
 
   group('command-deck report hierarchy (HPA-699)', () {
+    testWidgets('result art spans the hero behind the stage heading', (
+      tester,
+    ) async {
+      await _pumpPanel(
+        tester,
+        _victoryContent(MissionSaveState.saved),
+        size: const Size(390, 844),
+      );
+      final art = tester.getRect(
+        find.byKey(const ValueKey('mission-report-result-art')),
+      );
+      final title = tester.getRect(findOrionTitle('Outpost Alpha'));
+      expect(art.top, 0);
+      expect(art.width, 390);
+      expect(art.height, greaterThanOrEqualTo(300));
+      expect(art.contains(title.center), isTrue);
+    });
+
+    testWidgets('the victory ribbon has notched ends', (tester) async {
+      await _pumpPanel(tester, _victoryContent(MissionSaveState.saved));
+      final ribbon = find.ancestor(
+        of: findOrionTitle('Victory'),
+        matching: find.byType(ClipPath),
+      );
+      expect(ribbon, findsOneWidget);
+      final clip = tester.widget<ClipPath>(ribbon);
+      final size = tester.getSize(ribbon);
+      final path = clip.clipper!.getClip(size);
+      expect(path.contains(Offset(1, size.height / 2)), isFalse);
+      expect(path.contains(Offset(size.width / 2, size.height / 2)), isTrue);
+    });
+
     Finder criterion(String label) => find.textContaining(
       RegExp(RegExp.escape(label), caseSensitive: false),
       findRichText: true,
     );
+
+    testWidgets('victory medals show distinct criteria glyphs', (tester) async {
+      await _pumpPanel(tester, _victoryContent(MissionSaveState.saved));
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.shield_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.emoji_events_rounded), findsOneWidget);
+    });
 
     testWidgets('victory carries an outcome ribbon and all three medal '
         'criteria', (tester) async {
@@ -1582,12 +1621,13 @@ Finder _resultArt(String fileName) => find.byWidgetPredicate(
 Future<void> _pumpPanel(
   WidgetTester tester,
   MissionReportContent content, {
+  Size size = const Size(360, 640),
   VoidCallback? onReplay,
   VoidCallback? onReturnToMap,
   VoidCallback? onRetrySave,
   bool disableAnimations = false,
 }) async {
-  tester.view.physicalSize = const Size(360, 640);
+  tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
 

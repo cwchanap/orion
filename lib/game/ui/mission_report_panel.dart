@@ -39,7 +39,12 @@ class MissionReportPanel extends StatelessWidget {
       color: uiTheme.voidBlack,
       child: Stack(
         children: [
-          const Positioned.fill(child: _ReportBackdrop()),
+          Positioned.fill(
+            child: _ReportBackdrop(
+              result: content.result,
+              isEndless: content.snapshot.isEndless,
+            ),
+          ),
           SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -173,7 +178,10 @@ bool _actionsStack(
 /// Approved debrief-hall scene art behind the report, dimmed by a readability
 /// scrim so the facts stay legible. The supplied portrait art is cover-fitted.
 class _ReportBackdrop extends StatelessWidget {
-  const _ReportBackdrop();
+  const _ReportBackdrop({required this.result, required this.isEndless});
+
+  final StageResult? result;
+  final bool isEndless;
 
   @override
   Widget build(BuildContext context) {
@@ -190,9 +198,31 @@ class _ReportBackdrop extends StatelessWidget {
           alignment: Alignment.topCenter,
           errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
         ),
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 360,
+          child: Semantics(
+            label: result == null
+                ? isEndless
+                      ? 'Endless run over'
+                      : 'Mission failed'
+                : null,
+            excludeSemantics: result == null,
+            child: Image.asset(
+              'assets/images/${OrionArt.result(result).fileName}',
+              key: const ValueKey('mission-report-result-art'),
+              fit: BoxFit.cover,
+              alignment: Alignment.center,
+              errorBuilder: (context, error, stackTrace) =>
+                  const SizedBox.shrink(),
+            ),
+          ),
+        ),
         const DecoratedBox(
           key: ValueKey('mission-report-scrim'),
-          decoration: BoxDecoration(gradient: orionMapScrim),
+          decoration: BoxDecoration(gradient: orionReportScrim),
         ),
       ],
     );
@@ -221,39 +251,10 @@ class _ReportBody extends StatelessWidget {
         ? 'Endless Run Over'
         : 'Mission Failed';
 
-    Widget resultArt = ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Image.asset(
-        'assets/images/${OrionArt.result(result).fileName}',
-        key: const ValueKey('mission-report-result-art'),
-        height: 150,
-        width: double.infinity,
-        fit: BoxFit.cover,
-        alignment: Alignment.center,
-        errorBuilder: (context, error, stackTrace) => SizedBox(
-          height: 150,
-          child: Center(
-            child: Icon(
-              OrionArt.result(result).fallbackIcon,
-              color: uiTheme.systemCyan.withValues(alpha: 0.6),
-              size: 32,
-            ),
-          ),
-        ),
-      ),
-    );
-    if (result == null) {
-      resultArt = Semantics(
-        label: isEndless ? 'Endless run over' : 'Mission failed',
-        excludeSemantics: true,
-        child: resultArt,
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 24),
+        SizedBox(height: MediaQuery.sizeOf(context).height >= 760 ? 76 : 24),
         if (content.didWin) ...[
           Center(
             child: OrionText.micro(
@@ -270,16 +271,13 @@ class _ReportBody extends StatelessWidget {
           textAlign: TextAlign.center,
           color: uiTheme.textPrimary,
         ),
-        const SizedBox(height: 14),
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            resultArt,
-            _OutcomeRibbon(text: outcomeSemantics, accent: outcomeColor),
-          ],
+        const SizedBox(height: 24),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 25),
+          child: _OutcomeRibbon(text: outcomeSemantics, accent: outcomeColor),
         ),
         if (result != null) ...[
-          const SizedBox(height: 18),
+          const SizedBox(height: 48),
           Semantics(
             label: '${result.medal.label} medal',
             excludeSemantics: true,
@@ -451,15 +449,13 @@ class _OutcomeRibbon extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    return Transform(
-      transform: Matrix4.skewX(-0.05),
-      alignment: Alignment.center,
+    return ClipPath(
+      clipper: const _OutcomeRibbonClipper(),
       child: Container(
         width: double.infinity,
-        height: 56,
+        height: 64,
         alignment: Alignment.center,
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(4),
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
@@ -480,12 +476,29 @@ class _OutcomeRibbon extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: OrionTitle(text, size: 30, color: uiTheme.voidBlack),
+            child: OrionTitle(text, size: 34, color: uiTheme.voidBlack),
           ),
         ),
       ),
     );
   }
+}
+
+class _OutcomeRibbonClipper extends CustomClipper<Path> {
+  const _OutcomeRibbonClipper();
+
+  @override
+  Path getClip(Size size) => Path()
+    ..moveTo(0, 0)
+    ..lineTo(size.width, 0)
+    ..lineTo(size.width - 18, size.height / 2)
+    ..lineTo(size.width, size.height)
+    ..lineTo(0, size.height)
+    ..lineTo(18, size.height / 2)
+    ..close();
+
+  @override
+  bool shouldReclip(_OutcomeRibbonClipper oldClipper) => false;
 }
 
 class _MedalCriteriaRow extends StatelessWidget {
@@ -513,7 +526,7 @@ class _MedalCriteriaRow extends StatelessWidget {
           (width, criterion) =>
               width +
               math.max(
-                54,
+                70,
                 _singleLineWidth(context, criterion.label, labelStyle),
               ),
         );
@@ -569,11 +582,21 @@ class _MedalCriterion extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 54,
-          height: 54,
+          width: 70,
+          height: 70,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: earned ? color : uiTheme.hullBlack,
+            color: earned ? null : uiTheme.hullBlack,
+            gradient: earned
+                ? RadialGradient(
+                    center: const Alignment(-0.35, -0.35),
+                    colors: [
+                      Color.lerp(color, uiTheme.textPrimary, .5)!,
+                      color,
+                      Color.lerp(color, uiTheme.voidBlack, .25)!,
+                    ],
+                  )
+                : null,
             border: Border.all(
               width: 3,
               color: earned ? color : uiTheme.frameSteel.withValues(alpha: .6),
@@ -588,10 +611,21 @@ class _MedalCriterion extends StatelessWidget {
                 : null,
           ),
           alignment: Alignment.center,
-          child: Text(
-            '$tier',
-            style: OrionTypography.readout(
-              size: 20,
+          child: Container(
+            margin: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: uiTheme.voidBlack.withValues(alpha: .25),
+              ),
+            ),
+            child: Icon(
+              switch (tier) {
+                1 => Icons.check_rounded,
+                2 => Icons.shield_rounded,
+                _ => Icons.emoji_events_rounded,
+              },
+              size: 28,
               color: earned ? uiTheme.voidBlack : uiTheme.textDim,
             ),
           ),

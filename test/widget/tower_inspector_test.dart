@@ -478,6 +478,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    expect(
+      tester.getRect(find.byKey(const ValueKey('tower-inspector'))).top,
+      greaterThanOrEqualTo(300),
+      reason: 'The inspector should leave the upper battlefield visible.',
+    );
 
     // No-op unless ORION_CAPTURE_DIR is set. runAsync: PNG encoding is
     // real async engine work and deadlocks the FakeAsync zone otherwise.

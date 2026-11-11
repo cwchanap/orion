@@ -48,6 +48,7 @@ class OrionMenuShell extends StatelessWidget {
       body: Column(
         children: [
           _TopBar(
+            destination: destination,
             medalEarned: medalEarned,
             medalTotal: medalTotal,
             researchPoints: researchPoints,
@@ -75,12 +76,14 @@ class OrionMenuShell extends StatelessWidget {
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
+    required this.destination,
     required this.medalEarned,
     required this.medalTotal,
     required this.researchPoints,
     required this.onOpenSettings,
   });
 
+  final OrionMenuDestination destination;
   final int medalEarned;
   final int medalTotal;
   final int researchPoints;
@@ -89,6 +92,17 @@ class _TopBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final (kicker, title) = switch (destination) {
+      OrionMenuDestination.sectors => ('ORION CAMPAIGN', 'Orion Sector'),
+      OrionMenuDestination.research => ('CAMPAIGN UPGRADES', 'R & D'),
+      OrionMenuDestination.codex => ('FIELD MANUAL', 'Codex'),
+    };
+    final accent = destination == OrionMenuDestination.research
+        ? uiTheme.systemViolet
+        : uiTheme.textMuted;
+    final textScaler = MediaQuery.textScalerOf(
+      context,
+    ).clamp(maxScaleFactor: 1.15);
     return SafeArea(
       bottom: false,
       child: Container(
@@ -99,6 +113,33 @@ class _TopBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         child: Row(
           children: [
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    kicker,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textScaler: textScaler,
+                    style: OrionTypography.microLabel(
+                      size: 10,
+                      color: accent,
+                    ).copyWith(letterSpacing: 0.8),
+                  ),
+                  OrionTitle(
+                    title,
+                    size: 15,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textScaler: textScaler,
+                    color: uiTheme.textPrimary,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
             OrionResourceChip(
               icon: Icons.emoji_events,
               iconColor: uiTheme.creditGold,
@@ -110,9 +151,11 @@ class _TopBar extends StatelessWidget {
               icon: Icons.diamond_rounded,
               iconColor: uiTheme.systemViolet,
               count: '$researchPoints',
-              semanticsLabel: '$researchPoints research points',
+              semanticsLabel: destination == OrionMenuDestination.research
+                  ? 'Unspent: $researchPoints'
+                  : '$researchPoints research points',
             ),
-            const Spacer(),
+            const SizedBox(width: 8),
             _GhostIconButton(
               tooltip: 'Settings',
               icon: Icons.settings_rounded,
@@ -241,7 +284,7 @@ class _TabBar extends StatelessWidget {
           gradient: orionChromePlate,
           border: Border(top: BorderSide(color: orionPanelEdge)),
         ),
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+        padding: const EdgeInsets.fromLTRB(10, 0, 10, 8),
         child: Row(
           children: [
             _Tab(
@@ -296,6 +339,9 @@ class _Tab extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final active = enabled;
+    final accent = destination == OrionMenuDestination.research
+        ? uiTheme.systemViolet
+        : uiTheme.systemCyan;
     return Expanded(
       child: Semantics(
         button: true,
@@ -309,47 +355,53 @@ class _Tab extends StatelessWidget {
               color: Colors.transparent,
               borderRadius: BorderRadius.circular(14),
               clipBehavior: Clip.antiAlias,
-              child: Ink(
-                decoration: BoxDecoration(
-                  gradient: selected ? orionGhostFill : null,
-                  borderRadius: BorderRadius.circular(14),
-                  border: selected ? Border.all(color: orionGhostEdge) : null,
-                ),
-                child: InkWell(
-                  onTap: active ? () => onTap(destination) : null,
-                  borderRadius: BorderRadius.circular(14),
-                  child: ExcludeSemantics(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 8,
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            icon,
-                            size: 18,
-                            color: selected
-                                ? uiTheme.textPrimary
-                                : uiTheme.textMuted,
+              child: InkWell(
+                onTap: active ? () => onTap(destination) : null,
+                borderRadius: BorderRadius.circular(14),
+                child: ExcludeSemantics(
+                  child: Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      if (selected)
+                        Container(
+                          width: 52,
+                          height: 3,
+                          decoration: BoxDecoration(
+                            color: accent,
+                            borderRadius: BorderRadius.circular(2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: accent.withValues(alpha: 0.65),
+                                blurRadius: 10,
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(
-                            label,
-                            textScaler: MediaQuery.textScalerOf(
-                              context,
-                            ).clamp(maxScaleFactor: 1.3),
-                            style: OrionTypography.microLabel(
-                              size: 10.5,
-                              color: selected
-                                  ? uiTheme.systemCyan
-                                  : uiTheme.textMuted,
-                            ).copyWith(letterSpacing: 1.05),
-                          ),
-                        ],
+                        ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(6, 14, 6, 8),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              icon,
+                              size: 22,
+                              color: selected ? accent : uiTheme.textMuted,
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              label,
+                              textScaler: MediaQuery.textScalerOf(
+                                context,
+                              ).clamp(maxScaleFactor: 1.3),
+                              style: OrionTypography.microLabel(
+                                size: 10.5,
+                                color: selected ? accent : uiTheme.textMuted,
+                              ).copyWith(letterSpacing: 1.05),
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
