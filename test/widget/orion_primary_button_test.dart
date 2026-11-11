@@ -1,8 +1,8 @@
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
@@ -186,6 +186,65 @@ void main() {
     await gesture.up();
     await t.pump();
     expect(buttonFrame(t).transform!.getTranslation().y, 0);
+  });
+
+  testWidgets('a keyboard press sinks the button and releasing fires it', (
+    t,
+  ) async {
+    var taps = 0;
+    await t.pumpWidget(host(onPressed: () => taps++));
+    Focus.of(
+      t.element(
+        find.descendant(
+          of: find.byType(TextButton),
+          matching: find.byType(Icon),
+        ),
+      ),
+    ).requestFocus();
+    await t.pump();
+
+    await t.sendKeyDownEvent(LogicalKeyboardKey.space);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(
+      buttonFrame(t).transform!.getTranslation().y,
+      4,
+      reason: 'a held keyboard press must sink the button like a pointer',
+    );
+
+    await t.sendKeyUpEvent(LogicalKeyboardKey.space);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(buttonFrame(t).transform!.getTranslation().y, 0);
+    expect(taps, 1);
+  });
+
+  testWidgets('a pointer that loses its gesture releases the pressed visual '
+      'without firing', (t) async {
+    var taps = 0;
+    await t.pumpWidget(host(onPressed: () => taps++));
+    final center = t.getCenter(find.byType(OrionPrimaryButton));
+    final gesture = await t.startGesture(center);
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(buttonFrame(t).transform!.getTranslation().y, 4);
+
+    await gesture.moveBy(const Offset(0, 80));
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(
+      buttonFrame(t).transform!.getTranslation().y,
+      0,
+      reason:
+          'the tap is dead once the pointer leaves, so the press chrome must '
+          'release while the pointer is still down',
+    );
+
+    await gesture.up();
+    await t.pump();
+    await t.pump(const Duration(milliseconds: 200));
+    expect(buttonFrame(t).transform!.getTranslation().y, 0);
+    expect(taps, 0);
   });
 
   testWidgets('disabled renders the grayscale rule and cannot fire', (t) async {

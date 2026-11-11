@@ -1,5 +1,6 @@
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
@@ -706,6 +707,75 @@ void main() {
         figure.style!.color!.toARGB32(),
         OrionUiTheme.dark.creditGold.toARGB32(),
       );
+    });
+
+    testWidgets('the modifier tile paints its full title at 390 and 360', (
+      tester,
+    ) async {
+      for (final viewport in const [Size(390, 844), Size(360, 640)]) {
+        await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          viewport: viewport,
+        );
+
+        expect(tester.takeException(), isNull);
+        final tile = find.byKey(const ValueKey('briefing-modifier'));
+        final title = find.descendant(
+          of: tile,
+          matching: find.text('STANDARD CONDITIONS'),
+        );
+        expect(
+          title,
+          findsOneWidget,
+          reason: 'the modifier name must stay complete at $viewport',
+        );
+
+        final text = tester.widget<Text>(title);
+        expect(
+          text.style!.fontSize,
+          greaterThanOrEqualTo(10),
+          reason: 'modifier copy dropped below the kit label floor',
+        );
+        expect(
+          find.descendant(
+            of: tile,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics &&
+                  widget.properties.label == 'Standard Conditions',
+            ),
+          ),
+          findsOneWidget,
+        );
+
+        final paragraph = tester.renderObject<RenderParagraph>(title);
+        final span = 'STANDARD CONDITIONS';
+        final lastWord = TextPainter(
+          text: TextSpan(text: 'CONDITIONS', style: paragraph.text.style),
+          textDirection: TextDirection.ltr,
+          textScaler: paragraph.textScaler,
+        )..layout();
+        final boxes = paragraph.getBoxesForSelection(
+          TextSelection(
+            baseOffset: span.indexOf('CONDITIONS'),
+            extentOffset: span.length,
+          ),
+        );
+        final painted = boxes.fold<double>(
+          0,
+          (width, box) => width + (box.right - box.left),
+        );
+        expect(
+          painted,
+          greaterThanOrEqualTo(lastWord.width - 1),
+          reason:
+              'CONDITIONS painted ${painted}px of ${lastWord.width}px at '
+              '$viewport — the name is being ellipsized',
+        );
+
+        await _dismissBriefing(tester);
+      }
     });
 
     testWidgets('fits four tiles at product width and 2x text scale', (

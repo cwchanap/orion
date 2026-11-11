@@ -1256,6 +1256,56 @@ void main() {
       expect(find.byType(CircularProgressIndicator), findsNothing);
     });
 
+    testWidgets('the damage bar carries the danger accent and every gauge is '
+        'at least 10dp thick', (tester) async {
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.cryo,
+        position: GridPosition(2, 3),
+      );
+      final stats = GameBalance.towerStats(TowerType.cryo, level: 1);
+      await pumpSheet(tester, tower: tower, stats: stats);
+
+      LinearProgressIndicator barOf(String key) =>
+          tester.widget<LinearProgressIndicator>(
+            find.descendant(
+              of: find.byKey(ValueKey(key)),
+              matching: find.byType(LinearProgressIndicator),
+            ),
+          );
+
+      final damage = barOf('tower-stat-damage');
+      expect(
+        damage.color,
+        OrionUiTheme.dark.dangerRed,
+        reason: 'the damage gauge lost its danger accent',
+      );
+      for (final key in const [
+        'tower-stat-damage',
+        'tower-stat-fire',
+        'tower-stat-range',
+        'tower-stat-secondary',
+      ]) {
+        final bar = barOf(key);
+        expect(
+          bar.minHeight,
+          greaterThanOrEqualTo(10),
+          reason: '$key gauge is thinner than the 10dp floor',
+        );
+        expect(
+          tester
+              .getSize(
+                find.descendant(
+                  of: find.byKey(ValueKey(key)),
+                  matching: find.byType(LinearProgressIndicator),
+                ),
+              )
+              .height,
+          greaterThanOrEqualTo(10),
+        );
+      }
+    });
+
     testWidgets('bounded inspector keeps header actions reachable at 360x640 '
         'with 1.5x text', (tester) async {
       tester.view.physicalSize = const Size(360, 640);

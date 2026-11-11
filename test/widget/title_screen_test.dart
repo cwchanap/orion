@@ -339,6 +339,175 @@ void main() {
       );
     });
 
+    testWidgets('an all-gold campaign reads 21 of 21 medals on the title and '
+        'on every menu destination', (tester) async {
+      final store = await _storeWithResults(
+        _resultsFor(OrionCampaign.stages.map((stage) => stage.id)),
+      );
+      await tester.pumpWidget(titleGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+
+      final handle = tester.ensureSemantics();
+      try {
+        void expectMedals() {
+          expect(find.text('21/21'), findsOneWidget);
+          expect(
+            find.bySemanticsLabel('21 of 21 campaign medals'),
+            findsOneWidget,
+          );
+        }
+
+        expectMedals();
+
+        await tester.tap(find.byTooltip('Sectors'));
+        await tester.pumpAndSettle();
+        expect(find.text('ORION SECTOR'), findsOneWidget);
+        expectMedals();
+
+        await tester.tap(find.byTooltip('R&D'));
+        await tester.pumpAndSettle();
+        expect(findOrionTitle('R & D'), findsOneWidget);
+        expectMedals();
+
+        await tester.tap(find.byTooltip('Codex'));
+        await tester.pumpAndSettle();
+        expect(findOrionTitle('Codex'), findsOneWidget);
+        expectMedals();
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('a partially cleared optional stage counts its medal against '
+        'the same all-stage total', (tester) async {
+      final results = _resultsFor(
+        OrionCampaign.mainStages.map((stage) => stage.id),
+      );
+      results[OrionCampaign.sideStages.first.id] = const StageResult(
+        medal: StageMedal.silver,
+        bestBaseHealth: 12,
+      );
+      final store = await _storeWithResults(results);
+      await tester.pumpWidget(titleGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+
+      final handle = tester.ensureSemantics();
+      try {
+        expect(find.text('17/21'), findsOneWidget);
+        expect(
+          find.bySemanticsLabel('17 of 21 campaign medals'),
+          findsOneWidget,
+        );
+
+        await tester.tap(find.byTooltip('Sectors'));
+        await tester.pumpAndSettle();
+        expect(find.text('17/21'), findsOneWidget);
+        expect(
+          find.bySemanticsLabel('17 of 21 campaign medals'),
+          findsOneWidget,
+        );
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('every title shortcut keeps a 48dp interaction region', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        titleGamePage(
+          feedbackPreferencesStore: InMemoryFeedbackPreferencesStore(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      for (final tooltip in const ['Sectors', 'R&D', 'Codex', 'Settings']) {
+        final rect = tester.getRect(
+          find.descendant(
+            of: find.byTooltip(tooltip),
+            matching: find.byType(InkWell),
+          ),
+        );
+        expect(
+          rect.width >= 48 && rect.height >= 48,
+          isTrue,
+          reason: '$tooltip interaction region is $rect',
+        );
+        expect(rect.left, greaterThanOrEqualTo(0));
+        expect(rect.right, lessThanOrEqualTo(800));
+      }
+    });
+
+    testWidgets('title shortcuts activate from the edge of their interaction '
+        'regions', (tester) async {
+      await tester.pumpWidget(
+        titleGamePage(
+          feedbackPreferencesStore: InMemoryFeedbackPreferencesStore(),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      Rect inkRect(String tooltip) => tester.getRect(
+        find.descendant(
+          of: find.byTooltip(tooltip),
+          matching: find.byType(InkWell),
+        ),
+      );
+
+      final settingsRect = inkRect('Settings');
+      await tester.tapAt(
+        Offset(settingsRect.right - 1, settingsRect.center.dy),
+      );
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(SwitchListTile, 'Sound Effects'),
+        findsOneWidget,
+      );
+      await tester.tap(find.widgetWithText(OrionPrimaryButton, 'Done'));
+      await tester.pumpAndSettle();
+
+      final sectorsRect = inkRect('Sectors');
+      await tester.tapAt(Offset(sectorsRect.center.dx, sectorsRect.top + 1));
+      await tester.pumpAndSettle();
+      expect(find.text('ORION SECTOR'), findsOneWidget);
+    });
+
+    testWidgets('the Settings shortcut does not fire from its edges while a '
+        'preference save is in flight', (tester) async {
+      final store = _DelayedTitleFeedbackStore();
+      await tester.pumpWidget(titleGamePage(feedbackPreferencesStore: store));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OrionPrimaryButton, 'Done'));
+      await tester.pumpAndSettle();
+
+      final rect = tester.getRect(
+        find.descendant(
+          of: find.byTooltip('Settings'),
+          matching: find.byType(InkWell),
+        ),
+      );
+      await tester.tapAt(Offset(rect.right - 1, rect.center.dy));
+      await tester.pump();
+      expect(
+        find.widgetWithText(SwitchListTile, 'Sound Effects'),
+        findsNothing,
+      );
+
+      store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      await tester.tapAt(Offset(rect.right - 1, rect.center.dy));
+      await tester.pumpAndSettle();
+      expect(
+        find.widgetWithText(SwitchListTile, 'Sound Effects'),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('the Settings shortcut is disabled while a feedback '
         'preference save is in flight', (tester) async {
       final store = _DelayedTitleFeedbackStore();

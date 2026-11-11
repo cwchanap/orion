@@ -47,6 +47,8 @@ class OrionPrimaryButton extends StatefulWidget {
 class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
   var _pressed = false;
 
+  final _statesController = WidgetStatesController();
+
   static const _radius = 14.0;
 
   static const _disabledFilter = ColorFilter.matrix([
@@ -71,6 +73,26 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
     1,
     0,
   ]);
+
+  @override
+  void initState() {
+    super.initState();
+    _statesController.addListener(_syncPressed);
+  }
+
+  @override
+  void dispose() {
+    _statesController.removeListener(_syncPressed);
+    _statesController.dispose();
+    super.dispose();
+  }
+
+  void _syncPressed() {
+    final pressed = _statesController.value.contains(WidgetState.pressed);
+    if (pressed != _pressed) {
+      setState(() => _pressed = pressed);
+    }
+  }
 
   _VariantSpec _spec() => switch (widget.variant) {
     OrionButtonVariant.primary => (
@@ -150,6 +172,7 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
         ),
         child: TextButton.icon(
           onPressed: enabled ? widget.onPressed : null,
+          statesController: _statesController,
           style: TextButton.styleFrom(
             minimumSize: Size.fromHeight(widget.height),
             foregroundColor: spec.ink,
@@ -178,15 +201,6 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
     if (!enabled) {
       frame = ColorFiltered(colorFilter: _disabledFilter, child: frame);
     }
-    return Listener(
-      onPointerDown: enabled ? (_) => setState(() => _pressed = true) : null,
-      onPointerUp: (_) {
-        if (_pressed) setState(() => _pressed = false);
-      },
-      onPointerCancel: (_) {
-        if (_pressed) setState(() => _pressed = false);
-      },
-      child: frame,
-    );
+    return frame;
   }
 }

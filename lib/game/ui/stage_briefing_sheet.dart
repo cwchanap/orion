@@ -129,47 +129,50 @@ class StageBriefingSheet extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              Row(
+                              Column(
                                 key: const ValueKey('briefing-facts'),
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Expanded(
-                                    child: _BriefingStatTile(
-                                      icon: Icons.waves_rounded,
-                                      value: '${stage.waves.length}',
-                                      label: 'WAVES',
-                                      color: uiTheme.systemCyan,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _BriefingStatTile(
-                                      icon: Icons.shield_outlined,
-                                      value: '$startingBaseHealth',
-                                      label: 'HULL',
-                                      color: uiTheme.systemCyan,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _BriefingStatTile(
-                                      icon: Icons.hexagon,
-                                      value: '$startingGold',
-                                      label: 'START',
-                                      color: uiTheme.creditGold,
-                                      valueColor: uiTheme.creditGold,
-                                    ),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _BriefingStatTile(
+                                          icon: Icons.waves_rounded,
+                                          value: '${stage.waves.length}',
+                                          label: 'WAVES',
+                                          color: uiTheme.systemCyan,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _BriefingStatTile(
+                                          icon: Icons.shield_outlined,
+                                          value: '$startingBaseHealth',
+                                          label: 'HULL',
+                                          color: uiTheme.systemCyan,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: _BriefingStatTile(
+                                          icon: Icons.hexagon,
+                                          value: '$startingGold',
+                                          label: 'START',
+                                          color: uiTheme.creditGold,
+                                          valueColor: uiTheme.creditGold,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                   if (metadata.isNotEmpty) ...[
-                                    const SizedBox(width: 8),
-                                    Expanded(
-                                      child: KeyedSubtree(
-                                        key: modifierTip?.anchorKey,
-                                        child: _BriefingModifierTile(
-                                          key: const ValueKey(
-                                            'briefing-modifier',
-                                          ),
-                                          title: metadata.first.title,
+                                    const SizedBox(height: 8),
+                                    KeyedSubtree(
+                                      key: modifierTip?.anchorKey,
+                                      child: _BriefingModifierTile(
+                                        key: const ValueKey(
+                                          'briefing-modifier',
                                         ),
+                                        title: metadata.first.title,
                                       ),
                                     ),
                                   ],
@@ -369,6 +372,7 @@ class StageBriefingSheet extends StatelessWidget {
                   tip: ContextualTip.stageModifier,
                   anchorKey: modifierTip!.anchorKey,
                   onDone: modifierTip!.onDone,
+                  preferAbove: true,
                 ),
               ),
           ],

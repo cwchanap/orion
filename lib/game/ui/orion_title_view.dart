@@ -444,38 +444,45 @@ class _GhostAction extends StatelessWidget {
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(14),
           clipBehavior: Clip.antiAlias,
-          child: Ink(
-            decoration: BoxDecoration(
-              gradient: orionGhostFill,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: orionGhostEdge),
-              boxShadow: const [
-                BoxShadow(color: orionGhostLip, offset: Offset(0, 3)),
-              ],
-            ),
-            child: InkWell(
-              onTap: onPressed,
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: iconOnly ? 13 : 14,
-                  vertical: 10,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 17, color: uiTheme.textMuted),
-                    if (!iconOnly) ...[
-                      const SizedBox(width: 6),
-                      Text(
-                        label,
-                        style: OrionTypography.microLabel(
-                          size: 11.5,
-                          color: uiTheme.textMuted,
-                        ).copyWith(letterSpacing: 1.84),
-                      ),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(14),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+              child: Center(
+                widthFactor: 1,
+                heightFactor: 1,
+                child: Ink(
+                  decoration: BoxDecoration(
+                    gradient: orionGhostFill,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: orionGhostEdge),
+                    boxShadow: const [
+                      BoxShadow(color: orionGhostLip, offset: Offset(0, 3)),
                     ],
-                  ],
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: iconOnly ? 13 : 14,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 17, color: uiTheme.textMuted),
+                        if (!iconOnly) ...[
+                          const SizedBox(width: 6),
+                          Text(
+                            label,
+                            style: OrionTypography.microLabel(
+                              size: 11.5,
+                              color: uiTheme.textMuted,
+                            ).copyWith(letterSpacing: 1.84),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
