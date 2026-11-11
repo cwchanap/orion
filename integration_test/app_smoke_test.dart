@@ -38,6 +38,9 @@ void main() {
       await tester.pumpWidget(const OrionApp());
     });
 
+    await _pumpUntil(tester, () => tester.any(find.byTooltip('Sectors')));
+    await tester.tap(find.byTooltip('Sectors'));
+
     // 1. World map is showing with the first stage ("Alpha").
     await _pumpUntil(tester, () => tester.any(find.text('ORION SECTOR')));
     expect(find.text('Alpha'), findsOneWidget);
@@ -385,7 +388,7 @@ void main() {
     // 13. Tech Tree: open from the world map rail, verify the real
     //     medal-point bank gates purchases on a fresh campaign (zero points
     //     earned, so every purchase is refused), then go back.
-    await tester.tap(find.byTooltip('Tech Tree'));
+    await tester.tap(find.byTooltip('R&D'));
     await _pumpUntil(
       tester,
       () => tester.any(find.byKey(const ValueKey('tech-bank-bar'))),
@@ -400,7 +403,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('tech-node-solar-capacitors')));
     await _pumpUntil(tester, () => tester.any(find.text('Need 3 more points')));
     expect(find.text('Need 3 more points'), findsOneWidget);
-    await tester.tap(find.byTooltip('Back'));
+    await tester.tap(find.byTooltip('Map'));
     await _pumpUntil(tester, () => tester.any(find.text('ORION SECTOR')));
 
     // 14. Mission Report representative action path: run a fresh defense
