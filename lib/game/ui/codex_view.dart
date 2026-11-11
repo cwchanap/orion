@@ -246,9 +246,6 @@ class _CodexViewState extends State<CodexView> {
           // The divider only makes sense between the two groups.
           if (traits.isNotEmpty && enemies.isNotEmpty) const Divider(),
           if (enemyDetail != null) ...[
-            // Detail above the roster: the section lands on the selected
-            // archetype's stats instead of a grid whose detail sits below
-            // the fold and never builds on short viewports.
             _enemyDetail(enemyDetail),
             const SizedBox(height: 12),
             _enemyGrid(enemies, enemyDetail.archetype),
@@ -343,9 +340,6 @@ class _CodexViewState extends State<CodexView> {
             children: [
               for (var row = 0; row < towers.length; row += columns) ...[
                 if (row > 0) const SizedBox(height: 8),
-                // Equal-height cells keep every label's baseline on one
-                // line across the row even when a wrapped name grows its
-                // tile.
                 IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -421,11 +415,6 @@ class _CodexViewState extends State<CodexView> {
     );
   }
 
-  // Tile labels may wrap at spaces but never split a word, so the column
-  // count is capped by the widest single word the grid has to paint. At the
-  // default text scale the artboard's four-column row always fits (longest
-  // word ≈ 50px inside an ≈ 80px tile); at large scales the count falls to
-  // whatever width keeps every word whole — down to a single column.
   int _tileColumns(double maxWidth, List<String> labels) {
     final scaler = MediaQuery.textScalerOf(context);
     if (scaler.scale(10) <= 15) return 4;
@@ -441,7 +430,6 @@ class _CodexViewState extends State<CodexView> {
         if (painter.width > widest) widest = painter.width;
       }
     }
-    // Tile inner width ≈ tile width − 12 (label horizontal padding and slack).
     const gap = 8;
     final tile = widest + 14;
     return ((maxWidth + gap) / (tile + gap)).floor().clamp(1, 4);
@@ -463,8 +451,6 @@ class _CodexViewState extends State<CodexView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // The name gets the panel's full width: beside the sprite column
-            // a long caps title can only wrap mid-word at large text scales.
             Text(
               t.label.toUpperCase(),
               style: OrionTypography.readout(
@@ -806,8 +792,6 @@ class _CodexViewState extends State<CodexView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Caps like the tower detail — also keeps the uppercase headline
-            // from colliding with the tile label's exact-text search hits.
             Text(
               e.label.toUpperCase(),
               style: OrionTypography.readout(
@@ -1043,9 +1027,6 @@ class _CodexTabState extends State<_CodexTab> {
       focusNode: _focusNode,
       onTap: widget.onTap,
       borderRadius: BorderRadius.circular(10),
-      // The InkWell's focus boundary already publishes focus state and the
-      // tap action; the tab's own flags merge into that single node so the
-      // cell announces as one segmented-control button.
       child: Semantics(
         button: true,
         selected: widget.selected,
@@ -1056,8 +1037,6 @@ class _CodexTabState extends State<_CodexTab> {
             decoration: BoxDecoration(
               gradient: widget.selected ? orionSecondaryFill : null,
               borderRadius: BorderRadius.circular(10),
-              // The InkWell's own ink sits under this opaque decoration, so
-              // keyboard focus gets its own painted ring inside the cell.
               border: focused
                   ? Border.all(color: uiTheme.systemCyan, width: 1.5)
                   : null,
@@ -1168,8 +1147,6 @@ class _CodexTileState extends State<_CodexTile> {
                       ),
                     ),
                   ),
-                // Keyboard focus needs its own painted ring — InkWell ink is
-                // hidden beneath the tile's opaque surface fill.
                 if (focused)
                   Positioned.fill(
                     child: DecoratedBox(
@@ -1188,8 +1165,6 @@ class _CodexTileState extends State<_CodexTile> {
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // The wave badge lives in layout flow above the sprite so
-                      // it can never paint over the art or the label.
                       Align(
                         alignment: Alignment.centerRight,
                         child: Text(
@@ -1268,8 +1243,6 @@ class _EnemyTileState extends State<_EnemyTile> {
     final uiTheme = OrionUiTheme.of(context);
     final entry = widget.entry;
     final focused = _focusNode.hasFocus;
-    // Trait indicator art the atlas already carries; swarm and heavy return
-    // null and leave no pip.
     final traitArts = [
       for (final tr in entry.traits) OrionArt.trait(tr),
     ].nonNulls.toList();
@@ -1332,9 +1305,6 @@ class _EnemyTileState extends State<_EnemyTile> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       Center(
-                        // No enemy art exists in the atlas, so the tile reuses
-                        // the drone threat sprites the wave preview already
-                        // selects by trait (heavy vs basic).
                         child: OrionAtlasSprite(
                           art: OrionArt.previewGroup(
                             WavePreviewGroup(
