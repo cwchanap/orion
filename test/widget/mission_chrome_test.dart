@@ -5,6 +5,7 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
@@ -355,6 +356,75 @@ void main() {
           'clearance should be tight: if the counter now sits far '
           'above the CTA the scroll overshot and hid content',
     );
+  });
+
+  for (final scale in [2.0, 3.0]) {
+    testWidgets(
+      'compact build controls keep Start readable at ${scale}x text',
+      (tester) async {
+        await loadRealFonts(withMaterialIcons: false);
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          chromeHost(
+            commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+            textScaler: TextScaler.linear(scale),
+          ),
+        );
+        await tester.pumpAndSettle();
+        final label = tester.renderObject<RenderParagraph>(find.text('START'));
+        expect(
+          label.getBoxesForSelection(
+            const TextSelection(baseOffset: 0, extentOffset: 5),
+          ),
+          hasLength(1),
+        );
+        expect(label.didExceedMaxLines, isFalse);
+        final start = tester.getRect(find.byTooltip('Start Wave'));
+        expect(
+          start.contains(tester.getRect(find.text('START')).topLeft),
+          isTrue,
+        );
+        expect(
+          start.contains(tester.getRect(find.text('START')).bottomRight),
+          isTrue,
+        );
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('foundry boss wave shows its composition before scanning', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final stage = OrionCampaign.stageById('asteroid-foundry');
+    final wave = stage.waves.last;
+    final preview = GameBalance.wavePreview(
+      wave: wave,
+      waveNumber: stage.waves.length,
+      missionWaveTotal: stage.waves.length,
+      unlockedTowerTypes: TowerType.values,
+      effectiveClearBonus: wave.clearBonus,
+    );
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: preview)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('BOSS'), findsOneWidget);
+    expect(find.text('ARMORED'), findsOneWidget);
+    expect(find.text('x1'), findsOneWidget);
+    expect(find.text('x10'), findsOneWidget);
+    for (final label in ['BOSS', 'ARMORED', 'x1', 'x10']) {
+      final rect = tester.getRect(find.text(label));
+      expect(rect.left, greaterThanOrEqualTo(0));
+      expect(rect.right, lessThanOrEqualTo(360));
+    }
   });
 
   testWidgets('mission actions render their labels fully at product width', (

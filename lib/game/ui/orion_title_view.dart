@@ -134,7 +134,7 @@ class OrionTitleView extends StatelessWidget {
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
-                            'v0.0 // COMMAND DECK',
+                            'ORION // COMMAND DECK',
                             maxLines: 1,
                             style: OrionTypography.microLabel(
                               size: 10,

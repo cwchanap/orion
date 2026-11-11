@@ -187,6 +187,7 @@ class _WorldMapViewState extends State<WorldMapView> {
                         hasChallengeBadge:
                             widget.campaignModifiers?.hasChallengeBadge == true,
                         feedback: _effectiveFeedback,
+                        showScrollCue: _hasMoreBelow,
                       ),
                     ],
                   ),
@@ -324,55 +325,7 @@ class _WorldMapViewState extends State<WorldMapView> {
                           ),
                         ),
                       );
-                      return Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          scroll,
-                          if (_hasMoreBelow)
-                            Positioned(
-                              bottom: 6,
-                              right: 18,
-                              child: IgnorePointer(
-                                child: ExcludeSemantics(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: uiTheme.hullBlack,
-                                      border: Border.all(
-                                        color: uiTheme.frameSteel,
-                                      ),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Text(
-                                            'SWIPE UP FOR MISSION',
-                                            textScaler: MediaQuery.textScalerOf(
-                                              context,
-                                            ).clamp(maxScaleFactor: 1.3),
-                                            style: OrionTypography.microLabel(
-                                              color: uiTheme.textMuted,
-                                            ),
-                                          ),
-                                          Icon(
-                                            Icons.keyboard_double_arrow_down,
-                                            size: 16,
-                                            color: uiTheme.systemCyan,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                        ],
-                      );
+                      return scroll;
                     },
                   ),
                 ),
@@ -489,6 +442,7 @@ class _SectorHeader extends StatelessWidget {
     required this.fullySecured,
     required this.hasChallengeBadge,
     required this.feedback,
+    this.showScrollCue = false,
   });
 
   final bool showTitle;
@@ -500,6 +454,7 @@ class _SectorHeader extends StatelessWidget {
   final bool fullySecured;
   final bool hasChallengeBadge;
   final String? feedback;
+  final bool showScrollCue;
 
   @override
   Widget build(BuildContext context) {
@@ -622,9 +577,8 @@ class _SectorHeader extends StatelessWidget {
         const SizedBox(height: 4),
         SizedBox(
           height: 16,
-          child: feedback == null
-              ? null
-              : Row(
+          child: feedback != null
+              ? Row(
                   children: [
                     Icon(
                       Icons.sensors,
@@ -651,7 +605,30 @@ class _SectorHeader extends StatelessWidget {
                       ),
                     ),
                   ],
-                ),
+                )
+              : showScrollCue
+              ? ExcludeSemantics(
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.keyboard_double_arrow_down,
+                        size: 15,
+                        color: uiTheme.systemCyan,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        'SWIPE UP FOR MISSION',
+                        textScaler: MediaQuery.textScalerOf(
+                          context,
+                        ).clamp(maxScaleFactor: 1.3),
+                        style: OrionTypography.microLabel(
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : null,
         ),
       ],
     );

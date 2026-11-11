@@ -252,51 +252,102 @@ class IdleCommandBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: LayoutBuilder(
         builder: (context, constraints) {
-          // Preserve the three 48dp pacing targets before using spare space
-          // for a visible summary beside the existing scanner.
-          final summaryWidth = showIntel
-              ? (constraints.maxWidth - 152 - 48 - actionWidth - 16).clamp(
-                  0.0,
-                  48.0,
-                )
-              : 0.0;
-          return Row(
-            children: [
-              Expanded(
-                child: MissionPacingControls(
+          final Widget controls;
+          if (showReactor && MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+            controls = Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                MissionPacingControls(
                   snapshot: snapshot,
                   onTogglePause: onTogglePause,
                   onSpeedSelected: onSpeedSelected,
                   onToggleAutoStart: onToggleAutoStart,
                 ),
-              ),
-              if (nextWaveIntel != null) ...[
-                const SizedBox(width: 8),
-                nextWaveIntel!,
-              ],
-              if (summaryWidth >= 22)
-                SizedBox(
-                  width: summaryWidth,
-                  child: _IncomingSummary(preview: preview!),
-                ),
-              if (showReactor) ...[
-                const SizedBox(width: 8),
-                AnimatedSwitcher(
-                  key: const ValueKey('idle-command-reactor-transition'),
-                  duration: orionMotionDuration(
-                    context,
-                    const Duration(milliseconds: 160),
-                  ),
-                  layoutBuilder: (currentChild, previousChildren) =>
-                      currentChild ?? const SizedBox.shrink(),
-                  child: _reactorPill(
-                    reactorLabel: reactorLabel,
-                    tooltip: reactorLabel,
-                    width: actionWidth,
-                    label: 'START',
-                  ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    if (nextWaveIntel != null) ...[
+                      nextWaveIntel!,
+                      const SizedBox(width: 8),
+                    ],
+                    if (showIntel) ...[
+                      SizedBox(
+                        width: 48,
+                        child: _IncomingSummary(preview: preview),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                    Expanded(
+                      child: _reactorPill(
+                        reactorLabel: reactorLabel,
+                        tooltip: reactorLabel,
+                        width: double.infinity,
+                        label: 'START',
+                      ),
+                    ),
+                  ],
                 ),
               ],
+            );
+          } else {
+            // Preserve the three 48dp pacing targets before using spare space
+            // for a visible summary beside the existing scanner.
+            final summaryWidth = showIntel
+                ? (constraints.maxWidth - 152 - 48 - actionWidth - 16).clamp(
+                    0.0,
+                    48.0,
+                  )
+                : 0.0;
+            controls = Row(
+              children: [
+                Expanded(
+                  child: MissionPacingControls(
+                    snapshot: snapshot,
+                    onTogglePause: onTogglePause,
+                    onSpeedSelected: onSpeedSelected,
+                    onToggleAutoStart: onToggleAutoStart,
+                  ),
+                ),
+                if (nextWaveIntel != null) ...[
+                  const SizedBox(width: 8),
+                  nextWaveIntel!,
+                ],
+                if (summaryWidth >= 22)
+                  SizedBox(
+                    width: summaryWidth,
+                    child: _IncomingSummary(preview: preview!),
+                  ),
+                if (showReactor) ...[
+                  const SizedBox(width: 8),
+                  AnimatedSwitcher(
+                    key: const ValueKey('idle-command-reactor-transition'),
+                    duration: orionMotionDuration(
+                      context,
+                      const Duration(milliseconds: 160),
+                    ),
+                    layoutBuilder: (currentChild, previousChildren) =>
+                        currentChild ?? const SizedBox.shrink(),
+                    child: _reactorPill(
+                      reactorLabel: reactorLabel,
+                      tooltip: reactorLabel,
+                      width: actionWidth,
+                      label: 'START',
+                    ),
+                  ),
+                ],
+              ],
+            );
+          }
+          return Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              controls,
+              if (showIntel)
+                _IncomingComposition(
+                  key: ValueKey('incoming-composition-${preview.waveNumber}'),
+                  preview: preview,
+                ),
             ],
           );
         },
@@ -337,6 +388,90 @@ class IdleCommandBar extends StatelessWidget {
     return KeyedSubtree(
       key: ValueKey(reactorLabel),
       child: KeyedSubtree(key: waveGuideAnchorKey, child: pill),
+    );
+  }
+}
+
+class _IncomingComposition extends StatefulWidget {
+  const _IncomingComposition({super.key, required this.preview});
+
+  final WavePreview preview;
+
+  @override
+  State<_IncomingComposition> createState() => _IncomingCompositionState();
+}
+
+class _IncomingCompositionState extends State<_IncomingComposition> {
+  final _scrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = OrionUiTheme.of(context);
+    final bosses = widget.preview.bossGroups.toSet();
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Scrollbar(
+        controller: _scrollController,
+        thumbVisibility: true,
+        child: SingleChildScrollView(
+          controller: _scrollController,
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(bottom: 6),
+          child: Row(
+            children: [
+              Text(
+                'INCOMING',
+                style: OrionTypography.microLabel(color: theme.textMuted),
+              ),
+              if (bosses.isNotEmpty) ...[
+                const SizedBox(width: 8),
+                Text(
+                  'BOSS',
+                  style: OrionTypography.microLabel(color: theme.warningOrange),
+                ),
+              ],
+              for (final trait in widget.preview.traits) ...[
+                const SizedBox(width: 8),
+                Text(
+                  trait.label.toUpperCase(),
+                  style: OrionTypography.microLabel(color: theme.warningOrange),
+                ),
+              ],
+              for (final group in widget.preview.groups) ...[
+                const SizedBox(width: 8),
+                Semantics(
+                  label:
+                      '${group.enemyCount} ${group.label}'
+                      '${bosses.contains(group) ? ', boss' : ''}',
+                  excludeSemantics: true,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      OrionAtlasSprite(
+                        art: OrionArt.previewGroup(group),
+                        size: const Size.square(22),
+                      ),
+                      Text(
+                        'x${group.enemyCount}',
+                        style: OrionTypography.readout(
+                          size: 12,
+                          color: theme.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

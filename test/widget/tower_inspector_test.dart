@@ -618,6 +618,74 @@ void main() {
       matching: find.textContaining(text, findRichText: true),
     );
 
+    testWidgets('compact level-one upgrade preview is not cut off', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+      );
+      await pumpInspector(
+        tester,
+        tower: tower,
+        stats: GameBalance.towerStats(TowerType.laser, level: 1),
+        upgradeStats: GameBalance.towerStats(TowerType.laser, level: 2),
+      );
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(
+        find.byKey(const ValueKey('tower-inspector-scroll')),
+      );
+      final lastStat = tester.getRect(
+        inPreview('tower-upgrade-preview', 'SHOT SPEED 420 → 460'),
+      );
+      expect(lastStat.bottom, lessThanOrEqualTo(viewport.bottom));
+      expect(find.byKey(const ValueKey('tower-upgrade')), findsOneWidget);
+    });
+
+    testWidgets('overflowing inspector exposes a persistent scroll indicator', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      const tower = PlacedTower(
+        id: 7,
+        type: TowerType.laser,
+        position: GridPosition(2, 3),
+        level: 2,
+      );
+      await pumpInspector(
+        tester,
+        tower: tower,
+        stats: GameBalance.towerStats(TowerType.laser, level: 2),
+        specializationStats: {
+          for (final specialization in GameBalance.specializationsFor(
+            TowerType.laser,
+          ))
+            specialization: GameBalance.towerStats(
+              TowerType.laser,
+              level: 3,
+              specialization: specialization,
+            ),
+        },
+      );
+      await tester.pumpAndSettle();
+      final scroll = tester.state<ScrollableState>(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-inspector-scroll')),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      expect(scroll.position.maxScrollExtent, greaterThan(0));
+      final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+      expect(scrollbar.thumbVisibility, isTrue);
+    });
+
     testWidgets('level 1 shows changed stats beside the upgrade action', (
       tester,
     ) async {
