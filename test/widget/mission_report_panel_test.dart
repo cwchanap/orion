@@ -8,6 +8,7 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
+import 'package:orion/game/ui/orion_typography.dart';
 import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
@@ -322,6 +323,161 @@ void main() {
         _expectNoOverflow(collect.errors);
         _expectWholeStageName(tester);
       });
+    }
+  });
+
+  group('painted title enlargement (fix round 2)', () {
+    for (final stage in const [
+      'Outpost Alpha',
+      'Asteroid Foundry',
+      'Singularity Core',
+    ]) {
+      for (final size in const [Size(360, 640), Size(390, 844)]) {
+        final label = '${size.width.toInt()}x${size.height.toInt()}';
+        final slug = stage.toLowerCase().replaceAll(' ', '-');
+        testWidgets('$stage title honours 3x scale with whole words, '
+            '$label', (tester) async {
+          await tester.runAsync(loadRealFonts);
+          final boundary = GlobalKey();
+          final collect = _collectLayoutErrors();
+          final content = _victoryContent(
+            MissionSaveState.saved,
+            stageName: stage,
+          );
+          await _pumpScaledReport(
+            tester,
+            content,
+            size,
+            textScale: 1,
+            boundary: boundary,
+            onReplay: () {},
+            onReturnToMap: () {},
+          );
+          final at1 = _paintedTitleWords(tester, stage);
+          await _pumpScaledReport(
+            tester,
+            content,
+            size,
+            textScale: 3,
+            boundary: boundary,
+            capture: 'task6-fix2-title-$slug-$label-3x.png',
+            onReplay: () {},
+            onReturnToMap: () {},
+          );
+          final at3 = _paintedTitleWords(tester, stage);
+          collect.restore();
+          _expectNoOverflow(collect.errors);
+          expect(
+            find.byWidgetPredicate(
+              (widget) =>
+                  widget is Semantics && widget.properties.label == stage,
+            ),
+            findsOneWidget,
+            reason: 'exactly one accessible stage title',
+          );
+          final contentWidth = size.width - 40;
+          for (final word in stage.toUpperCase().split(' ')) {
+            final rects1 = at1[word]!;
+            final rects3 = at3[word]!;
+            expect(
+              rects3.map((rect) => rect.top).toSet().length,
+              1,
+              reason: '"$word" splits across painted lines',
+            );
+            final bounds1 = _unionRects(rects1);
+            final bounds3 = _unionRects(rects3);
+            expect(
+              bounds3.left >= -0.5 && bounds3.right <= size.width + 0.5,
+              isTrue,
+              reason: '"$word" clips painted horizontal bounds: $bounds3',
+            );
+            expect(
+              bounds3.height,
+              greaterThanOrEqualTo(bounds1.height - 0.5),
+              reason: '"$word" paints smaller at 3x than at 1x',
+            );
+            if (_wordFitsAtScale(word, contentWidth, 3)) {
+              expect(
+                bounds3.height,
+                greaterThanOrEqualTo(bounds1.height * 1.8),
+                reason: '"$word" fits at 3x yet is not substantially enlarged',
+              );
+            }
+          }
+          expect(
+            _unionRects(at3.values.expand((rects) => rects)).height,
+            greaterThanOrEqualTo(
+              _unionRects(at1.values.expand((rects) => rects)).height * 1.6,
+            ),
+            reason: 'painted title height does not grow substantially at 3x',
+          );
+          await tester.ensureVisible(find.text('MISSION DETAILS'));
+          await tester.pumpAndSettle();
+          final footer = tester.getRect(
+            find.ancestor(
+              of: find.text('World Map'),
+              matching: find.byType(OrionPrimaryButton),
+            ),
+          );
+          expect(
+            footer.top >= 0 && footer.bottom <= size.height,
+            isTrue,
+            reason: 'pinned footer left the viewport after scrolling',
+          );
+        });
+      }
+    }
+  });
+
+  testWidgets('3x scrolled details captures for failed and saved states', (
+    tester,
+  ) async {
+    await tester.runAsync(loadRealFonts);
+    for (final (name, content) in [
+      ('failed', _victoryContent(MissionSaveState.failed)),
+      ('saved', _victoryContent(MissionSaveState.saved)),
+    ]) {
+      final collect = _collectLayoutErrors();
+      final boundary = GlobalKey();
+      await _pumpScaledReport(
+        tester,
+        content,
+        const Size(360, 640),
+        boundary: boundary,
+        capture: 'task6-fix2-$name-360x640-3x-top.png',
+        onReplay: () {},
+        onReturnToMap: () {},
+        onRetrySave: () {},
+      );
+      await tester.ensureVisible(find.text('WAVES'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundary,
+          'task6-fix2-$name-360x640-3x-stats.png',
+        ),
+      );
+      await tester.ensureVisible(find.text('MISSION DETAILS'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundary,
+          'task6-fix2-$name-360x640-3x-scrolled.png',
+        ),
+      );
+      collect.restore();
+      _expectNoOverflow(collect.errors);
+      final footer = tester.getRect(
+        find.ancestor(
+          of: find.text(name == 'failed' ? 'World Map (Unsaved)' : 'World Map'),
+          matching: find.byType(OrionPrimaryButton),
+        ),
+      );
+      expect(
+        footer.top >= 0 && footer.bottom <= 640,
+        isTrue,
+        reason: '$name pinned footer left the viewport after scrolling',
+      );
     }
   });
 
@@ -1461,6 +1617,7 @@ GameSnapshot _syntheticSnapshot({
   int? missionWaveTotal = 8,
   int wavesCleared = 0,
   GamePhase phase = GamePhase.won,
+  String stageName = 'Outpost Alpha',
 }) {
   return commandDeckSnapshot(
     phase: phase,
@@ -1471,7 +1628,7 @@ GameSnapshot _syntheticSnapshot({
     missionWaveTotal: missionWaveTotal,
     wavesCleared: wavesCleared,
     stageId: 'outpost-alpha',
-    stageName: 'Outpost Alpha',
+    stageName: stageName,
     stageLabel: 'Alpha',
     unlockedTowerTypes: const [TowerType.laser, TowerType.cryo],
     acquiredRunModules: modules,
@@ -1482,9 +1639,10 @@ MissionReportContent _victoryContent(
   MissionSaveState saveState, {
   List<RunModuleId> moduleIds = const [],
   MissionRewardFact? reward,
+  String stageName = 'Outpost Alpha',
 }) {
   return projectVictoryReport(
-    snapshot: _syntheticSnapshot(modules: moduleIds),
+    snapshot: _syntheticSnapshot(modules: moduleIds, stageName: stageName),
     result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     priorSavedResult: null,
     saveState: saveState,
@@ -1576,6 +1734,7 @@ Future<void> _pumpScaledReport(
   Size viewSize, {
   double textScale = 3,
   String? capture,
+  GlobalKey? boundary,
   VoidCallback? onReplay,
   VoidCallback? onReturnToMap,
   VoidCallback? onRetrySave,
@@ -1583,7 +1742,7 @@ Future<void> _pumpScaledReport(
   tester.view.physicalSize = viewSize;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
-  final boundary = GlobalKey();
+  final boundaryKey = boundary ?? GlobalKey();
   await tester.pumpWidget(
     MaterialApp(
       debugShowCheckedModeBanner: false,
@@ -1596,7 +1755,7 @@ Future<void> _pumpScaledReport(
       ),
       home: Scaffold(
         body: RepaintBoundary(
-          key: boundary,
+          key: boundaryKey,
           child: MissionReportPanel(
             content: content,
             onReplay: onReplay,
@@ -1609,7 +1768,7 @@ Future<void> _pumpScaledReport(
   );
   await tester.pumpAndSettle();
   if (capture != null) {
-    await tester.runAsync(() => captureReactorRimFixture(boundary, capture));
+    await tester.runAsync(() => captureReactorRimFixture(boundaryKey, capture));
   }
 }
 
@@ -1638,7 +1797,12 @@ void _expectWholeWords(WidgetTester tester, String text) {
 }
 
 void _expectWholeStageName(WidgetTester tester) {
-  _expectWholeWords(tester, 'OUTPOST ALPHA');
+  if (find.text('OUTPOST ALPHA').evaluate().isNotEmpty) {
+    _expectWholeWords(tester, 'OUTPOST ALPHA');
+  } else {
+    _expectWholeWords(tester, 'OUTPOST');
+    _expectWholeWords(tester, 'ALPHA');
+  }
 }
 
 void _expectWholeMedalCriteria(WidgetTester tester) {
@@ -1651,6 +1815,65 @@ void _expectWholeStats(WidgetTester tester, List<String> texts) {
   for (final text in texts) {
     _expectWholeWords(tester, text);
   }
+}
+
+Map<String, List<Rect>> _paintedTitleWords(
+  WidgetTester tester,
+  String stageName,
+) {
+  final upper = stageName.toUpperCase();
+  final words = upper.split(' ');
+  final result = <String, List<Rect>>{};
+  final joined = find.text(upper);
+  if (joined.evaluate().isNotEmpty) {
+    final paragraph = tester.renderObject<RenderParagraph>(joined);
+    var cursor = 0;
+    for (final word in words) {
+      final start = upper.indexOf(word, cursor);
+      result[word] = _paintedWordRects(paragraph, start, start + word.length);
+      cursor = start + word.length;
+    }
+  } else {
+    for (final word in words) {
+      final finder = find.text(word);
+      expect(finder, findsOneWidget, reason: 'title word "$word" missing');
+      final paragraph = tester.renderObject<RenderParagraph>(finder);
+      result[word] = _paintedWordRects(paragraph, 0, word.length);
+    }
+  }
+  return result;
+}
+
+List<Rect> _paintedWordRects(RenderParagraph paragraph, int start, int end) {
+  return [
+    for (final box in paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: start, extentOffset: end),
+    ))
+      Rect.fromPoints(
+        paragraph.localToGlobal(Offset(box.left, box.top)),
+        paragraph.localToGlobal(Offset(box.right, box.bottom)),
+      ),
+  ];
+}
+
+Rect _unionRects(Iterable<Rect> rects) {
+  var union = rects.first;
+  for (final rect in rects.skip(1)) {
+    union = union.expandToInclude(rect);
+  }
+  return union;
+}
+
+bool _wordFitsAtScale(String word, double maxWidth, double scale) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: word,
+      style: OrionTypography.title(color: const Color(0xFFFFFFFF), size: 26),
+    ),
+    textDirection: TextDirection.ltr,
+    textScaler: TextScaler.linear(scale),
+  )..layout();
+  return painter.width <= maxWidth;
 }
 
 Future<void> _expectAction(

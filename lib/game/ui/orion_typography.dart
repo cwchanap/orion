@@ -123,18 +123,62 @@ class OrionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = OrionTypography.title(color: color, size: size);
+    final resolved = shadows == null ? style : style.copyWith(shadows: shadows);
+    final plainTitle = Text(
+      data.toUpperCase(),
+      textAlign: textAlign,
+      maxLines: maxLines,
+      overflow: overflow,
+      textScaler: textScaler,
+      style: resolved,
+    );
+    Widget title = plainTitle;
+    if (maxLines == null && overflow == null) {
+      title = LayoutBuilder(
+        builder: (context, constraints) {
+          if (constraints.maxWidth.isInfinite) {
+            return plainTitle;
+          }
+          final scaler = textScaler ?? MediaQuery.textScalerOf(context);
+          final words = data.toUpperCase().split(' ');
+          final allFit = words.every((word) {
+            final painter = TextPainter(
+              text: TextSpan(text: word, style: resolved),
+              textDirection: Directionality.of(context),
+              textScaler: scaler,
+            )..layout();
+            return painter.width <= constraints.maxWidth;
+          });
+          if (allFit) {
+            return plainTitle;
+          }
+          final space = TextPainter(
+            text: TextSpan(text: ' ', style: resolved),
+            textDirection: Directionality.of(context),
+            textScaler: scaler,
+          )..layout();
+          return Wrap(
+            alignment: switch (textAlign) {
+              TextAlign.right || TextAlign.end => WrapAlignment.end,
+              TextAlign.center => WrapAlignment.center,
+              _ => WrapAlignment.start,
+            },
+            spacing: space.width,
+            runSpacing: 4,
+            children: [
+              for (final word in words)
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(word, textScaler: scaler, style: resolved),
+                ),
+            ],
+          );
+        },
+      );
+    }
     return Semantics(
       label: data,
-      child: ExcludeSemantics(
-        child: Text(
-          data.toUpperCase(),
-          textAlign: textAlign,
-          maxLines: maxLines,
-          overflow: overflow,
-          textScaler: textScaler,
-          style: shadows == null ? style : style.copyWith(shadows: shadows),
-        ),
-      ),
+      child: ExcludeSemantics(child: title),
     );
   }
 }
