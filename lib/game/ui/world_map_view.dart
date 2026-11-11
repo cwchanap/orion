@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
 import '../campaign/stage_definition.dart';
+import '../campaign/stage_modifier_metadata.dart';
 import '../campaign/stage_reward_label.dart';
 import '../rules/stage_modifier_rules.dart';
 import 'campaign_presentation.dart';
@@ -64,6 +65,31 @@ class WorldMapView extends StatefulWidget {
 }
 
 class _WorldMapViewState extends State<WorldMapView> {
+  final ScrollController _plotController = ScrollController();
+  bool _hasMoreBelow = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _plotController.addListener(_updateScrollCue);
+  }
+
+  void _updateScrollCue() {
+    if (!_plotController.hasClients) return;
+    final hasMore = _plotController.position.extentAfter > 1;
+    if (hasMore != _hasMoreBelow) {
+      setState(() => _hasMoreBelow = hasMore);
+    }
+  }
+
+  @override
+  void dispose() {
+    _plotController
+      ..removeListener(_updateScrollCue)
+      ..dispose();
+    super.dispose();
+  }
+
   bool get _isBusy => widget.isSavingProgress || widget.isResetting;
 
   String? get _effectiveFeedback {
@@ -228,63 +254,124 @@ class _WorldMapViewState extends State<WorldMapView> {
                             ),
                         ],
                       );
-                      return ScrollConfiguration(
-                        behavior: const _NoOverscrollBehavior(),
-                        child: SingleChildScrollView(
-                          key: const ValueKey('world-map-plot-viewport'),
-                          primary: false,
-                          physics: const ClampingScrollPhysics(),
-                          child: ConstrainedBox(
-                            constraints: BoxConstraints(
-                              minHeight: regionSize.height,
-                            ),
-                            child: Column(
-                              // Slack between plot and footer is invisible
-                              // over the backdrop; pinning them apart keeps
-                              // the footer at the region's bottom edge when
-                              // nothing scrolls, and at the end of the
-                              // scrollable content when it does.
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                SizedBox(
-                                  height: plotHeight,
-                                  child: contentWidth > regionSize.width
-                                      ? SingleChildScrollView(
-                                          scrollDirection: Axis.horizontal,
-                                          child: SizedBox(
-                                            width: contentWidth,
-                                            height: plotHeight,
-                                            child: plotLayers,
-                                          ),
-                                        )
-                                      : plotLayers,
-                                ),
-                                Container(
-                                  constraints: const BoxConstraints(
-                                    minHeight: 150,
+                      final scroll = NotificationListener<ScrollMetricsNotification>(
+                        onNotification: (notification) {
+                          if (notification.depth == 0) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) _updateScrollCue();
+                            });
+                          }
+                          return false;
+                        },
+                        child: ScrollConfiguration(
+                          behavior: const _NoOverscrollBehavior(),
+                          child: SingleChildScrollView(
+                            key: const ValueKey('world-map-plot-viewport'),
+                            controller: _plotController,
+                            primary: false,
+                            physics: const ClampingScrollPhysics(),
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                minHeight: regionSize.height,
+                              ),
+                              child: Column(
+                                // Slack between plot and footer is invisible
+                                // over the backdrop; pinning them apart keeps
+                                // the footer at the region's bottom edge when
+                                // nothing scrolls, and at the end of the
+                                // scrollable content when it does.
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  SizedBox(
+                                    height: plotHeight,
+                                    child: contentWidth > regionSize.width
+                                        ? SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: SizedBox(
+                                              width: contentWidth,
+                                              height: plotHeight,
+                                              child: plotLayers,
+                                            ),
+                                          )
+                                        : plotLayers,
                                   ),
-                                  alignment: Alignment.bottomCenter,
-                                  padding: const EdgeInsets.fromLTRB(
-                                    14,
-                                    12,
-                                    14,
-                                    10,
+                                  Container(
+                                    constraints: const BoxConstraints(
+                                      minHeight: 150,
+                                    ),
+                                    alignment: Alignment.bottomCenter,
+                                    padding: const EdgeInsets.fromLTRB(
+                                      14,
+                                      12,
+                                      14,
+                                      10,
+                                    ),
+                                    child: _MissionDestination(
+                                      stages: widget.stages,
+                                      progress: widget.progress,
+                                      campaignModifiers:
+                                          widget.campaignModifiers ??
+                                          CampaignModifiers.empty,
+                                      onStageSelected: _isBusy
+                                          ? null
+                                          : widget.onStageSelected,
+                                    ),
                                   ),
-                                  child: _MissionDestination(
-                                    stages: widget.stages,
-                                    progress: widget.progress,
-                                    campaignModifiers:
-                                        widget.campaignModifiers ??
-                                        CampaignModifiers.empty,
-                                    onStageSelected: _isBusy
-                                        ? null
-                                        : widget.onStageSelected,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
                         ),
+                      );
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          scroll,
+                          if (_hasMoreBelow)
+                            Positioned(
+                              bottom: 6,
+                              right: 18,
+                              child: IgnorePointer(
+                                child: ExcludeSemantics(
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: uiTheme.hullBlack,
+                                      border: Border.all(
+                                        color: uiTheme.frameSteel,
+                                      ),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'SWIPE UP FOR MISSION',
+                                            textScaler: MediaQuery.textScalerOf(
+                                              context,
+                                            ).clamp(maxScaleFactor: 1.3),
+                                            style: OrionTypography.microLabel(
+                                              color: uiTheme.textMuted,
+                                            ),
+                                          ),
+                                          Icon(
+                                            Icons.keyboard_double_arrow_down,
+                                            size: 16,
+                                            color: uiTheme.systemCyan,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       );
                     },
                   ),
@@ -1235,6 +1322,9 @@ class _MissionDestination extends StatelessWidget {
       campaignAdjustedBaseHealth: campaignModifiers.adjustedStartingBaseHealth,
       stageModifiers: stage.modifiers,
     );
+    final modifierTitles = stage.modifiers
+        .map((modifier) => StageModifierMetadata.forModifier(modifier).title)
+        .toList(growable: false);
     return OrionSurface(
       role: OrionSurfaceRole.sheet,
       padding: const EdgeInsets.all(14),
@@ -1244,7 +1334,8 @@ class _MissionDestination extends StatelessWidget {
         label: 'Briefing for ${stage.name}',
         hint:
             '$qualifier. ${stage.waves.length} waves. '
-            '$startingHull starting hull.',
+            '$startingHull starting hull.'
+            '${modifierTitles.isEmpty ? '' : ' Modifiers: ${modifierTitles.join(', ')}.'}',
         enabled: onStageSelected != null,
         excludeSemantics: true,
         onTap: onStageSelected == null ? null : () => onStageSelected!(stage),
@@ -1345,6 +1436,25 @@ class _MissionDestination extends StatelessWidget {
                             ],
                           ),
                         ),
+                        if (modifierTitles.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 4,
+                            children: [
+                              for (final title in modifierTitles)
+                                Text(
+                                  title,
+                                  textScaler: MediaQuery.textScalerOf(
+                                    context,
+                                  ).clamp(maxScaleFactor: 1.3),
+                                  style: OrionTypography.microLabel(
+                                    color: theme.warningOrange,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),

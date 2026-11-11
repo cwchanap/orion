@@ -7,6 +7,7 @@ import '../util/format.dart';
 import 'orion_surface.dart';
 import 'hold_to_salvage.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_primary_button.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'tower_stat_scale.dart';
@@ -483,20 +484,30 @@ class _ProgressionFooter extends StatelessWidget {
     final stats = snapshot.selectedTowerStats;
     final Widget? action;
     if (tower.isMaxLevel) {
-      action = FilledButton.icon(
+      action = OrionPrimaryButton(
         onPressed: null,
-        icon: const Icon(Icons.check, size: 17),
-        label: const Text('Max'),
+        icon: Icons.check,
+        label: 'Max',
+        height: 48,
       );
     } else if (tower.canUpgrade) {
       final cost = stats?.upgradeCost;
       final enabled =
           canMutate && stats != null && snapshot.gold >= stats.upgradeCost;
-      action = FilledButton.icon(
+      final label = cost == null ? 'Upgrade' : 'Upgrade $cost';
+      action = Semantics(
         key: const ValueKey('tower-upgrade'),
-        onPressed: enabled ? onUpgrade : null,
-        icon: const Icon(Icons.upgrade, size: 17),
-        label: Text(cost == null ? 'Upgrade' : 'Upgrade $cost'),
+        button: true,
+        enabled: enabled,
+        label: label,
+        onTap: enabled ? onUpgrade : null,
+        excludeSemantics: true,
+        child: OrionPrimaryButton(
+          onPressed: enabled ? onUpgrade : null,
+          icon: Icons.upgrade,
+          label: label,
+          height: 48,
+        ),
       );
     } else {
       action = null;
@@ -511,7 +522,7 @@ class _ProgressionFooter extends StatelessWidget {
           top: BorderSide(color: uiTheme.frameSteel.withValues(alpha: .6)),
         ),
       ),
-      child: Align(alignment: Alignment.centerLeft, child: action),
+      child: action,
     );
   }
 }

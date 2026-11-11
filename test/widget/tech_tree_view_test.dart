@@ -8,6 +8,7 @@ import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
+import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_menu_shell.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
@@ -19,6 +20,46 @@ import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
+  testWidgets('node effects name their gameplay benefit without clipping', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(loadRealFonts);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3)),
+          child: child!,
+        ),
+        home: TechTreeView(
+          progress: CampaignProgress(),
+          techTree: CampaignTechTree(),
+          onPurchase: (_) {},
+        ),
+      ),
+    );
+    for (final label in [
+      '+${GameBalance.solarCapacitorsGoldBonus} GOLD',
+      '+${GameBalance.hardenedCoreHealthBonus} HULL',
+      '+${(GameBalance.salvageCrewClearBonusFraction * 100).round()}% WAVE GOLD',
+      '+${(GameBalance.laserTuningDamageFraction * 100).round()}% DAMAGE',
+      '+${GameBalance.cryoCoolantSlowDurationBonus.toStringAsFixed(1)}s SLOW',
+    ]) {
+      final text = find.text(label);
+      expect(text, findsOneWidget);
+      expect(
+        tester.renderObject<RenderParagraph>(text).didExceedMaxLines,
+        isFalse,
+        reason: label,
+      );
+    }
+  });
+
   testWidgets('research header identifies the campaign upgrades lab', (
     tester,
   ) async {

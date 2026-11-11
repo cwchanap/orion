@@ -9,6 +9,7 @@ import 'package:orion/game/assets/game_tower_variety_sheet.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tower_inspector.dart';
@@ -79,6 +80,17 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Upgrade ${resolved.upgradeCost}'), findsOneWidget);
+      expect(
+        tester
+            .widget<OrionPrimaryButton>(
+              find.descendant(
+                of: find.byKey(const ValueKey('tower-upgrade')),
+                matching: find.byType(OrionPrimaryButton),
+              ),
+            )
+            .variant,
+        OrionButtonVariant.primary,
+      );
       expect(find.text('+41'), findsOneWidget);
       await tester.tap(find.byKey(const ValueKey('tower-upgrade')));
       await tester.tap(find.byKey(const ValueKey('tower-target-strongest')));

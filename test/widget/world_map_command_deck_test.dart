@@ -105,6 +105,62 @@ Widget buildMap({
 }
 
 void main() {
+  testWidgets('compact map hints at the destination until scrolled', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      buildMap(progress: CampaignProgress(), inShell: true),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('SWIPE UP FOR MISSION'), findsOneWidget);
+    await tester.drag(
+      find.byKey(const ValueKey('world-map-plot-viewport')),
+      const Offset(0, -600),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('SWIPE UP FOR MISSION'), findsNothing);
+    expect(find.text('Deploy'), findsOneWidget);
+  });
+
+  testWidgets('destination displays and announces stage modifiers', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await tester.pumpWidget(
+        buildMap(
+          progress: CampaignProgress(
+            bestResultsByStageId: const {
+              'outpost-alpha': StageResult(
+                medal: StageMedal.gold,
+                bestBaseHealth: 20,
+              ),
+              'nebula-relay': StageResult(
+                medal: StageMedal.silver,
+                bestBaseHealth: 15,
+              ),
+            },
+          ),
+        ),
+      );
+      expect(find.text('Reinforced Armor'), findsOneWidget);
+      expect(
+        tester
+            .getSemantics(
+              find.bySemanticsLabel('Briefing for Asteroid Foundry'),
+            )
+            .hint,
+        contains('Modifiers: Reinforced Armor'),
+      );
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets(
     'enlarged map title and feedback stay clear of utility controls',
     (tester) async {

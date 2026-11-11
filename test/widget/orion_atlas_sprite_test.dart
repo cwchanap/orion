@@ -140,6 +140,34 @@ void main() {
     expect(OrionArt.trait(EnemyTrait.heavy), isNull);
   });
 
+  testWidgets('stage artwork is filtered without softening sprite sheets', (
+    tester,
+  ) async {
+    final stage = OrionArt.stage(
+      OrionCampaign.stageOne,
+      crop: OrionStageArtCrop.mapSquare,
+    );
+    Flame.images.add(stage.fileName, await _blankImage(400, 400));
+    OrionArtDescriptor.resetSpriteCache();
+    addTearDown(Flame.images.clearCache);
+    addTearDown(OrionArtDescriptor.resetSpriteCache);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: OrionAtlasSprite(art: stage, size: const Size(80, 80)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<SpriteWidget>(find.byType(SpriteWidget))
+          .paint
+          ?.filterQuality,
+      FilterQuality.medium,
+    );
+    expect(OrionArt.tower(TowerType.laser).filterQuality, FilterQuality.none);
+  });
+
   testWidgets('renders through SpriteWidget and reuses the canonical future', (
     tester,
   ) async {
