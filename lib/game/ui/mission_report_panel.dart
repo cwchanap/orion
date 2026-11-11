@@ -264,14 +264,11 @@ class _ReportBody extends StatelessWidget {
           ),
           const SizedBox(height: 8),
         ],
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: OrionTitle(
-            content.stageName,
-            size: 26,
-            textAlign: TextAlign.center,
-            color: uiTheme.textPrimary,
-          ),
+        OrionTitle(
+          content.stageName,
+          size: 26,
+          textAlign: TextAlign.center,
+          color: uiTheme.textPrimary,
         ),
         const SizedBox(height: 14),
         Stack(
