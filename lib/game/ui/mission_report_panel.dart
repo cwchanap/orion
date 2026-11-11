@@ -376,7 +376,7 @@ class _OutcomeRibbon extends StatelessWidget {
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              Color.lerp(accent, Colors.white, .15)!,
+              Color.lerp(accent, uiTheme.textPrimary, .15)!,
               Color.lerp(accent, uiTheme.voidBlack, .25)!,
             ],
           ),

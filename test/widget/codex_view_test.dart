@@ -1,7 +1,13 @@
+import 'dart:ui' show Tristate;
+
+import 'package:flame/flame.dart';
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/semantics.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
@@ -11,7 +17,12 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/codex_view.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_menu_shell.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/tower_stat_scale.dart';
+import 'package:orion/game/util/format.dart';
+
+import '../support/reactor_rim_visual_capture.dart';
+import '../support/real_fonts.dart';
 
 void main() {
   testWidgets('renders the four section chips and Towers content by default', (
@@ -331,6 +342,7 @@ void main() {
   // ---------------------------------------------------------------------
 
   Widget codexHost({TextScaler? textScaler}) => MaterialApp(
+    debugShowCheckedModeBanner: false,
     builder: textScaler == null
         ? null
         : (context, child) => MediaQuery(
@@ -1166,5 +1178,899 @@ void main() {
       );
       expect(find.byKey(const ValueKey('codex-tile-laser')), findsNothing);
     });
+  });
+
+  group('command-deck fix round 1 (HPA-699)', () {
+    final detail = find.byKey(const ValueKey('codex-detail'));
+
+    Finder tileFinder(TowerType type) =>
+        find.byKey(ValueKey('codex-tile-${type.name}'));
+
+    Finder enemyTileFinder(EnemyArchetype archetype) =>
+        find.byKey(ValueKey('codex-enemy-tile-${archetype.name}'));
+
+    bool breaksInsideWord(
+      WidgetTester tester,
+      Finder textFinder,
+      TextScaler scaler,
+    ) {
+      final widget = tester.widget<Text>(textFinder);
+      final painter = TextPainter(
+        text: TextSpan(text: widget.data ?? '', style: widget.style),
+        textAlign: widget.textAlign ?? TextAlign.start,
+        textDirection: TextDirection.ltr,
+        textScaler: scaler,
+        maxLines: widget.maxLines,
+        ellipsis: widget.overflow == TextOverflow.ellipsis ? '…' : null,
+        locale: widget.locale,
+        strutStyle: widget.strutStyle,
+        textHeightBehavior: widget.textHeightBehavior,
+        textWidthBasis: widget.textWidthBasis ?? TextWidthBasis.parent,
+      )..layout(maxWidth: tester.getSize(textFinder).width);
+      final text = painter.text!.toPlainText();
+      var offset = 0;
+      while (offset < text.length) {
+        final line = painter.getLineBoundary(TextPosition(offset: offset));
+        if (line.isCollapsed || line.end >= text.length) {
+          return false;
+        }
+        final endsCleanly = text[line.end - 1] == ' ' || text[line.end] == ' ';
+        if (!endsCleanly) {
+          return true;
+        }
+        offset = line.end;
+      }
+      return false;
+    }
+
+    List<(String, String)> expectedSpecialtyLines(TowerStats s) {
+      final out = <(String, String)>[];
+      if (s.splashRadius > 0) {
+        out.add(('Splash radius', number(s.splashRadius)));
+      }
+      if (s.slowMultiplier < 1) {
+        out.add((
+          'Slow',
+          '${percent(1 - s.slowMultiplier)} for ${number(s.slowDuration)}s',
+        ));
+      }
+      if (s.pierceCount > 0) out.add(('Pierce', '${s.pierceCount}'));
+      if (s.chainCount > 0) {
+        out.add(('Chain', '${s.chainCount} (range ${number(s.chainRange)})'));
+      }
+      if (s.corrosionDamagePerSecond > 0) {
+        out.add((
+          'Corrosion',
+          '${number(s.corrosionDamagePerSecond)}/s for ${number(s.corrosionDuration)}s',
+        ));
+      }
+      if (s.armorShred > 0) out.add(('Armor shred', percent(s.armorShred)));
+      if (s.fieldRadius > 0) {
+        out.add((
+          'Field',
+          'r ${number(s.fieldRadius)}, ${number(s.fieldDuration)}s, tick ${cadence(s.fieldTickInterval)}s',
+        ));
+      }
+      if (s.droneCount > 0) {
+        out.add((
+          'Drones',
+          '${s.droneCount} (cap ${s.maxActiveDrones}), ${number(s.droneDamage)} dmg / ${cadence(s.droneAttackInterval)}s, ${number(s.droneLifetime)}s life',
+        ));
+      }
+      if (s.shieldDamageMultiplier != 1) {
+        out.add(('vs Shield', 'x${decimal(s.shieldDamageMultiplier)}'));
+      }
+      if (s.armorDamageMultiplier != 1) {
+        out.add(('vs Armored', 'x${decimal(s.armorDamageMultiplier)}'));
+      }
+      if (s.slowedDamageMultiplier != 1) {
+        out.add(('vs Slowed', 'x${number(s.slowedDamageMultiplier)}'));
+      }
+      return out;
+    }
+
+    Set<String> paintSignature(WidgetTester tester, Finder scope) {
+      final signature = <String>{};
+      final decorated = find.descendant(
+        of: scope,
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is DecoratedBox ||
+              widget is Container ||
+              widget is Material ||
+              widget is PhysicalModel ||
+              widget is PhysicalShape ||
+              widget is Ink ||
+              widget is CustomPaint ||
+              widget is Opacity ||
+              widget is AnimatedOpacity,
+        ),
+      );
+      for (final element in decorated.evaluate()) {
+        final widget = element.widget;
+        if (widget is DecoratedBox) {
+          signature.add('DecoratedBox:${widget.decoration}');
+        } else if (widget is Container) {
+          signature.add('Container:${widget.decoration}:${widget.color}');
+        } else if (widget is Material) {
+          signature.add(
+            'Material:${widget.type}:${widget.color}:${widget.elevation}:'
+            '${widget.borderRadius}:${widget.shape}',
+          );
+        } else if (widget is PhysicalModel) {
+          signature.add(
+            'PhysicalModel:${widget.color}:${widget.elevation}:${widget.shape}',
+          );
+        } else if (widget is PhysicalShape) {
+          signature.add('PhysicalShape:${widget.color}:${widget.elevation}');
+        } else if (widget is Ink) {
+          signature.add('Ink:${widget.decoration}');
+        } else if (widget is CustomPaint) {
+          signature.add(
+            'CustomPaint:${widget.painter?.runtimeType}:'
+            '${widget.foregroundPainter?.runtimeType}',
+          );
+        } else if (widget is Opacity) {
+          signature.add('Opacity:${widget.opacity}');
+        } else if (widget is AnimatedOpacity) {
+          signature.add('AnimatedOpacity');
+        }
+      }
+      return signature;
+    }
+
+    for (final size in const [Size(390, 844), Size(360, 640)]) {
+      for (final scaler in const [TextScaler.linear(1), TextScaler.linear(3)]) {
+        testWidgets('every tile paints its full label at ${size.width.toInt()}x'
+            '${size.height.toInt()} text x${scaler.scale(1).round()}', (
+          tester,
+        ) async {
+          await loadRealFonts();
+          await pumpCodex(tester, size: size, textScaler: scaler);
+          for (final entry in CodexData.towers) {
+            final tile = tileFinder(entry.type);
+            await tester.scrollUntilVisible(
+              tile,
+              400,
+              scrollable: find.byType(Scrollable).first,
+            );
+            final label = find.descendant(
+              of: tile,
+              matching: find.text(entry.label),
+            );
+            expect(
+              label,
+              findsOneWidget,
+              reason: '${entry.type.name} tile must show its label',
+            );
+            final paragraph = tester.renderObject<RenderParagraph>(label);
+            expect(
+              paragraph.didExceedMaxLines,
+              isFalse,
+              reason:
+                  '${entry.label} truncates inside its fixed-column tile '
+                  'at $size text x${scaler.scale(1).round()} — the full '
+                  'tower name must paint',
+            );
+            expect(
+              breaksInsideWord(tester, label, scaler),
+              isFalse,
+              reason:
+                  '${entry.label} breaks mid-word inside its tile at $size '
+                  'text x${scaler.scale(1).round()} — the name may wrap at '
+                  'spaces or grow the tile, never split a word',
+            );
+          }
+        });
+
+        testWidgets('the wave badge never overlaps tile art or label at '
+            '${size.width.toInt()}x${size.height.toInt()} text '
+            'x${scaler.scale(1).round()}', (tester) async {
+          await loadRealFonts();
+          await pumpCodex(tester, size: size, textScaler: scaler);
+          for (final entry in CodexData.towers) {
+            final tile = tileFinder(entry.type);
+            await tester.scrollUntilVisible(
+              tile,
+              400,
+              scrollable: find.byType(Scrollable).first,
+            );
+            final tileRect = tester.getRect(tile);
+            final badge = find.descendant(
+              of: tile,
+              matching: find.text('W${entry.unlockWave}'),
+            );
+            expect(
+              badge,
+              findsOneWidget,
+              reason: '${entry.type.name} tile must show its W-wave badge',
+            );
+            final badgeRect = tester.getRect(badge);
+            expect(
+              tileRect.contains(badgeRect.topLeft) &&
+                  tileRect.contains(badgeRect.bottomRight),
+              isTrue,
+              reason:
+                  'the W badge must stay inside the ${entry.type.name} '
+                  'tile bounds',
+            );
+            final sprites = find.descendant(
+              of: tile,
+              matching: find.byType(OrionAtlasSprite),
+            );
+            expect(sprites, findsWidgets);
+            for (final element in sprites.evaluate()) {
+              final spriteRect = tester.getRect(find.byWidget(element.widget));
+              expect(
+                badgeRect.overlaps(spriteRect),
+                isFalse,
+                reason:
+                    'the W badge overlays sprite space on ${entry.type.name} '
+                    'at $size text x${scaler.scale(1).round()}',
+              );
+            }
+            final label = find.descendant(
+              of: tile,
+              matching: find.text(entry.label),
+            );
+            expect(label, findsOneWidget);
+            expect(
+              badgeRect.overlaps(tester.getRect(label)),
+              isFalse,
+              reason: 'the W badge overlaps the ${entry.label} tile label',
+            );
+          }
+        });
+      }
+
+      testWidgets('the detail header keeps its title and cost whole at '
+          '${size.width.toInt()}x${size.height.toInt()} 3x text', (
+        tester,
+      ) async {
+        await loadRealFonts();
+        await pumpCodex(
+          tester,
+          size: size,
+          textScaler: const TextScaler.linear(3),
+        );
+        for (final entry in CodexData.towers) {
+          await tester.enterText(searchField, entry.label);
+          await tester.pump();
+          expect(
+            tileFinder(entry.type),
+            findsOneWidget,
+            reason: 'search must isolate the ${entry.type.name} tile',
+          );
+          expect(detail, findsOneWidget);
+          final title = find.descendant(
+            of: detail,
+            matching: find.text(entry.label.toUpperCase()),
+          );
+          expect(
+            title,
+            findsOneWidget,
+            reason: 'the detail must headline ${entry.label}',
+          );
+          expect(
+            tester.renderObject<RenderParagraph>(title).didExceedMaxLines,
+            isFalse,
+            reason: 'the ${entry.label} detail title truncates at $size 3x',
+          );
+          expect(
+            breaksInsideWord(tester, title, const TextScaler.linear(3)),
+            isFalse,
+            reason:
+                'the ${entry.label} detail header splits the name '
+                'mid-word at $size 3x — wrap at spaces only',
+          );
+          final cost = find.descendant(
+            of: detail,
+            matching: find.text('${entry.baseStats.cost}g'),
+          );
+          expect(
+            cost,
+            findsOneWidget,
+            reason: 'the detail must show the real ${entry.label} cost',
+          );
+          expect(
+            tester.renderObject<RenderParagraph>(cost).didExceedMaxLines,
+            isFalse,
+            reason: 'the ${entry.label} detail cost truncates at $size 3x',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+
+      testWidgets('every tab keeps a 48dp target at '
+          '${size.width.toInt()}x${size.height.toInt()}', (tester) async {
+        final handle = tester.ensureSemantics();
+        try {
+          await pumpCodex(tester, size: size);
+          for (final label in const [
+            'Towers',
+            'Enemies',
+            'Effects',
+            'Stages',
+          ]) {
+            final rect = tester.getRect(find.bySemanticsLabel(label));
+            expect(
+              rect.width,
+              greaterThanOrEqualTo(48),
+              reason:
+                  '$label is ${rect.width.toStringAsFixed(1)}dp wide — '
+                  'below the 48dp touch floor at $size',
+            );
+            expect(
+              rect.height,
+              greaterThanOrEqualTo(48),
+              reason:
+                  '$label is ${rect.height.toStringAsFixed(1)}dp tall — '
+                  'below the 48dp touch floor at $size',
+            );
+          }
+        } finally {
+          handle.dispose();
+        }
+      });
+    }
+
+    testWidgets('the tabs announce selection, grouping and focus support', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await pumpCodex(tester, size: const Size(390, 844));
+        final missing = <String>[];
+        for (final label in const ['Towers', 'Enemies', 'Effects', 'Stages']) {
+          final node = tester.getSemantics(find.bySemanticsLabel(label));
+          final data = node.getSemanticsData();
+          if (data.flagsCollection.isButton != true) {
+            missing.add('$label: button flag');
+          }
+          if (data.flagsCollection.isInMutuallyExclusiveGroup != true) {
+            missing.add('$label: mutually-exclusive-group flag');
+          }
+          if (data.flagsCollection.isFocused == Tristate.none) {
+            missing.add('$label: focus state');
+          }
+          if (data.actions & SemanticsAction.tap.index == 0) {
+            missing.add('$label: tap action');
+          }
+        }
+        if (tester
+                .getSemantics(find.bySemanticsLabel('Towers'))
+                .getSemanticsData()
+                .flagsCollection
+                .isSelected !=
+            Tristate.isTrue) {
+          missing.add('Towers: selected state (active tab)');
+        }
+        if (tester
+                .getSemantics(find.bySemanticsLabel('Enemies'))
+                .getSemanticsData()
+                .flagsCollection
+                .isSelected !=
+            Tristate.isFalse) {
+          missing.add('Enemies: unselected state (inactive tab)');
+        }
+        expect(
+          missing,
+          isEmpty,
+          reason:
+              'each tab is one cell of a segmented control — it must '
+              'announce as a button, publish focus and selection state, '
+              'declare the mutually-exclusive group and offer a tap '
+              'action: $missing',
+        );
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('semantics activation switches each tab section', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await pumpCodex(tester, size: const Size(390, 844));
+        final sectionChecks = <String, Pattern>{
+          'Towers': 'Pulse Laser',
+          'Enemies': 'Standard fodder',
+          'Effects': 'Chain Lightning',
+          'Stages': 'Outpost Alpha',
+        };
+        for (final entry in sectionChecks.entries) {
+          final node = tester.getSemantics(find.bySemanticsLabel(entry.key));
+          node.owner!.performAction(node.id, SemanticsAction.tap);
+          await tester.pump();
+          expect(
+            find.textContaining(entry.value),
+            findsWidgets,
+            reason:
+                'semantics-activating the ${entry.key} tab must show the '
+                '${entry.key} section',
+          );
+        }
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('keyboard focus and activation reach the tabs', (tester) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await pumpCodex(tester, size: const Size(390, 844));
+
+        Future<void> tabTo(String label) async {
+          for (var i = 0; i < 10; i += 1) {
+            final focused =
+                tester
+                    .getSemantics(find.bySemanticsLabel(label))
+                    .getSemanticsData()
+                    .flagsCollection
+                    .isFocused ==
+                Tristate.isTrue;
+            if (focused) return;
+            await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+            await tester.pump();
+          }
+          fail('$label never received keyboard focus within 10 Tab presses');
+        }
+
+        await tabTo('Enemies');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+        await tester.pump();
+        expect(
+          find.byKey(const PageStorageKey<int>(1)),
+          findsOneWidget,
+          reason: 'Enter must activate the focused Enemies tab',
+        );
+
+        await tabTo('Effects');
+        await tester.sendKeyEvent(LogicalKeyboardKey.space);
+        await tester.pump();
+        expect(
+          find.byKey(const PageStorageKey<int>(2)),
+          findsOneWidget,
+          reason: 'Space must activate the focused Effects tab',
+        );
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('a focused tab paints a visible treatment', (tester) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await pumpCodex(tester, size: const Size(390, 844));
+        final tabScope = find.ancestor(
+          of: find.text('Enemies'),
+          matching: find.byType(InkWell),
+        );
+        expect(tabScope, findsOneWidget);
+        final before = paintSignature(tester, tabScope);
+        for (var i = 0; i < 10; i += 1) {
+          final focused =
+              tester
+                  .getSemantics(find.bySemanticsLabel('Enemies'))
+                  .getSemanticsData()
+                  .flagsCollection
+                  .isFocused ==
+              Tristate.isTrue;
+          if (focused) break;
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+        }
+        expect(
+          tester
+              .getSemantics(find.bySemanticsLabel('Enemies'))
+              .getSemanticsData()
+              .flagsCollection
+              .isFocused,
+          Tristate.isTrue,
+          reason: 'the Enemies tab must hold keyboard focus for this check',
+        );
+        await tester.pump();
+        expect(
+          paintSignature(tester, tabScope),
+          isNot(equals(before)),
+          reason:
+              'keyboard focus changes nothing the eye can see — the tab '
+              'needs a focus-driven border, overlay or tint INSIDE its own '
+              'paint, since InkWell ink hides behind the opaque rail fill',
+        );
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('a focused tile paints a visible treatment', (tester) async {
+      final handle = tester.ensureSemantics();
+      try {
+        await pumpCodex(tester, size: const Size(390, 844));
+        final tile = tileFinder(TowerType.rocket);
+        final before = paintSignature(tester, tile);
+        var focused = false;
+        for (var i = 0; i < 14; i += 1) {
+          focused =
+              tester
+                  .getSemantics(
+                    find.byWidgetPredicate(
+                      (widget) =>
+                          widget is Semantics &&
+                          widget.properties.label == 'Rocket',
+                    ),
+                  )
+                  .getSemanticsData()
+                  .flagsCollection
+                  .isFocused ==
+              Tristate.isTrue;
+          if (focused) break;
+          await tester.sendKeyEvent(LogicalKeyboardKey.tab);
+          await tester.pump();
+        }
+        expect(
+          focused,
+          isTrue,
+          reason:
+              'the Rocket tile never received keyboard focus within 14 '
+              'Tab presses — tiles must be focusable targets',
+        );
+        await tester.pump();
+        expect(
+          paintSignature(tester, tile),
+          isNot(equals(before)),
+          reason:
+              'keyboard focus changes nothing the eye can see on the '
+              'Rocket tile — it needs a focus-driven border, overlay or '
+              'tint INSIDE its own paint, since InkWell ink hides behind '
+              'the opaque tile surface',
+        );
+      } finally {
+        handle.dispose();
+      }
+    });
+
+    testWidgets('the detail reports upgrade cost and every base specialty '
+        'metric', (tester) async {
+      await pumpCodex(tester);
+      final missing = <String>[];
+      for (final entry in CodexData.towers) {
+        await tester.enterText(searchField, entry.label);
+        await tester.pump();
+        expect(
+          tileFinder(entry.type),
+          findsOneWidget,
+          reason: 'search must isolate the ${entry.type.name} tile',
+        );
+        expect(detail, findsOneWidget);
+        if (find
+            .descendant(of: detail, matching: find.text('Upgrade cost'))
+            .evaluate()
+            .isEmpty) {
+          missing.add('${entry.label}: "Upgrade cost" label');
+        }
+        if (find
+            .descendant(of: detail, matching: find.text('${entry.upgradeCost}'))
+            .evaluate()
+            .isEmpty) {
+          missing.add(
+            '${entry.label}: "${entry.upgradeCost}" upgrade cost value',
+          );
+        }
+        for (final (key, value) in expectedSpecialtyLines(entry.baseStats)) {
+          if (find
+              .descendant(of: detail, matching: find.text(key))
+              .evaluate()
+              .isEmpty) {
+            missing.add('${entry.label}: "$key" metric label');
+          }
+          if (find
+              .descendant(of: detail, matching: find.text(value))
+              .evaluate()
+              .isEmpty) {
+            missing.add('${entry.label}: "$value" ($key) metric value');
+          }
+        }
+      }
+      expect(
+        missing,
+        isEmpty,
+        reason:
+            'the tower detail dropped metrics the base codex card showed — '
+            'upgradeCost and the live _specialtyLines values from '
+            'GameBalance: $missing',
+      );
+    });
+
+    testWidgets('enemy entries render as sprite tiles backed by existing art', (
+      tester,
+    ) async {
+      await pumpCodex(tester);
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+      for (final entry in CodexData.enemies) {
+        final tile = enemyTileFinder(entry.archetype);
+        expect(
+          tile,
+          findsOneWidget,
+          reason: 'the ${entry.archetype.name} enemy tile is missing',
+        );
+        expect(
+          find.descendant(of: tile, matching: find.text(entry.label)),
+          findsOneWidget,
+          reason: 'the ${entry.label} tile must show its label',
+        );
+        final expectedArt = entry.traits.contains(EnemyTrait.heavy)
+            ? 'Heavy drone threat'
+            : 'Drone threat';
+        expect(
+          find.descendant(
+            of: tile,
+            matching: find.byWidgetPredicate(
+              (widget) =>
+                  widget is OrionAtlasSprite &&
+                  widget.art.semanticLabel == expectedArt,
+            ),
+          ),
+          findsWidgets,
+          reason:
+              'the ${entry.label} tile must present the existing '
+              '"$expectedArt" sprite — no enemy art was added, so reuse the '
+              'drone atlas sprites already in OrionArt',
+        );
+        for (final trait in entry.traits) {
+          final traitArt = OrionArt.trait(trait);
+          if (traitArt == null) continue;
+          expect(
+            find.descendant(
+              of: tile,
+              matching: find.byWidgetPredicate(
+                (widget) =>
+                    widget is OrionAtlasSprite &&
+                    widget.art.semanticLabel == traitArt.semanticLabel,
+              ),
+            ),
+            findsWidgets,
+            reason:
+                'the ${entry.label} tile must show the existing '
+                '"${traitArt.semanticLabel}" indicator art',
+          );
+        }
+      }
+    });
+
+    testWidgets('tapping an enemy tile shows its detail with real stats', (
+      tester,
+    ) async {
+      await pumpCodex(tester);
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+      final enemyDetail = find.byKey(const ValueKey('codex-enemy-detail'));
+      for (final archetype in [
+        EnemyArchetype.swarmDrone,
+        EnemyArchetype.armoredHeavyDrone,
+      ]) {
+        final entry = CodexData.enemies.firstWhere(
+          (e) => e.archetype == archetype,
+        );
+        await tester.tap(enemyTileFinder(archetype));
+        await tester.pump();
+        expect(
+          enemyDetail,
+          findsOneWidget,
+          reason: 'selecting ${entry.label} must open an enemy detail',
+        );
+        expect(
+          find.descendant(
+            of: enemyDetail,
+            matching: find.text(entry.roleDescription),
+          ),
+          findsOneWidget,
+        );
+        for (final (key, value) in <(String, String)>[
+          ('Health', number(entry.stats.health)),
+          ('Speed', number(entry.stats.speed)),
+          ('Base damage', '${entry.stats.baseDamage}'),
+          ('Reward', '${entry.stats.goldReward}g'),
+          if (entry.stats.shieldHealth > 0)
+            ('Shield', number(entry.stats.shieldHealth)),
+          if (entry.stats.armorReduction > 0)
+            ('Armor', percent(entry.stats.armorReduction)),
+          if (entry.stats.regenPerSecond > 0)
+            ('Regen', '${number(entry.stats.regenPerSecond)}/s'),
+        ]) {
+          expect(
+            find.descendant(of: enemyDetail, matching: find.text(key)),
+            findsWidgets,
+            reason: 'the ${entry.label} detail lost its "$key" row',
+          );
+          expect(
+            find.descendant(of: enemyDetail, matching: find.text(value)),
+            findsWidgets,
+            reason:
+                'the ${entry.label} detail must report the live "$key" '
+                'value "$value" from GameBalance',
+          );
+        }
+        for (final trait in entry.traits) {
+          expect(
+            find.descendant(of: enemyDetail, matching: find.text(trait.label)),
+            findsWidgets,
+            reason:
+                'the ${entry.label} detail must keep its '
+                '"${trait.label}" trait badge',
+          );
+        }
+      }
+    });
+
+    testWidgets('searching filters enemy tiles and keeps the trait glossary', (
+      tester,
+    ) async {
+      await pumpCodex(tester);
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(searchField, 'bruiser');
+      await tester.pump();
+      expect(
+        enemyTileFinder(EnemyArchetype.heavyDrone),
+        findsOneWidget,
+        reason: 'a role-sentence match must surface the enemy tile',
+      );
+      expect(
+        enemyTileFinder(EnemyArchetype.basicDrone),
+        findsNothing,
+        reason: 'non-matching enemy tiles must filter out',
+      );
+      expect(
+        find.text(EnemyTrait.swarm.label),
+        findsNothing,
+        reason: 'the trait glossary filters with the same query',
+      );
+
+      await tester.enterText(searchField, 'large numbers');
+      await tester.pump();
+      expect(
+        find.text(EnemyTrait.swarm.label),
+        findsOneWidget,
+        reason: 'a trait-effect match must keep the trait glossary row',
+      );
+      expect(
+        find.text(EnemyTrait.heavy.label),
+        findsNothing,
+        reason: 'non-matching trait glossary rows filter out',
+      );
+      expect(
+        enemyTileFinder(EnemyArchetype.swarmDrone),
+        findsNothing,
+        reason:
+            'a trait-only match must not resurrect enemy tiles — the '
+            'glossary and the tiles filter independently',
+      );
+    });
+
+    testWidgets(
+      'enemy tiles and detail live inside the retained section list',
+      (tester) async {
+        await pumpCodex(tester);
+        await tester.tap(find.text('Enemies'));
+        await tester.pumpAndSettle();
+        await tester.tap(enemyTileFinder(EnemyArchetype.basicDrone));
+        await tester.pump();
+        final enemyDetail = find.byKey(const ValueKey('codex-enemy-detail'));
+        expect(
+          find.ancestor(
+            of: enemyTileFinder(EnemyArchetype.basicDrone),
+            matching: find.byKey(const PageStorageKey<int>(1)),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.ancestor(
+            of: enemyDetail,
+            matching: find.byKey(const PageStorageKey<int>(1)),
+          ),
+          findsOneWidget,
+        );
+      },
+    );
+  });
+
+  testWidgets('capture codex command-deck fixtures', (tester) async {
+    await loadRealFonts();
+    OrionArtDescriptor.resetSpriteCache();
+    await tester.runAsync(() async {
+      await Flame.images.load('orion_sprite_sheet.png');
+    });
+
+    final boundaryKey = GlobalKey();
+
+    Future<void> pumpScene(Size size, {TextScaler? textScaler}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: MaterialApp(
+            debugShowCheckedModeBanner: false,
+            theme: orionThemeData,
+            builder: textScaler == null
+                ? null
+                : (context, child) => MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: textScaler),
+                    child: child!,
+                  ),
+            home: CodexView(progress: CampaignProgress(), onBack: () {}),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.runAsync(
+        () => warmSceneImages(tester.element(find.byType(CodexView)), [
+          'reactor_rim_ui/backdrops/map-room.png',
+        ]),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Future<void> tapTile(Key key) async {
+      await tester.ensureVisible(find.byKey(key));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(key));
+      await tester.pumpAndSettle();
+    }
+
+    await pumpScene(const Size(390, 844));
+    await tapTile(const ValueKey('codex-tile-laser'));
+    expect(find.byKey(const ValueKey('codex-detail')), findsOneWidget);
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-codex-towers.png'),
+    );
+
+    await pumpScene(const Size(360, 640));
+    await tapTile(const ValueKey('codex-tile-laser'));
+    await tester.runAsync(
+      () => captureReactorRimFixture(
+        boundaryKey,
+        'fixture-codex-towers-compact.png',
+      ),
+    );
+
+    await pumpScene(
+      const Size(360, 640),
+      textScaler: const TextScaler.linear(3),
+    );
+    await tapTile(const ValueKey('codex-tile-laser'));
+    await tester.runAsync(
+      () => captureReactorRimFixture(
+        boundaryKey,
+        'fixture-codex-towers-large-text.png',
+      ),
+    );
+
+    await pumpScene(const Size(390, 844));
+    await tester.tap(find.text('Enemies'));
+    await tester.pumpAndSettle();
+    await tapTile(const ValueKey('codex-enemy-tile-armoredDrone'));
+    expect(find.byKey(const ValueKey('codex-enemy-detail')), findsOneWidget);
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'fixture-codex-enemies.png'),
+    );
+
+    await pumpScene(const Size(360, 640));
+    await tester.tap(find.text('Enemies'));
+    await tester.pumpAndSettle();
+    await tapTile(const ValueKey('codex-enemy-tile-armoredDrone'));
+    await tester.runAsync(
+      () => captureReactorRimFixture(
+        boundaryKey,
+        'fixture-codex-enemies-compact.png',
+      ),
+    );
   });
 }

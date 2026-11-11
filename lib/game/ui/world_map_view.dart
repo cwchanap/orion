@@ -436,7 +436,7 @@ class _SectorHeader extends StatelessWidget {
               Icons.public,
               size: 16,
               color: uiTheme.systemCyan,
-              shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+              shadows: [Shadow(color: uiTheme.voidBlack, blurRadius: 6)],
             ),
             OrionTitle(
               'Orion Sector',
@@ -500,7 +500,7 @@ class _SectorHeader extends StatelessWidget {
                   Icons.workspace_premium,
                   size: 13,
                   color: uiTheme.creditGold,
-                  shadows: const [Shadow(color: Colors.black, blurRadius: 6)],
+                  shadows: [Shadow(color: uiTheme.voidBlack, blurRadius: 6)],
                 ),
                 const SizedBox(width: 5),
                 Expanded(
@@ -532,8 +532,8 @@ class _SectorHeader extends StatelessWidget {
                       Icons.sensors,
                       size: 13,
                       color: uiTheme.warningOrange,
-                      shadows: const [
-                        Shadow(color: Colors.black, blurRadius: 6),
+                      shadows: [
+                        Shadow(color: uiTheme.voidBlack, blurRadius: 6),
                       ],
                     ),
                     const SizedBox(width: 5),
@@ -998,13 +998,7 @@ class _StageOrb extends StatelessWidget {
       art = Stack(
         fit: StackFit.expand,
         children: [
-          ColorFiltered(
-            colorFilter: const ColorFilter.mode(
-              Colors.grey,
-              BlendMode.saturation,
-            ),
-            child: art,
-          ),
+          ColorFiltered(colorFilter: orionLockDesaturate, child: art),
           ColoredBox(color: uiTheme.voidBlack.withValues(alpha: 0.55)),
         ],
       );

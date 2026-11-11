@@ -72,6 +72,31 @@ void main() {
     );
   });
 
+  test('named palette literals stay inside orion_ui_theme.dart in game UI', () {
+    final namedLiteral = RegExp(r'\bColors\.(\w+)\b');
+    const allowed = {'transparent'};
+    final offenders = <String>[
+      for (final file in _libDartFiles())
+        if (_posixPath(file).contains('/game/ui/') &&
+            !_posixPath(file).endsWith('orion_ui_theme.dart'))
+          for (final literal
+              in namedLiteral
+                  .allMatches(file.readAsStringSync())
+                  .map((m) => m.group(1)!)
+                  .toSet()
+                  .difference(allowed))
+            '${_posixPath(file)}: Colors.$literal',
+    ]..sort();
+    expect(
+      offenders,
+      isEmpty,
+      reason:
+          'game UI consumes theme roles; a named Colors.* literal belongs '
+          'in orion_ui_theme.dart like any other raw color. Only '
+          'Colors.transparent is structural and allowed',
+    );
+  });
+
   test('no game UI label dips below the 10px floor', () {
     final tiny = RegExp(r'(fontSize|size):\s*[89][.\s,);]');
     final offenders = <String>[

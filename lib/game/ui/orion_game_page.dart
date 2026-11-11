@@ -996,7 +996,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
                       child: Stack(
                         children: [
                           ModalBarrier(
-                            color: Colors.black54,
+                            color: OrionUiTheme.of(
+                              context,
+                            ).voidBlack.withValues(alpha: .54),
                             dismissible: true,
                             onDismiss: () =>
                                 setState(() => _inspectedTowerId = null),
