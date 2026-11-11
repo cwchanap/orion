@@ -303,18 +303,11 @@ class _WorldMapBackdrop extends StatelessWidget {
       fit: StackFit.expand,
       children: [
         ColoredBox(color: uiTheme.voidBlack),
-        Image.asset(
-          'assets/images/reactor_rim_ui/backdrops/map-room.png',
-          fit: BoxFit.cover,
-          alignment: Alignment.topCenter,
-          excludeFromSemantics: true,
-          errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
-        ),
         // ponytail: square art, so any square child size cover-fits correctly;
         // recompute from the decoded image if the asset ever stops being 1:1.
         Opacity(
           key: const ValueKey('world-map-backdrop-art'),
-          opacity: 0.28,
+          opacity: 1,
           child: FittedBox(
             fit: BoxFit.cover,
             clipBehavior: Clip.hardEdge,
@@ -326,6 +319,9 @@ class _WorldMapBackdrop extends StatelessWidget {
               ),
             ),
           ),
+        ),
+        const DecoratedBox(
+          decoration: BoxDecoration(gradient: orionMapVignette),
         ),
         const DecoratedBox(
           key: ValueKey('world-map-scrim'),

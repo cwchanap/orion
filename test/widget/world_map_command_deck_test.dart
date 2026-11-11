@@ -1,4 +1,5 @@
 import 'package:flame/flame.dart';
+import 'package:flame/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,8 +91,7 @@ Widget buildMap({
         ? OrionMenuShell(
             destination: OrionMenuDestination.sectors,
             medalEarned: CampaignTechTree.totalMedalRank(progress),
-            medalTotal:
-                resolvedStages.where((stage) => stage.isMainPath).length * 3,
+            medalTotal: resolvedStages.length * 3,
             researchPoints: CampaignTechTree().unspentPoints(progress),
             navigationEnabled: !(isSavingProgress || isResetting),
             settingsEnabled: !isSavingFeedback,
@@ -560,6 +560,13 @@ void main() {
     // never stretched to the viewport aspect.
     final sprite = tester.widget<OrionAtlasSprite>(art);
     expect(sprite.size!.width, sprite.size!.height);
+    expect(
+      tester
+          .widget<Opacity>(find.byKey(const ValueKey('world-map-backdrop-art')))
+          .opacity,
+      1,
+      reason: 'The galaxy is the map background, not a faint overlay.',
+    );
     final fittedBox = tester.widget<FittedBox>(
       find.ancestor(of: art, matching: find.byType(FittedBox)).first,
     );
@@ -1865,4 +1872,79 @@ void main() {
       () => captureReactorRimFixture(boundaryKey, 'fixture-1f.png'),
     );
   });
+
+  for (final size in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('shell map capture loads its artwork at $size', (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await loadRealFonts();
+      await tester.runAsync(() async {
+        await Flame.images.load('reactor_rim_ui/backdrops/world-map.png');
+        for (final stage in OrionCampaign.stages) {
+          await Flame.images.load('reactor_rim_ui/stages/${stage.id}.png');
+          await Flame.images.load('reactor_rim_ui/crests/${stage.id}.png');
+        }
+      });
+      OrionArtDescriptor.resetSpriteCache();
+      final progress = CampaignProgress(
+        bestResultsByStageId: const {
+          'outpost-alpha': StageResult(
+            medal: StageMedal.gold,
+            bestBaseHealth: 20,
+          ),
+          'nebula-relay': StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 15,
+          ),
+        },
+      );
+      final boundaryKey = GlobalKey();
+      await tester.pumpWidget(
+        RepaintBoundary(
+          key: boundaryKey,
+          child: buildMap(progress: progress, inShell: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('world-map-backdrop')),
+          matching: find.byType(SpriteWidget),
+        ),
+        findsOneWidget,
+      );
+      for (final stage in OrionCampaign.stages) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey('sector-stage-${stage.id}')),
+            matching: find.byType(SpriteWidget),
+          ),
+          findsOneWidget,
+          reason: '${stage.name} must paint its crest in the capture.',
+        );
+      }
+      final destination = progress.recommendedStage(OrionCampaign.stages)!;
+      final preview = find.byWidgetPredicate(
+        (widget) =>
+            widget is OrionAtlasSprite &&
+            widget.art.fileName ==
+                'reactor_rim_ui/stages/${destination.id}.png',
+      );
+      expect(
+        find.descendant(of: preview, matching: find.byType(SpriteWidget)),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+
+      await tester.runAsync(
+        () => captureReactorRimFixture(
+          boundaryKey,
+          'world-map-shell-${size.width.toInt()}x${size.height.toInt()}.png',
+        ),
+      );
+    });
+  }
 }
