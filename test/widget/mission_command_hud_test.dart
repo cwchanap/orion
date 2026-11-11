@@ -1,6 +1,8 @@
 import 'dart:ui' show SemanticsFlags, Tristate;
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -378,6 +380,50 @@ void main() {
         _ => uiTheme.dangerRed,
       });
     }
+  });
+
+  testWidgets('hull readout paints segmented blocks over the exact fill', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final boundaryKey = GlobalKey();
+    await tester.pumpWidget(
+      RepaintBoundary(
+        key: boundaryKey,
+        child: MaterialApp(
+          home: MissionStatusHud(snapshot: commandDeckSnapshot()),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final track = tester.getRect(
+      find.byKey(const ValueKey('base-health-fill-track')),
+    );
+    final boundary =
+        boundaryKey.currentContext!.findRenderObject()!
+            as RenderRepaintBoundary;
+    final pixels = await tester.runAsync(() async {
+      final image = await boundary.toImage();
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      image.dispose();
+      return data!;
+    });
+    int brightness(double dx) {
+      final x = (track.left + dx).round();
+      final y = track.center.dy.round();
+      final offset = (y * 390 + x) * 4;
+      return pixels!.getUint8(offset) +
+          pixels.getUint8(offset + 1) +
+          pixels.getUint8(offset + 2);
+    }
+
+    expect(
+      brightness(7),
+      lessThan(brightness(4) ~/ 2),
+      reason: 'A dark divider should separate the first two hull blocks.',
+    );
   });
 
   testWidgets('status HUD is one framed top bar holding all three readouts', (

@@ -64,14 +64,22 @@ class OrionTitleView extends StatelessWidget {
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Column(
                       children: [
-                        SizedBox(height: constraints.maxHeight * 0.14),
+                        SizedBox(
+                          height:
+                              constraints.maxHeight *
+                              (constraints.maxHeight >= 760 ? 0.30 : 0.12),
+                        ),
                         const _TitleLockup(),
-                        const SizedBox(height: 30),
+                        SizedBox(
+                          height: constraints.maxHeight >= 760
+                              ? constraints.maxHeight * 0.13
+                              : 20,
+                        ),
                         ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 320),
+                          constraints: const BoxConstraints(maxWidth: 440),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
@@ -92,7 +100,8 @@ class OrionTitleView extends StatelessWidget {
                                 icon: isContinueAvailable
                                     ? Icons.play_arrow_rounded
                                     : Icons.public_rounded,
-                                height: 54,
+                                height: 64,
+                                labelSize: 16,
                                 onPressed: busy
                                     ? null
                                     : (isContinueAvailable
@@ -152,18 +161,12 @@ class _TitleBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: FittedBox(
-        fit: BoxFit.cover,
-        clipBehavior: Clip.hardEdge,
-        child: SizedBox.square(
-          dimension: 640,
-          child: OrionAtlasSprite(
-            art: OrionArt.scene(OrionSceneArt.commandCenter),
-            size: const Size.square(640),
-          ),
-        ),
-      ),
+    return Image.asset(
+      'assets/images/reactor_rim_ui/backdrops/command-center.png',
+      fit: BoxFit.cover,
+      alignment: Alignment.topCenter,
+      excludeFromSemantics: true,
+      errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
     );
   }
 }
@@ -184,32 +187,6 @@ class _TitleLockup extends StatelessWidget {
       children: [
         FittedBox(
           fit: BoxFit.scaleDown,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              ExcludeSemantics(
-                child: OrionTitle(
-                  'Orion',
-                  size: 84,
-                  color: Colors.transparent,
-                  shadows: [glow, lip],
-                ),
-              ),
-              ShaderMask(
-                blendMode: BlendMode.srcIn,
-                shaderCallback: orionWordmarkFill.createShader,
-                child: OrionTitle(
-                  'Orion',
-                  size: 84,
-                  color: uiTheme.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        FittedBox(
-          fit: BoxFit.scaleDown,
           child: Text(
             'SPACE TOWER DEFENSE',
             maxLines: 1,
@@ -228,12 +205,42 @@ class _TitleLockup extends StatelessWidget {
                 ),
           ),
         ),
+        const SizedBox(height: 8),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 340),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                ExcludeSemantics(
+                  child: OrionTitle(
+                    'Orion',
+                    size: 84,
+                    color: Colors.transparent,
+                    shadows: [glow, lip],
+                  ),
+                ),
+                ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: orionWordmarkFill.createShader,
+                  child: OrionTitle(
+                    'Orion',
+                    size: 84,
+                    color: uiTheme.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 10),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Flexible(child: _HoldRule()),
             Flexible(
+              flex: 3,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 child: FittedBox(
@@ -305,59 +312,70 @@ class _CampaignCard extends StatelessWidget {
         : campaignComplete
         ? 'All sectors cleared'
         : (stage?.name ?? 'No missions');
+    final showArt =
+        stage != null && MediaQuery.textScalerOf(context).scale(1) <= 1.5;
     return OrionSurface(
       key: const ValueKey('title-campaign-card'),
       role: OrionSurfaceRole.sheet,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          if (showArt) ...[
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: OrionAtlasSprite(
+                art: OrionArt.stage(stage, crop: OrionStageArtCrop.mapSquare),
+                size: const Size.square(56),
+              ),
+            ),
+            const SizedBox(width: 14),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  campaignComplete
+                      ? 'CAMPAIGN COMPLETE'
+                      : 'CAMPAIGN / NEXT MISSION',
+                  maxLines: 2,
+                  style: OrionTypography.microLabel(
+                    size: 10,
+                    color: uiTheme.textMuted,
+                  ).copyWith(letterSpacing: 1.2),
+                ),
+                const SizedBox(height: 4),
+                OrionTitle(
+                  headline,
+                  color: uiTheme.textPrimary,
+                  size: 18,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
                   children: [
-                    Text(
-                      campaignComplete ? 'CAMPAIGN COMPLETE' : 'DEPLOYMENT',
-                      style: OrionTypography.microLabel(
-                        size: 11,
-                        color: uiTheme.systemCyan,
-                      ).copyWith(letterSpacing: 2.6),
+                    OrionResourceChip(
+                      icon: Icons.emoji_events,
+                      iconColor: uiTheme.creditGold,
+                      count: '$medalEarned/$medalTotal',
+                      semanticsLabel:
+                          '$medalEarned of $medalTotal campaign medals',
                     ),
-                    const SizedBox(height: 6),
-                    OrionTitle(
-                      headline,
-                      color: uiTheme.textPrimary,
-                      size: 22,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
+                    OrionResourceChip(
+                      icon: Icons.diamond_rounded,
+                      iconColor: uiTheme.systemViolet,
+                      count: '$researchPoints',
+                      semanticsLabel: '$researchPoints research points',
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  OrionResourceChip(
-                    icon: Icons.emoji_events,
-                    iconColor: uiTheme.creditGold,
-                    count: '$medalEarned/$medalTotal',
-                    semanticsLabel:
-                        '$medalEarned of $medalTotal campaign medals',
-                  ),
-                  const SizedBox(height: 6),
-                  OrionResourceChip(
-                    icon: Icons.diamond_rounded,
-                    iconColor: uiTheme.systemViolet,
-                    count: '$researchPoints',
-                    semanticsLabel: '$researchPoints research points',
-                  ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ],
       ),
@@ -382,35 +400,43 @@ class _ShortcutRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      alignment: WrapAlignment.center,
-      spacing: 8,
-      runSpacing: 8,
+    return Row(
       children: [
-        _GhostAction(
-          icon: Icons.public_rounded,
-          label: 'Sectors',
-          tooltip: 'Sectors',
-          onPressed: busy ? null : onOpenSectors,
+        Expanded(
+          child: _GhostAction(
+            icon: Icons.public_rounded,
+            label: 'Sectors',
+            tooltip: 'Sectors',
+            onPressed: busy ? null : onOpenSectors,
+          ),
         ),
-        _GhostAction(
-          icon: Icons.biotech_rounded,
-          label: 'R&D',
-          tooltip: 'R&D',
-          onPressed: busy ? null : onOpenResearch,
+        const SizedBox(width: 8),
+        Expanded(
+          child: _GhostAction(
+            icon: Icons.biotech_rounded,
+            label: 'R&D',
+            tooltip: 'R&D',
+            onPressed: busy ? null : onOpenResearch,
+          ),
         ),
-        _GhostAction(
-          icon: Icons.menu_book_rounded,
-          label: 'Codex',
-          tooltip: 'Codex',
-          onPressed: busy ? null : onOpenCodex,
+        const SizedBox(width: 8),
+        Expanded(
+          child: _GhostAction(
+            icon: Icons.menu_book_rounded,
+            label: 'Codex',
+            tooltip: 'Codex',
+            onPressed: busy ? null : onOpenCodex,
+          ),
         ),
-        _GhostAction(
-          icon: Icons.settings_rounded,
-          label: 'Settings',
-          tooltip: 'Settings',
-          iconOnly: true,
-          onPressed: busy ? null : onOpenSettings,
+        const SizedBox(width: 8),
+        Expanded(
+          child: _GhostAction(
+            icon: Icons.settings_rounded,
+            label: 'Settings',
+            tooltip: 'Settings',
+            iconOnly: true,
+            onPressed: busy ? null : onOpenSettings,
+          ),
         ),
       ],
     );
@@ -447,41 +473,49 @@ class _GhostAction extends StatelessWidget {
           child: InkWell(
             onTap: onPressed,
             borderRadius: BorderRadius.circular(14),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-              child: Center(
-                widthFactor: 1,
-                heightFactor: 1,
-                child: Ink(
-                  decoration: BoxDecoration(
-                    gradient: orionGhostFill,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: orionGhostEdge),
-                    boxShadow: const [
-                      BoxShadow(color: orionGhostLip, offset: Offset(0, 3)),
-                    ],
-                  ),
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(
-                      horizontal: iconOnly ? 13 : 14,
-                      vertical: 10,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(icon, size: 17, color: uiTheme.textMuted),
-                        if (!iconOnly) ...[
-                          const SizedBox(width: 6),
-                          Text(
+            child: SizedBox(
+              height: 62,
+              width: double.infinity,
+              child: Ink(
+                decoration: BoxDecoration(
+                  gradient: orionGhostFill,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: orionGhostEdge),
+                  boxShadow: const [
+                    BoxShadow(color: orionGhostLip, offset: Offset(0, 3)),
+                  ],
+                ),
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        icon,
+                        size: 22,
+                        color: iconOnly
+                            ? uiTheme.textMuted
+                            : icon == Icons.biotech_rounded
+                            ? uiTheme.systemViolet
+                            : uiTheme.systemCyan,
+                      ),
+                      if (!iconOnly) ...[
+                        const SizedBox(height: 4),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
                             label,
+                            textScaler: MediaQuery.textScalerOf(
+                              context,
+                            ).clamp(maxScaleFactor: 1.3),
                             style: OrionTypography.microLabel(
-                              size: 11.5,
+                              size: 10,
                               color: uiTheme.textMuted,
-                            ).copyWith(letterSpacing: 1.84),
+                            ).copyWith(letterSpacing: 1),
                           ),
-                        ],
+                        ),
                       ],
-                    ),
+                    ],
                   ),
                 ),
               ),

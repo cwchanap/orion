@@ -60,6 +60,7 @@ Widget buildMap({
   final map = WorldMapView(
     stages: resolvedStages,
     progress: progress,
+    embeddedInMenuShell: inShell,
     // Production always derives modifiers from progress; default to the
     // same derivation so fixture headers (e.g. the Challenge Badge) match
     // what players see. Explicit modifiers still override this default.
@@ -1064,6 +1065,37 @@ void main() {
     }
   });
 
+  testWidgets('main-route destination number matches its map node', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      buildMap(
+        progress: CampaignProgress(
+          bestResultsByStageId: const {
+            'outpost-alpha': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'nebula-relay': StageResult(
+              medal: StageMedal.silver,
+              bestBaseHealth: 15,
+            ),
+          },
+        ),
+      ),
+    );
+    final foundry = find.byKey(const ValueKey('sector-stage-asteroid-foundry'));
+    expect(
+      find.descendant(of: foundry, matching: find.text('03 ·')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: foundry, matching: find.text('Foundry')),
+      findsOneWidget,
+    );
+    expect(find.text('SECTOR 03 / NEXT MAIN'), findsOneWidget);
+  });
+
   testWidgets('footer steers to the first open optional stage once the main '
       'route is cleared', (tester) async {
     final semantics = tester.ensureSemantics();
@@ -1104,7 +1136,7 @@ void main() {
         ),
       );
 
-      expect(find.text('SECTOR 07 / REPLAY'), findsOneWidget);
+      expect(find.text('SECTOR 05 / REPLAY'), findsOneWidget);
       expect(
         tester
             .getSemantics(
@@ -1114,9 +1146,9 @@ void main() {
         'REPLAY',
       );
 
-      await tester.ensureVisible(find.text('SECTOR 07 / REPLAY'));
+      await tester.ensureVisible(find.text('SECTOR 05 / REPLAY'));
       await tester.pump();
-      await tester.tap(find.text('SECTOR 07 / REPLAY'));
+      await tester.tap(find.text('SECTOR 05 / REPLAY'));
       expect(selected, ['singularity-core']);
     } finally {
       semantics.dispose();

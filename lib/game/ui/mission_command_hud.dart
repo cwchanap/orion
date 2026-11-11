@@ -64,7 +64,7 @@ class MissionStatusHud extends StatelessWidget {
     // reflows to a second run instead of overflowing; `spacing` is then the
     // minimum gap rather than the actual one.
     return OrionSurface(
-      role: OrionSurfaceRole.floating,
+      role: OrionSurfaceRole.sheet,
       radius: 16,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Wrap(
@@ -167,20 +167,23 @@ class _BaseHealthAnchor extends StatelessWidget {
         const SizedBox(height: 3),
         SizedBox(
           key: const ValueKey('base-health-fill-track'),
-          height: 4,
+          height: 6,
           width: 76,
           child: ClipRRect(
             borderRadius: BorderRadius.circular(2),
-            child: ColoredBox(
-              color: uiTheme.panelRaised,
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: FractionallySizedBox(
-                  widthFactor: fraction,
-                  heightFactor: 1,
-                  child: ColoredBox(
-                    key: const ValueKey('base-health-fill'),
-                    color: baseHealthColor(snapshot, uiTheme),
+            child: CustomPaint(
+              foregroundPainter: _HullSegmentsPainter(uiTheme.voidBlack),
+              child: ColoredBox(
+                color: uiTheme.panelRaised,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: fraction,
+                    heightFactor: 1,
+                    child: ColoredBox(
+                      key: const ValueKey('base-health-fill'),
+                      color: baseHealthColor(snapshot, uiTheme),
+                    ),
                   ),
                 ),
               ),
@@ -190,6 +193,31 @@ class _BaseHealthAnchor extends StatelessWidget {
       ],
     );
   }
+}
+
+class _HullSegmentsPainter extends CustomPainter {
+  const _HullSegmentsPainter(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = color;
+    for (var index = 1; index < 10; index++) {
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(size.width * index / 10, size.height / 2),
+          width: 2,
+          height: size.height,
+        ),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_HullSegmentsPainter oldDelegate) =>
+      oldDelegate.color != color;
 }
 
 class _MissionStatusAnchor extends StatelessWidget {

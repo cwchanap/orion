@@ -11,11 +11,17 @@ import 'orion_ui_theme.dart';
 import 'tower_stat_scale.dart';
 
 class CodexView extends StatefulWidget {
-  const CodexView({super.key, required this.progress, this.onBack});
+  const CodexView({
+    super.key,
+    required this.progress,
+    this.onBack,
+    this.embeddedInMenuShell = false,
+  });
 
   final CampaignProgress progress;
 
   final VoidCallback? onBack;
+  final bool embeddedInMenuShell;
 
   @override
   State<CodexView> createState() => _CodexViewState();
@@ -101,21 +107,39 @@ class _CodexViewState extends State<CodexView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Padding(
-                        padding: const EdgeInsets.all(8),
-                        child: Row(
-                          children: [
-                            if (widget.onBack != null)
-                              IconButton(
-                                tooltip: 'Back',
-                                onPressed: widget.onBack,
-                                icon: const Icon(Icons.arrow_back),
+                      if (!widget.embeddedInMenuShell)
+                        Padding(
+                          padding: const EdgeInsets.all(8),
+                          child: Row(
+                            children: [
+                              if (widget.onBack != null)
+                                IconButton(
+                                  tooltip: 'Back',
+                                  onPressed: widget.onBack,
+                                  icon: const Icon(Icons.arrow_back),
+                                ),
+                              const SizedBox(width: 8),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    'FIELD MANUAL',
+                                    style: OrionTypography.microLabel(
+                                      size: 10,
+                                      color: uiTheme.textMuted,
+                                    ),
+                                  ),
+                                  OrionTitle(
+                                    'Codex',
+                                    size: 19,
+                                    color: uiTheme.textPrimary,
+                                  ),
+                                ],
                               ),
-                            const SizedBox(width: 8),
-                            OrionTitle('Codex', color: uiTheme.textPrimary),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
                       // The chips join the field's tap region: mouse/stylus (and
                       // web touch) taps outside a TextField unfocus it on
                       // pointer-down, which would run before _selectSection's
@@ -440,6 +464,11 @@ class _CodexViewState extends State<CodexView> {
     final stats = t.baseStats;
     final scale = TowerStatScale.forType(t.type);
     final secondaryFill = scale.secondaryFill(stats);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    final heading = Text(
+      t.label.toUpperCase(),
+      style: OrionTypography.readout(size: 20, color: uiTheme.textPrimary),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: OrionSurface(
@@ -451,15 +480,9 @@ class _CodexViewState extends State<CodexView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              t.label.toUpperCase(),
-              style: OrionTypography.readout(
-                size: 20,
-                color: uiTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 8),
+            if (largeText) ...[heading, const SizedBox(height: 8)],
             Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 OrionAtlasSprite(
                   art: OrionArt.tower(t.type),
@@ -467,12 +490,19 @@ class _CodexViewState extends State<CodexView> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: Text(
-                    'Available from wave ${t.unlockWave}',
-                    style: OrionTypography.microLabel(
-                      size: 10,
-                      color: uiTheme.textMuted,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (!largeText) ...[heading, const SizedBox(height: 4)],
+                      Text(
+                        'Available from wave ${t.unlockWave}',
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          color: uiTheme.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Text(
@@ -980,7 +1010,9 @@ class _CodexBackdrop extends StatelessWidget {
                 const SizedBox.shrink(),
           ),
         ),
-        const DecoratedBox(decoration: BoxDecoration(gradient: orionMapScrim)),
+        const DecoratedBox(
+          decoration: BoxDecoration(gradient: orionCodexScrim),
+        ),
       ],
     );
   }

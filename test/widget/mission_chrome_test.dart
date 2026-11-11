@@ -507,11 +507,9 @@ void main() {
     },
   );
 
-  testWidgets('the unboxed status readouts stay on one row', (tester) async {
-    // Unboxing the status band freed width, and hero-scale numerals spend
-    // it: at 26 the credits group wrapped to a second row behind the two
-    // band buttons. This pins the row at the product viewport with the real
-    // face, because Roboto is narrower and would not catch a regression.
+  testWidgets('the status readouts stay on one row', (tester) async {
+    // Hero-scale numerals can wrap the credits behind the band buttons.
+    // Use the real face because a narrower test font would miss it.
     await loadRealFonts(withMaterialIcons: false);
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
@@ -524,15 +522,20 @@ void main() {
     );
     await tester.pump();
 
-    final centres = [
+    final readouts = [
       'mission-status-base',
       'mission-status-stage',
       'mission-status-credits',
-    ].map((key) => tester.getCenter(find.byKey(ValueKey(key))).dy).toList();
-    for (final centre in centres) {
+    ].map((key) => tester.getRect(find.byKey(ValueKey(key)))).toList();
+    for (final readout in readouts.skip(1)) {
       expect(
-        (centre - centres.first).abs(),
-        lessThan(8),
+        readout.top,
+        lessThan(readouts.first.bottom),
+        reason: 'a status readout wrapped off the band row',
+      );
+      expect(
+        readout.bottom,
+        greaterThan(readouts.first.top),
         reason: 'a status readout wrapped off the band row',
       );
     }

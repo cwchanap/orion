@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/ui/orion_menu_shell.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 
 Widget buildShell({
   OrionMenuDestination destination = OrionMenuDestination.sectors,
@@ -34,6 +35,47 @@ Widget buildShell({
 }
 
 void main() {
+  testWidgets('menu destinations identify the current scene beside resources', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    for (final (destination, kicker, title) in [
+      (OrionMenuDestination.sectors, 'ORION CAMPAIGN', 'ORION SECTOR'),
+      (OrionMenuDestination.research, 'CAMPAIGN UPGRADES', 'R & D'),
+      (OrionMenuDestination.codex, 'FIELD MANUAL', 'CODEX'),
+    ]) {
+      await tester.pumpWidget(buildShell(destination: destination));
+      expect(find.text(kicker), findsOneWidget);
+      expect(find.text(title), findsOneWidget);
+      final titleRect = tester.getRect(find.text(title));
+      final medalsRect = tester.getRect(find.text('4/15'));
+      expect(titleRect.right, lessThanOrEqualTo(medalsRect.left));
+      expect(tester.takeException(), isNull);
+    }
+  });
+
+  testWidgets('active research tab uses the research accent', (tester) async {
+    await tester.pumpWidget(
+      buildShell(destination: OrionMenuDestination.research),
+    );
+    final icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byTooltip('R&D'),
+        matching: find.byIcon(Icons.biotech_rounded),
+      ),
+    );
+    expect(icon.color, OrionUiTheme.dark.systemViolet);
+  });
+
+  testWidgets('research header announces the unspent balance', (tester) async {
+    await tester.pumpWidget(
+      buildShell(destination: OrionMenuDestination.research),
+    );
+    expect(find.bySemanticsLabel('Unspent: 7'), findsOneWidget);
+  });
+
   testWidgets('top bar carries the resource chips and the Settings gear', (
     tester,
   ) async {

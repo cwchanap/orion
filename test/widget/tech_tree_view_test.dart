@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flame/flame.dart';
+import 'package:flame/widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart';
@@ -8,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_menu_shell.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
@@ -17,6 +19,22 @@ import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
+  testWidgets('research header identifies the campaign upgrades lab', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: TechTreeView(
+          progress: CampaignProgress(),
+          techTree: CampaignTechTree(),
+          onPurchase: (_) {},
+        ),
+      ),
+    );
+    expect(find.text('CAMPAIGN UPGRADES'), findsOneWidget);
+    expect(find.text('R & D'), findsOneWidget);
+  });
+
   testWidgets('compact R&D details fit at 3x text', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
@@ -1506,6 +1524,65 @@ void main() {
     }
   });
 
+  for (final size in [const Size(390, 844), const Size(360, 640)]) {
+    testWidgets('embedded research stays usable at $size with 3x text', (
+      tester,
+    ) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final progress = progressWithRanks(const [3, 3, 1]);
+      final tree = CampaignTechTree(
+        purchased: {CampaignTechUpgrade.solarCapacitors},
+      );
+      final purchases = <CampaignTechUpgrade>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orionThemeData,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3)),
+            child: child!,
+          ),
+          home: OrionMenuShell(
+            destination: OrionMenuDestination.research,
+            medalEarned: 7,
+            medalTotal: 21,
+            researchPoints: 4,
+            onDestinationSelected: (_) {},
+            onOpenSettings: () {},
+            child: TechTreeView(
+              progress: progress,
+              techTree: tree,
+              onPurchase: purchases.add,
+              embeddedInMenuShell: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await selectNode(tester, CampaignTechUpgrade.hardenedCore);
+      await tester.pumpAndSettle();
+      final bank = find.byKey(const ValueKey('tech-bank-bar'));
+      await tester.ensureVisible(bank);
+      await tester.pumpAndSettle();
+      expect(find.text('Unspent: 4 · Earned: 7 · Spent: 3'), findsOneWidget);
+      expect(
+        tester.getRect(bank).bottom,
+        lessThanOrEqualTo(
+          tester.getRect(detailFinder(CampaignTechUpgrade.hardenedCore)).top,
+        ),
+      );
+      final action = researchActionFinder(CampaignTechUpgrade.hardenedCore);
+      await tester.ensureVisible(action);
+      await tester.tap(action);
+      await tester.pump();
+      expect(purchases, [CampaignTechUpgrade.hardenedCore]);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('capture scene 1g fixture', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -1526,6 +1603,7 @@ void main() {
     await tester.runAsync(() async {
       await Flame.images.load('reactor_rim_ui/backdrops/tech-tree-rnd-bay.png');
       await Flame.images.load('orion_sprite_sheet.png');
+      await Flame.images.load('orion_tower_variety_sheet.png');
     });
 
     final progress = progressWithRanks(const [3, 3, 1]); // 7 earned, 4 unspent
@@ -1542,11 +1620,19 @@ void main() {
           // parity evidence carries a stripe the shipped game never shows.
           debugShowCheckedModeBanner: false,
           theme: orionThemeData,
-          home: TechTreeView(
-            progress: progress,
-            techTree: techTree,
-            onPurchase: (_) {},
-            onBack: () async {},
+          home: OrionMenuShell(
+            destination: OrionMenuDestination.research,
+            medalEarned: 7,
+            medalTotal: 21,
+            researchPoints: 4,
+            onDestinationSelected: (_) {},
+            onOpenSettings: () {},
+            child: TechTreeView(
+              progress: progress,
+              techTree: techTree,
+              onPurchase: (_) {},
+              embeddedInMenuShell: true,
+            ),
           ),
         ),
       ),
@@ -1574,6 +1660,14 @@ void main() {
       ]);
     });
     await tester.pumpAndSettle();
+    expect(
+      find.descendant(
+        of: nodeFinder(CampaignTechUpgrade.laserTuning),
+        matching: find.byType(SpriteWidget),
+      ),
+      findsOneWidget,
+      reason: 'Tower artwork must load before the R&D capture.',
+    );
 
     // Scene 1g's subject is the purchased detail; the resting tree keeps
     // details closed, so select the purchased node before capturing.
@@ -1585,6 +1679,36 @@ void main() {
     // real async engine work and deadlocks the FakeAsync zone otherwise.
     await tester.runAsync(
       () => captureReactorRimFixture(boundaryKey, 'fixture-1g.png'),
+    );
+    await selectNode(tester, CampaignTechUpgrade.hardenedCore);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(nodeFinder(CampaignTechUpgrade.laserTuning)).bottom,
+      lessThanOrEqualTo(
+        tester.getRect(detailFinder(CampaignTechUpgrade.hardenedCore)).top,
+      ),
+      reason: 'The full upgrade field should remain visible above the detail.',
+    );
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'rnd-shell-390x844.png'),
+    );
+    final bank = find.byKey(const ValueKey('tech-bank-bar'));
+    await tester.ensureVisible(bank);
+    await tester.pumpAndSettle();
+    expect(
+      tester.getRect(bank).bottom,
+      lessThanOrEqualTo(
+        tester.getRect(detailFinder(CampaignTechUpgrade.hardenedCore)).top,
+      ),
+    );
+    expect(find.text('Unspent: 4 · Earned: 7 · Spent: 3'), findsOneWidget);
+
+    tester.view.physicalSize = const Size(360, 640);
+    await tester.pumpAndSettle();
+    await selectNode(tester, CampaignTechUpgrade.hardenedCore);
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+      () => captureReactorRimFixture(boundaryKey, 'rnd-shell-360x640.png'),
     );
   });
 }

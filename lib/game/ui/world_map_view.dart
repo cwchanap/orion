@@ -43,6 +43,7 @@ class WorldMapView extends StatefulWidget {
     required this.feedback,
     this.isSavingProgress = false,
     this.isResetting = false,
+    this.embeddedInMenuShell = false,
     required this.onStageSelected,
     this.onLockedStageSelected,
   });
@@ -53,6 +54,7 @@ class WorldMapView extends StatefulWidget {
   final String? feedback;
   final bool isSavingProgress;
   final bool isResetting;
+  final bool embeddedInMenuShell;
   final ValueChanged<StageDefinition> onStageSelected;
   final ValueChanged<StageDefinition>? onLockedStageSelected;
 
@@ -105,6 +107,7 @@ class _WorldMapViewState extends State<WorldMapView> {
       return SafeArea(
         child: _EmptySectorMap(
           uiTheme: uiTheme,
+          showTitle: !widget.embeddedInMenuShell,
           feedback: _effectiveFeedback,
           hasChallengeBadge:
               widget.campaignModifiers?.hasChallengeBadge == true,
@@ -147,6 +150,7 @@ class _WorldMapViewState extends State<WorldMapView> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _SectorHeader(
+                        showTitle: !widget.embeddedInMenuShell,
                         mainCleared: mainCleared,
                         mainTotal: mainTotal,
                         optionalCleared: optionalCleared,
@@ -335,11 +339,13 @@ class _WorldMapBackdrop extends StatelessWidget {
 class _EmptySectorMap extends StatelessWidget {
   const _EmptySectorMap({
     required this.uiTheme,
+    required this.showTitle,
     required this.feedback,
     required this.hasChallengeBadge,
   });
 
   final OrionUiTheme uiTheme;
+  final bool showTitle;
   final String? feedback;
   final bool hasChallengeBadge;
 
@@ -365,6 +371,7 @@ class _EmptySectorMap extends StatelessWidget {
           top: 8,
           right: SectorMapLayout.horizontalPadding,
           child: _SectorHeader(
+            showTitle: showTitle,
             mainCleared: 0,
             mainTotal: 0,
             optionalCleared: 0,
@@ -382,6 +389,7 @@ class _EmptySectorMap extends StatelessWidget {
 
 class _SectorHeader extends StatelessWidget {
   const _SectorHeader({
+    required this.showTitle,
     required this.mainCleared,
     required this.mainTotal,
     required this.optionalCleared,
@@ -392,6 +400,7 @@ class _SectorHeader extends StatelessWidget {
     required this.feedback,
   });
 
+  final bool showTitle;
   final int mainCleared;
   final int mainTotal;
   final int optionalCleared;
@@ -428,21 +437,23 @@ class _SectorHeader extends StatelessWidget {
           runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
-            Icon(
-              Icons.public,
-              size: 16,
-              color: uiTheme.systemCyan,
-              shadows: [Shadow(color: uiTheme.voidBlack, blurRadius: 6)],
-            ),
-            OrionTitle(
-              'Orion Sector',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textScaler: MediaQuery.textScalerOf(
-                context,
-              ).clamp(maxScaleFactor: 1.3),
-              color: uiTheme.textPrimary,
-            ),
+            if (showTitle) ...[
+              Icon(
+                Icons.public,
+                size: 16,
+                color: uiTheme.systemCyan,
+                shadows: [Shadow(color: uiTheme.voidBlack, blurRadius: 6)],
+              ),
+              OrionTitle(
+                'Orion Sector',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textScaler: MediaQuery.textScalerOf(
+                  context,
+                ).clamp(maxScaleFactor: 1.3),
+                color: uiTheme.textPrimary,
+              ),
+            ],
             Semantics(
               label: summary,
               child: ExcludeSemantics(
@@ -1258,7 +1269,7 @@ class _MissionDestination extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'SECTOR ${(stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
+                          'SECTOR ${(stage.mainPathOrder ?? stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
                           // Two clamped lines, not one unclamped: at 3x system
                           // text the single line ellipsized the qualifier (the
                           // informative part) inside the ~110px column.

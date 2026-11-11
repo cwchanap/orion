@@ -469,6 +469,23 @@ void main() {
       await tester.tap(find.byTooltip('Inspect tower'));
       await tester.pump();
       expect(find.byType(TowerInspector), findsOneWidget);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-inspector-hero')),
+          matching: find.byType(InternalSpriteWidget),
+        ),
+        findsWidgets,
+        reason: 'The inspector artwork must load before the capture.',
+      );
+      await tester.runAsync(
+        () =>
+            captureReactorRimFixture(boundaryKey, 'inspector-live$suffix.png'),
+      );
       final navigator = Navigator.of(
         tester.element(find.byType(TowerInspector)),
       );
@@ -6111,6 +6128,7 @@ void main() {
       addTearDown(tester.view.reset);
       await tester.runAsync(loadRealFonts);
       await _warmGameImages(tester);
+      OrionArtDescriptor.resetSpriteCache();
       addTearDown(() async {
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 100));
@@ -6142,6 +6160,15 @@ void main() {
         () => Future<void>.delayed(const Duration(milliseconds: 50)),
       );
       await tester.pump();
+      await tester.pump();
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('mission-status-base')),
+          matching: find.byType(InternalSpriteWidget),
+        ),
+        findsOneWidget,
+        reason: 'The hull emblem must load before the wave capture.',
+      );
 
       final suffix = viewSize.height < 700 ? '-compact' : '';
       await tester.runAsync(
