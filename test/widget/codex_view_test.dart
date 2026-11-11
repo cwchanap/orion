@@ -26,6 +26,69 @@ import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
+  testWidgets('large-text tower selection reveals its detail heading', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3)),
+          child: child!,
+        ),
+        home: OrionMenuShell(
+          destination: OrionMenuDestination.codex,
+          medalEarned: 0,
+          medalTotal: 21,
+          researchPoints: 0,
+          onDestinationSelected: (_) {},
+          onOpenSettings: () {},
+          child: CodexView(
+            progress: CampaignProgress(),
+            embeddedInMenuShell: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('codex-tile-rocket')));
+    await tester.pumpAndSettle();
+    final heading = find.descendant(
+      of: find.byKey(const ValueKey('codex-detail')),
+      matching: find.text('ROCKET'),
+    );
+    expect(heading, findsOneWidget);
+    final visibleList = tester.getRect(
+      find.byKey(const PageStorageKey<int>(0)),
+    );
+    expect(tester.getRect(heading).top, greaterThanOrEqualTo(visibleList.top));
+    expect(
+      tester.getRect(heading).bottom,
+      lessThanOrEqualTo(visibleList.bottom),
+    );
+    final damage = tester.renderObject<RenderParagraph>(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('codex-detail')),
+            matching: find.text('Damage'),
+          )
+          .first,
+    );
+    expect(
+      damage.getBoxesForSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 6),
+      ),
+      hasLength(1),
+      reason: 'The visible stat must not split a word at large text sizes.',
+    );
+  });
+
   testWidgets('specialization descriptions have breathing room beside cost', (
     tester,
   ) async {

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../campaign/campaign_progress.dart';
 import '../codex/codex_data.dart';
@@ -32,6 +33,7 @@ class _CodexViewState extends State<CodexView> {
   static const _sections = ['Towers', 'Enemies', 'Effects', 'Stages'];
   TowerType? _selectedTower;
   EnemyArchetype? _selectedEnemy;
+  final _towerGridKey = GlobalKey();
 
   // One ScrollController per section so each section's scroll offset is
   // preserved independently when the player switches chips.
@@ -86,6 +88,39 @@ class _CodexViewState extends State<CodexView> {
     setState(() {});
     final controller = _scrollControllers[_section];
     if (controller.hasClients) controller.jumpTo(0);
+  }
+
+  void _selectTower(TowerType tower) {
+    setState(() => _selectedTower = tower);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _section != 0 || _selectedTower != tower) return;
+      final controller = _scrollControllers[0];
+      final grid = _towerGridKey.currentContext?.findRenderObject();
+      if (!controller.hasClients || grid is! RenderBox || !grid.hasSize) return;
+      final viewport = RenderAbstractViewport.maybeOf(grid);
+      if (viewport == null) return;
+      final position = controller.position;
+      final detailTop =
+          viewport.getOffsetToReveal(grid, 0).offset + grid.size.height + 12;
+      final headingHeight = MediaQuery.textScalerOf(context).scale(20) + 28;
+      if (detailTop + headingHeight <=
+          position.pixels + position.viewportDimension) {
+        return;
+      }
+      final target = detailTop.clamp(
+        position.minScrollExtent,
+        position.maxScrollExtent,
+      );
+      final duration = orionMotionDuration(
+        context,
+        const Duration(milliseconds: 220),
+      );
+      if (duration == Duration.zero) {
+        controller.jumpTo(target);
+      } else {
+        controller.animateTo(target, duration: duration, curve: Curves.easeOut);
+      }
+    });
   }
 
   @override
@@ -354,6 +389,7 @@ class _CodexViewState extends State<CodexView> {
 
   Widget _towerGrid(List<CodexTowerEntry> towers, TowerType detailType) {
     return Padding(
+      key: _towerGridKey,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -376,10 +412,8 @@ class _CodexViewState extends State<CodexView> {
                                   entry: towers[row + col],
                                   selected:
                                       towers[row + col].type == detailType,
-                                  onSelect: () => setState(
-                                    () =>
-                                        _selectedTower = towers[row + col].type,
-                                  ),
+                                  onSelect: () =>
+                                      _selectTower(towers[row + col].type),
                                 )
                               : const SizedBox(height: 92),
                         ),
@@ -655,56 +689,65 @@ class _CodexViewState extends State<CodexView> {
 
   Widget _statBar(String label, String value, double fill, Gradient barFill) {
     final uiTheme = OrionUiTheme.of(context);
+    final labelWidget = Text(
+      label,
+      style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+    );
+    final valueWidget = Text(
+      value,
+      textAlign: TextAlign.end,
+      style: OrionTypography.readout(size: 12, color: uiTheme.textPrimary),
+    );
+    final bar = SizedBox(
+      height: 8,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: orionPipEmpty,
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: FractionallySizedBox(
+            widthFactor: fill,
+            heightFactor: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: barFill,
+                borderRadius: BorderRadius.circular(4),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    if (MediaQuery.textScalerOf(context).scale(1) > 1.5) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: labelWidget),
+                const SizedBox(width: 8),
+                valueWidget,
+              ],
+            ),
+            const SizedBox(height: 4),
+            bar,
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          SizedBox(
-            width: 78,
-            child: Text(
-              label,
-              style: OrionTypography.microLabel(
-                size: 10,
-                color: uiTheme.textMuted,
-              ),
-            ),
-          ),
-          Expanded(
-            child: SizedBox(
-              height: 8,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: orionPipEmpty,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: fill,
-                    heightFactor: 1,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        gradient: barFill,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+          SizedBox(width: 78, child: labelWidget),
+          Expanded(child: bar),
           const SizedBox(width: 10),
-          SizedBox(
-            width: 44,
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: OrionTypography.readout(
-                size: 12,
-                color: uiTheme.textPrimary,
-              ),
-            ),
-          ),
+          SizedBox(width: 44, child: valueWidget),
         ],
       ),
     );

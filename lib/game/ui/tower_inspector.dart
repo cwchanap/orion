@@ -37,7 +37,7 @@ class TowerInspector extends StatelessWidget {
     final tower = snapshot.selectedTower;
     if (tower == null) return const SizedBox.shrink();
 
-    final maxHeight = math.min(480.0, MediaQuery.sizeOf(context).height * .72);
+    final maxHeight = math.min(480.0, MediaQuery.sizeOf(context).height * .78);
     final uiTheme = OrionUiTheme.of(context);
     final canMutate = snapshot.phase == GamePhase.build;
     return FocusScope(
@@ -133,8 +133,7 @@ class TowerInspector extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Expanded(
-                    child: SingleChildScrollView(
-                      key: const ValueKey('tower-inspector-scroll'),
+                    child: _InspectorBodyViewport(
                       child: _InspectorBody(
                         snapshot: snapshot,
                         tower: tower,
@@ -157,6 +156,36 @@ class TowerInspector extends StatelessWidget {
       ),
     );
   }
+}
+
+class _InspectorBodyViewport extends StatefulWidget {
+  const _InspectorBodyViewport({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_InspectorBodyViewport> createState() => _InspectorBodyViewportState();
+}
+
+class _InspectorBodyViewportState extends State<_InspectorBodyViewport> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scrollbar(
+    controller: _controller,
+    thumbVisibility: true,
+    child: SingleChildScrollView(
+      key: const ValueKey('tower-inspector-scroll'),
+      controller: _controller,
+      child: widget.child,
+    ),
+  );
 }
 
 class _InspectorBody extends StatelessWidget {

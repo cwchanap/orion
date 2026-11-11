@@ -138,6 +138,14 @@ void main() {
   });
 
   group('title screen', () {
+    testWidgets('title does not present a placeholder app version', (
+      tester,
+    ) async {
+      await tester.pumpWidget(titleGamePage());
+      await tester.pumpAndSettle();
+      expect(find.text('v0.0 // COMMAND DECK'), findsNothing);
+    });
+
     testWidgets('title backdrop fills the full width with loaded artwork', (
       tester,
     ) async {

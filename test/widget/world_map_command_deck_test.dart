@@ -105,6 +105,46 @@ Widget buildMap({
 }
 
 void main() {
+  testWidgets('compact map scroll hint stays outside the content viewport', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await loadRealFonts();
+    await tester.pumpWidget(
+      buildMap(
+        inShell: true,
+        progress: CampaignProgress(
+          bestResultsByStageId: const {
+            'outpost-alpha': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'nebula-relay': StageResult(
+              medal: StageMedal.silver,
+              bestBaseHealth: 15,
+            ),
+          },
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final scrollable = tester.state<ScrollableState>(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Scrollable && widget.axisDirection == AxisDirection.down,
+      ),
+    );
+    scrollable.position.jumpTo(20);
+    await tester.pumpAndSettle();
+    final hint = tester.getRect(find.text('SWIPE UP FOR MISSION'));
+    final viewport = tester.getRect(
+      find.byKey(const ValueKey('world-map-plot-viewport')),
+    );
+    expect(hint.overlaps(viewport), isFalse);
+  });
+
   testWidgets('compact map hints at the destination until scrolled', (
     tester,
   ) async {
