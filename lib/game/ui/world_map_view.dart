@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../campaign/campaign_progress.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_reward_label.dart';
+import '../rules/stage_modifier_rules.dart';
 import 'campaign_presentation.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_primary_button.dart';
@@ -272,6 +273,9 @@ class _WorldMapViewState extends State<WorldMapView> {
                                   child: _MissionDestination(
                                     stages: widget.stages,
                                     progress: widget.progress,
+                                    campaignModifiers:
+                                        widget.campaignModifiers ??
+                                        CampaignModifiers.empty,
                                     onStageSelected: _isBusy
                                         ? null
                                         : widget.onStageSelected,
@@ -1210,10 +1214,12 @@ class _MissionDestination extends StatelessWidget {
   const _MissionDestination({
     required this.stages,
     required this.progress,
+    required this.campaignModifiers,
     required this.onStageSelected,
   });
   final List<StageDefinition> stages;
   final CampaignProgress progress;
+  final CampaignModifiers campaignModifiers;
   final ValueChanged<StageDefinition>? onStageSelected;
 
   @override
@@ -1225,6 +1231,10 @@ class _MissionDestination extends StatelessWidget {
     final qualifier = status == StageProgressStatus.unlocked
         ? (stage.isMainPath ? 'NEXT MAIN' : 'OPTIONAL')
         : 'REPLAY';
+    final startingHull = StageModifierRules.effectiveStartingBaseHealth(
+      campaignAdjustedBaseHealth: campaignModifiers.adjustedStartingBaseHealth,
+      stageModifiers: stage.modifiers,
+    );
     return OrionSurface(
       role: OrionSurfaceRole.sheet,
       padding: const EdgeInsets.all(14),
@@ -1232,7 +1242,9 @@ class _MissionDestination extends StatelessWidget {
       child: Semantics(
         button: true,
         label: 'Briefing for ${stage.name}',
-        hint: qualifier,
+        hint:
+            '$qualifier. ${stage.waves.length} waves. '
+            '$startingHull starting hull.',
         enabled: onStageSelected != null,
         excludeSemantics: true,
         onTap: onStageSelected == null ? null : () => onStageSelected!(stage),
@@ -1296,24 +1308,42 @@ class _MissionDestination extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(Icons.waves, color: theme.textMuted, size: 18),
-                            const SizedBox(width: 5),
-                            Text(
-                              '${stage.waves.length}',
-                              style: OrionTypography.readout(
-                                size: 12,
+                        MediaQuery.withClampedTextScaling(
+                          maxScaleFactor: 1.3,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.waves,
                                 color: theme.textMuted,
+                                size: 18,
                               ),
-                            ),
-                            const SizedBox(width: 10),
-                            Icon(
-                              Icons.shield_outlined,
-                              color: theme.systemCyan,
-                              size: 18,
-                            ),
-                          ],
+                              const SizedBox(width: 5),
+                              Text(
+                                '${stage.waves.length}',
+                                style: OrionTypography.readout(
+                                  size: 12,
+                                  color: theme.textMuted,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Icon(
+                                Icons.shield_outlined,
+                                color: theme.systemCyan,
+                                size: 18,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                '$startingHull',
+                                key: const ValueKey(
+                                  'destination-starting-hull',
+                                ),
+                                style: OrionTypography.readout(
+                                  size: 12,
+                                  color: theme.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),

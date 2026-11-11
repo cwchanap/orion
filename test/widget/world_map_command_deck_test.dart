@@ -1053,7 +1053,7 @@ void main() {
         tester
             .getSemantics(find.bySemanticsLabel('Briefing for Outpost Alpha'))
             .hint,
-        'NEXT MAIN',
+        startsWith('NEXT MAIN.'),
       );
 
       await tester.ensureVisible(find.text('SECTOR 01 / NEXT MAIN'));
@@ -1096,6 +1096,48 @@ void main() {
     expect(find.text('SECTOR 03 / NEXT MAIN'), findsOneWidget);
   });
 
+  testWidgets('destination hull matches campaign and stage modifiers', (
+    tester,
+  ) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      final cases = [
+        (
+          progress: CampaignProgress(),
+          stage: OrionCampaign.stageOne,
+          expected: GameBalance.initialBaseHealth + 3,
+        ),
+        (
+          progress: mainCompleteProgress(clearedSideStages: {'salvage-rift'}),
+          stage: OrionCampaign.stageById('void-bastion'),
+          expected:
+              GameBalance.initialBaseHealth +
+              3 -
+              GameBalance.reducedStartingHealthPenalty,
+        ),
+      ];
+      for (final scenario in cases) {
+        await tester.pumpWidget(
+          buildMap(
+            progress: scenario.progress,
+            campaignModifiers: const CampaignModifiers(bonusHealth: 3),
+          ),
+        );
+        final hull = find.byKey(const ValueKey('destination-starting-hull'));
+        expect(tester.widget<Text>(hull).data, '${scenario.expected}');
+        final destination = find.bySemanticsLabel(
+          'Briefing for ${scenario.stage.name}',
+        );
+        expect(
+          tester.getSemantics(destination).hint,
+          contains('${scenario.expected} starting hull'),
+        );
+      }
+    } finally {
+      semantics.dispose();
+    }
+  });
+
   testWidgets('footer steers to the first open optional stage once the main '
       'route is cleared', (tester) async {
     final semantics = tester.ensureSemantics();
@@ -1113,7 +1155,7 @@ void main() {
         tester
             .getSemantics(find.bySemanticsLabel('Briefing for Salvage Rift'))
             .hint,
-        'OPTIONAL',
+        startsWith('OPTIONAL.'),
       );
 
       await tester.ensureVisible(find.text('SECTOR 03 / OPTIONAL'));
@@ -1143,7 +1185,7 @@ void main() {
               find.bySemanticsLabel('Briefing for Singularity Core'),
             )
             .hint,
-        'REPLAY',
+        startsWith('REPLAY.'),
       );
 
       await tester.ensureVisible(find.text('SECTOR 05 / REPLAY'));
