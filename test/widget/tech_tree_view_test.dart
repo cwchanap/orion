@@ -46,7 +46,7 @@ void main() {
     for (final label in [
       '+${GameBalance.solarCapacitorsGoldBonus} GOLD',
       '+${GameBalance.hardenedCoreHealthBonus} HULL',
-      '+${(GameBalance.salvageCrewClearBonusFraction * 100).round()}% WAVE GOLD',
+      '+${(GameBalance.salvageCrewClearBonusFraction * 100).round()}% CLEAR GOLD',
       '+${(GameBalance.laserTuningDamageFraction * 100).round()}% DAMAGE',
       '+${GameBalance.cryoCoolantSlowDurationBonus.toStringAsFixed(1)}s SLOW',
     ]) {

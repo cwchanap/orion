@@ -1053,7 +1053,7 @@ String _compactEffect(CampaignTechUpgrade upgrade) => switch (upgrade) {
   CampaignTechUpgrade.hardenedCore =>
     '+${GameBalance.hardenedCoreHealthBonus} HULL',
   CampaignTechUpgrade.salvageCrew =>
-    '+${(GameBalance.salvageCrewClearBonusFraction * 100).round()}% WAVE GOLD',
+    '+${(GameBalance.salvageCrewClearBonusFraction * 100).round()}% CLEAR GOLD',
   CampaignTechUpgrade.laserTuning =>
     '+${(GameBalance.laserTuningDamageFraction * 100).round()}% DAMAGE',
   CampaignTechUpgrade.cryoCoolant =>
