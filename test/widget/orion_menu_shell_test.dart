@@ -56,6 +56,80 @@ void main() {
     expect(settingsTaps, 1);
   });
 
+  testWidgets('the Settings gear keeps a 48x48 interaction region that fires '
+      'from its edges', (tester) async {
+    var settingsTaps = 0;
+    await tester.pumpWidget(
+      buildShell(onOpenSettings: () => settingsTaps += 1),
+    );
+
+    final inkWell = find.descendant(
+      of: find.byTooltip('Settings'),
+      matching: find.byType(InkWell),
+    );
+    final rect = tester.getRect(inkWell);
+    expect(rect.width >= 48 && rect.height >= 48, isTrue, reason: '$rect');
+
+    await tester.tapAt(Offset(rect.right - 1, rect.center.dy));
+    await tester.tapAt(Offset(rect.left + 1, rect.center.dy));
+    await tester.tapAt(Offset(rect.center.dx, rect.top + 1));
+    await tester.tapAt(Offset(rect.right - 5, rect.bottom - 5));
+    expect(settingsTaps, 4);
+  });
+
+  testWidgets('the disabled Settings gear does not fire from its edges', (
+    tester,
+  ) async {
+    var settingsTaps = 0;
+    await tester.pumpWidget(
+      buildShell(
+        settingsEnabled: false,
+        onOpenSettings: () => settingsTaps += 1,
+      ),
+    );
+
+    final rect = tester.getRect(
+      find.descendant(
+        of: find.byTooltip('Settings'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    await tester.tapAt(Offset(rect.right - 1, rect.center.dy));
+    await tester.tapAt(Offset(rect.center.dx, rect.bottom - 1));
+    expect(settingsTaps, 0);
+  });
+
+  testWidgets('the Settings gear stays in bounds at 360x640 without crowding '
+      'the chips', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(buildShell());
+
+    expect(tester.takeException(), isNull);
+    final rect = tester.getRect(
+      find.descendant(
+        of: find.byTooltip('Settings'),
+        matching: find.byType(InkWell),
+      ),
+    );
+    expect(rect.left, greaterThanOrEqualTo(0));
+    expect(rect.right, lessThanOrEqualTo(360));
+    final chip = tester.getRect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Semantics &&
+            widget.properties.label == '7 research points',
+      ),
+    );
+    expect(
+      rect.left,
+      greaterThanOrEqualTo(chip.right),
+      reason: 'the 48dp region overlaps the research chip at $rect vs $chip',
+    );
+  });
+
   testWidgets('bottom tabs report every destination and mark the active one', (
     tester,
   ) async {

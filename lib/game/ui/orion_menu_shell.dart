@@ -195,19 +195,23 @@ class _GhostIconButton extends StatelessWidget {
           color: Colors.transparent,
           borderRadius: BorderRadius.circular(12),
           clipBehavior: Clip.antiAlias,
-          child: Ink(
-            decoration: BoxDecoration(
-              gradient: orionGhostFill,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: orionGhostEdge),
-            ),
-            child: InkWell(
-              onTap: onPressed,
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                width: 40,
-                height: 40,
-                child: Icon(icon, size: 20, color: uiTheme.textMuted),
+          child: InkWell(
+            onTap: onPressed,
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Center(
+                child: Ink(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    gradient: orionGhostFill,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: orionGhostEdge),
+                  ),
+                  child: Icon(icon, size: 20, color: uiTheme.textMuted),
+                ),
               ),
             ),
           ),

@@ -3630,6 +3630,31 @@ void main() {
     },
   );
 
+  testWidgets('a failed reset from the Codex keeps the Codex and reports the '
+      'error through the shell', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      resetResults: [StateError('reset failed')],
+    );
+
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Codex'));
+    await tester.pumpAndSettle();
+    expect(findOrionTitle('Codex'), findsOneWidget);
+
+    await openResetCampaignDialog(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+    expect(findOrionTitle('Codex'), findsOneWidget);
+    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(store.resetCalls, 1);
+    expect(store.progress.bestResultsByStageId.keys, {'outpost-alpha'});
+  });
+
   testWidgets('successful reset after a pending save drains wipes the store', (
     tester,
   ) async {

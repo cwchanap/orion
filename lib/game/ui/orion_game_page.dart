@@ -564,7 +564,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       isContinueAvailable: continueAvailable,
       campaignComplete: _progress.isCampaignComplete(OrionCampaign.stages),
       medalEarned: CampaignTechTree.totalMedalRank(_progress),
-      medalTotal: _mainStageMedalTotal,
+      medalTotal: _campaignMedalTotal,
       researchPoints: _techTree.unspentPoints(_progress),
       busy: _isBusy,
       feedback: _mapFeedback,
@@ -618,7 +618,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     return OrionMenuShell(
       destination: destination,
       medalEarned: CampaignTechTree.totalMedalRank(_progress),
-      medalTotal: _mainStageMedalTotal,
+      medalTotal: _campaignMedalTotal,
       researchPoints: _techTree.unspentPoints(_progress),
       navigationEnabled: !_isBusy,
       settingsEnabled:
@@ -630,8 +630,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     );
   }
 
-  int get _mainStageMedalTotal =>
-      OrionCampaign.stages.where((stage) => stage.isMainPath).length * 3;
+  int get _campaignMedalTotal => OrionCampaign.stages.length * 3;
 
   bool get _isBusy => _isSavingProgress || _isResetting;
 
