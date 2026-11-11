@@ -504,7 +504,7 @@ void main() {
     await tester.pumpWidget(testGamePage());
     await tester.pumpAndSettle();
 
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.byTooltip('Start Wave'), findsNothing);
   });
@@ -1241,7 +1241,7 @@ void main() {
       await tester.tapAt(tester.getCenter(find.bySubtype<GameWidget>()));
       await tester.pump();
       expect(find.text('MISSION FAILED'), findsOneWidget);
-      expect(find.text('ORION SECTOR'), findsNothing);
+      expect(find.text('SECTOR MAP'), findsNothing);
     },
   );
 
@@ -1410,7 +1410,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
     expect(find.text('Could not load campaign progress.'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.byTooltip('Start Wave'), findsNothing);
@@ -2336,7 +2336,7 @@ void main() {
     await tester.pump();
 
     expect(find.text('Saving result…'), findsOneWidget);
-    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(find.text('SECTOR MAP'), findsNothing);
 
     store.saveCompletions.single.complete();
     await tester.pumpAndSettle();
@@ -2366,7 +2366,7 @@ void main() {
     );
     await tester.tap(find.byTooltip('World Map').last);
     await tester.pumpAndSettle();
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
   });
 
   testWidgets('an active wave exposes no actionable map exit', (tester) async {
@@ -2408,7 +2408,7 @@ void main() {
       await tester.tap(chip.last, warnIfMissed: false);
       await tester.pumpAndSettle();
     }
-    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(find.text('SECTOR MAP'), findsNothing);
     expect(game!.snapshot.phase, GamePhase.wave);
   });
 
@@ -2453,7 +2453,7 @@ void main() {
       await tester.tap(chip.last, warnIfMissed: false);
       await tester.pumpAndSettle();
     }
-    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(find.text('SECTOR MAP'), findsNothing);
     expect(game!.snapshot.isPaused, isTrue);
   });
 
@@ -2519,7 +2519,7 @@ void main() {
     await tester.tap(find.byTooltip('World Map (Unsaved)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
     expect(find.text('Mission result was not saved.'), findsOneWidget);
     expect(
       store.progress.resultFor('outpost-alpha'),
@@ -2980,7 +2980,7 @@ void main() {
     await tester.tap(find.byTooltip('World Map (Unsaved)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
     expect(find.text('Endless best was not saved.'), findsOneWidget);
     expect(store.progress.endlessBestFor('outpost-alpha'), isNull);
   });
@@ -3023,7 +3023,7 @@ void main() {
       await tester.tap(find.byTooltip('World Map (Unsaved)'));
       await tester.pumpAndSettle();
 
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
       expect(
         find.text('Endless save failed — best 4 waves kept.'),
         findsOneWidget,
@@ -3057,7 +3057,7 @@ void main() {
       await tester.tap(find.byTooltip('World Map'));
       await tester.pump();
 
-      expect(find.text('ORION SECTOR'), findsNothing);
+      expect(find.text('SECTOR MAP'), findsNothing);
       expect(
         find.text('Saving Endless best… Finish saving before returning.'),
         findsOneWidget,
@@ -3069,7 +3069,7 @@ void main() {
 
       await tester.tap(find.byTooltip('World Map'));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
     },
   );
 
@@ -3209,7 +3209,7 @@ void main() {
       expect(reportActionOnPressed(tester, 'World Map'), isNotNull);
       await tester.tap(find.text('World Map'));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
     },
   );
 
@@ -3244,7 +3244,7 @@ void main() {
 
       await tester.tap(find.text('World Map'));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
 
       await tester.ensureVisible(find.text('Alpha'));
       await tester.tap(find.text('Alpha'));
@@ -3299,7 +3299,7 @@ void main() {
 
       await tester.tap(find.text('World Map'));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
       expect(find.text('Could not save campaign progress.'), findsNothing);
     },
   );
@@ -3361,7 +3361,7 @@ void main() {
     await tester.tap(find.byTooltip('Map'));
     await tester.pumpAndSettle();
 
-    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(find.text('SECTOR MAP'), findsNothing);
     expect(find.byTooltip('Start Wave'), findsNothing);
     expect(find.byTooltip('Start Mission'), findsNothing);
     expect(find.byTooltip('Replay Mission'), findsNothing);
@@ -3667,7 +3667,7 @@ void main() {
 
     expect(find.text('Could not reset campaign progress.'), findsOneWidget);
     expect(findOrionTitle('Codex'), findsOneWidget);
-    expect(find.text('ORION SECTOR'), findsNothing);
+    expect(find.text('SECTOR MAP'), findsNothing);
     expect(store.resetCalls, 1);
     expect(store.progress.bestResultsByStageId.keys, {'outpost-alpha'});
   });
@@ -3837,7 +3837,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Could not save campaign progress.'), findsOneWidget);
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
     },
   );
 
@@ -3901,7 +3901,7 @@ void main() {
       await tester.tap(find.byTooltip('Map'));
       await tester.pumpAndSettle();
 
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
       expect(find.text('Could not save campaign progress.'), findsNothing);
     },
   );
@@ -3992,16 +3992,16 @@ void main() {
 
       // TechTreeView is now rendered (T12): its header appears and the
       // world-map header is replaced.
-      expect(findOrionTitle('R & D'), findsOneWidget);
-      expect(find.text('ORION SECTOR'), findsNothing);
+      expect(findOrionTitle('R&D Lab'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsNothing);
       expect(find.byTooltip('Map'), findsOneWidget);
 
       // The back arrow returns the player to the world map.
       await tester.tap(find.byTooltip('Map'));
       await tester.pumpAndSettle();
 
-      expect(find.text('ORION SECTOR'), findsOneWidget);
-      expect(findOrionTitle('R & D'), findsNothing);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
+      expect(findOrionTitle('R&D Lab'), findsNothing);
     },
   );
 
@@ -4029,7 +4029,7 @@ void main() {
       ),
     );
 
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
     expect(find.text('Alpha'), findsOneWidget);
     expect(find.text('Relay'), findsOneWidget);
     expect(find.text('Core'), findsOneWidget);

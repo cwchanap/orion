@@ -42,8 +42,8 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     for (final (destination, kicker, title) in [
-      (OrionMenuDestination.sectors, 'ORION CAMPAIGN', 'ORION SECTOR'),
-      (OrionMenuDestination.research, 'CAMPAIGN UPGRADES', 'R & D'),
+      (OrionMenuDestination.sectors, 'ORION CAMPAIGN', 'SECTOR MAP'),
+      (OrionMenuDestination.research, 'CAMPAIGN UPGRADES', 'R&D LAB'),
       (OrionMenuDestination.codex, 'FIELD MANUAL', 'CODEX'),
     ]) {
       await tester.pumpWidget(buildShell(destination: destination));

@@ -84,7 +84,7 @@ abstract final class OrionTypography {
       fontFamily: 'ChakraPetch',
       fontWeight: FontWeight.w700,
       fontSize: size,
-      letterSpacing: size * 0.18,
+      letterSpacing: size * 0.10,
       color: resolved,
       shadows: const [shadow],
     );

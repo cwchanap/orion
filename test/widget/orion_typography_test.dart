@@ -56,7 +56,7 @@ void main() {
     expect(s.fontFamily, 'ChakraPetch');
     expect(s.fontWeight, FontWeight.w700);
     expect(s.fontSize, 10);
-    expect(s.letterSpacing! / s.fontSize!, inInclusiveRange(0.14, 0.24));
+    expect(s.letterSpacing! / s.fontSize!, inInclusiveRange(0.08, 0.12));
   });
 
   test('microLabel asserts explicit sizes stay at or above the floor', () {

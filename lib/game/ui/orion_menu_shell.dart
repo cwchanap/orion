@@ -93,8 +93,8 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final (kicker, title) = switch (destination) {
-      OrionMenuDestination.sectors => ('ORION CAMPAIGN', 'Orion Sector'),
-      OrionMenuDestination.research => ('CAMPAIGN UPGRADES', 'R & D'),
+      OrionMenuDestination.sectors => ('ORION CAMPAIGN', 'Sector Map'),
+      OrionMenuDestination.research => ('CAMPAIGN UPGRADES', 'R&D Lab'),
       OrionMenuDestination.codex => ('FIELD MANUAL', 'Codex'),
     };
     final accent = destination == OrionMenuDestination.research

@@ -476,7 +476,12 @@ class _OutcomeRibbon extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: FittedBox(
             fit: BoxFit.scaleDown,
-            child: OrionTitle(text, size: 34, color: uiTheme.voidBlack),
+            child: OrionTitle(
+              text,
+              size: 34,
+              color: uiTheme.voidBlack,
+              shadows: const [],
+            ),
           ),
         ),
       ),

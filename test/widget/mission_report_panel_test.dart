@@ -1354,7 +1354,7 @@ void main() {
       expect(find.text('Continue'), findsNothing);
       await tester.tap(find.byTooltip('World Map'));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
       expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
     });
 
@@ -1391,7 +1391,7 @@ void main() {
       expect(find.text('Continue'), findsNothing);
       await tester.tap(find.byTooltip('World Map'));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
       expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
     });
 

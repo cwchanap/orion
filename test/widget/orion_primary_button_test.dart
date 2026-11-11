@@ -109,6 +109,17 @@ void main() {
     );
   });
 
+  testWidgets('light action surfaces keep their dark labels crisp', (t) async {
+    for (final variant in [
+      OrionButtonVariant.primary,
+      OrionButtonVariant.secondary,
+    ]) {
+      await t.pumpWidget(host(onPressed: () {}, variant: variant));
+      final label = t.widget<Text>(find.text('Deploy'));
+      expect(label.style!.shadows, isEmpty);
+    }
+  });
+
   testWidgets('danger paints its lit top edge inside the frame', (t) async {
     final key = GlobalKey();
     await t.pumpWidget(

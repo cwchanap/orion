@@ -273,7 +273,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(OrionTitleView), findsOneWidget);
-      expect(find.text('ORION SECTOR'), findsNothing);
+      expect(find.text('SECTOR MAP'), findsNothing);
       expect(find.byTooltip('Start Wave'), findsNothing);
     });
 
@@ -350,7 +350,7 @@ void main() {
       );
       await tester.tap(cta);
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
     });
 
     testWidgets('the Sectors shortcut opens the world map', (tester) async {
@@ -358,7 +358,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Sectors'));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
     });
 
     testWidgets('the R&D shortcut opens the tech tree', (tester) async {
@@ -366,7 +366,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('R&D'));
       await tester.pumpAndSettle();
-      expect(findOrionTitle('R & D'), findsOneWidget);
+      expect(findOrionTitle('R&D Lab'), findsOneWidget);
     });
 
     testWidgets('the Codex shortcut opens the codex', (tester) async {
@@ -496,12 +496,12 @@ void main() {
 
         await tester.tap(find.byTooltip('Sectors'));
         await tester.pumpAndSettle();
-        expect(find.text('ORION SECTOR'), findsOneWidget);
+        expect(find.text('SECTOR MAP'), findsOneWidget);
         expectMedals();
 
         await tester.tap(find.byTooltip('R&D'));
         await tester.pumpAndSettle();
-        expect(findOrionTitle('R & D'), findsOneWidget);
+        expect(findOrionTitle('R&D Lab'), findsOneWidget);
         expectMedals();
 
         await tester.tap(find.byTooltip('Codex'));
@@ -604,7 +604,7 @@ void main() {
       final sectorsRect = inkRect('Sectors');
       await tester.tapAt(Offset(sectorsRect.center.dx, sectorsRect.top + 1));
       await tester.pumpAndSettle();
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
     });
 
     testWidgets('the Settings shortcut does not fire from its edges while a '

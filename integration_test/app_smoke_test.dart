@@ -42,7 +42,7 @@ void main() {
     await tester.tap(find.byTooltip('Sectors'));
 
     // 1. World map is showing with the first stage ("Alpha").
-    await _pumpUntil(tester, () => tester.any(find.text('ORION SECTOR')));
+    await _pumpUntil(tester, () => tester.any(find.text('SECTOR MAP')));
     expect(find.text('Alpha'), findsOneWidget);
 
     // 2. Enter the first stage: the briefing opens first (scene 1b), its
@@ -68,7 +68,7 @@ void main() {
     await _pumpUntil(
       tester,
       () =>
-          tester.any(find.text('ORION SECTOR')) &&
+          tester.any(find.text('SECTOR MAP')) &&
           !tester.any(find.byTooltip('Start Mission')),
     );
     expect(find.text('Alpha'), findsOneWidget);
@@ -378,7 +378,7 @@ void main() {
     await _tapUntil(
       tester,
       () => tester.tap(find.byKey(const ValueKey('world-map-action'))),
-      () => tester.any(find.text('ORION SECTOR')),
+      () => tester.any(find.text('SECTOR MAP')),
       timeoutMessage:
           'Tapping the World Map action in the build phase did not return '
           'to the sector map.',
@@ -404,7 +404,7 @@ void main() {
     await _pumpUntil(tester, () => tester.any(find.text('Need 3 more points')));
     expect(find.text('Need 3 more points'), findsOneWidget);
     await tester.tap(find.byTooltip('Map'));
-    await _pumpUntil(tester, () => tester.any(find.text('ORION SECTOR')));
+    await _pumpUntil(tester, () => tester.any(find.text('SECTOR MAP')));
 
     // 14. Mission Report representative action path: run a fresh defense
     //     with no towers, let leaked waves destroy the base, and return to
@@ -460,7 +460,7 @@ void main() {
     await _tapUntil(
       tester,
       () => tester.tap(find.text('World Map')),
-      () => tester.any(find.text('ORION SECTOR')),
+      () => tester.any(find.text('SECTOR MAP')),
       timeoutMessage:
           'Tapping the loss report World Map action did not return to the '
           'sector map.',

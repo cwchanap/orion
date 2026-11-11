@@ -449,7 +449,7 @@ class _SectorHeader extends StatelessWidget {
                 shadows: [Shadow(color: uiTheme.voidBlack, blurRadius: 6)],
               ),
               OrionTitle(
-                'Orion Sector',
+                'Sector Map',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 textScaler: MediaQuery.textScalerOf(

@@ -630,6 +630,7 @@ class _CodexViewState extends State<CodexView> {
                     ],
                   ),
                 ),
+                const SizedBox(width: 8),
                 Text(
                   '${t.specializationCost}g',
                   style: OrionTypography.readout(
@@ -1090,7 +1091,7 @@ class _CodexTabState extends State<_CodexTab> {
                     color: widget.selected
                         ? orionSecondaryInk
                         : uiTheme.textMuted,
-                  ),
+                  ).copyWith(shadows: widget.selected ? const [] : null),
                 ),
               ),
             ),

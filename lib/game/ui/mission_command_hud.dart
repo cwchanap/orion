@@ -682,13 +682,18 @@ class _SpeedSegmentState extends State<_SpeedSegment> {
               child: Text(
                 label,
                 maxLines: 1,
-                style: OrionTypography.microLabel(
-                  color: !widget.enabled
-                      ? uiTheme.textDim
-                      : widget.selected
-                      ? orionSecondaryInk
-                      : uiTheme.textMuted,
-                ),
+                style:
+                    OrionTypography.microLabel(
+                      color: !widget.enabled
+                          ? uiTheme.textDim
+                          : widget.selected
+                          ? orionSecondaryInk
+                          : uiTheme.textMuted,
+                    ).copyWith(
+                      shadows: widget.enabled && widget.selected
+                          ? const []
+                          : null,
+                    ),
               ),
             ),
           ),
