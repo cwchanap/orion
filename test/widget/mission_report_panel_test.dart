@@ -1,5 +1,6 @@
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
@@ -104,6 +105,224 @@ void main() {
     await tester.tap(find.byTooltip('World Map (Unsaved)'));
     expect(retried, isTrue);
     expect(returned, isTrue);
+  });
+
+  testWidgets(
+    'failed-save actions survive 3x text at 360x640 (Task 4 triage)',
+    (tester) async {
+      await tester.runAsync(loadRealFonts);
+      final collect = _collectLayoutErrors();
+      var retried = false;
+      var returned = false;
+      await _pumpScaledReport(
+        tester,
+        _victoryContent(MissionSaveState.failed),
+        const Size(360, 640),
+        capture: 'task6-fix1-failed-360-3x.png',
+        onRetrySave: () => retried = true,
+        onReturnToMap: () => returned = true,
+      );
+      collect.restore();
+      _expectNoOverflow(collect.errors);
+      _expectWholeStageName(tester);
+      _expectWholeMedalCriteria(tester);
+      _expectWholeStats(tester, ['HULL', 'WAVES', 'CREDITS', 'PENDING']);
+      _expectWholeStats(tester, ['20/20', '8/8', '120', '+3']);
+      expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+      await _expectAction(tester, const Size(360, 640), 'Retry Save', true);
+      await _expectAction(
+        tester,
+        const Size(360, 640),
+        'World Map (Unsaved)',
+        true,
+      );
+      expect(retried, isTrue);
+      expect(returned, isTrue);
+    },
+  );
+
+  group('tall-text report surfaces (fix round 1)', () {
+    for (final size in const [Size(360, 640), Size(390, 844)]) {
+      final label = '${size.width.toInt()}x${size.height.toInt()}';
+
+      testWidgets('failed victory stays whole at 3x text, $label', (
+        tester,
+      ) async {
+        await tester.runAsync(loadRealFonts);
+        final collect = _collectLayoutErrors();
+        var retried = false;
+        var returned = false;
+        await _pumpScaledReport(
+          tester,
+          _victoryContent(MissionSaveState.failed),
+          size,
+          capture: 'task6-fix1-failed-$label-3x.png',
+          onRetrySave: () => retried = true,
+          onReturnToMap: () => returned = true,
+        );
+        collect.restore();
+        _expectNoOverflow(collect.errors);
+        _expectWholeStageName(tester);
+        _expectWholeMedalCriteria(tester);
+        _expectWholeStats(tester, const [
+          'HULL',
+          'WAVES',
+          'CREDITS',
+          'PENDING',
+        ]);
+        _expectWholeStats(tester, const ['20/20', '8/8', '120', '+3']);
+        expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+        await _expectAction(tester, size, 'Retry Save', true);
+        await _expectAction(tester, size, 'World Map (Unsaved)', true);
+        expect(retried, isTrue);
+        expect(returned, isTrue);
+      });
+
+      testWidgets('saved victory keeps whole labels and enabled exits '
+          'at 3x text, $label', (tester) async {
+        await tester.runAsync(loadRealFonts);
+        final collect = _collectLayoutErrors();
+        var replayed = false;
+        var returned = false;
+        await _pumpScaledReport(
+          tester,
+          _victoryContent(MissionSaveState.saved),
+          size,
+          capture: 'task6-fix1-saved-$label-3x.png',
+          onReplay: () => replayed = true,
+          onReturnToMap: () => returned = true,
+        );
+        collect.restore();
+        _expectNoOverflow(collect.errors);
+        _expectWholeStageName(tester);
+        _expectWholeWords(tester, 'SECTOR SECURED');
+        _expectWholeWords(tester, 'VICTORY');
+        _expectWholeMedalCriteria(tester);
+        _expectWholeStats(tester, const ['HULL', 'WAVES', 'CREDITS', 'R&D']);
+        _expectWholeStats(tester, const ['20/20', '8/8', '120', '+3']);
+        expect(find.text('Saved.'), findsOneWidget);
+        expect(find.text('New first-clear result'), findsOneWidget);
+        await _expectAction(tester, size, 'Replay Mission', true);
+        await _expectAction(tester, size, 'World Map', true);
+        expect(replayed, isTrue);
+        expect(returned, isTrue);
+      });
+
+      testWidgets('defeat keeps whole labels and exits at 3x text, $label', (
+        tester,
+      ) async {
+        await tester.runAsync(loadRealFonts);
+        final collect = _collectLayoutErrors();
+        var retried = false;
+        var returned = false;
+        await _pumpScaledReport(
+          tester,
+          _lossContent(),
+          size,
+          capture: 'task6-fix1-loss-$label-3x.png',
+          onReplay: () => retried = true,
+          onReturnToMap: () => returned = true,
+        );
+        collect.restore();
+        _expectNoOverflow(collect.errors);
+        _expectWholeStageName(tester);
+        _expectWholeWords(tester, 'MISSION FAILED');
+        _expectWholeStats(tester, const [
+          'HULL',
+          'WAVES',
+          'CREDITS',
+          'PENDING',
+        ]);
+        _expectWholeStats(tester, const ['0/20', '5/8', '120', '+0']);
+        _expectWholeWords(tester, 'MISSION DETAILS');
+        await _expectAction(tester, size, 'Retry', true);
+        await _expectAction(tester, size, 'World Map', true);
+        expect(retried, isTrue);
+        expect(returned, isTrue);
+      });
+    }
+
+    testWidgets('saving victory keeps gated exits whole at 3x text, 360x640', (
+      tester,
+    ) async {
+      await tester.runAsync(loadRealFonts);
+      final collect = _collectLayoutErrors();
+      await _pumpScaledReport(
+        tester,
+        _victoryContent(MissionSaveState.saving),
+        const Size(360, 640),
+        capture: 'task6-fix1-saving-360x640-3x.png',
+        onReplay: () {},
+        onReturnToMap: () {},
+      );
+      collect.restore();
+      _expectNoOverflow(collect.errors);
+      _expectWholeStageName(tester);
+      _expectWholeMedalCriteria(tester);
+      expect(find.text('Saving result…'), findsOneWidget);
+      await _expectAction(
+        tester,
+        const Size(360, 640),
+        'Replay Mission',
+        false,
+      );
+      await _expectAction(tester, const Size(360, 640), 'World Map', false);
+    });
+
+    testWidgets('endless saved report keeps whole exits at 3x text, 360x640', (
+      tester,
+    ) async {
+      await tester.runAsync(loadRealFonts);
+      final collect = _collectLayoutErrors();
+      var replayed = false;
+      var returned = false;
+      await _pumpScaledReport(
+        tester,
+        _endlessContent(MissionSaveState.saved, priorBest: 5, savedBest: 8),
+        const Size(360, 640),
+        capture: 'task6-fix1-endless-saved-360x640-3x.png',
+        onReplay: () => replayed = true,
+        onReturnToMap: () => returned = true,
+      );
+      collect.restore();
+      _expectNoOverflow(collect.errors);
+      _expectWholeStageName(tester);
+      _expectWholeWords(tester, 'ENDLESS RUN OVER');
+      _expectWholeStats(tester, const ['HULL', 'WAVES', 'CREDITS']);
+      _expectWholeStats(tester, const ['0/20', '8', '120']);
+      expect(find.text('Saved.'), findsOneWidget);
+      expect(find.text('New best! Previous: 5 waves'), findsOneWidget);
+      await _expectAction(tester, const Size(360, 640), 'Replay Endless', true);
+      await _expectAction(tester, const Size(360, 640), 'World Map', true);
+      expect(replayed, isTrue);
+      expect(returned, isTrue);
+    });
+
+    for (final (name, content) in [
+      ('failed', _victoryContent(MissionSaveState.failed)),
+      ('saved', _victoryContent(MissionSaveState.saved)),
+      ('loss', _lossContent()),
+    ]) {
+      testWidgets('$name report stays whole at compact 1x, 360x640', (
+        tester,
+      ) async {
+        await tester.runAsync(loadRealFonts);
+        final collect = _collectLayoutErrors();
+        await _pumpScaledReport(
+          tester,
+          content,
+          const Size(360, 640),
+          textScale: 1,
+          capture: 'task6-fix1-$name-360x640-1x.png',
+          onReplay: () {},
+          onReturnToMap: () {},
+          onRetrySave: () {},
+        );
+        collect.restore();
+        _expectNoOverflow(collect.errors);
+        _expectWholeStageName(tester);
+      });
+    }
   });
 
   testWidgets('loss offers retry and world map actions', (tester) async {
@@ -1328,4 +1547,146 @@ Future<void> _openDetails(WidgetTester tester) async {
   await tester.ensureVisible(details);
   await tester.tap(details);
   await tester.pumpAndSettle();
+}
+
+({List<FlutterErrorDetails> errors, void Function() restore})
+_collectLayoutErrors() {
+  final errors = <FlutterErrorDetails>[];
+  final previous = FlutterError.onError;
+  FlutterError.onError = errors.add;
+  void restore() => FlutterError.onError = previous;
+  addTearDown(restore);
+  return (errors: errors, restore: restore);
+}
+
+void _expectNoOverflow(List<FlutterErrorDetails> errors) {
+  final overflows = errors
+      .where((details) => details.exceptionAsString().contains('overflowed'))
+      .toList();
+  expect(
+    overflows,
+    isEmpty,
+    reason: overflows.map((d) => d.exceptionAsString()).join('\n'),
+  );
+}
+
+Future<void> _pumpScaledReport(
+  WidgetTester tester,
+  MissionReportContent content,
+  Size viewSize, {
+  double textScale = 3,
+  String? capture,
+  VoidCallback? onReplay,
+  VoidCallback? onReturnToMap,
+  VoidCallback? onRetrySave,
+}) async {
+  tester.view.physicalSize = viewSize;
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
+  final boundary = GlobalKey();
+  await tester.pumpWidget(
+    MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: orionThemeData,
+      builder: (context, child) => MediaQuery(
+        data: MediaQuery.of(
+          context,
+        ).copyWith(textScaler: TextScaler.linear(textScale)),
+        child: child!,
+      ),
+      home: Scaffold(
+        body: RepaintBoundary(
+          key: boundary,
+          child: MissionReportPanel(
+            content: content,
+            onReplay: onReplay,
+            onReturnToMap: onReturnToMap,
+            onRetrySave: onRetrySave,
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+  if (capture != null) {
+    await tester.runAsync(() => captureReactorRimFixture(boundary, capture));
+  }
+}
+
+void _expectWholeWords(WidgetTester tester, String text) {
+  final finder = find.text(text);
+  expect(finder, findsOneWidget, reason: text);
+  final paragraph = tester.renderObject<RenderParagraph>(finder);
+  var start = 0;
+  for (var i = 0; i <= text.length; i++) {
+    if (i < text.length && text[i] != ' ') continue;
+    if (start < i) {
+      final tops = paragraph
+          .getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: i),
+          )
+          .map((box) => box.top)
+          .toSet();
+      expect(
+        tops.length,
+        1,
+        reason: '"${text.substring(start, i)}" in "$text" splits mid-word',
+      );
+    }
+    start = i + 1;
+  }
+}
+
+void _expectWholeStageName(WidgetTester tester) {
+  _expectWholeWords(tester, 'OUTPOST ALPHA');
+}
+
+void _expectWholeMedalCriteria(WidgetTester tester) {
+  for (final label in const ['CLEARED', '10+ HULL', 'NO LEAKS']) {
+    _expectWholeWords(tester, label);
+  }
+}
+
+void _expectWholeStats(WidgetTester tester, List<String> texts) {
+  for (final text in texts) {
+    _expectWholeWords(tester, text);
+  }
+}
+
+Future<void> _expectAction(
+  WidgetTester tester,
+  Size viewSize,
+  String label,
+  bool enabled,
+) async {
+  final button = find.ancestor(
+    of: find.text(label),
+    matching: find.byType(OrionPrimaryButton),
+  );
+  expect(button, findsOneWidget, reason: label);
+  final rect = tester.getRect(button);
+  expect(rect.width, greaterThanOrEqualTo(48), reason: '$label target width');
+  expect(rect.height, greaterThanOrEqualTo(48), reason: '$label target height');
+  expect(rect.left, greaterThanOrEqualTo(0), reason: '$label left edge');
+  expect(
+    rect.right,
+    lessThanOrEqualTo(viewSize.width),
+    reason: '$label right edge',
+  );
+  expect(rect.top, greaterThanOrEqualTo(0), reason: '$label top edge');
+  expect(
+    rect.bottom,
+    lessThanOrEqualTo(viewSize.height),
+    reason: '$label bottom edge',
+  );
+  expect(
+    tester.widget<OrionPrimaryButton>(button).onPressed != null,
+    enabled,
+    reason: '$label enabled gate',
+  );
+  _expectWholeWords(tester, label);
+  if (enabled) {
+    await tester.tap(find.byTooltip(label));
+    await tester.pump();
+  }
 }
