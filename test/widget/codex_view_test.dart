@@ -26,6 +26,28 @@ import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
+  testWidgets('specialization descriptions have breathing room beside cost', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await loadRealFonts();
+    await tester.pumpWidget(
+      MaterialApp(home: CodexView(progress: CampaignProgress())),
+    );
+    await tester.pumpAndSettle();
+    final description = find.text(TowerSpecialization.pulseLaser.role);
+    final row = find
+        .ancestor(of: description, matching: find.byType(Row))
+        .first;
+    final cost = find.descendant(of: row, matching: find.text('120g'));
+    expect(
+      tester.getRect(description).right + 8,
+      lessThanOrEqualTo(tester.getRect(cost).left),
+    );
+  });
+
   testWidgets('tower detail leads with its portrait beside the heading', (
     tester,
   ) async {

@@ -121,7 +121,7 @@ void main() {
         ),
       );
       await tester.pump();
-      final titleRect = tester.getRect(find.text('ORION SECTOR'));
+      final titleRect = tester.getRect(find.text('SECTOR MAP'));
       final codexRect = tester.getRect(find.byTooltip('Codex'));
       final feedbackRect = tester.getRect(
         find.text('Singularity Core is locked.'),
@@ -259,7 +259,7 @@ void main() {
           // its badges, the completion status line, the feedback line and the
           // Challenge Badge.
           final headerRows = <Rect>[
-            tester.getRect(find.text('ORION SECTOR')),
+            tester.getRect(find.text('SECTOR MAP')),
             tester.getRect(find.text('MAIN 5/5')),
             if (find.text('OPTIONAL 1/2').evaluate().isNotEmpty)
               tester.getRect(find.text('OPTIONAL 1/2')),
@@ -500,7 +500,7 @@ void main() {
         ),
       );
 
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
       // Capture every rect in one frame before any ensureVisible scroll
       // shifts the coordinate frame between captures.
       final rects = <Rect>[];
@@ -859,7 +859,7 @@ void main() {
   ) async {
     await tester.pumpWidget(buildMap(progress: CampaignProgress()));
 
-    expect(find.text('ORION SECTOR'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
     expect(
       find.descendant(
         of: find.byType(WorldMapView),
@@ -1667,7 +1667,7 @@ void main() {
         ),
       );
 
-      expect(find.text('ORION SECTOR'), findsOneWidget);
+      expect(find.text('SECTOR MAP'), findsOneWidget);
 
       // Every stage node is rendered and sized 56x80.
       final rects = <Rect>[];

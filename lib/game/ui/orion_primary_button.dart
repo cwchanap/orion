@@ -190,10 +190,15 @@ class _OrionPrimaryButtonState extends State<OrionPrimaryButton> {
               : Icon(widget.icon, size: 24),
           label: Text(
             widget.label,
-            style: OrionTypography.microLabel(
-              size: widget.labelSize,
-              color: spec.ink,
-            ),
+            style:
+                OrionTypography.microLabel(
+                  size: widget.labelSize,
+                  color: spec.ink,
+                ).copyWith(
+                  shadows: widget.variant == OrionButtonVariant.danger
+                      ? null
+                      : const [],
+                ),
           ),
         ),
       ),
