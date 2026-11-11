@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
@@ -50,16 +52,41 @@ class MissionReportPanel extends StatelessWidget {
                 ),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      for (var index = 0; index < actions.length; index++) ...[
-                        if (index > 0) const SizedBox(width: 8),
-                        Expanded(
-                          child: _MissionActionButton(action: actions[index]),
-                        ),
-                      ],
-                    ],
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      if (_actionsStack(context, actions, constraints)) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (
+                              var index = 0;
+                              index < actions.length;
+                              index++
+                            ) ...[
+                              if (index > 0) const SizedBox(height: 8),
+                              _MissionActionButton(action: actions[index]),
+                            ],
+                          ],
+                        );
+                      }
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          for (
+                            var index = 0;
+                            index < actions.length;
+                            index++
+                          ) ...[
+                            if (index > 0) const SizedBox(width: 8),
+                            Expanded(
+                              child: _MissionActionButton(
+                                action: actions[index],
+                              ),
+                            ),
+                          ],
+                        ],
+                      );
+                    },
                   ),
                 ),
               ],
@@ -123,6 +150,24 @@ class MissionReportPanel extends StatelessWidget {
       ],
     };
   }
+}
+
+bool _actionsStack(
+  BuildContext context,
+  List<_MissionAction> actions,
+  BoxConstraints constraints,
+) {
+  final share =
+      (constraints.maxWidth - 8.0 * (actions.length - 1)) / actions.length;
+  final style = OrionTypography.microLabel(size: 11);
+  for (final action in actions) {
+    for (final word in action.label.split(' ')) {
+      if (_singleLineWidth(context, word, style) + 64 > share) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /// Approved debrief-hall scene art behind the report, dimmed by a readability
@@ -219,11 +264,14 @@ class _ReportBody extends StatelessWidget {
           ),
           const SizedBox(height: 8),
         ],
-        OrionTitle(
-          content.stageName,
-          size: 26,
-          textAlign: TextAlign.center,
-          color: uiTheme.textPrimary,
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          child: OrionTitle(
+            content.stageName,
+            size: 26,
+            textAlign: TextAlign.center,
+            color: uiTheme.textPrimary,
+          ),
         ),
         const SizedBox(height: 14),
         Stack(
@@ -242,50 +290,93 @@ class _ReportBody extends StatelessWidget {
           ),
         ],
         const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: _ReportStat(
-                label: 'HULL',
-                value: '${snapshot.baseHealth}/${snapshot.startingBaseHealth}',
-                color: uiTheme.naniteGreen,
-                art: OrionArt.trait(EnemyTrait.shielded),
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ReportStat(
-                label: 'WAVES',
-                value: snapshot.missionWaveTotal == null
-                    ? '${snapshot.wavesCleared}'
-                    : '${snapshot.waveNumber}/${snapshot.missionWaveTotal}',
-                color: uiTheme.textPrimary,
-                icon: Icons.radar,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _ReportStat(
-                label: 'CREDITS',
-                value: '${snapshot.gold}',
-                color: uiTheme.creditGold,
-                icon: Icons.hexagon,
-              ),
-            ),
-            if (!isEndless) ...[
-              const SizedBox(width: 8),
-              Expanded(
-                child: _ReportStat(
-                  label: content.saveState == MissionSaveState.saved
-                      ? 'R&D'
-                      : 'PENDING',
-                  value: '+${content.medalPoints}',
-                  color: uiTheme.systemViolet,
-                  icon: Icons.pentagon,
-                ),
-              ),
-            ],
-          ],
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final stats =
+                <
+                  ({
+                    String label,
+                    String value,
+                    Color color,
+                    IconData? icon,
+                    OrionArtDescriptor? art,
+                  })
+                >[
+                  (
+                    label: 'HULL',
+                    value:
+                        '${snapshot.baseHealth}/${snapshot.startingBaseHealth}',
+                    color: uiTheme.naniteGreen,
+                    icon: null,
+                    art: OrionArt.trait(EnemyTrait.shielded),
+                  ),
+                  (
+                    label: 'WAVES',
+                    value: snapshot.missionWaveTotal == null
+                        ? '${snapshot.wavesCleared}'
+                        : '${snapshot.waveNumber}/${snapshot.missionWaveTotal}',
+                    color: uiTheme.textPrimary,
+                    icon: Icons.radar,
+                    art: null,
+                  ),
+                  (
+                    label: 'CREDITS',
+                    value: '${snapshot.gold}',
+                    color: uiTheme.creditGold,
+                    icon: Icons.hexagon,
+                    art: null,
+                  ),
+                  if (!isEndless)
+                    (
+                      label: content.saveState == MissionSaveState.saved
+                          ? 'R&D'
+                          : 'PENDING',
+                      value: '+${content.medalPoints}',
+                      color: uiTheme.systemViolet,
+                      icon: Icons.pentagon,
+                      art: null,
+                    ),
+                ];
+            final share =
+                (constraints.maxWidth - 8.0 * (stats.length - 1)) /
+                stats.length;
+            final stacks = stats.any(
+              (stat) => _statWidth(context, stat) > share,
+            );
+            if (stacks) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var index = 0; index < stats.length; index++) ...[
+                    if (index > 0) const SizedBox(height: 8),
+                    _ReportStat(
+                      label: stats[index].label,
+                      value: stats[index].value,
+                      color: stats[index].color,
+                      icon: stats[index].icon,
+                      art: stats[index].art,
+                    ),
+                  ],
+                ],
+              );
+            }
+            return Row(
+              children: [
+                for (var index = 0; index < stats.length; index++) ...[
+                  if (index > 0) const SizedBox(width: 8),
+                  Expanded(
+                    child: _ReportStat(
+                      label: stats[index].label,
+                      value: stats[index].value,
+                      color: stats[index].color,
+                      icon: stats[index].icon,
+                      art: stats[index].art,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
         ),
         const SizedBox(height: 14),
         if (content.saveText != null)
@@ -417,17 +508,46 @@ class _MedalCriteriaRow extends StatelessWidget {
       ),
       (tier: 3, label: 'NO LEAKS', color: uiTheme.creditGold),
     ];
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: [
-        for (final criterion in criteria)
-          _MedalCriterion(
-            label: criterion.label,
-            tier: criterion.tier,
-            earned: medal.rank >= criterion.tier,
-            color: criterion.color,
-          ),
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final labelStyle = OrionTypography.microLabel(size: 10);
+        final needed = criteria.fold<double>(
+          0,
+          (width, criterion) =>
+              width +
+              math.max(
+                54,
+                _singleLineWidth(context, criterion.label, labelStyle),
+              ),
+        );
+        if (needed > constraints.maxWidth) {
+          return Column(
+            children: [
+              for (var index = 0; index < criteria.length; index++) ...[
+                if (index > 0) const SizedBox(height: 12),
+                _MedalCriterion(
+                  label: criteria[index].label,
+                  tier: criteria[index].tier,
+                  earned: medal.rank >= criteria[index].tier,
+                  color: criteria[index].color,
+                ),
+              ],
+            ],
+          );
+        }
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: [
+            for (final criterion in criteria)
+              _MedalCriterion(
+                label: criterion.label,
+                tier: criterion.tier,
+                earned: medal.rank >= criterion.tier,
+                color: criterion.color,
+              ),
+          ],
+        );
+      },
     );
   }
 }
@@ -714,4 +834,35 @@ class _MissionActionButton extends StatelessWidget {
       ),
     );
   }
+}
+
+double _statWidth(
+  BuildContext context,
+  ({
+    String label,
+    String value,
+    Color color,
+    IconData? icon,
+    OrionArtDescriptor? art,
+  })
+  stat,
+) {
+  final widest = math.max(
+    _singleLineWidth(
+      context,
+      stat.value,
+      OrionTypography.readout(size: 20, color: stat.color),
+    ),
+    _singleLineWidth(context, stat.label, OrionTypography.microLabel(size: 10)),
+  );
+  return math.max(24, widest) + 8;
+}
+
+double _singleLineWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: text, style: style),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  return painter.width;
 }
