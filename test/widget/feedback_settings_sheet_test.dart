@@ -93,6 +93,49 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('large-text settings exposes or signals its save action', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3)),
+          child: child!,
+        ),
+        home: const Scaffold(
+          body: FeedbackSettingsSheet(
+            initialPreferences: FeedbackPreferences(),
+            reduceMotion: false,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final sheet = find.byType(FeedbackSettingsSheet);
+    final scrollable = find.descendant(
+      of: sheet,
+      matching: find.byType(Scrollable),
+    );
+    final done = find.text('Done');
+    final viewport = tester.getRect(scrollable);
+    if (tester.getRect(done).bottom > viewport.bottom) {
+      final scrollbar = find.descendant(
+        of: sheet,
+        matching: find.byType(Scrollbar),
+      );
+      expect(scrollbar, findsOneWidget);
+      expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
+    }
+    await tester.ensureVisible(done);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(done).bottom, lessThanOrEqualTo(viewport.bottom));
+  });
+
   testWidgets('Replay Tutorial awaits the callback once, then confirms', (
     tester,
   ) async {
