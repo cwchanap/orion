@@ -422,12 +422,16 @@ class _CodexViewState extends State<CodexView> {
     // Zero results stay inside the same ListView (same key, controller and
     // always-scrollable drag behavior) rather than swapping in a Center.
     if (children.isEmpty) children = [_noMatches()];
-    return ListView(
-      key: PageStorageKey<int>(_section),
+    return Scrollbar(
       controller: controller,
-      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      physics: const AlwaysScrollableScrollPhysics(),
-      children: children,
+      thumbVisibility: true,
+      child: ListView(
+        key: PageStorageKey<int>(_section),
+        controller: controller,
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: children,
+      ),
     );
   }
 

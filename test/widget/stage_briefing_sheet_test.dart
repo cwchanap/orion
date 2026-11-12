@@ -531,6 +531,173 @@ void main() {
     );
   }
 
+  testWidgets('large-text briefing content does not scroll behind dismiss', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    await _pumpBriefing(
+      tester,
+      stage: OrionCampaign.stageOne,
+      viewport: const Size(360, 640),
+      textScaler: const TextScaler.linear(3),
+    );
+    final heading = find.text('THREAT PROFILE');
+    await tester.ensureVisible(heading);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .getRect(heading)
+          .overlaps(tester.getRect(find.byTooltip('Dismiss'))),
+      isFalse,
+    );
+  });
+
+  testWidgets('blueprint heading stays in one piece at 320 and 4x', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    await _pumpBriefing(
+      tester,
+      stage: OrionCampaign.stageOne,
+      viewport: const Size(320, 568),
+      textScaler: const TextScaler.linear(4),
+    );
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.text('BLUEPRINT'),
+    );
+    expect(
+      paragraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 9),
+      ),
+      hasLength(1),
+    );
+  });
+
+  testWidgets('replay and endless actions scale on a narrow display', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    const viewport = Size(320, 568);
+    const result = StageResult(medal: StageMedal.silver, bestBaseHealth: 14);
+    await _pumpBriefing(
+      tester,
+      stage: OrionCampaign.stageOne,
+      result: result,
+      viewport: viewport,
+    );
+    final initial = tester
+        .getRect(
+          find.descendant(
+            of: find.byTooltip('Endless'),
+            matching: find.text('ENDLESS'),
+          ),
+        )
+        .height;
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+    await _pumpBriefing(
+      tester,
+      stage: OrionCampaign.stageOne,
+      result: result,
+      viewport: viewport,
+      textScaler: const TextScaler.linear(1.2),
+    );
+    final intermediate = find.descendant(
+      of: find.byTooltip('Endless'),
+      matching: find.text('ENDLESS'),
+    );
+    expect(tester.getRect(intermediate).height, greaterThan(initial * 1.1));
+    for (final tooltip in ['Replay Mission', 'Endless']) {
+      expect(
+        tester.getRect(find.byTooltip(tooltip)).height,
+        greaterThanOrEqualTo(48),
+      );
+    }
+    await tester.tap(find.byTooltip('Dismiss'));
+    await tester.pumpAndSettle();
+    await _pumpBriefing(
+      tester,
+      stage: OrionCampaign.stageOne,
+      result: result,
+      viewport: viewport,
+      textScaler: const TextScaler.linear(3),
+    );
+    final action = find.byTooltip('Endless');
+    final label = find.descendant(of: action, matching: find.text('ENDLESS'));
+    expect(tester.getRect(label).height, greaterThan(initial * 2.3));
+    final scroll = find.descendant(
+      of: find.byType(StageBriefingSheet),
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.getRect(scroll).height,
+      greaterThanOrEqualTo(300),
+      reason: 'Large launch actions must leave room to read the briefing.',
+    );
+    await _expectActionWithinViewport(
+      tester,
+      viewport,
+      actionTooltip: 'Endless',
+    );
+    await _expectActionWithinViewport(
+      tester,
+      viewport,
+      actionTooltip: 'Replay Mission',
+    );
+  });
+
+  for (final (tooltip, expected) in [
+    ('Replay Mission', RunMode.mission),
+    ('Endless', RunMode.endless),
+  ]) {
+    testWidgets('large-text $tooltip launches the correct mode', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      final recorder = await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+        viewport: const Size(320, 568),
+        textScaler: const TextScaler.linear(3),
+      );
+      await tester.tap(find.byTooltip(tooltip));
+      await tester.pumpAndSettle();
+      expect(recorder.popped, expected);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('wide landscape briefing keeps room for its content at 3x', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    const viewport = Size(568, 320);
+    await _pumpBriefing(
+      tester,
+      stage: OrionCampaign.stageOne,
+      result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      viewport: viewport,
+      textScaler: const TextScaler.linear(3),
+    );
+    final scroll = find.descendant(
+      of: find.byType(StageBriefingSheet),
+      matching: find.byType(Scrollable),
+    );
+    expect(tester.getRect(scroll).height, greaterThanOrEqualTo(100));
+    await _expectActionWithinViewport(
+      tester,
+      viewport,
+      actionTooltip: 'Replay Mission',
+    );
+    await _expectActionWithinViewport(
+      tester,
+      viewport,
+      actionTooltip: 'Endless',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('briefing shows a scroll cue for the hidden blueprint', (
     tester,
   ) async {

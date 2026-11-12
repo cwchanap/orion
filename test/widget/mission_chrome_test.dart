@@ -465,6 +465,66 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets(
+    'incoming total stays readable at 360 without shrinking the board',
+    (tester) async {
+      await loadRealFonts();
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final preview = commandDeckPreview(
+        groups: [
+          WavePreviewGroup(enemyCount: 8, label: 'Drones', traits: const {}),
+          WavePreviewGroup(enemyCount: 8, label: 'Shielded', traits: const {}),
+          WavePreviewGroup(enemyCount: 12, label: 'Swarm', traits: const {}),
+        ],
+        traits: EnemyTrait.values.toSet(),
+      );
+      Rect? board;
+      Future<double> show(double width) async {
+        tester.view.physicalSize = Size(width, 640);
+        await tester.pumpWidget(
+          chromeHost(
+            commandDeckSnapshot(nextWavePreview: preview),
+            onBoardViewportChanged: (value) => board = value,
+          ),
+        );
+        await tester.pumpAndSettle();
+        final summary = find.byKey(const ValueKey('incoming-wave-summary'));
+        final label = find.descendant(of: summary, matching: find.text('FOES'));
+        expect(
+          find.descendant(of: summary, matching: find.text('28')),
+          findsOneWidget,
+        );
+        return tester.getRect(label).height;
+      }
+
+      final baseline = await show(320);
+      final compact = await show(360);
+      expect(compact, greaterThanOrEqualTo(baseline * .95));
+      expect(board!.height, greaterThanOrEqualTo(330));
+      final summary = find.byKey(const ValueKey('incoming-wave-summary'));
+      final beforeScroll = tester.getRect(summary);
+      final composition = find.byKey(
+        ValueKey('incoming-composition-${preview.waveNumber}'),
+      );
+      final scroll = find.descendant(
+        of: composition,
+        matching: find.byType(Scrollable),
+      );
+      final position = tester.state<ScrollableState>(scroll).position;
+      expect(position.maxScrollExtent, greaterThan(0));
+      await tester.drag(scroll, const Offset(-120, 0));
+      await tester.pumpAndSettle();
+      expect(position.pixels, greaterThan(0));
+      expect(
+        tester.getRect(summary).left,
+        closeTo(beforeScroll.left, 0.1),
+        reason: 'The total must stay visible while composition is scrolled.',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('foundry boss wave shows its composition before scanning', (
     tester,
   ) async {
