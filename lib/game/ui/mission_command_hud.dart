@@ -43,9 +43,9 @@ class MissionStatusHud extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final textScaler = MediaQuery.textScalerOf(
-      context,
-    ).clamp(maxScaleFactor: 1.15);
+    final requestedScaler = MediaQuery.textScalerOf(context);
+    final largeText = requestedScaler.scale(1) > 1.15;
+    final textScaler = requestedScaler;
     final missionWaveTotal = snapshot.missionWaveTotal;
     final waveLabel = missionWaveTotal == null
         ? 'Endless. Wave ${snapshot.waveNumber}'
@@ -57,61 +57,72 @@ class MissionStatusHud extends StatelessWidget {
     // never depends on a surface fill" — and dropping three pills' padding
     // buys back the width the hero-scale numerals need.
     //
-    // spaceBetween is the arrangement, not decoration: the artboard pins hull
-    // to the left edge, centres the wave group and pins credits to the right,
-    // so the three readings are found by position rather than by reading
-    // along a row. Still a Wrap, so a narrow viewport or a large text scale
-    // reflows to a second run instead of overflowing; `spacing` is then the
-    // minimum gap rather than the actual one.
+    // At large text sizes, fit each scaled readout separately in a stable
+    // single-row band. The fixed-size status icons remain recognizable while
+    // the phase's complete wording stays in the semantics label.
+    final anchors = <Widget>[
+      Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: 'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
+        child: _BaseHealthAnchor(
+          key: const ValueKey('mission-status-base'),
+          snapshot: snapshot,
+          uiTheme: uiTheme,
+          textScaler: textScaler,
+          compact: largeText,
+        ),
+      ),
+      Semantics(
+        container: true,
+        excludeSemantics: true,
+        label:
+            '${snapshot.stageName}. '
+            '$waveLabel, '
+            '${_missionPhaseLabel(snapshot)}',
+        child: _MissionStatusAnchor(
+          key: const ValueKey('mission-status-stage'),
+          snapshot: snapshot,
+          uiTheme: uiTheme,
+          textScaler: textScaler,
+          compact: largeText,
+        ),
+      ),
+      Semantics(
+        container: true,
+        excludeSemantics: true,
+        label: 'Credits ${snapshot.gold}',
+        child: _CreditsAnchor(
+          key: const ValueKey('mission-status-credits'),
+          snapshot: snapshot,
+          uiTheme: uiTheme,
+          textScaler: textScaler,
+          compact: largeText,
+        ),
+      ),
+    ];
     return OrionSurface(
       role: OrionSurfaceRole.sheet,
       radius: 16,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Wrap(
-        key: const ValueKey('mission-status-hud'),
-        alignment: WrapAlignment.spaceBetween,
-        spacing: 10,
-        runSpacing: 6,
-        children: [
-          Semantics(
-            container: true,
-            excludeSemantics: true,
-            label:
-                'Base ${snapshot.baseHealth} of ${snapshot.startingBaseHealth}',
-            child: _BaseHealthAnchor(
-              key: const ValueKey('mission-status-base'),
-              snapshot: snapshot,
-              uiTheme: uiTheme,
-              textScaler: textScaler,
+      child: largeText
+          ? SizedBox(
+              key: const ValueKey('mission-status-hud'),
+              height: 43,
+              child: Row(
+                children: [
+                  for (final (index, anchor) in anchors.indexed)
+                    Expanded(flex: index == 1 ? 2 : 3, child: anchor),
+                ],
+              ),
+            )
+          : Wrap(
+              key: const ValueKey('mission-status-hud'),
+              alignment: WrapAlignment.spaceBetween,
+              spacing: 10,
+              runSpacing: 6,
+              children: anchors,
             ),
-          ),
-          Semantics(
-            container: true,
-            excludeSemantics: true,
-            label:
-                '${snapshot.stageName}. '
-                '$waveLabel, '
-                '${_missionPhaseLabel(snapshot)}',
-            child: _MissionStatusAnchor(
-              key: const ValueKey('mission-status-stage'),
-              snapshot: snapshot,
-              uiTheme: uiTheme,
-              textScaler: textScaler,
-            ),
-          ),
-          Semantics(
-            container: true,
-            excludeSemantics: true,
-            label: 'Credits ${snapshot.gold}',
-            child: _CreditsAnchor(
-              key: const ValueKey('mission-status-credits'),
-              snapshot: snapshot,
-              uiTheme: uiTheme,
-              textScaler: textScaler,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -122,11 +133,13 @@ class _BaseHealthAnchor extends StatelessWidget {
     required this.snapshot,
     required this.uiTheme,
     required this.textScaler,
+    this.compact = false,
   });
 
   final GameSnapshot snapshot;
   final OrionUiTheme uiTheme;
   final TextScaler textScaler;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -136,9 +149,63 @@ class _BaseHealthAnchor extends StatelessWidget {
               .clamp(0.0, 1.0)
               .toDouble();
 
-    // ponytail: fixed-width fill track so the anchor shrink-wraps without
-    // intrinsic-width queries (IntrinsicWidth + width:infinity asserts under
-    // unbounded-height ancestors, e.g. Stack positioned overlays).
+    final readout = OrionReadout(
+      value: '${snapshot.baseHealth}',
+      denominator: '${snapshot.startingBaseHealth}',
+      color: uiTheme.textPrimary,
+      size: 26,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textScaler: textScaler,
+    );
+    final track = SizedBox(
+      key: const ValueKey('base-health-fill-track'),
+      height: 6,
+      width: 76,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(2),
+        child: CustomPaint(
+          foregroundPainter: _HullSegmentsPainter(uiTheme.voidBlack),
+          child: ColoredBox(
+            color: uiTheme.panelRaised,
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                widthFactor: fraction,
+                heightFactor: 1,
+                child: ColoredBox(
+                  key: const ValueKey('base-health-fill'),
+                  color: baseHealthColor(snapshot, uiTheme),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    final icon = OrionAtlasSprite(
+      art: OrionArt.trait(EnemyTrait.shielded)!,
+      size: Size.square(compact ? 20 : 34),
+    );
+    if (compact) {
+      return Row(
+        children: [
+          icon,
+          const SizedBox(width: 4),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [readout, const SizedBox(height: 3), track],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,50 +213,13 @@ class _BaseHealthAnchor extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            OrionAtlasSprite(
-              art: OrionArt.trait(EnemyTrait.shielded)!,
-              size: const Size.square(34),
-            ),
+            icon,
             const SizedBox(width: 4),
-            Flexible(
-              child: OrionReadout(
-                value: '${snapshot.baseHealth}',
-                denominator: '${snapshot.startingBaseHealth}',
-                color: uiTheme.textPrimary,
-                size: 26,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textScaler: textScaler,
-              ),
-            ),
+            Flexible(child: readout),
           ],
         ),
         const SizedBox(height: 3),
-        SizedBox(
-          key: const ValueKey('base-health-fill-track'),
-          height: 6,
-          width: 76,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(2),
-            child: CustomPaint(
-              foregroundPainter: _HullSegmentsPainter(uiTheme.voidBlack),
-              child: ColoredBox(
-                color: uiTheme.panelRaised,
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: FractionallySizedBox(
-                    widthFactor: fraction,
-                    heightFactor: 1,
-                    child: ColoredBox(
-                      key: const ValueKey('base-health-fill'),
-                      color: baseHealthColor(snapshot, uiTheme),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
+        track,
       ],
     );
   }
@@ -226,16 +256,29 @@ class _MissionStatusAnchor extends StatelessWidget {
     required this.snapshot,
     required this.uiTheme,
     required this.textScaler,
+    this.compact = false,
   });
 
   final GameSnapshot snapshot;
   final OrionUiTheme uiTheme;
   final TextScaler textScaler;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final phaseLabel = _missionPhaseLabel(snapshot);
 
+    final readout = OrionReadout(
+      value: '${snapshot.waveNumber}',
+      denominator: snapshot.missionWaveTotal == null
+          ? null
+          : '${snapshot.missionWaveTotal}',
+      color: uiTheme.systemCyan,
+      size: 22,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textScaler: textScaler,
+    );
     return Tooltip(
       message: snapshot.stageName,
       excludeFromSemantics: true,
@@ -243,55 +286,70 @@ class _MissionStatusAnchor extends StatelessWidget {
       // centred beneath it. The stage name is not in the band at all there —
       // the band carries three numbers, not prose — so it stays in this
       // widget's tooltip and in the Semantics label its parent supplies.
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          OrionReadout(
-            value: '${snapshot.waveNumber}',
-            denominator: snapshot.missionWaveTotal == null
-                ? null
-                : '${snapshot.missionWaveTotal}',
-            color: uiTheme.systemCyan,
-            size: 22,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textScaler: textScaler,
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // The artboard colours this pair by phase, not by chrome:
-              // `BUILD` is naniteGreen with a green dot -- it is the state
-              // that invites action -- and a running wave goes muted. Paused
-              // keeps our warning orange, which the artboard has no state for.
-              SizedBox.square(
-                dimension: 6,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: _phaseAccent(snapshot, uiTheme),
-                    shape: BoxShape.circle,
+      child: compact
+          ? Row(
+              children: [
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.center,
+                    child: readout,
                   ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              Flexible(
-                child: Text(
-                  // Caps, as the artboard sets it. The anchor's Semantics
-                  // and Tooltip carry the readable copy.
-                  phaseLabel.toUpperCase(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textScaler: textScaler,
-                  style: OrionTypography.microLabel(
-                    color: _phaseAccent(snapshot, uiTheme),
-                  ),
+                const SizedBox(width: 3),
+                Icon(
+                  snapshot.isPaused
+                      ? Icons.pause
+                      : switch (snapshot.phase) {
+                          GamePhase.build => Icons.build,
+                          GamePhase.wave => Icons.play_arrow,
+                          GamePhase.won => Icons.check,
+                          GamePhase.lost => Icons.close,
+                        },
+                  size: 18,
+                  color: _phaseAccent(snapshot, uiTheme),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
+              ],
+            )
+          : Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                readout,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // The artboard colours this pair by phase, not by chrome:
+                    // `BUILD` is naniteGreen with a green dot -- it is the state
+                    // that invites action -- and a running wave goes muted. Paused
+                    // keeps our warning orange, which the artboard has no state for.
+                    SizedBox.square(
+                      dimension: 6,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: _phaseAccent(snapshot, uiTheme),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        // Caps, as the artboard sets it. The anchor's Semantics
+                        // and Tooltip carry the readable copy.
+                        phaseLabel.toUpperCase(),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textScaler: textScaler,
+                        style: OrionTypography.microLabel(
+                          color: _phaseAccent(snapshot, uiTheme),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 }
@@ -302,28 +360,37 @@ class _CreditsAnchor extends StatelessWidget {
     required this.snapshot,
     required this.uiTheme,
     required this.textScaler,
+    this.compact = false,
   });
 
   final GameSnapshot snapshot;
   final OrionUiTheme uiTheme;
   final TextScaler textScaler;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     // Artboard order: the figure, then the credit mark -- "410 (hex)". The
     // number is what the player reads, so it leads.
+    final value = Text(
+      '${snapshot.gold}',
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textScaler: textScaler,
+      textAlign: TextAlign.end,
+      style: OrionTypography.readout(size: 26, color: uiTheme.creditGold),
+    );
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Flexible(
-          child: Text(
-            '${snapshot.gold}',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textScaler: textScaler,
-            textAlign: TextAlign.end,
-            style: OrionTypography.readout(size: 26, color: uiTheme.creditGold),
-          ),
+          child: compact
+              ? FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: value,
+                )
+              : value,
         ),
         const SizedBox(width: 5),
         Icon(Icons.hexagon, color: uiTheme.creditGold, size: 19),

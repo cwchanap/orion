@@ -427,6 +427,87 @@ void main() {
     }
   });
 
+  testWidgets(
+    'narrow large-text boss preview shows a group and a spaced trait',
+    (tester) async {
+      await loadRealFonts(withMaterialIcons: false);
+      tester.view.physicalSize = const Size(320, 568);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final stage = OrionCampaign.stageById('asteroid-foundry');
+      final wave = stage.waves.last;
+      final preview = GameBalance.wavePreview(
+        wave: wave,
+        waveNumber: stage.waves.length,
+        missionWaveTotal: stage.waves.length,
+        unlockedTowerTypes: TowerType.values,
+        effectiveClearBonus: wave.clearBonus,
+      );
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(nextWavePreview: preview),
+          textScaler: const TextScaler.linear(3),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final intel = find.byKey(
+        ValueKey('incoming-composition-${preview.waveNumber}'),
+      );
+      final scroll = find.descendant(
+        of: intel,
+        matching: find.byType(Scrollable),
+      );
+      final viewport = tester.getRect(scroll);
+      bool isVisible(Finder finder) {
+        final rect = tester.getRect(finder);
+        return rect.left >= viewport.left &&
+            rect.right <= viewport.right &&
+            rect.top >= viewport.top &&
+            rect.bottom <= viewport.bottom;
+      }
+
+      final group = find.descendant(of: intel, matching: find.text('x10'));
+      final boss = find.descendant(of: intel, matching: find.text('BOSS'));
+      final visibleTraits = preview.traits
+          .map(
+            (trait) => find.descendant(
+              of: intel,
+              matching: find.text(trait.label.toUpperCase()),
+            ),
+          )
+          .where(isVisible)
+          .toList();
+      expect(isVisible(group), isTrue, reason: 'a group must be visible first');
+      expect(isVisible(boss), isTrue);
+      expect(visibleTraits, isNotEmpty);
+      final labels = [tester.getRect(boss), tester.getRect(visibleTraits.first)]
+        ..sort((a, b) => a.left.compareTo(b.left));
+      expect(
+        labels.last.left - labels.first.right,
+        greaterThanOrEqualTo(8),
+        reason: 'adjacent orange labels must not read as one word',
+      );
+      final laterTrait = preview.traits
+          .map(
+            (trait) => find.descendant(
+              of: intel,
+              matching: find.text(trait.label.toUpperCase()),
+            ),
+          )
+          .firstWhere((finder) => !isVisible(finder));
+      expect(
+        tester.getRect(laterTrait).top -
+            tester.getRect(visibleTraits.first).bottom,
+        greaterThanOrEqualTo(8),
+        reason: 'wrapped traits need a visible line gap',
+      );
+      await tester.ensureVisible(find.text('x1'));
+      await tester.pumpAndSettle();
+      expect(isVisible(find.text('x1')), isTrue);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('active wave keeps the hostiles label readable at 3x', (
     tester,
   ) async {
@@ -573,6 +654,285 @@ void main() {
     await tester.pumpAndSettle();
     expect(board, isNotNull);
     expect(board!.height, greaterThan(250));
+  });
+
+  testWidgets('narrow large-text board stays stable when the wave starts', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    Rect? board;
+    final preview = commandDeckPreview();
+    Future<void> pump(GameSnapshot snapshot) async {
+      await tester.pumpWidget(
+        chromeHost(
+          snapshot,
+          textScaler: const TextScaler.linear(3),
+          onBoardViewportChanged: (rect) => board = rect,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pump(commandDeckSnapshot(nextWavePreview: preview));
+    final buildBoard = board!;
+    await pump(
+      commandDeckSnapshot(
+        phase: GamePhase.wave,
+        waveHostilesTotal: 8,
+        waveHostilesRemaining: 8,
+        waveClearBonus: 30,
+      ),
+    );
+    expect(board, buildBoard, reason: 'the grid must not jump mid-mission');
+    expect(board!.height, greaterThanOrEqualTo(180));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrow board stays stable for a high-bonus wave', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    Rect? board;
+    Future<void> pump(GameSnapshot snapshot) async {
+      await tester.pumpWidget(
+        chromeHost(
+          snapshot,
+          textScaler: const TextScaler.linear(3),
+          onBoardViewportChanged: (rect) => board = rect,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pump(
+      commandDeckSnapshot(
+        waveNumber: 7,
+        nextWavePreview: commandDeckPreview(waveNumber: 7, clearBonus: 115),
+      ),
+    );
+    final buildBoard = board!;
+    await pump(
+      commandDeckSnapshot(
+        phase: GamePhase.wave,
+        waveNumber: 7,
+        waveHostilesTotal: 47,
+        waveHostilesRemaining: 47,
+        waveClearBonus: 115,
+      ),
+    );
+    expect(board, buildBoard);
+    expect(find.text('47 hostiles left'), findsOneWidget);
+    expect(find.text('+115 clear'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('HUD readouts honor intermediate text scaling', (tester) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+        textScaler: const TextScaler.linear(1.3),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final hull = find.descendant(
+      of: find.byKey(const ValueKey('mission-status-base')),
+      matching: find.text('20'),
+    );
+    expect(tester.widget<Text>(hull).textScaler!.scale(1), 1.3);
+    expect(
+      tester.renderObject<RenderParagraph>(hull).didExceedMaxLines,
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('large-text battle readouts remain enlarged and whole', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final readouts = [
+      ('mission-status-base', '20'),
+      ('mission-status-stage', '1'),
+      ('mission-status-credits', '150'),
+    ];
+    Finder readout(String anchor, String value) => find.descendant(
+      of: find.byKey(ValueKey(anchor)),
+      matching: find.text(value),
+    );
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: commandDeckPreview())),
+    );
+    await tester.pumpAndSettle();
+    final defaultHeights = {
+      for (final (anchor, value) in readouts)
+        anchor: tester.getRect(readout(anchor, value)).height,
+    };
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+        textScaler: const TextScaler.linear(3),
+      ),
+    );
+    await tester.pumpAndSettle();
+    for (final (anchor, value) in readouts) {
+      final finder = readout(anchor, value);
+      final label = tester.widget<Text>(finder);
+      final effectiveSize = (label.textScaler ?? const TextScaler.linear(3))
+          .scale(label.style!.fontSize!);
+      expect(effectiveSize, greaterThanOrEqualTo(36), reason: anchor);
+      expect(
+        tester.renderObject<RenderParagraph>(finder).didExceedMaxLines,
+        isFalse,
+      );
+      final bounds = tester.getRect(finder);
+      expect(
+        bounds.height,
+        greaterThan(defaultHeights[anchor]! * 1.15),
+        reason: '$anchor should actually paint larger after fitting',
+      );
+      final band = tester.getRect(
+        find.byKey(const ValueKey('mission-status-hud')),
+      );
+      expect(bounds.left, greaterThanOrEqualTo(band.left));
+      expect(bounds.top, greaterThanOrEqualTo(band.top));
+      expect(bounds.right, lessThanOrEqualTo(band.right));
+      expect(bounds.bottom, lessThanOrEqualTo(band.bottom));
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('large-text HUD keeps its status icons recognizable', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+        textScaler: const TextScaler.linear(3),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final iconFinders = [
+      find.descendant(
+        of: find.byKey(const ValueKey('mission-status-base')),
+        matching: find.byType(OrionAtlasSprite),
+      ),
+      find.descendant(
+        of: find.byKey(const ValueKey('mission-status-stage')),
+        matching: find.byIcon(Icons.build),
+      ),
+      find.descendant(
+        of: find.byKey(const ValueKey('mission-status-credits')),
+        matching: find.byIcon(Icons.hexagon),
+      ),
+    ];
+    for (final icon in iconFinders) {
+      expect(
+        tester.getRect(icon).shortestSide,
+        greaterThanOrEqualTo(16),
+        reason: 'a status icon must not shrink along with fitted text',
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('large-text tower cards show full names and prices', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+        textScaler: const TextScaler.linear(3),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final railViewport = find.descendant(
+      of: find.byType(TowerBuildRail),
+      matching: find.byType(Scrollable),
+    );
+    for (final type in TowerType.values) {
+      final card = find.byKey(ValueKey('tower-card-${type.name}'));
+      final name = find.descendant(
+        of: card,
+        matching: find.text(type.label.toUpperCase()),
+      );
+      final price = find.descendant(
+        of: card,
+        matching: find.text('${GameBalance.towerStats(type, level: 1).cost}'),
+      );
+      for (final text in [name, price]) {
+        final widget = tester.widget<Text>(text);
+        expect((widget.textScaler ?? const TextScaler.linear(3)).scale(1), 3);
+        expect(
+          tester.renderObject<RenderParagraph>(text).didExceedMaxLines,
+          isFalse,
+        );
+      }
+      await Scrollable.ensureVisible(tester.element(name), alignment: 1);
+      await tester.pumpAndSettle();
+      final bounds = tester.getRect(name);
+      final viewport = tester.getRect(railViewport);
+      expect(
+        bounds.left,
+        greaterThanOrEqualTo(viewport.left - 0.1),
+        reason: type.label,
+      );
+      expect(
+        bounds.right,
+        lessThanOrEqualTo(viewport.right + 0.1),
+        reason: type.label,
+      );
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('lifting a large-text tower card does not shift the rail', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final events = <TowerPlacementPreviewEvent>[];
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+        textScaler: const TextScaler.linear(3),
+        onPlacementPreviewEvent: events.add,
+      ),
+    );
+    await tester.pumpAndSettle();
+    final next = find.byKey(const ValueKey('tower-card-rocket'));
+    final nextLeft = tester.getTopLeft(next).dx;
+    final gesture = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+    );
+    await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
+    expect(events.single, isA<TowerPlacementPreviewBegin>());
+    expect(tester.getTopLeft(next).dx, closeTo(nextLeft, 0.01));
+    await gesture.up();
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets(

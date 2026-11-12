@@ -574,20 +574,109 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,
-          ).copyWith(textScaler: const TextScaler.linear(1.4)),
+          ).copyWith(textScaler: const TextScaler.linear(1.3)),
           child: child!,
         ),
         home: railHost(),
       ),
     );
 
-    // The scaler is capped at 1.3 and the card dimensions follow it.
+    // The standard vertical card grows with text up to 1.3x.
     final first = tester.getRect(
       find.byKey(const ValueKey('tower-card-laser')),
     );
     expect(first.width, closeTo(70 * 1.3, 0.01));
     expect(find.byType(TowerBuildRail), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('large tower cards grow vertically for very large text', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(4)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomLeft,
+            child: SizedBox(
+              width: 250,
+              child: TowerBuildRail(
+                phase: GamePhase.build,
+                gold: 999,
+                unlockedTowerTypes: TowerType.values,
+                onPlaceTower: (_) {},
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final card = tester.getRect(find.byKey(const ValueKey('tower-card-laser')));
+    for (final text in [
+      'LASER',
+      '${GameBalance.towerStats(TowerType.laser, level: 1).cost}',
+    ]) {
+      final bounds = tester.getRect(find.text(text));
+      expect(bounds.top, greaterThanOrEqualTo(card.top), reason: text);
+      expect(bounds.bottom, lessThanOrEqualTo(card.bottom), reason: text);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('tower prices do not shrink when text scale increases', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    double previousHeight = 0;
+    for (final scale in [1.3, 1.4, 2.0, 3.0]) {
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: TextScaler.linear(scale)),
+            child: child!,
+          ),
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomLeft,
+              child: SizedBox(
+                width: 250,
+                child: TowerBuildRail(
+                  phase: GamePhase.build,
+                  gold: 999,
+                  unlockedTowerTypes: TowerType.values,
+                  onPlaceTower: (_) {},
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final price = find.descendant(
+        of: find.byKey(const ValueKey('tower-card-laser')),
+        matching: find.text('50'),
+      );
+      final height = tester.getRect(price).height;
+      expect(height, greaterThanOrEqualTo(previousHeight), reason: '$scale x');
+      previousHeight = height;
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('card semantics distinguish affordable and unaffordable towers', (
