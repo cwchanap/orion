@@ -485,6 +485,84 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final (viewport, scale) in [
+    (const Size(320, 568), 2.0),
+    (const Size(320, 568), 3.0),
+    (const Size(320, 568), 4.0),
+    (const Size(360, 640), 3.0),
+  ]) {
+    testWidgets(
+      'briefing facts and threats remain readable at $viewport and ${scale}x',
+      (tester) async {
+        await loadRealFonts();
+        await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          viewport: viewport,
+          textScaler: TextScaler.linear(scale),
+        );
+
+        for (final label in [
+          'WAVES',
+          'HULL',
+          'START',
+          'HOSTILES',
+          'ARMORED',
+          'SHIELDED',
+        ]) {
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.text(label),
+          );
+          expect(
+            paragraph.didExceedMaxLines,
+            isFalse,
+            reason: '$label is truncated',
+          );
+          expect(
+            paragraph.getBoxesForSelection(
+              TextSelection(baseOffset: 0, extentOffset: label.length),
+            ),
+            hasLength(1),
+            reason: '$label must not split mid-word',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('briefing shows a scroll cue for the hidden blueprint', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+    final briefing = find.byType(StageBriefingSheet);
+    final scroll = find.descendant(
+      of: briefing,
+      matching: find.byType(Scrollable),
+    );
+    final state = tester.state<ScrollableState>(scroll);
+    expect(state.position.maxScrollExtent, greaterThan(0));
+    final scrollbar = find.descendant(
+      of: briefing,
+      matching: find.byWidgetPredicate(
+        (widget) => widget is Scrollbar && widget.thumbVisibility == true,
+      ),
+    );
+    expect(scrollbar, findsOneWidget);
+    final blueprint = find.textContaining(
+      'Blueprint locked: Relay Calibration',
+    );
+    await tester.drag(scroll, const Offset(0, -250));
+    await tester.pumpAndSettle();
+    expect(state.position.pixels, greaterThan(0));
+    final viewport = tester.getRect(scroll);
+    final blueprintRect = tester.getRect(blueprint);
+    expect(blueprintRect.top, greaterThanOrEqualTo(viewport.top));
+    expect(blueprintRect.bottom, lessThanOrEqualTo(viewport.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('reduced motion remains usable', (tester) async {
     final recorder = await _pumpBriefing(
       tester,
