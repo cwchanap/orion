@@ -418,6 +418,31 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
     final theme = OrionUiTheme.of(context);
     final bosses = widget.preview.bossGroups.toSet();
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final groups = widget.preview.groups;
+    final traits = widget.preview.traits.toList(growable: false);
+    Widget groupItem(WavePreviewGroup group) => Semantics(
+      label:
+          '${group.enemyCount} ${group.label}'
+          '${bosses.contains(group) ? ', boss' : ''}',
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OrionAtlasSprite(
+            art: OrionArt.previewGroup(group),
+            size: const Size.square(22),
+          ),
+          Text(
+            'x${group.enemyCount}',
+            style: OrionTypography.readout(size: 12, color: theme.textPrimary),
+          ),
+        ],
+      ),
+    );
+    Widget traitItem(EnemyTrait trait) => Text(
+      trait.label.toUpperCase(),
+      style: OrionTypography.microLabel(color: theme.warningOrange),
+    );
     final items = <Widget>[
       if (!largeText)
         Semantics(
@@ -433,34 +458,10 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
           'BOSS',
           style: OrionTypography.microLabel(color: theme.warningOrange),
         ),
-      for (final group in widget.preview.groups)
-        Semantics(
-          label:
-              '${group.enemyCount} ${group.label}'
-              '${bosses.contains(group) ? ', boss' : ''}',
-          excludeSemantics: true,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OrionAtlasSprite(
-                art: OrionArt.previewGroup(group),
-                size: const Size.square(22),
-              ),
-              Text(
-                'x${group.enemyCount}',
-                style: OrionTypography.readout(
-                  size: 12,
-                  color: theme.textPrimary,
-                ),
-              ),
-            ],
-          ),
-        ),
-      for (final trait in widget.preview.traits)
-        Text(
-          trait.label.toUpperCase(),
-          style: OrionTypography.microLabel(color: theme.warningOrange),
-        ),
+      if (traits.isNotEmpty) traitItem(traits.first),
+      if (groups.isNotEmpty) groupItem(groups.first),
+      for (final group in groups.skip(1)) groupItem(group),
+      for (final trait in traits.skip(1)) traitItem(trait),
     ];
     if (largeText) {
       final scaler = MediaQuery.textScalerOf(context);
@@ -492,9 +493,10 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
       );
       labelMeasure.dispose();
       countMeasure.dispose();
-      // Long waves already need scrolling; use one line to leave more room
-      // for the board while keeping the first groups visible.
-      final visibleLines = widget.preview.groups.length > 4 ? 1 : 2;
+      // Constrain the preview on short screens and long waves so the board
+      // remains usable; its first group and trait stay at the front.
+      final shortScreen = MediaQuery.sizeOf(context).height < 700;
+      final visibleLines = groups.length > 4 || shortScreen ? 1 : 2;
       final maxHeight = math.min(
         lineHeight * visibleLines + 4,
         MediaQuery.sizeOf(context).height * .25,
@@ -513,7 +515,7 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
                 container: true,
                 label: 'Incoming enemies',
                 child: Wrap(
-                  spacing: 8,
+                  spacing: 4,
                   runSpacing: 4,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: items,

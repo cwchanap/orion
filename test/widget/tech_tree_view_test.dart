@@ -20,6 +20,53 @@ import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
+  testWidgets('embedded research exposes or signals the points breakdown', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.runAsync(loadRealFonts);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: OrionMenuShell(
+          destination: OrionMenuDestination.research,
+          medalEarned: 0,
+          medalTotal: 21,
+          researchPoints: 0,
+          onDestinationSelected: (_) {},
+          onOpenSettings: () {},
+          child: TechTreeView(
+            progress: CampaignProgress(),
+            techTree: CampaignTechTree(),
+            onPurchase: (_) {},
+            embeddedInMenuShell: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('tech-node-hardened-core')));
+    await tester.pumpAndSettle();
+    final bank = find.byKey(const ValueKey('tech-bank-bar'));
+    final fieldScroll = find
+        .ancestor(of: bank, matching: find.byType(Scrollable))
+        .first;
+    final viewport = tester.getRect(fieldScroll);
+    if (tester.getRect(bank).bottom > viewport.bottom) {
+      final scrollbar = find.ancestor(
+        of: fieldScroll,
+        matching: find.byType(Scrollbar),
+      );
+      expect(scrollbar, findsOneWidget);
+      expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
+    }
+    await tester.ensureVisible(bank);
+    await tester.pumpAndSettle();
+    expect(tester.getRect(bank).bottom, lessThanOrEqualTo(viewport.bottom));
+  });
+
   testWidgets('node effects name their gameplay benefit without clipping', (
     tester,
   ) async {

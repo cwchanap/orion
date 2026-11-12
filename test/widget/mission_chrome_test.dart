@@ -501,8 +501,82 @@ void main() {
     expect(bounds.right, lessThanOrEqualTo(viewport.right));
   });
 
+  for (final scale in [1.0, 3.0]) {
+    testWidgets('long wave exposes a trait at ${scale}x text', (tester) async {
+      await loadRealFonts(withMaterialIcons: false);
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final stage = OrionCampaign.stageById('outpost-alpha');
+      final wave = stage.waves.last;
+      final preview = GameBalance.wavePreview(
+        wave: wave,
+        waveNumber: stage.waves.length,
+        missionWaveTotal: stage.waves.length,
+        unlockedTowerTypes: TowerType.values,
+        effectiveClearBonus: wave.clearBonus,
+      );
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(nextWavePreview: preview),
+          textScaler: TextScaler.linear(scale),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final intel = find.byKey(
+        ValueKey('incoming-composition-${preview.waveNumber}'),
+      );
+      final scroll = find.descendant(
+        of: intel,
+        matching: find.byType(Scrollable),
+      );
+      final viewport = tester.getRect(scroll);
+      final visibleTraits = preview.traits.where((trait) {
+        final label = find.descendant(
+          of: intel,
+          matching: find.text(trait.label.toUpperCase()),
+        );
+        final bounds = tester.getRect(label);
+        return bounds.left >= viewport.left &&
+            bounds.right <= viewport.right &&
+            bounds.top >= viewport.top &&
+            bounds.bottom <= viewport.bottom;
+      });
+      expect(visibleTraits, isNotEmpty);
+    });
+  }
+
+  testWidgets('short boss wave preserves large-text board space', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final stage = OrionCampaign.stageById('asteroid-foundry');
+    final wave = stage.waves.last;
+    final preview = GameBalance.wavePreview(
+      wave: wave,
+      waveNumber: stage.waves.length,
+      missionWaveTotal: stage.waves.length,
+      unlockedTowerTypes: TowerType.values,
+      effectiveClearBonus: wave.clearBonus,
+    );
+    Rect? board;
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(nextWavePreview: preview),
+        textScaler: const TextScaler.linear(3),
+        onBoardViewportChanged: (rect) => board = rect,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(board, isNotNull);
+    expect(board!.height, greaterThan(250));
+  });
+
   testWidgets(
-    'large-text boss composition is visible without horizontal scroll',
+    'large-text boss composition exposes the first group and trait and scrolls',
     (tester) async {
       await loadRealFonts(withMaterialIcons: false);
       tester.view.physicalSize = const Size(360, 640);
@@ -526,21 +600,43 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      for (final label in ['BOSS', 'ARMORED', 'HEAVY', 'x1', 'x10']) {
+      final intel = find.byKey(
+        ValueKey('incoming-composition-${preview.waveNumber}'),
+      );
+      final scrollable = find.descendant(
+        of: intel,
+        matching: find.byType(Scrollable),
+      );
+      final scrollbar = find.descendant(
+        of: intel,
+        matching: find.byType(Scrollbar),
+      );
+      expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
+      expect(
+        tester.state<ScrollableState>(scrollable).position.axisDirection,
+        AxisDirection.down,
+      );
+      for (final label in ['BOSS', 'x10', 'ARMORED']) {
         expect(find.text(label), findsOneWidget);
         _expectWithinViewport(tester, find.text(label), const Size(360, 640));
+        final bounds = tester.getRect(find.text(label));
+        final viewport = tester.getRect(scrollable);
+        expect(bounds.top, greaterThanOrEqualTo(viewport.top));
+        expect(bounds.bottom, lessThanOrEqualTo(viewport.bottom));
+        expect(bounds.left, greaterThanOrEqualTo(viewport.left));
+        expect(bounds.right, lessThanOrEqualTo(viewport.right));
+      }
+      for (final label in ['x1', 'HEAVY']) {
         final text = find.text(label);
-        for (final element
-            in find
-                .ancestor(of: text, matching: find.byType(Scrollable))
-                .evaluate()) {
-          final viewport = tester.getRect(find.byWidget(element.widget));
-          final bounds = tester.getRect(text);
-          expect(bounds.top, greaterThanOrEqualTo(viewport.top));
-          expect(bounds.bottom, lessThanOrEqualTo(viewport.bottom));
-          expect(bounds.left, greaterThanOrEqualTo(viewport.left));
-          expect(bounds.right, lessThanOrEqualTo(viewport.right));
-        }
+        expect(text, findsOneWidget);
+        await tester.ensureVisible(text);
+        await tester.pumpAndSettle();
+        final bounds = tester.getRect(text);
+        final viewport = tester.getRect(scrollable);
+        expect(bounds.top, greaterThanOrEqualTo(viewport.top));
+        expect(bounds.bottom, lessThanOrEqualTo(viewport.bottom));
+        expect(bounds.left, greaterThanOrEqualTo(viewport.left));
+        expect(bounds.right, lessThanOrEqualTo(viewport.right));
       }
       _expectWithinViewport(
         tester,
@@ -548,7 +644,7 @@ void main() {
         const Size(360, 640),
       );
       expect(board, isNotNull);
-      expect(board!.height, greaterThan(100));
+      expect(board!.height, greaterThan(250));
       expect(tester.takeException(), isNull);
     },
   );

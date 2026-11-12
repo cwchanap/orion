@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../feedback/feedback_preferences.dart';
 import 'orion_primary_button.dart';
+import 'orion_scroll_view.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
@@ -81,7 +82,7 @@ class _FeedbackSettingsSheetState extends State<FeedbackSettingsSheet> {
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
+        child: OrionScrollView(
           child: OrionSurface(
             role: OrionSurfaceRole.sheet,
             padding: const EdgeInsets.fromLTRB(8, 16, 8, 16),

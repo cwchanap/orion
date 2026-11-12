@@ -4,6 +4,7 @@ import '../campaign/stage_definition.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_menu_shell.dart';
 import 'orion_primary_button.dart';
+import 'orion_scroll_view.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
@@ -60,7 +61,7 @@ class OrionTitleView extends StatelessWidget {
           ),
           SafeArea(
             child: LayoutBuilder(
-              builder: (context, constraints) => SingleChildScrollView(
+              builder: (context, constraints) => OrionScrollView(
                 child: ConstrainedBox(
                   constraints: BoxConstraints(minHeight: constraints.maxHeight),
                   child: Padding(

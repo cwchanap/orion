@@ -419,6 +419,70 @@ void main() {
       _expectWordmarkIntact(tester);
     });
 
+    testWidgets('large-text title exposes or signals its navigation', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.runAsync(loadRealFonts);
+      await tester.pumpWidget(
+        titleGamePage(textScaler: const TextScaler.linear(3)),
+      );
+      await tester.pumpAndSettle();
+      final title = find.byType(OrionTitleView);
+      final scrollable = find.descendant(
+        of: title,
+        matching: find.byType(Scrollable),
+      );
+      final shortcut = find.byTooltip('Settings');
+      final viewport = tester.getRect(scrollable);
+      final bounds = tester.getRect(shortcut);
+      if (bounds.bottom > viewport.bottom) {
+        final scrollbar = find.descendant(
+          of: title,
+          matching: find.byType(Scrollbar),
+        );
+        expect(scrollbar, findsOneWidget);
+        expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
+      }
+      await tester.ensureVisible(shortcut);
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(shortcut).bottom,
+        lessThanOrEqualTo(viewport.bottom),
+      );
+    });
+
+    testWidgets('large-text title settings can save a changed preference', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final store = InMemoryFeedbackPreferencesStore();
+      await tester.pumpWidget(
+        titleGamePage(
+          textScaler: const TextScaler.linear(3),
+          feedbackPreferencesStore: store,
+        ),
+      );
+      await tester.pumpAndSettle();
+      final settings = find.byTooltip('Settings');
+      await tester.ensureVisible(settings);
+      await tester.pumpAndSettle();
+      await tester.tap(settings);
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Music'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Done'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(store.value.musicEnabled, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('the production title lays out 640x360 landscape at 3x '
         'text without overflow', (tester) async {
       tester.view.physicalSize = const Size(640, 360);

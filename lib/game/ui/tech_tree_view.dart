@@ -5,6 +5,7 @@ import '../campaign/tech_tree.dart';
 import '../models/game_models.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_primary_button.dart';
+import 'orion_scroll_view.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
@@ -270,7 +271,7 @@ class _TechTreeViewState extends State<TechTreeView> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Expanded(
-                            child: SingleChildScrollView(
+                            child: OrionScrollView(
                               // Selecting a node opens its details at the top of this scrollable area.
                               key: ValueKey(_selected),
                               padding: EdgeInsets.only(
