@@ -13,6 +13,7 @@ import 'package:orion/game/ui/mission_report_content.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../support/orion_finders.dart';
 import '../support/command_deck_fixtures.dart';
@@ -21,6 +22,37 @@ import '../support/real_fonts.dart';
 import '../widget_test.dart' as fixtures;
 
 void main() {
+  testWidgets('a defeated hull is marked as danger, not healthy', (
+    tester,
+  ) async {
+    await _pumpPanel(tester, _lossContent());
+    expect(
+      tester.widget<Text>(find.text('0/20')).style!.color,
+      OrionUiTheme.dark.dangerRed,
+    );
+    for (final (health, color) in [
+      (5, OrionUiTheme.dark.dangerRed),
+      (10, OrionUiTheme.dark.warningOrange),
+      (11, OrionUiTheme.dark.systemCyan),
+    ]) {
+      await _pumpPanel(
+        tester,
+        projectLossReport(
+          snapshot: _syntheticSnapshot(
+            phase: GamePhase.lost,
+            baseHealth: health,
+          ),
+        ),
+      );
+      expect(tester.widget<Text>(find.text('$health/20')).style!.color, color);
+    }
+    await _pumpPanel(tester, _victoryContent(MissionSaveState.saved));
+    expect(
+      tester.widget<Text>(find.text('20/20')).style!.color,
+      OrionUiTheme.dark.systemCyan,
+    );
+  });
+
   testWidgets('large-text report visibly indicates more scrollable content', (
     tester,
   ) async {

@@ -434,7 +434,10 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
           ),
           Text(
             'x${group.enemyCount}',
-            style: OrionTypography.readout(size: 12, color: theme.textPrimary),
+            style: OrionTypography.readout(
+              size: largeText ? 10 : 12,
+              color: theme.textPrimary,
+            ),
           ),
         ],
       ),
@@ -443,7 +446,7 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
       trait.label.toUpperCase(),
       style: OrionTypography.microLabel(color: theme.warningOrange),
     );
-    final items = <Widget>[
+    List<Widget> itemsFor(EnemyTrait? leadingTrait) => <Widget>[
       if (!largeText)
         Semantics(
           label: 'Incoming',
@@ -458,10 +461,11 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
           'BOSS',
           style: OrionTypography.microLabel(color: theme.warningOrange),
         ),
-      if (traits.isNotEmpty) traitItem(traits.first),
+      if (leadingTrait != null) traitItem(leadingTrait),
       if (groups.isNotEmpty) groupItem(groups.first),
       for (final group in groups.skip(1)) groupItem(group),
-      for (final trait in traits.skip(1)) traitItem(trait),
+      for (final trait in traits)
+        if (trait != leadingTrait) traitItem(trait),
     ];
     if (largeText) {
       final scaler = MediaQuery.textScalerOf(context);
@@ -481,7 +485,7 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
         text: TextSpan(
           text: 'x10',
           style: inheritedStyle.merge(
-            OrionTypography.readout(size: 12, color: theme.textPrimary),
+            OrionTypography.readout(size: 10, color: theme.textPrimary),
           ),
         ),
         textDirection: direction,
@@ -505,27 +509,67 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
         padding: const EdgeInsets.only(top: 4),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          child: Scrollbar(
-            controller: _largeTextScrollController,
-            thumbVisibility: true,
-            child: SingleChildScrollView(
-              controller: _largeTextScrollController,
-              padding: const EdgeInsets.only(right: 6),
-              child: Semantics(
-                container: true,
-                label: 'Incoming enemies',
-                child: Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: items,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              double widthOf(String text, TextStyle style) {
+                final painter = TextPainter(
+                  text: TextSpan(
+                    text: text,
+                    style: inheritedStyle.merge(style),
+                  ),
+                  textDirection: direction,
+                  textScaler: scaler,
+                )..layout();
+                final width = painter.width;
+                painter.dispose();
+                return width;
+              }
+
+              final labelStyle = OrionTypography.microLabel(
+                color: theme.warningOrange,
+              );
+              final countStyle = OrionTypography.readout(
+                size: 10,
+                color: theme.textPrimary,
+              );
+              final fixedWidth =
+                  (bosses.isEmpty ? 0.0 : widthOf('BOSS', labelStyle) + 8) +
+                  (groups.isEmpty
+                      ? 0.0
+                      : 22 +
+                            widthOf('x${groups.first.enemyCount}', countStyle) +
+                            8);
+              final available = constraints.maxWidth - 6 - fixedWidth;
+              final leadingTrait = traits.cast<EnemyTrait?>().firstWhere(
+                (trait) =>
+                    widthOf(trait!.label.toUpperCase(), labelStyle) <=
+                    available,
+                orElse: () => traits.isEmpty ? null : traits.first,
+              );
+              return Scrollbar(
+                controller: _largeTextScrollController,
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  controller: _largeTextScrollController,
+                  padding: const EdgeInsets.only(right: 6),
+                  child: Semantics(
+                    container: true,
+                    label: 'Incoming enemies',
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: itemsFor(leadingTrait),
+                    ),
+                  ),
                 ),
-              ),
-            ),
+              );
+            },
           ),
         ),
       );
     }
+    final items = itemsFor(traits.firstOrNull);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Scrollbar(
@@ -607,10 +651,14 @@ class _WaveStatusStrip extends StatelessWidget {
     final progress = total <= 0
         ? 0.0
         : (resolved / total).clamp(0.0, 1.0).toDouble();
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     final waveLabel = Text(
       'Wave ${snapshot.waveNumber}',
       maxLines: 1,
-      style: OrionTypography.microLabel(color: uiTheme.textMuted, size: 11),
+      style: OrionTypography.microLabel(
+        color: uiTheme.textMuted,
+        size: largeText ? 10 : 11,
+      ),
     );
     final remainingLabel = Container(
       key: const ValueKey('mission-hostiles-remaining'),
@@ -640,14 +688,13 @@ class _WaveStatusStrip extends StatelessWidget {
               maxLines: 1,
               style: OrionTypography.microLabel(
                 color: uiTheme.creditGold,
-                size: 11,
+                size: largeText ? 10 : 11,
               ),
             ),
           ],
         ),
       ),
     );
-    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     return OrionSurface(
       role: OrionSurfaceRole.card,
       radius: 14,
@@ -819,9 +866,10 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
 
   /// Builds one rail card, wrapping it in the guide anchor when it is the
   /// single active target. The card's own ValueKey stays untouched.
-  Widget _buildCard(TowerType type) {
+  Widget _buildCard(TowerType type, double cardHeight) {
     final card = _TowerBuildCard(
       type: type,
+      cardHeight: cardHeight,
       phase: widget.phase,
       gold: widget.gold,
       unlocked: widget.unlockedTowerTypes.contains(type),
@@ -908,14 +956,13 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
       context,
     ).clamp(maxScaleFactor: 1.3);
     final compact = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final cardHeight = compact
+        ? _largeTextTowerCardHeight(context)
+        : textScaler.scale(1) * _TowerBuildCard.baseHeight;
     return Padding(
       padding: EdgeInsets.zero,
       child: SizedBox(
-        height:
-            (compact
-                ? _TowerBuildCard.compactHeight
-                : textScaler.scale(1) * _TowerBuildCard.baseHeight) +
-            12,
+        height: cardHeight + 12,
         child: Stack(
           children: [
             // Eight fixed cards: one eager Row in a scroll view. Every card
@@ -945,7 +992,7 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
                           RepaintBoundary(
                             child: IndexedSemantics(
                               index: index,
-                              child: _buildCard(type),
+                              child: _buildCard(type, cardHeight),
                             ),
                           ),
                         ],
@@ -996,9 +1043,41 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   }
 }
 
+double _largeTextTowerCardHeight(BuildContext context) {
+  final uiTheme = OrionUiTheme.of(context);
+  final scaler = MediaQuery.textScalerOf(context);
+  final inheritedStyle = DefaultTextStyle.of(context).style;
+  double heightOf(String text, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: inheritedStyle.merge(style)),
+      textDirection: Directionality.of(context),
+      textScaler: scaler,
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
+  }
+
+  final labelsHeight =
+      heightOf('LASER', OrionTypography.microLabel(color: uiTheme.textMuted)) +
+      heightOf(
+        '50',
+        OrionTypography.readout(
+          size: _largeTextTowerCostSize(scaler),
+          color: uiTheme.creditGold,
+        ),
+      );
+  return math.max(_TowerBuildCard.compactHeight, labelsHeight + 10);
+}
+
+// Preserve the price hierarchy at the compact-layout threshold without
+// letting a hero-sized price consume the whole battlefield at 3x.
+double _largeTextTowerCostSize(TextScaler scaler) => 10 + 6 / scaler.scale(1);
+
 class _TowerBuildCard extends StatelessWidget {
   const _TowerBuildCard({
     required this.type,
+    required this.cardHeight,
     required this.phase,
     required this.gold,
     required this.unlocked,
@@ -1011,6 +1090,7 @@ class _TowerBuildCard extends StatelessWidget {
   });
 
   final TowerType type;
+  final double cardHeight;
   final GamePhase phase;
   final int gold;
   final bool unlocked;
@@ -1048,17 +1128,104 @@ class _TowerBuildCard extends StatelessWidget {
         : affordable
         ? uiTheme.systemCyan
         : uiTheme.textMuted;
-    // Honor the player's text-size preference up to 1.3x and grow the card
-    // with it so the scaled labels keep their room instead of truncating.
-    final textScaler = MediaQuery.textScalerOf(
-      context,
-    ).clamp(maxScaleFactor: 1.3);
+    final requestedScaler = MediaQuery.textScalerOf(context);
+    final compact = requestedScaler.scale(1) > 1.3;
+    final textScaler = requestedScaler;
     final scaleFactor = textScaler.scale(1);
-    final compact = MediaQuery.textScalerOf(context).scale(1) > 1.3;
-    final cardHeight = compact ? compactHeight : baseHeight * scaleFactor;
     final sprite = OrionAtlasSprite(
       art: OrionArt.tower(type),
       size: const Size(58, 58),
+    );
+    final nameStyle = OrionTypography.microLabel(
+      size: 10,
+      color: uiTheme.textMuted,
+    );
+    final priceStyle = OrionTypography.readout(
+      size: compact ? _largeTextTowerCostSize(textScaler) : 14,
+      color: !unlocked
+          ? uiTheme.textMuted
+          : affordable
+          ? uiTheme.creditGold
+          : uiTheme.dangerRed,
+    );
+    double textWidth(String value, TextStyle style) {
+      final painter = TextPainter(
+        text: TextSpan(
+          text: value,
+          style: DefaultTextStyle.of(context).style.merge(style),
+        ),
+        textDirection: Directionality.of(context),
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
+      final width = painter.width;
+      painter.dispose();
+      return width;
+    }
+
+    final cardWidth = compact
+        ? math.max(
+            baseWidth,
+            58.0 +
+                math.max(
+                  textWidth(type.label.toUpperCase(), nameStyle),
+                  textWidth('${stats.cost}', priceStyle),
+                ),
+          )
+        : baseWidth * scaleFactor;
+    final art = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Opacity(
+            opacity: affordable ? 1 : 0.48,
+            child: unlocked
+                ? sprite
+                : ColorFiltered(
+                    colorFilter: const ColorFilter.matrix(<double>[
+                      0.2126,
+                      0.7152,
+                      0.0722,
+                      0,
+                      0,
+                      0.2126,
+                      0.7152,
+                      0.0722,
+                      0,
+                      0,
+                      0.2126,
+                      0.7152,
+                      0.0722,
+                      0,
+                      0,
+                      0,
+                      0,
+                      0,
+                      1,
+                      0,
+                    ]),
+                    child: sprite,
+                  ),
+          ),
+          if (!unlocked)
+            Icon(Icons.lock_outline, size: 17, color: uiTheme.textMuted),
+        ],
+      ),
+    );
+    final price = Text(
+      '${stats.cost}',
+      maxLines: 1,
+      textScaler: textScaler,
+      style: priceStyle,
+    );
+    final name = Text(
+      type.label.toUpperCase(),
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: TextAlign.center,
+      textScaler: textScaler,
+      style: nameStyle,
     );
 
     final card = Semantics(
@@ -1069,7 +1236,7 @@ class _TowerBuildCard extends StatelessWidget {
       excludeSemantics: true,
       child: SizedBox(
         key: ValueKey('tower-card-${type.name}'),
-        width: baseWidth * scaleFactor,
+        width: cardWidth,
         height: cardHeight,
         child: OrionSurface(
           role: OrionSurfaceRole.card,
@@ -1086,97 +1253,30 @@ class _TowerBuildCard extends StatelessWidget {
               highlightColor: accent.withValues(alpha: 0.10),
               child: Padding(
                 padding: const EdgeInsets.only(left: 2, right: 2, bottom: 6),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            Opacity(
-                              opacity: affordable ? 1 : 0.48,
-                              // A ColorFiltered layer is only worth its cost
-                              // for the locked greyscale; unlocked cards pass
-                              // the sprite through untouched.
-                              child: unlocked
-                                  ? sprite
-                                  : ColorFiltered(
-                                      colorFilter:
-                                          const ColorFilter.matrix(<double>[
-                                            0.2126,
-                                            0.7152,
-                                            0.0722,
-                                            0,
-                                            0,
-                                            0.2126,
-                                            0.7152,
-                                            0.0722,
-                                            0,
-                                            0,
-                                            0.2126,
-                                            0.7152,
-                                            0.0722,
-                                            0,
-                                            0,
-                                            0,
-                                            0,
-                                            0,
-                                            1,
-                                            0,
-                                          ]),
-                                      child: sprite,
-                                    ),
+                child: compact
+                    ? Row(
+                        children: [
+                          SizedBox(width: 42, child: art),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [name, price],
                             ),
-                            if (!unlocked)
-                              Icon(
-                                Icons.lock_outline,
-                                size: 17,
-                                color: uiTheme.textMuted,
-                              ),
-                          ],
-                        ),
+                          ),
+                        ],
+                      )
+                    : Column(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          Flexible(child: art),
+                          const SizedBox(height: 2),
+                          price,
+                          const SizedBox(height: 1),
+                          name,
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 2),
-                    // Cost above name, per the artboard's card template
-                    // (icon, cost, name). An unaffordable cost goes red
-                    // rather than muted: the artboard says *why* the card is
-                    // dimmed instead of only that it is.
-                    Text(
-                      '${stats.cost}',
-                      maxLines: 1,
-                      textScaler: textScaler,
-                      style: OrionTypography.readout(
-                        size: 14,
-                        color: !unlocked
-                            ? uiTheme.textMuted
-                            : affordable
-                            ? uiTheme.creditGold
-                            : uiTheme.dangerRed,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      // The artboard sets every micro label in caps; the
-                      // card's Semantics carries the real copy, so the
-                      // display string is free to shout.
-                      type.label.toUpperCase(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      textScaler: textScaler,
-                      // Muted in every state, as the artboard sets it: the
-                      // cost carries the affordability signal now, so the
-                      // name does not need to.
-                      style: OrionTypography.microLabel(
-                        size: 10,
-                        color: uiTheme.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
               ),
             ),
           ),
@@ -1211,7 +1311,7 @@ class _TowerBuildCard extends StatelessWidget {
         onDragUpdate: (details) => onDragUpdate?.call(details.globalPosition),
         onDragEnd: (_) => onDragEnded?.call(),
         feedback: _buildDragFeedback(context),
-        childWhenDragging: _buildLiftedSource(context, scaleFactor, cardHeight),
+        childWhenDragging: _buildLiftedSource(context, cardWidth, cardHeight),
         child: card,
       ),
     );
@@ -1269,12 +1369,12 @@ class _TowerBuildCard extends StatelessWidget {
   /// 1e treatment: the source card reads LIFTED while its drag is airborne.
   Widget _buildLiftedSource(
     BuildContext context,
-    double scaleFactor,
+    double cardWidth,
     double cardHeight,
   ) {
     final uiTheme = OrionUiTheme.of(context);
     return SizedBox(
-      width: baseWidth * scaleFactor,
+      width: cardWidth,
       height: cardHeight,
       child: OrionSurface(
         role: OrionSurfaceRole.card,

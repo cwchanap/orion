@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flame/components.dart';
 import 'package:flutter/painting.dart';
 
@@ -52,7 +54,7 @@ class EnemyOverlayRenderer {
         canvas,
         badges: state.badges,
         centerX: centerX,
-        y: badgesY,
+        y: radius + badgesY,
         size: layout.badgeSize,
         gap: layout.badgeGap,
         cornerRadius: layout.badgeCornerRadius,
@@ -66,7 +68,7 @@ class EnemyOverlayRenderer {
       _renderBar(
         canvas,
         centerX: centerX,
-        y: healthBarY,
+        y: radius + healthBarY,
         width: layout.healthBarWidth,
         height: layout.healthBarHeight,
         ratio: state.healthRatio,
@@ -79,7 +81,7 @@ class EnemyOverlayRenderer {
       _renderBar(
         canvas,
         centerX: centerX,
-        y: shieldBarY,
+        y: radius + shieldBarY,
         width: layout.shieldBarWidth,
         height: layout.shieldBarHeight,
         ratio: state.shieldRatio,
@@ -89,19 +91,35 @@ class EnemyOverlayRenderer {
 
     final label = name;
     if (label != null) {
+      final transform = canvas.getTransform();
+      final scale = math
+          .sqrt(transform[0] * transform[0] + transform[1] * transform[1])
+          .clamp(0.25, 1.0);
       final tp = TextPainter(
         text: TextSpan(
           text: label,
-          style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 12),
+          style: TextStyle(
+            color: const Color(0xFFFFFFFF),
+            fontSize: 12 / scale,
+          ),
         ),
         textDirection: TextDirection.ltr,
       )..layout();
-      // originY is component-local (negative = above center); draw the label
-      // just above the overlay's top edge.
-      tp.paint(
-        canvas,
-        Offset(radius - tp.width / 2, layout.originY - tp.height - 2),
+      // Layout coordinates are relative to the center, while the canvas is
+      // local to the component's top-left corner.
+      final position = Offset(
+        radius - tp.width / 2,
+        radius + layout.originY - tp.height - 2,
       );
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          (position & tp.size).inflate(2 / scale),
+          Radius.circular(3 / scale),
+        ),
+        _badgeBackgroundPaint,
+      );
+      tp.paint(canvas, position);
+      tp.dispose();
     }
   }
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../campaign/campaign_progress.dart';
 import '../models/game_models.dart';
+import 'mission_command_hud.dart';
 import 'mission_report_content.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_surface.dart';
@@ -326,7 +327,7 @@ class _ReportBody extends StatelessWidget {
                     label: 'HULL',
                     value:
                         '${snapshot.baseHealth}/${snapshot.startingBaseHealth}',
-                    color: uiTheme.naniteGreen,
+                    color: baseHealthColor(snapshot, uiTheme),
                     icon: null,
                     art: OrionArt.trait(EnemyTrait.shielded),
                   ),

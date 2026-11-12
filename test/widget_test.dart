@@ -6445,25 +6445,25 @@ void main() {
       final localBounds = <String, Rect>{
         'name': Rect.fromLTWH(
           radius - namePainter.width / 2,
-          overlayLayout.originY - namePainter.height - 2,
+          radius + overlayLayout.originY - namePainter.height - 2,
           namePainter.width,
           namePainter.height,
-        ),
+        ).inflate(2),
         'badges': Rect.fromLTWH(
           radius - badgeWidth / 2,
-          overlayLayout.badgesY!,
+          radius + overlayLayout.badgesY!,
           badgeWidth,
           overlayLayout.badgeSize,
         ).inflate(0.5),
         'health bar': Rect.fromLTWH(
           radius - overlayLayout.healthBarWidth / 2,
-          overlayLayout.healthBarY!,
+          radius + overlayLayout.healthBarY!,
           overlayLayout.healthBarWidth,
           overlayLayout.healthBarHeight,
         ),
         'shield bar': Rect.fromLTWH(
           radius - overlayLayout.shieldBarWidth / 2,
-          overlayLayout.shieldBarY!,
+          radius + overlayLayout.shieldBarY!,
           overlayLayout.shieldBarWidth,
           overlayLayout.shieldBarHeight,
         ),
