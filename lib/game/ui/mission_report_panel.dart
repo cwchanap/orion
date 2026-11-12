@@ -49,12 +49,7 @@ class MissionReportPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
-                    child: _ReportBody(content: content),
-                  ),
-                ),
+                Expanded(child: _ReportBodyViewport(content: content)),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
                   child: LayoutBuilder(
@@ -155,6 +150,36 @@ class MissionReportPanel extends StatelessWidget {
       ],
     };
   }
+}
+
+class _ReportBodyViewport extends StatefulWidget {
+  const _ReportBodyViewport({required this.content});
+
+  final MissionReportContent content;
+
+  @override
+  State<_ReportBodyViewport> createState() => _ReportBodyViewportState();
+}
+
+class _ReportBodyViewportState extends State<_ReportBodyViewport> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Scrollbar(
+    controller: _controller,
+    thumbVisibility: true,
+    child: SingleChildScrollView(
+      controller: _controller,
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 4),
+      child: _ReportBody(content: widget.content),
+    ),
+  );
 }
 
 bool _actionsStack(

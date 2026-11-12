@@ -433,11 +433,6 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
           'BOSS',
           style: OrionTypography.microLabel(color: theme.warningOrange),
         ),
-      for (final trait in widget.preview.traits)
-        Text(
-          trait.label.toUpperCase(),
-          style: OrionTypography.microLabel(color: theme.warningOrange),
-        ),
       for (final group in widget.preview.groups)
         Semantics(
           label:
@@ -460,6 +455,11 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
               ),
             ],
           ),
+        ),
+      for (final trait in widget.preview.traits)
+        Text(
+          trait.label.toUpperCase(),
+          style: OrionTypography.microLabel(color: theme.warningOrange),
         ),
     ];
     if (largeText) {
@@ -492,9 +492,11 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
       );
       labelMeasure.dispose();
       countMeasure.dispose();
-      // Keep the board usable; longer compositions scroll after two lines.
+      // Long waves already need scrolling; use one line to leave more room
+      // for the board while keeping the first groups visible.
+      final visibleLines = widget.preview.groups.length > 4 ? 1 : 2;
       final maxHeight = math.min(
-        lineHeight * 2 + 4,
+        lineHeight * visibleLines + 4,
         MediaQuery.sizeOf(context).height * .25,
       );
       return Padding(
@@ -603,6 +605,47 @@ class _WaveStatusStrip extends StatelessWidget {
     final progress = total <= 0
         ? 0.0
         : (resolved / total).clamp(0.0, 1.0).toDouble();
+    final waveLabel = Text(
+      'Wave ${snapshot.waveNumber}',
+      maxLines: 1,
+      style: OrionTypography.microLabel(color: uiTheme.textMuted, size: 11),
+    );
+    final remainingLabel = Container(
+      key: const ValueKey('mission-hostiles-remaining'),
+      child: Text(
+        '$remaining hostiles left',
+        style: OrionTypography.microLabel(color: uiTheme.dangerRed, size: 11),
+      ),
+    );
+    final bonusBadge = Semantics(
+      label: 'Clear bonus $bonus credits',
+      excludeSemantics: true,
+      child: Container(
+        key: const ValueKey('mission-clear-bonus'),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+        decoration: BoxDecoration(
+          color: uiTheme.creditGold.withValues(alpha: .08),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: uiTheme.creditGold.withValues(alpha: .45)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.hexagon, size: 13, color: uiTheme.creditGold),
+            const SizedBox(width: 4),
+            Text(
+              '+$bonus clear',
+              maxLines: 1,
+              style: OrionTypography.microLabel(
+                color: uiTheme.creditGold,
+                size: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     return OrionSurface(
       role: OrionSurfaceRole.card,
       radius: 14,
@@ -611,78 +654,37 @@ class _WaveStatusStrip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Wrap(
-                  spacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    Text(
-                      'Wave ${snapshot.waveNumber}',
-                      maxLines: 1,
-                      style: OrionTypography.microLabel(
-                        color: uiTheme.textMuted,
-                        size: 11,
-                      ),
-                    ),
-                    Text(
-                      '·',
-                      style: OrionTypography.microLabel(
-                        color: uiTheme.textDim,
-                        size: 11,
-                      ),
-                    ),
-                    Container(
-                      key: const ValueKey('mission-hostiles-remaining'),
-                      child: Text(
-                        '$remaining hostiles left',
-                        maxLines: 1,
-                        style: OrionTypography.microLabel(
-                          color: uiTheme.dangerRed,
-                          size: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Semantics(
-                label: 'Clear bonus $bonus credits',
-                excludeSemantics: true,
-                child: Container(
-                  key: const ValueKey('mission-clear-bonus'),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: uiTheme.creditGold.withValues(alpha: .08),
-                    borderRadius: BorderRadius.circular(11),
-                    border: Border.all(
-                      color: uiTheme.creditGold.withValues(alpha: .45),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
+          if (largeText)
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [waveLabel, bonusBadge, remainingLabel],
+            )
+          else
+            Row(
+              children: [
+                Expanded(
+                  child: Wrap(
+                    spacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Icon(Icons.hexagon, size: 13, color: uiTheme.creditGold),
-                      const SizedBox(width: 4),
+                      waveLabel,
                       Text(
-                        '+$bonus clear',
-                        maxLines: 1,
+                        '·',
                         style: OrionTypography.microLabel(
-                          color: uiTheme.creditGold,
+                          color: uiTheme.textDim,
                           size: 11,
                         ),
                       ),
+                      remainingLabel,
                     ],
                   ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 8),
+                bonusBadge,
+              ],
+            ),
           const SizedBox(height: 8),
           SizedBox(
             key: const ValueKey('mission-wave-progress'),
@@ -903,10 +905,15 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
     final textScaler = MediaQuery.textScalerOf(
       context,
     ).clamp(maxScaleFactor: 1.3);
+    final compact = MediaQuery.textScalerOf(context).scale(1) > 1.3;
     return Padding(
       padding: EdgeInsets.zero,
       child: SizedBox(
-        height: textScaler.scale(1) * _TowerBuildCard.baseHeight + 12,
+        height:
+            (compact
+                ? _TowerBuildCard.compactHeight
+                : textScaler.scale(1) * _TowerBuildCard.baseHeight) +
+            12,
         child: Stack(
           children: [
             // Eight fixed cards: one eager Row in a scroll view. Every card
@@ -1024,6 +1031,7 @@ class _TowerBuildCard extends StatelessWidget {
   // gets the room, and the cost is the decision, so it outranks the name.
   static const double baseWidth = 70;
   static const double baseHeight = 96;
+  static const double compactHeight = 90;
 
   @override
   Widget build(BuildContext context) {
@@ -1044,6 +1052,8 @@ class _TowerBuildCard extends StatelessWidget {
       context,
     ).clamp(maxScaleFactor: 1.3);
     final scaleFactor = textScaler.scale(1);
+    final compact = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final cardHeight = compact ? compactHeight : baseHeight * scaleFactor;
     final sprite = OrionAtlasSprite(
       art: OrionArt.tower(type),
       size: const Size(58, 58),
@@ -1058,7 +1068,7 @@ class _TowerBuildCard extends StatelessWidget {
       child: SizedBox(
         key: ValueKey('tower-card-${type.name}'),
         width: baseWidth * scaleFactor,
-        height: baseHeight * scaleFactor,
+        height: cardHeight,
         child: OrionSurface(
           role: OrionSurfaceRole.card,
           // Keep room for the sprite above the cost and name.
@@ -1199,7 +1209,7 @@ class _TowerBuildCard extends StatelessWidget {
         onDragUpdate: (details) => onDragUpdate?.call(details.globalPosition),
         onDragEnd: (_) => onDragEnded?.call(),
         feedback: _buildDragFeedback(context),
-        childWhenDragging: _buildLiftedSource(context, scaleFactor),
+        childWhenDragging: _buildLiftedSource(context, scaleFactor, cardHeight),
         child: card,
       ),
     );
@@ -1255,11 +1265,15 @@ class _TowerBuildCard extends StatelessWidget {
   }
 
   /// 1e treatment: the source card reads LIFTED while its drag is airborne.
-  Widget _buildLiftedSource(BuildContext context, double scaleFactor) {
+  Widget _buildLiftedSource(
+    BuildContext context,
+    double scaleFactor,
+    double cardHeight,
+  ) {
     final uiTheme = OrionUiTheme.of(context);
     return SizedBox(
       width: baseWidth * scaleFactor,
-      height: baseHeight * scaleFactor,
+      height: cardHeight,
       child: OrionSurface(
         role: OrionSurfaceRole.card,
         padding: const EdgeInsets.all(2),

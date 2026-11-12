@@ -145,6 +145,65 @@ void main() {
     }
   });
 
+  for (final upgrade in [
+    CampaignTechUpgrade.hardenedCore,
+    CampaignTechUpgrade.salvageCrew,
+    CampaignTechUpgrade.laserTuning,
+  ]) {
+    testWidgets('${upgrade.label} shows its disabled reason at 3x', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await loadRealFonts();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: orionThemeData,
+          builder: (context, child) => MediaQuery(
+            data: MediaQuery.of(
+              context,
+            ).copyWith(textScaler: const TextScaler.linear(3)),
+            child: child!,
+          ),
+          home: OrionMenuShell(
+            destination: OrionMenuDestination.research,
+            medalEarned: 0,
+            medalTotal: 21,
+            researchPoints: 0,
+            onDestinationSelected: (_) {},
+            onOpenSettings: () {},
+            child: TechTreeView(
+              progress: CampaignProgress(),
+              techTree: CampaignTechTree(),
+              onPurchase: (_) {},
+              embeddedInMenuShell: true,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final node = find.byKey(ValueKey('tech-node-${upgrade.id}'));
+      await tester.ensureVisible(node);
+      await tester.pumpAndSettle();
+      await tester.tap(node);
+      await tester.pumpAndSettle();
+      final detail = find.byKey(ValueKey('tech-detail-${upgrade.id}'));
+      final viewport = find.descendant(
+        of: detail,
+        matching: find.byType(Scrollable),
+      );
+      final reason = find.descendant(
+        of: detail,
+        matching: find.text('Need ${upgrade.cost} more points'),
+      );
+      expect(
+        tester.getRect(reason).bottom,
+        lessThanOrEqualTo(tester.getRect(viewport).bottom + 0.5),
+      );
+    });
+  }
+
   testWidgets('compact R&D details fit at 3x text', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;

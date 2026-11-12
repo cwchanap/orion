@@ -183,6 +183,7 @@ class _InspectorBodyViewportState extends State<_InspectorBodyViewport> {
     child: SingleChildScrollView(
       key: const ValueKey('tower-inspector-scroll'),
       controller: _controller,
+      padding: const EdgeInsets.only(right: 8),
       child: widget.child,
     ),
   );
