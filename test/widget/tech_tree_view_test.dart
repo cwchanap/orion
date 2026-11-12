@@ -76,6 +76,75 @@ void main() {
     expect(find.text('R & D'), findsOneWidget);
   });
 
+  testWidgets('large-text research detail shows price and disabled reason', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await loadRealFonts();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3)),
+          child: child!,
+        ),
+        home: OrionMenuShell(
+          destination: OrionMenuDestination.research,
+          medalEarned: 0,
+          medalTotal: 21,
+          researchPoints: 0,
+          onDestinationSelected: (_) {},
+          onOpenSettings: () {},
+          child: TechTreeView(
+            progress: CampaignProgress(),
+            techTree: CampaignTechTree(),
+            onPurchase: (_) {},
+            embeddedInMenuShell: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('tech-node-solar-capacitors')));
+    await tester.pumpAndSettle();
+    final detail = find.byKey(const ValueKey('tech-detail-solar-capacitors'));
+    final action = find.byWidgetPredicate(
+      (widget) => widget is OrionPrimaryButton && widget.label == 'Research',
+    );
+    for (final label in ['Cost: 3 pts', 'Need 3 more points']) {
+      final text = find.descendant(of: detail, matching: find.text(label));
+      expect(text, findsOneWidget);
+      final bounds = tester.getRect(text);
+      expect(bounds.top, greaterThanOrEqualTo(tester.getRect(detail).top));
+      expect(bounds.bottom, lessThanOrEqualTo(tester.getRect(action).top));
+      for (final scrollable
+          in find
+              .ancestor(of: text, matching: find.byType(Scrollable))
+              .evaluate()) {
+        final viewport = tester.getRect(find.byWidget(scrollable.widget));
+        expect(bounds.top, greaterThanOrEqualTo(viewport.top));
+        expect(bounds.bottom, lessThanOrEqualTo(viewport.bottom));
+      }
+    }
+    final scrollable = find.descendant(
+      of: detail,
+      matching: find.byType(Scrollable),
+    );
+    if (tester.state<ScrollableState>(scrollable).position.maxScrollExtent >
+        0) {
+      final scrollbar = find.descendant(
+        of: detail,
+        matching: find.byType(Scrollbar),
+      );
+      expect(scrollbar, findsOneWidget);
+      expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
+    }
+  });
+
   testWidgets('compact R&D details fit at 3x text', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
