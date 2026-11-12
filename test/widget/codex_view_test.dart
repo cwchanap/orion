@@ -1477,6 +1477,29 @@ void main() {
       });
     }
 
+    testWidgets('enemy list exposes its scroll position at 3x', (tester) async {
+      await loadRealFonts();
+      await pumpCodex(
+        tester,
+        size: const Size(360, 640),
+        textScaler: const TextScaler.linear(3),
+      );
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+      final list = find.byKey(const PageStorageKey<int>(1));
+      final state = tester.state<ScrollableState>(
+        find.descendant(of: list, matching: find.byType(Scrollable)),
+      );
+      expect(state.position.maxScrollExtent, greaterThan(0));
+      final scrollbar = find.ancestor(
+        of: list,
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Scrollbar && widget.thumbVisibility == true,
+        ),
+      );
+      expect(scrollbar, findsOneWidget);
+    });
+
     testWidgets('enemy glossary labels stay readable at 3x', (tester) async {
       await loadRealFonts();
       await pumpCodex(

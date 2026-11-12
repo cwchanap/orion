@@ -61,6 +61,11 @@ class StageBriefingSheet extends StatelessWidget {
               .map(StageModifierMetadata.forModifier)
               .toList(growable: false);
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    const headerHeight = 64.0;
+    final heroHeight = (MediaQuery.sizeOf(context).height * 0.4).clamp(
+      260.0,
+      360.0,
+    );
     final facts = [
       _BriefingStatTile(
         icon: Icons.waves_rounded,
@@ -118,23 +123,31 @@ class StageBriefingSheet extends StatelessWidget {
                 ),
               ),
             ),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              height: heroHeight,
+              child: IgnorePointer(
+                child: _BriefingHero(
+                  stage: stage,
+                  scrimColor: uiTheme.voidBlack,
+                ),
+              ),
+            ),
             Column(
               children: [
+                const SizedBox(height: headerHeight),
                 Expanded(
                   child: OrionScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         SizedBox(
-                          height: (MediaQuery.sizeOf(context).height * 0.4)
-                              .clamp(260, 360),
+                          height: heroHeight - headerHeight,
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              _BriefingHero(
-                                stage: stage,
-                                scrimColor: uiTheme.voidBlack,
-                              ),
                               Positioned(
                                 left: 16,
                                 right: 16,
@@ -338,31 +351,7 @@ class StageBriefingSheet extends StatelessWidget {
                           onPressed: () =>
                               Navigator.of(context).pop(RunMode.mission),
                         )
-                      : Row(
-                          children: [
-                            Expanded(
-                              child: _BriefingLaunchAction(
-                                label: 'Replay Mission',
-                                kicker: 'REPLAY',
-                                accent: accent,
-                                icon: Icons.replay_rounded,
-                                onPressed: () =>
-                                    Navigator.of(context).pop(RunMode.mission),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: _BriefingLaunchAction(
-                                label: 'Endless',
-                                kicker: 'ENDLESS',
-                                accent: accent,
-                                icon: Icons.all_inclusive_rounded,
-                                onPressed: () =>
-                                    Navigator.of(context).pop(RunMode.endless),
-                              ),
-                            ),
-                          ],
-                        ),
+                      : _BriefingReplayActions(accent: accent),
                 ),
               ],
             ),
@@ -642,6 +631,70 @@ class _StageThreat {
   final int shielded;
 }
 
+TextStyle _briefingLaunchLabelStyle(Color color) => OrionTypography.microLabel(
+  color: color,
+  size: 13,
+).copyWith(letterSpacing: 3.6, shadows: const []);
+
+class _BriefingReplayActions extends StatelessWidget {
+  const _BriefingReplayActions({required this.accent});
+
+  final Color accent;
+
+  @override
+  Widget build(BuildContext context) {
+    final scaler = MediaQuery.textScalerOf(context);
+    final uiTheme = OrionUiTheme.of(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final label = TextPainter(
+          text: TextSpan(
+            text: 'ENDLESS',
+            style: _briefingLaunchLabelStyle(uiTheme.voidBlack),
+          ),
+          textDirection: Directionality.of(context),
+          textScaler: scaler,
+        )..layout();
+        final actionChromeWidth = 28 + (IconTheme.of(context).size ?? 24) + 10;
+        final stackActions =
+            scaler.scale(13) > 13 * 1.15 &&
+            (constraints.maxWidth - 8) / 2 < label.width + actionChromeWidth;
+        label.dispose();
+
+        final replay = _BriefingLaunchAction(
+          label: 'Replay Mission',
+          kicker: 'REPLAY',
+          accent: accent,
+          icon: Icons.replay_rounded,
+          compactVertical: stackActions,
+          onPressed: () => Navigator.of(context).pop(RunMode.mission),
+        );
+        final endless = _BriefingLaunchAction(
+          label: 'Endless',
+          kicker: 'ENDLESS',
+          accent: accent,
+          icon: Icons.all_inclusive_rounded,
+          compactVertical: stackActions,
+          onPressed: () => Navigator.of(context).pop(RunMode.endless),
+        );
+        if (stackActions) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [replay, const SizedBox(height: 8), endless],
+          );
+        }
+        return Row(
+          children: [
+            Expanded(child: replay),
+            const SizedBox(width: 8),
+            Expanded(child: endless),
+          ],
+        );
+      },
+    );
+  }
+}
+
 /// A solid, filled launch action on the briefing sheet (such as Launch,
 /// Replay, or Endless).
 class _BriefingLaunchAction extends StatelessWidget {
@@ -651,6 +704,7 @@ class _BriefingLaunchAction extends StatelessWidget {
     required this.accent,
     required this.icon,
     required this.onPressed,
+    this.compactVertical = false,
   });
 
   final String label;
@@ -658,6 +712,7 @@ class _BriefingLaunchAction extends StatelessWidget {
   final Color accent;
   final IconData icon;
   final VoidCallback onPressed;
+  final bool compactVertical;
 
   @override
   Widget build(BuildContext context) {
@@ -685,9 +740,9 @@ class _BriefingLaunchAction extends StatelessWidget {
               splashColor: uiTheme.voidBlack.withValues(alpha: 0.18),
               highlightColor: uiTheme.voidBlack.withValues(alpha: 0.10),
               child: Padding(
-                padding: const EdgeInsets.symmetric(
+                padding: EdgeInsets.symmetric(
                   horizontal: 14,
-                  vertical: 22,
+                  vertical: compactVertical ? 12 : 22,
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -702,10 +757,7 @@ class _BriefingLaunchAction extends StatelessWidget {
                         child: ExcludeSemantics(
                           child: Text(
                             kicker,
-                            style: OrionTypography.microLabel(
-                              color: uiTheme.voidBlack,
-                              size: 13,
-                            ).copyWith(letterSpacing: 3.6, shadows: const []),
+                            style: _briefingLaunchLabelStyle(uiTheme.voidBlack),
                           ),
                         ),
                       ),
@@ -958,35 +1010,37 @@ class _BriefingIntelRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final text = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: OrionTypography.microLabel(size: 11, color: color)),
+        const SizedBox(height: 2),
+        Text(
+          detail,
+          style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+        ),
+      ],
+    );
     return OrionSurface(
       role: OrionSurfaceRole.card,
       padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 21, color: color),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
+      child: MediaQuery.textScalerOf(context).scale(1) > 3
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: OrionTypography.microLabel(size: 11, color: color),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  detail,
-                  style: OrionTypography.microLabel(
-                    size: 10,
-                    color: uiTheme.textMuted,
-                  ),
-                ),
+                Icon(icon, size: 21, color: color),
+                const SizedBox(height: 6),
+                text,
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 21, color: color),
+                const SizedBox(width: 9),
+                Expanded(child: text),
               ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }

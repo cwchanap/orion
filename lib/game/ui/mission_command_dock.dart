@@ -261,6 +261,11 @@ class IdleCommandBar extends StatelessWidget {
                   48.0,
                 )
               : 0.0;
+          final inlineSummary =
+              showIntel &&
+              textScale <= 1.3 &&
+              summaryWidth >= 22 &&
+              summaryWidth < 32;
           if (showReactor &&
               (textScale > 1.3 || (showIntel && summaryWidth < 22))) {
             controls = Column(
@@ -315,7 +320,7 @@ class IdleCommandBar extends StatelessWidget {
                   const SizedBox(width: 8),
                   nextWaveIntel!,
                 ],
-                if (summaryWidth >= 22)
+                if (summaryWidth >= 22 && !inlineSummary)
                   SizedBox(
                     width: summaryWidth,
                     child: _IncomingSummary(preview: preview!),
@@ -350,6 +355,7 @@ class IdleCommandBar extends StatelessWidget {
                 _IncomingComposition(
                   key: ValueKey('incoming-composition-${preview.waveNumber}'),
                   preview: preview,
+                  inlineSummary: inlineSummary,
                 ),
             ],
           );
@@ -396,9 +402,14 @@ class IdleCommandBar extends StatelessWidget {
 }
 
 class _IncomingComposition extends StatefulWidget {
-  const _IncomingComposition({super.key, required this.preview});
+  const _IncomingComposition({
+    super.key,
+    required this.preview,
+    this.inlineSummary = false,
+  });
 
   final WavePreview preview;
+  final bool inlineSummary;
 
   @override
   State<_IncomingComposition> createState() => _IncomingCompositionState();
@@ -449,7 +460,7 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
       style: OrionTypography.microLabel(color: theme.warningOrange),
     );
     List<Widget> itemsFor(EnemyTrait? leadingTrait) => <Widget>[
-      if (!largeText)
+      if (!largeText && !widget.inlineSummary)
         Semantics(
           label: 'Incoming',
           excludeSemantics: true,
@@ -574,31 +585,42 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
     final items = itemsFor(traits.firstOrNull);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
-      child: Scrollbar(
-        controller: _scrollController,
-        thumbVisibility: true,
-        child: SingleChildScrollView(
-          controller: _scrollController,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            children: [
-              for (var i = 0; i < items.length; i++) ...[
-                if (i > 0) const SizedBox(width: 8),
-                items[i],
-              ],
-            ],
+      child: Row(
+        children: [
+          if (widget.inlineSummary) ...[
+            _IncomingSummary(preview: widget.preview, inline: true),
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Scrollbar(
+              controller: _scrollController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _scrollController,
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(bottom: 6),
+                child: Row(
+                  children: [
+                    for (var i = 0; i < items.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 8),
+                      items[i],
+                    ],
+                  ],
+                ),
+              ),
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 }
 
 class _IncomingSummary extends StatelessWidget {
-  const _IncomingSummary({required this.preview});
+  const _IncomingSummary({required this.preview, this.inline = false});
 
   final WavePreview preview;
+  final bool inline;
 
   @override
   Widget build(BuildContext context) {
@@ -607,6 +629,28 @@ class _IncomingSummary extends StatelessWidget {
       0,
       (sum, group) => sum + group.enemyCount,
     );
+    if (inline) {
+      return ExcludeSemantics(
+        child: Row(
+          key: const ValueKey('incoming-wave-summary'),
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$total',
+              style: OrionTypography.readout(
+                size: 14,
+                color: theme.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              'FOES',
+              style: OrionTypography.microLabel(color: theme.textMuted),
+            ),
+          ],
+        ),
+      );
+    }
     return ExcludeSemantics(
       child: SizedBox(
         key: const ValueKey('incoming-wave-summary'),
