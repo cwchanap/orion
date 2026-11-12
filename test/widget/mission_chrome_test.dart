@@ -395,6 +395,76 @@ void main() {
     );
   }
 
+  for (final (size, scale) in [
+    (const Size(320, 568), 1.2),
+    (const Size(320, 568), 1.3),
+    (const Size(360, 640), 1.2),
+    (const Size(360, 640), 1.3),
+    (const Size(390, 844), 1.2),
+    (const Size(390, 844), 1.3),
+  ]) {
+    testWidgets('Start label stays on one line at $size and ${scale}x', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(nextWavePreview: commandDeckPreview()),
+          textScaler: TextScaler.linear(scale),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final label = tester.renderObject<RenderParagraph>(find.text('START'));
+      expect(
+        label.getBoxesForSelection(
+          const TextSelection(baseOffset: 0, extentOffset: 5),
+        ),
+        hasLength(1),
+      );
+      expect(label.didExceedMaxLines, isFalse);
+      final action = tester.getRect(find.byTooltip('Start Wave'));
+      final labelRect = tester.getRect(find.text('START'));
+      expect(action.contains(labelRect.topLeft), isTrue);
+      expect(action.contains(labelRect.bottomRight), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('narrow build dock shows the incoming total', (tester) async {
+    await loadRealFonts();
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final preview = commandDeckPreview(
+      groups: [
+        WavePreviewGroup(enemyCount: 8, label: 'Drones', traits: const {}),
+        WavePreviewGroup(enemyCount: 8, label: 'Shielded', traits: const {}),
+        WavePreviewGroup(enemyCount: 12, label: 'Swarm', traits: const {}),
+      ],
+    );
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: preview)),
+    );
+    await tester.pumpAndSettle();
+
+    final summary = find.byKey(const ValueKey('incoming-wave-summary'));
+    expect(summary, findsOneWidget);
+    expect(
+      find.descendant(of: summary, matching: find.text('28')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: summary, matching: find.text('FOES')),
+      findsOneWidget,
+    );
+    _expectWithinViewport(tester, summary, const Size(320, 568));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('foundry boss wave shows its composition before scanning', (
     tester,
   ) async {
@@ -688,6 +758,86 @@ void main() {
     );
     expect(board, buildBoard, reason: 'the grid must not jump mid-mission');
     expect(board!.height, greaterThanOrEqualTo(180));
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final scale in [1.0, 1.15]) {
+    testWidgets(
+      'narrow board stays stable with four-digit credits at ${scale}x',
+      (tester) async {
+        await loadRealFonts();
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        Rect? board;
+        Future<void> pump(GameSnapshot snapshot) async {
+          await tester.pumpWidget(
+            chromeHost(
+              snapshot,
+              textScaler: TextScaler.linear(scale),
+              onBoardViewportChanged: (rect) => board = rect,
+            ),
+          );
+          await tester.pumpAndSettle();
+        }
+
+        await pump(
+          commandDeckSnapshot(
+            gold: 1250,
+            nextWavePreview: commandDeckPreview(),
+          ),
+        );
+        final buildBoard = board!;
+        await pump(
+          commandDeckSnapshot(
+            gold: 1250,
+            phase: GamePhase.wave,
+            waveHostilesTotal: 8,
+            waveHostilesRemaining: 8,
+            waveClearBonus: 30,
+          ),
+        );
+        expect(
+          board,
+          buildBoard,
+          reason: 'starting a wave must not move the grid',
+        );
+        expect(find.text('WAVE ACTIVE'), findsOneWidget);
+        expect(find.text('1250'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
+  }
+
+  testWidgets('narrow active-wave board stays stable as credits grow', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    Rect? board;
+    Future<void> pump(int gold) async {
+      await tester.pumpWidget(
+        chromeHost(
+          commandDeckSnapshot(
+            gold: gold,
+            phase: GamePhase.wave,
+            waveHostilesTotal: 8,
+            waveHostilesRemaining: 8,
+            waveClearBonus: 30,
+          ),
+          onBoardViewportChanged: (rect) => board = rect,
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    await pump(999);
+    final before = board!;
+    await pump(1000);
+    expect(board, before);
+    expect(find.text('1000'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

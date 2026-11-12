@@ -116,12 +116,25 @@ class MissionStatusHud extends StatelessWidget {
                 ],
               ),
             )
-          : Wrap(
+          : SizedBox(
               key: const ValueKey('mission-status-hud'),
-              alignment: WrapAlignment.spaceBetween,
-              spacing: 10,
-              runSpacing: 6,
-              children: anchors,
+              height: 43,
+              child: Row(
+                children: [
+                  for (final (index, anchor) in anchors.indexed)
+                    Expanded(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: switch (index) {
+                          0 => Alignment.centerLeft,
+                          2 => Alignment.centerRight,
+                          _ => Alignment.center,
+                        },
+                        child: anchor,
+                      ),
+                    ),
+                ],
+              ),
             ),
     );
   }

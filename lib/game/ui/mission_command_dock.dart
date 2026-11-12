@@ -247,14 +247,22 @@ class IdleCommandBar extends StatelessWidget {
     final showReactor = snapshot.phase != GamePhase.wave || countdown != null;
     final preview = snapshot.nextWavePreview;
     final showIntel = nextWaveIntel != null && preview != null && showReactor;
-    final actionWidth = showIntel ? 96.0 : 116.0;
+    final textScale = MediaQuery.textScalerOf(context).scale(1);
+    final actionWidth = showIntel ? (textScale > 1.15 ? 112.0 : 96.0) : 116.0;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final Widget controls;
-          if (showReactor && MediaQuery.textScalerOf(context).scale(1) > 1.3) {
+          final summaryWidth = showIntel
+              ? (constraints.maxWidth - 152 - 48 - actionWidth - 16).clamp(
+                  0.0,
+                  48.0,
+                )
+              : 0.0;
+          if (showReactor &&
+              (textScale > 1.3 || (showIntel && summaryWidth < 22))) {
             controls = Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
@@ -293,12 +301,6 @@ class IdleCommandBar extends StatelessWidget {
           } else {
             // Preserve the three 48dp pacing targets before using spare space
             // for a visible summary beside the existing scanner.
-            final summaryWidth = showIntel
-                ? (constraints.maxWidth - 152 - 48 - actionWidth - 16).clamp(
-                    0.0,
-                    48.0,
-                  )
-                : 0.0;
             controls = Row(
               children: [
                 Expanded(

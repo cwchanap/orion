@@ -11,6 +11,7 @@ import '../onboarding/contextual_tips.dart';
 import 'campaign_presentation.dart';
 import 'first_mission_guide_callout.dart';
 import 'orion_atlas_sprite.dart';
+import 'orion_scroll_view.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
@@ -59,6 +60,31 @@ class StageBriefingSheet extends StatelessWidget {
         : stage.modifiers
               .map(StageModifierMetadata.forModifier)
               .toList(growable: false);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    final facts = [
+      _BriefingStatTile(
+        icon: Icons.waves_rounded,
+        value: '${stage.waves.length}',
+        label: 'WAVES',
+        color: uiTheme.systemCyan,
+        horizontal: largeText,
+      ),
+      _BriefingStatTile(
+        icon: Icons.shield_outlined,
+        value: '$startingBaseHealth',
+        label: 'HULL',
+        color: uiTheme.systemCyan,
+        horizontal: largeText,
+      ),
+      _BriefingStatTile(
+        icon: Icons.hexagon,
+        value: '$startingGold',
+        label: 'START',
+        color: uiTheme.creditGold,
+        valueColor: uiTheme.creditGold,
+        horizontal: largeText,
+      ),
+    ];
 
     return Material(
       color: uiTheme.voidBlack,
@@ -95,7 +121,7 @@ class StageBriefingSheet extends StatelessWidget {
             Column(
               children: [
                 Expanded(
-                  child: SingleChildScrollView(
+                  child: OrionScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
@@ -133,37 +159,30 @@ class StageBriefingSheet extends StatelessWidget {
                                 key: const ValueKey('briefing-facts'),
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: _BriefingStatTile(
-                                          icon: Icons.waves_rounded,
-                                          value: '${stage.waves.length}',
-                                          label: 'WAVES',
-                                          color: uiTheme.systemCyan,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: _BriefingStatTile(
-                                          icon: Icons.shield_outlined,
-                                          value: '$startingBaseHealth',
-                                          label: 'HULL',
-                                          color: uiTheme.systemCyan,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: _BriefingStatTile(
-                                          icon: Icons.hexagon,
-                                          value: '$startingGold',
-                                          label: 'START',
-                                          color: uiTheme.creditGold,
-                                          valueColor: uiTheme.creditGold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
+                                  if (largeText)
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.stretch,
+                                      children: [
+                                        for (final (index, fact)
+                                            in facts.indexed) ...[
+                                          if (index > 0)
+                                            const SizedBox(height: 8),
+                                          fact,
+                                        ],
+                                      ],
+                                    )
+                                  else
+                                    Row(
+                                      children: [
+                                        for (final (index, fact)
+                                            in facts.indexed) ...[
+                                          if (index > 0)
+                                            const SizedBox(width: 8),
+                                          Expanded(child: fact),
+                                        ],
+                                      ],
+                                    ),
                                   if (metadata.isNotEmpty) ...[
                                     const SizedBox(height: 8),
                                     KeyedSubtree(
@@ -454,6 +473,36 @@ class _BriefingThreatProfile extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final threat = _StageThreat.of(stage);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    final figures = [
+      _ThreatFigure(
+        art: OrionArt.previewGroup(
+          WavePreviewGroup(
+            enemyCount: threat.enemies,
+            label: 'Drones',
+            traits: const {},
+          ),
+        ),
+        value: '${threat.enemies}',
+        label: 'HOSTILES',
+        color: uiTheme.textPrimary,
+        horizontal: largeText,
+      ),
+      _ThreatFigure(
+        art: OrionArt.trait(EnemyTrait.armored)!,
+        value: '${threat.armored}',
+        label: 'ARMORED',
+        color: threat.armored > 0 ? uiTheme.warningOrange : uiTheme.textMuted,
+        horizontal: largeText,
+      ),
+      _ThreatFigure(
+        art: OrionArt.trait(EnemyTrait.shielded)!,
+        value: '${threat.shielded}',
+        label: 'SHIELDED',
+        color: threat.shielded > 0 ? uiTheme.systemViolet : uiTheme.textMuted,
+        horizontal: largeText,
+      ),
+    ];
 
     return OrionSurface(
       role: OrionSurfaceRole.card,
@@ -474,44 +523,19 @@ class _BriefingThreatProfile extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 9),
-          Row(
-            children: [
-              Expanded(
-                child: _ThreatFigure(
-                  art: OrionArt.previewGroup(
-                    WavePreviewGroup(
-                      enemyCount: threat.enemies,
-                      label: 'Drones',
-                      traits: const {},
-                    ),
-                  ),
-                  value: '${threat.enemies}',
-                  label: 'HOSTILES',
-                  color: uiTheme.textPrimary,
-                ),
-              ),
-              Expanded(
-                child: _ThreatFigure(
-                  art: OrionArt.trait(EnemyTrait.armored)!,
-                  value: '${threat.armored}',
-                  label: 'ARMORED',
-                  color: threat.armored > 0
-                      ? uiTheme.warningOrange
-                      : uiTheme.textMuted,
-                ),
-              ),
-              Expanded(
-                child: _ThreatFigure(
-                  art: OrionArt.trait(EnemyTrait.shielded)!,
-                  value: '${threat.shielded}',
-                  label: 'SHIELDED',
-                  color: threat.shielded > 0
-                      ? uiTheme.systemViolet
-                      : uiTheme.textMuted,
-                ),
-              ),
-            ],
-          ),
+          if (largeText)
+            Column(
+              children: [
+                for (final (index, figure) in figures.indexed) ...[
+                  if (index > 0) const SizedBox(height: 8),
+                  figure,
+                ],
+              ],
+            )
+          else
+            Row(
+              children: [for (final figure in figures) Expanded(child: figure)],
+            ),
         ],
       ),
     );
@@ -525,16 +549,43 @@ class _ThreatFigure extends StatelessWidget {
     required this.label,
     required this.color,
     required this.art,
+    this.horizontal = false,
   });
 
   final OrionArtDescriptor art;
   final String value;
   final String label;
   final Color color;
+  final bool horizontal;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    if (horizontal) {
+      return Row(
+        children: [
+          OrionAtlasSprite(art: art, size: const Size.square(46)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OrionTypography.microLabel(color: uiTheme.textMuted),
+                ),
+                Text(
+                  value,
+                  style: OrionTypography.readout(size: 14, color: color),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -730,6 +781,7 @@ class _BriefingStatTile extends StatelessWidget {
     required this.label,
     required this.color,
     this.valueColor,
+    this.horizontal = false,
   });
 
   final IconData icon;
@@ -737,6 +789,7 @@ class _BriefingStatTile extends StatelessWidget {
   final String label;
   final Color color;
   final Color? valueColor;
+  final bool horizontal;
 
   @override
   Widget build(BuildContext context) {
@@ -744,32 +797,62 @@ class _BriefingStatTile extends StatelessWidget {
     final tile = OrionSurface(
       role: OrionSurfaceRole.card,
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Icon(icon, color: color, size: 17),
-          const SizedBox(height: 3),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              value,
-              textAlign: TextAlign.center,
-              style: OrionTypography.readout(
-                color: valueColor ?? uiTheme.textPrimary,
-              ),
+      child: horizontal
+          ? Row(
+              children: [
+                Icon(icon, color: color, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OrionTypography.microLabel(color: uiTheme.textMuted),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  flex: 2,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      value,
+                      style: OrionTypography.readout(
+                        color: valueColor ?? uiTheme.textPrimary,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Icon(icon, color: color, size: 17),
+                const SizedBox(height: 3),
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    value,
+                    textAlign: TextAlign.center,
+                    style: OrionTypography.readout(
+                      color: valueColor ?? uiTheme.textPrimary,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  label,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OrionTypography.microLabel(color: uiTheme.textMuted),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: OrionTypography.microLabel(color: uiTheme.textMuted),
-          ),
-        ],
-      ),
     );
     return tile;
   }
