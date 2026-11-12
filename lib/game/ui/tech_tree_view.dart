@@ -828,12 +828,22 @@ class _TechDetail extends StatelessWidget {
       upgrade.description,
       style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
     );
+    final effectText = Text(
+      upgrade.effectLabel,
+      style: OrionTypography.microLabel(size: 11, color: uiTheme.naniteGreen),
+    );
+    final costText = Text(
+      'Cost: ${upgrade.cost} pts',
+      style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: OrionSurface(
         role: OrionSurfaceRole.sheet,
-        padding: const EdgeInsets.all(14),
+        padding: largeText
+            ? const EdgeInsets.symmetric(horizontal: 8, vertical: 14)
+            : const EdgeInsets.all(14),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
           child: Column(
@@ -863,32 +873,15 @@ class _TechDetail extends StatelessWidget {
               const SizedBox(height: 10),
               Flexible(
                 fit: FlexFit.loose,
-                child: SingleChildScrollView(
+                child: _TechDetailScroll(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (largeText) ...[
-                        titleText,
-                        const SizedBox(height: 2),
-                        descriptionText,
-                        const SizedBox(height: 10),
-                      ],
-                      Text(
-                        upgrade.effectLabel,
-                        style: OrionTypography.microLabel(
-                          size: 11,
-                          color: uiTheme.naniteGreen,
-                        ),
-                      ),
+                      if (largeText) ...[titleText, const SizedBox(height: 6)],
+                      effectText,
                       const SizedBox(height: 2),
-                      Text(
-                        'Cost: ${upgrade.cost} pts',
-                        style: OrionTypography.microLabel(
-                          size: 10,
-                          color: uiTheme.textMuted,
-                        ),
-                      ),
+                      costText,
                       if (largeText && !isPurchased && !canAfford) ...[
                         const SizedBox(height: 6),
                         Text(
@@ -898,6 +891,10 @@ class _TechDetail extends StatelessWidget {
                             color: uiTheme.dangerRed,
                           ),
                         ),
+                      ],
+                      if (largeText) ...[
+                        const SizedBox(height: 6),
+                        descriptionText,
                       ],
                     ],
                   ),
@@ -1028,6 +1025,38 @@ class _TechDetail extends StatelessWidget {
       onPressed: canPurchase
           ? () => onPurchase(upgrade)
           : null, // disabled while saving
+    );
+  }
+}
+
+class _TechDetailScroll extends StatefulWidget {
+  const _TechDetailScroll({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_TechDetailScroll> createState() => _TechDetailScrollState();
+}
+
+class _TechDetailScrollState extends State<_TechDetailScroll> {
+  final _controller = ScrollController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: _controller,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _controller,
+        padding: const EdgeInsets.only(right: 6),
+        child: widget.child,
+      ),
     );
   }
 }

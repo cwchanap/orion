@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
@@ -403,10 +404,12 @@ class _IncomingComposition extends StatefulWidget {
 
 class _IncomingCompositionState extends State<_IncomingComposition> {
   final _scrollController = ScrollController();
+  final _largeTextScrollController = ScrollController();
 
   @override
   void dispose() {
     _scrollController.dispose();
+    _largeTextScrollController.dispose();
     super.dispose();
   }
 
@@ -414,6 +417,111 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
   Widget build(BuildContext context) {
     final theme = OrionUiTheme.of(context);
     final bosses = widget.preview.bossGroups.toSet();
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.3;
+    final items = <Widget>[
+      if (!largeText)
+        Semantics(
+          label: 'Incoming',
+          excludeSemantics: true,
+          child: Text(
+            'INCOMING',
+            style: OrionTypography.microLabel(color: theme.textMuted),
+          ),
+        ),
+      if (bosses.isNotEmpty)
+        Text(
+          'BOSS',
+          style: OrionTypography.microLabel(color: theme.warningOrange),
+        ),
+      for (final trait in widget.preview.traits)
+        Text(
+          trait.label.toUpperCase(),
+          style: OrionTypography.microLabel(color: theme.warningOrange),
+        ),
+      for (final group in widget.preview.groups)
+        Semantics(
+          label:
+              '${group.enemyCount} ${group.label}'
+              '${bosses.contains(group) ? ', boss' : ''}',
+          excludeSemantics: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              OrionAtlasSprite(
+                art: OrionArt.previewGroup(group),
+                size: const Size.square(22),
+              ),
+              Text(
+                'x${group.enemyCount}',
+                style: OrionTypography.readout(
+                  size: 12,
+                  color: theme.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
+    if (largeText) {
+      final scaler = MediaQuery.textScalerOf(context);
+      final direction = Directionality.of(context);
+      final inheritedStyle = DefaultTextStyle.of(context).style;
+      final labelMeasure = TextPainter(
+        text: TextSpan(
+          text: 'BOSS',
+          style: inheritedStyle.merge(
+            OrionTypography.microLabel(color: theme.textMuted),
+          ),
+        ),
+        textDirection: direction,
+        textScaler: scaler,
+      )..layout();
+      final countMeasure = TextPainter(
+        text: TextSpan(
+          text: 'x10',
+          style: inheritedStyle.merge(
+            OrionTypography.readout(size: 12, color: theme.textPrimary),
+          ),
+        ),
+        textDirection: direction,
+        textScaler: scaler,
+      )..layout();
+      final lineHeight = math.max(
+        22.0,
+        math.max(labelMeasure.height, countMeasure.height),
+      );
+      labelMeasure.dispose();
+      countMeasure.dispose();
+      // Keep the board usable; longer compositions scroll after two lines.
+      final maxHeight = math.min(
+        lineHeight * 2 + 4,
+        MediaQuery.sizeOf(context).height * .25,
+      );
+      return Padding(
+        padding: const EdgeInsets.only(top: 4),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Scrollbar(
+            controller: _largeTextScrollController,
+            thumbVisibility: true,
+            child: SingleChildScrollView(
+              controller: _largeTextScrollController,
+              padding: const EdgeInsets.only(right: 6),
+              child: Semantics(
+                container: true,
+                label: 'Incoming enemies',
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: items,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Scrollbar(
@@ -425,48 +533,9 @@ class _IncomingCompositionState extends State<_IncomingComposition> {
           padding: const EdgeInsets.only(bottom: 6),
           child: Row(
             children: [
-              Text(
-                'INCOMING',
-                style: OrionTypography.microLabel(color: theme.textMuted),
-              ),
-              if (bosses.isNotEmpty) ...[
-                const SizedBox(width: 8),
-                Text(
-                  'BOSS',
-                  style: OrionTypography.microLabel(color: theme.warningOrange),
-                ),
-              ],
-              for (final trait in widget.preview.traits) ...[
-                const SizedBox(width: 8),
-                Text(
-                  trait.label.toUpperCase(),
-                  style: OrionTypography.microLabel(color: theme.warningOrange),
-                ),
-              ],
-              for (final group in widget.preview.groups) ...[
-                const SizedBox(width: 8),
-                Semantics(
-                  label:
-                      '${group.enemyCount} ${group.label}'
-                      '${bosses.contains(group) ? ', boss' : ''}',
-                  excludeSemantics: true,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      OrionAtlasSprite(
-                        art: OrionArt.previewGroup(group),
-                        size: const Size.square(22),
-                      ),
-                      Text(
-                        'x${group.enemyCount}',
-                        style: OrionTypography.readout(
-                          size: 12,
-                          color: theme.textPrimary,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              for (var i = 0; i < items.length; i++) ...[
+                if (i > 0) const SizedBox(width: 8),
+                items[i],
               ],
             ],
           ),

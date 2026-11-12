@@ -34,6 +34,8 @@ class _CodexViewState extends State<CodexView> {
   TowerType? _selectedTower;
   EnemyArchetype? _selectedEnemy;
   final _towerGridKey = GlobalKey();
+  final _enemyGridKey = GlobalKey();
+  final _enemyDetailKey = GlobalKey();
 
   // One ScrollController per section so each section's scroll offset is
   // preserved independently when the player switches chips.
@@ -121,6 +123,62 @@ class _CodexViewState extends State<CodexView> {
         controller.animateTo(target, duration: duration, curve: Curves.easeOut);
       }
     });
+  }
+
+  void _selectEnemy(EnemyArchetype enemy) {
+    setState(() => _selectedEnemy = enemy);
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _revealEnemyDetail(enemy),
+    );
+  }
+
+  void _revealEnemyDetail(EnemyArchetype enemy, {bool maySeek = true}) {
+    if (!mounted || _section != 1 || _selectedEnemy != enemy) return;
+    final controller = _scrollControllers[1];
+    if (!controller.hasClients) return;
+    final detail = _enemyDetailKey.currentContext?.findRenderObject();
+    if (detail is! RenderBox || !detail.hasSize) {
+      // The list may have discarded a detail far above the selected tile.
+      final grid = _enemyGridKey.currentContext?.findRenderObject();
+      if (!maySeek || grid is! RenderBox || !grid.hasSize) return;
+      final viewport = RenderAbstractViewport.maybeOf(grid);
+      if (viewport == null) return;
+      final position = controller.position;
+      final gridTop = viewport.getOffsetToReveal(grid, 0).offset;
+      controller.jumpTo(
+        (gridTop - 100).clamp(
+          position.minScrollExtent,
+          position.maxScrollExtent,
+        ),
+      );
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _revealEnemyDetail(enemy, maySeek: false),
+      );
+      return;
+    }
+    final viewport = RenderAbstractViewport.maybeOf(detail);
+    if (viewport == null) return;
+    final position = controller.position;
+    final detailTop = viewport.getOffsetToReveal(detail, 0).offset;
+    final headingHeight = MediaQuery.textScalerOf(context).scale(20) + 28;
+    if (detailTop >= position.pixels &&
+        detailTop + headingHeight <=
+            position.pixels + position.viewportDimension) {
+      return;
+    }
+    final target = detailTop.clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
+    final duration = orionMotionDuration(
+      context,
+      const Duration(milliseconds: 220),
+    );
+    if (duration == Duration.zero) {
+      controller.jumpTo(target);
+    } else {
+      controller.animateTo(target, duration: duration, curve: Curves.easeOut);
+    }
   }
 
   @override
@@ -431,6 +489,7 @@ class _CodexViewState extends State<CodexView> {
 
   Widget _enemyGrid(List<CodexEnemyEntry> enemies, EnemyArchetype detailType) {
     return Padding(
+      key: _enemyGridKey,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -454,9 +513,8 @@ class _CodexViewState extends State<CodexView> {
                                   selected:
                                       enemies[row + col].archetype ==
                                       detailType,
-                                  onSelect: () => setState(
-                                    () => _selectedEnemy =
-                                        enemies[row + col].archetype,
+                                  onSelect: () => _selectEnemy(
+                                    enemies[row + col].archetype,
                                   ),
                                 )
                               : const SizedBox(height: 92),
@@ -626,6 +684,23 @@ class _CodexViewState extends State<CodexView> {
     required bool includeCoreLines,
   }) {
     final uiTheme = OrionUiTheme.of(context);
+    final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    final art = OrionAtlasSprite(
+      art: OrionArt.specialization(spec.specialization),
+      size: const Size.square(34),
+    );
+    final cost = Text(
+      '${t.specializationCost}g',
+      style: OrionTypography.readout(size: 14, color: uiTheme.creditGold),
+    );
+    final title = Text(
+      spec.label,
+      style: OrionTypography.readout(size: 14, color: uiTheme.textPrimary),
+    );
+    final description = Text(
+      spec.description,
+      style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+    );
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
       child: OrionSurface(
@@ -636,44 +711,26 @@ class _CodexViewState extends State<CodexView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Row(
-              children: [
-                OrionAtlasSprite(
-                  art: OrionArt.specialization(spec.specialization),
-                  size: const Size.square(34),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        spec.label,
-                        style: OrionTypography.readout(
-                          size: 14,
-                          color: uiTheme.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        spec.description,
-                        style: OrionTypography.microLabel(
-                          size: 10,
-                          color: uiTheme.textMuted,
-                        ),
-                      ),
-                    ],
+            if (largeText) ...[
+              Row(children: [art, const Spacer(), cost]),
+              const SizedBox(height: 8),
+              title,
+              description,
+            ] else
+              Row(
+                children: [
+                  art,
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [title, description],
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  '${t.specializationCost}g',
-                  style: OrionTypography.readout(
-                    size: 14,
-                    color: uiTheme.creditGold,
-                  ),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 8),
+                  cost,
+                ],
+              ),
             if (includeCoreLines)
               for (final (k, v) in _specializationCoreLines(
                 spec.specializedStats,
@@ -856,6 +913,7 @@ class _CodexViewState extends State<CodexView> {
         ('Regen', '${number(e.stats.regenPerSecond)}/s'),
     ];
     return Padding(
+      key: _enemyDetailKey,
       padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
       child: OrionSurface(
         role: OrionSurfaceRole.sheet,
@@ -984,32 +1042,25 @@ class _CodexViewState extends State<CodexView> {
 
   Widget _line(String key, String value) {
     final uiTheme = OrionUiTheme.of(context);
+    final label = Text(
+      key,
+      style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+    );
+    final detail = Text(
+      value,
+      style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
+    );
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 120,
-            child: Text(
-              key,
-              style: OrionTypography.microLabel(
-                size: 10,
-                color: uiTheme.textMuted,
-              ),
+      child: MediaQuery.textScalerOf(context).scale(1) > 1.5
+          ? Wrap(spacing: 8, children: [label, detail])
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(width: 120, child: label),
+                Expanded(child: detail),
+              ],
             ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: OrionTypography.microLabel(
-                size: 10,
-                color: uiTheme.textMuted,
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 

@@ -1430,6 +1430,120 @@ void main() {
       return signature;
     }
 
+    for (final (scale, enemy) in [
+      (1.0, EnemyArchetype.armoredDrone),
+      (3.0, EnemyArchetype.armoredDrone),
+      (3.0, EnemyArchetype.regenHeavyDrone),
+    ]) {
+      testWidgets('enemy selection reveals ${enemy.label} at ${scale}x', (
+        tester,
+      ) async {
+        await loadRealFonts();
+        await pumpCodex(
+          tester,
+          size: const Size(360, 640),
+          textScaler: TextScaler.linear(scale),
+        );
+        await tester.tap(find.text('Enemies'));
+        await tester.pumpAndSettle();
+        final list = find.byKey(const PageStorageKey<int>(1));
+        final scrollable = find.descendant(
+          of: list,
+          matching: find.byType(Scrollable),
+        );
+        final target = enemyTileFinder(enemy);
+        await tester.scrollUntilVisible(
+          target,
+          200,
+          scrollable: scrollable,
+          maxScrolls: 100,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(target);
+        await tester.pumpAndSettle();
+        final heading = find.descendant(
+          of: find.byKey(const ValueKey('codex-enemy-detail')),
+          matching: find.text(enemy.label.toUpperCase()),
+        );
+        expect(heading, findsOneWidget);
+        expect(
+          tester.getRect(heading).top,
+          greaterThanOrEqualTo(tester.getRect(list).top),
+        );
+        expect(
+          tester.getRect(heading).bottom,
+          lessThanOrEqualTo(tester.getRect(list).bottom),
+        );
+      });
+    }
+
+    testWidgets('enemy glossary labels stay readable at 3x', (tester) async {
+      await loadRealFonts();
+      await pumpCodex(
+        tester,
+        size: const Size(360, 640),
+        textScaler: const TextScaler.linear(3),
+      );
+      await tester.tap(find.text('Enemies'));
+      await tester.pumpAndSettle();
+      final armored = find.text('Armored').first;
+      expect(
+        breaksInsideWord(tester, armored, const TextScaler.linear(3)),
+        isFalse,
+        reason: 'The trait name should not break in the middle of a word.',
+      );
+    });
+
+    testWidgets('tower upgrade labels stay readable at 3x', (tester) async {
+      await loadRealFonts();
+      await pumpCodex(
+        tester,
+        size: const Size(360, 640),
+        textScaler: const TextScaler.linear(3),
+      );
+      await tester.enterText(searchField, 'Rocket');
+      await tester.pumpAndSettle();
+      final cost = find.descendant(
+        of: detail,
+        matching: find.text('Upgrade cost'),
+      );
+      expect(cost, findsOneWidget);
+      expect(
+        breaksInsideWord(tester, cost, const TextScaler.linear(3)),
+        isFalse,
+        reason: 'The upgrade cost label should not break inside a word.',
+      );
+    });
+
+    testWidgets('specialization names and descriptions stay readable at 3x', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      await pumpCodex(
+        tester,
+        size: const Size(360, 640),
+        textScaler: const TextScaler.linear(3),
+      );
+      await tester.enterText(searchField, 'Rocket');
+      await tester.pumpAndSettle();
+      final title = find.descendant(
+        of: detail,
+        matching: find.text('Siege Rocket'),
+      );
+      final description = find.descendant(
+        of: detail,
+        matching: find.text(TowerSpecialization.siegeRocket.role),
+      );
+      for (final text in [title, description]) {
+        expect(text, findsOneWidget);
+        expect(
+          breaksInsideWord(tester, text, const TextScaler.linear(3)),
+          isFalse,
+          reason: 'Specialization text should wrap only at word boundaries.',
+        );
+      }
+    });
+
     for (final size in const [Size(390, 844), Size(360, 640)]) {
       for (final scaler in const [TextScaler.linear(1), TextScaler.linear(3)]) {
         testWidgets('every tile paints its full label at ${size.width.toInt()}x'
