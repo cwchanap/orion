@@ -1068,6 +1068,47 @@ void main() {
       );
     }
 
+    testWidgets('scrollbar does not cover level-two stat values', (
+      tester,
+    ) async {
+      tester.view.physicalSize = const Size(390, 844);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await loadRealFonts();
+      await pumpSheet(
+        tester,
+        tower: const PlacedTower(
+          id: 7,
+          type: TowerType.laser,
+          position: GridPosition(2, 3),
+          level: 2,
+        ),
+        includeSpecializationStats: true,
+      );
+      await tester.pumpAndSettle();
+      final viewport = tester.getRect(
+        find.byKey(const ValueKey('tower-inspector-scroll')),
+      );
+      for (final value in ['18', '0.34s', '160']) {
+        final stat = find.descendant(
+          of: find.byKey(
+            ValueKey(
+              'tower-stat-${value == '18'
+                  ? 'damage'
+                  : value == '0.34s'
+                  ? 'fire'
+                  : 'range'}',
+            ),
+          ),
+          matching: find.text(value),
+        );
+        expect(
+          tester.getRect(stat).right,
+          lessThanOrEqualTo(viewport.right - 8),
+        );
+      }
+    });
+
     testWidgets('sell and close stay fixed in the header band at 360x640', (
       tester,
     ) async {

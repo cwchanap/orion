@@ -21,6 +21,44 @@ import '../support/real_fonts.dart';
 import '../widget_test.dart' as fixtures;
 
 void main() {
+  testWidgets('large-text report visibly indicates more scrollable content', (
+    tester,
+  ) async {
+    await tester.runAsync(loadRealFonts);
+    await _pumpScaledReport(
+      tester,
+      _victoryContent(MissionSaveState.saved),
+      const Size(360, 640),
+      onReplay: () {},
+      onReturnToMap: () {},
+    );
+    final report = find.byType(MissionReportPanel);
+    final scrollbar = find.descendant(
+      of: report,
+      matching: find.byType(Scrollbar),
+    );
+    expect(scrollbar, findsOneWidget);
+    expect(tester.widget<Scrollbar>(scrollbar).thumbVisibility, isTrue);
+    final scrollable = find.descendant(
+      of: scrollbar,
+      matching: find.byType(Scrollable),
+    );
+    expect(
+      tester.state<ScrollableState>(scrollable).position.maxScrollExtent,
+      greaterThan(0),
+    );
+    await tester.drag(scrollable, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    expect(
+      tester.state<ScrollableState>(scrollable).position.pixels,
+      greaterThan(0),
+    );
+    expect(
+      tester.getRect(find.byTooltip('World Map')).bottom,
+      lessThanOrEqualTo(640),
+    );
+  });
+
   testWidgets('saving victory shows save copy and disables both exits', (
     tester,
   ) async {

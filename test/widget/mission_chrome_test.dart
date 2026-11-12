@@ -427,6 +427,80 @@ void main() {
     }
   });
 
+  testWidgets('active wave keeps the hostiles label readable at 3x', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      chromeHost(
+        commandDeckSnapshot(
+          phase: GamePhase.wave,
+          waveHostilesTotal: 47,
+          waveHostilesRemaining: 47,
+          waveClearBonus: 40,
+        ),
+        textScaler: const TextScaler.linear(3),
+      ),
+    );
+    await tester.pumpAndSettle();
+    final label = find.text('47 hostiles left');
+    expect(label, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(label);
+    expect(paragraph.didExceedMaxLines, isFalse);
+    for (final word in ['47', 'hostiles', 'left']) {
+      final start = '47 hostiles left'.indexOf(word);
+      expect(
+        paragraph.getBoxesForSelection(
+          TextSelection(baseOffset: start, extentOffset: start + word.length),
+        ),
+        hasLength(1),
+        reason: '$word must remain readable',
+      );
+    }
+  });
+
+  testWidgets('long normal-text wave shows a group before scrolling', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final stage = OrionCampaign.stageById('outpost-alpha');
+    final wave = stage.waves.last;
+    final preview = GameBalance.wavePreview(
+      wave: wave,
+      waveNumber: stage.waves.length,
+      missionWaveTotal: stage.waves.length,
+      unlockedTowerTypes: TowerType.values,
+      effectiveClearBonus: wave.clearBonus,
+    );
+    await tester.pumpWidget(
+      chromeHost(commandDeckSnapshot(nextWavePreview: preview)),
+    );
+    await tester.pumpAndSettle();
+    final intel = find.byKey(
+      ValueKey('incoming-composition-${preview.waveNumber}'),
+    );
+    final scrollable = find.descendant(
+      of: intel,
+      matching: find.byType(Scrollable),
+    );
+    final firstGroup = find
+        .descendant(
+          of: intel,
+          matching: find.text('x${preview.groups.first.enemyCount}'),
+        )
+        .first;
+    final bounds = tester.getRect(firstGroup);
+    final viewport = tester.getRect(scrollable);
+    expect(bounds.left, greaterThanOrEqualTo(viewport.left));
+    expect(bounds.right, lessThanOrEqualTo(viewport.right));
+  });
+
   testWidgets(
     'large-text boss composition is visible without horizontal scroll',
     (tester) async {
@@ -505,7 +579,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(board, isNotNull);
-    expect(board!.height, greaterThan(150));
+    expect(board!.height, greaterThan(250));
     final intel = find.byKey(
       ValueKey('incoming-composition-${preview.waveNumber}'),
     );
@@ -516,12 +590,19 @@ void main() {
     final position = tester.state<ScrollableState>(scrollable).position;
     expect(position.axisDirection, AxisDirection.down);
     expect(position.maxScrollExtent, greaterThan(0));
-    await tester.drag(scrollable, const Offset(0, -500));
+    await tester.ensureVisible(find.text('x1'));
     await tester.pumpAndSettle();
     final bossCount = tester.getRect(find.text('x1'));
     final viewport = tester.getRect(scrollable);
     expect(bossCount.top, greaterThanOrEqualTo(viewport.top));
     expect(bossCount.bottom, lessThanOrEqualTo(viewport.bottom));
+    await tester.drag(scrollable, const Offset(0, -500));
+    await tester.pumpAndSettle();
+    final lastTrait = tester.getRect(
+      find.text(preview.traits.last.label.toUpperCase()),
+    );
+    expect(lastTrait.top, greaterThanOrEqualTo(viewport.top));
+    expect(lastTrait.bottom, lessThanOrEqualTo(viewport.bottom));
     _expectWithinViewport(
       tester,
       find.byTooltip('Start Wave'),

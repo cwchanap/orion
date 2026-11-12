@@ -851,7 +851,12 @@ class _TechDetail extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (largeText)
-                Row(children: [headerIcon, const Spacer(), closeButton])
+                Row(
+                  children: [
+                    Expanded(child: titleText),
+                    closeButton,
+                  ],
+                )
               else
                 Row(
                   children: [
@@ -878,7 +883,6 @@ class _TechDetail extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (largeText) ...[titleText, const SizedBox(height: 6)],
                       effectText,
                       const SizedBox(height: 2),
                       costText,
