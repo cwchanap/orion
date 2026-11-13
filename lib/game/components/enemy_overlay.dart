@@ -92,9 +92,10 @@ class EnemyOverlayRenderer {
     final label = name;
     if (label != null) {
       final transform = canvas.getTransform();
-      final scale = math
-          .sqrt(transform[0] * transform[0] + transform[1] * transform[1])
-          .clamp(0.25, 1.0);
+      final rawScale = math.sqrt(
+        transform[0] * transform[0] + transform[1] * transform[1],
+      );
+      final scale = rawScale > 0 ? rawScale : 1.0;
       final tp = TextPainter(
         text: TextSpan(
           text: label,

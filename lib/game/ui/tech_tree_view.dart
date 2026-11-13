@@ -58,6 +58,10 @@ const _fieldHeight = 484.0;
 const _fieldMinViewport = 100.0;
 const _detailSurfaceChrome = 31.0;
 
+/// Header, gaps and the pinned action the detail sheet cannot compress: the
+/// field reservation must yield before this height is taken from the sheet.
+const _detailPinnedExtent = 124.0;
+
 Path _hexPath(Size size) {
   final w = size.width;
   final h = size.height;
@@ -261,11 +265,17 @@ class _TechTreeViewState extends State<TechTreeView> {
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, region) {
+                      final fieldReserve =
+                          (region.maxHeight -
+                                  12 -
+                                  _detailSurfaceChrome -
+                                  _detailPinnedExtent)
+                              .clamp(0.0, _fieldMinViewport);
                       final detailMaxHeight =
                           (region.maxHeight -
                                   12 -
-                                  _fieldMinViewport -
-                                  _detailSurfaceChrome)
+                                  _detailSurfaceChrome -
+                                  fieldReserve)
                               .clamp(0.0, region.maxHeight);
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,

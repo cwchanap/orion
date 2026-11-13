@@ -43,32 +43,49 @@ class OrionMenuShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    // While the keyboard is open the shell sheds its top chrome so the child
+    // and the navigation stay reachable in the shrunken area above it.
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
     return Scaffold(
       backgroundColor: uiTheme.voidBlack,
-      body: Column(
-        children: [
-          _TopBar(
-            destination: destination,
-            medalEarned: medalEarned,
-            medalTotal: medalTotal,
-            researchPoints: researchPoints,
-            onOpenSettings: settingsEnabled ? onOpenSettings : null,
-          ),
-          if (feedback != null) _FeedbackLine(message: feedback!),
-          Expanded(
-            child: MediaQuery.removePadding(
-              context: context,
-              removeTop: true,
-              removeBottom: true,
-              child: child,
-            ),
-          ),
-          _TabBar(
-            destination: destination,
-            onDestinationSelected: onDestinationSelected,
-            enabled: navigationEnabled,
-          ),
-        ],
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          return Column(
+            children: [
+              if (!keyboardOpen)
+                _TopBar(
+                  destination: destination,
+                  medalEarned: medalEarned,
+                  medalTotal: medalTotal,
+                  researchPoints: researchPoints,
+                  onOpenSettings: settingsEnabled ? onOpenSettings : null,
+                ),
+              if (feedback != null) _FeedbackLine(message: feedback!),
+              Expanded(
+                child: MediaQuery.removePadding(
+                  context: context,
+                  removeTop: true,
+                  removeBottom: true,
+                  child: child,
+                ),
+              ),
+              // The tab bar sits at the bottom of the body — which the
+              // Scaffold shrinks above the keyboard — so it stays reachable
+              // while typing. Its slot is capped and scrollable so a
+              // degenerate viewport cannot overflow the column.
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: constraints.maxHeight),
+                child: SingleChildScrollView(
+                  child: _TabBar(
+                    destination: destination,
+                    onDestinationSelected: onDestinationSelected,
+                    enabled: navigationEnabled,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }

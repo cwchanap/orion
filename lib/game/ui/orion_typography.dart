@@ -147,7 +147,9 @@ class OrionTitle extends StatelessWidget {
               textDirection: Directionality.of(context),
               textScaler: scaler,
             )..layout();
-            return painter.width <= constraints.maxWidth;
+            final fits = painter.width <= constraints.maxWidth;
+            painter.dispose();
+            return fits;
           });
           if (allFit) {
             return plainTitle;
@@ -157,13 +159,15 @@ class OrionTitle extends StatelessWidget {
             textDirection: Directionality.of(context),
             textScaler: scaler,
           )..layout();
+          final spaceWidth = space.width;
+          space.dispose();
           return Wrap(
             alignment: switch (textAlign) {
               TextAlign.right || TextAlign.end => WrapAlignment.end,
               TextAlign.center => WrapAlignment.center,
               _ => WrapAlignment.start,
             },
-            spacing: space.width,
+            spacing: spaceWidth,
             runSpacing: 4,
             children: [
               for (final word in words)

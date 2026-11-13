@@ -336,8 +336,11 @@ class BoardComponent extends PositionComponent {
   bool _markerShadowsRemoved = false;
 
   @override
-  void onLoad() {
-    super.onLoad();
+  void onMount() {
+    super.onMount();
+    // Baking acquires GPU images disposed in onRemove, which Flame only calls
+    // for mounted components; starting the bake here keeps every cached image
+    // paired with a removal callback.
     unawaited(_bakeMarkerShadows());
   }
 

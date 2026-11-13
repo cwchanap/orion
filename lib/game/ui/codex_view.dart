@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
@@ -190,127 +192,149 @@ class _CodexViewState extends State<CodexView> {
         children: [
           const Positioned.fill(child: _CodexBackdrop()),
           SafeArea(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Compact chrome follows the app convention of clamping text
-                // scale; result cards below keep scaling fully.
-                MediaQuery.withClampedTextScaling(
-                  maxScaleFactor: 1.15,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!widget.embeddedInMenuShell)
-                        Padding(
-                          padding: const EdgeInsets.all(8),
-                          child: Row(
+            child: LayoutBuilder(
+              builder: (context, layoutConstraints) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // Compact chrome follows the app convention of clamping
+                    // text scale; result cards below keep scaling fully. At
+                    // keyboard-reduced heights the chrome cannot fit whole, so
+                    // it scrolls inside its own slot rather than overflowing
+                    // the column; at normal heights it takes exactly its
+                    // natural height.
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxHeight: math.max(0, layoutConstraints.maxHeight - 8),
+                      ),
+                      child: SingleChildScrollView(
+                        child: MediaQuery.withClampedTextScaling(
+                          maxScaleFactor: 1.15,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                              if (widget.onBack != null)
-                                IconButton(
-                                  tooltip: 'Back',
-                                  onPressed: widget.onBack,
-                                  icon: const Icon(Icons.arrow_back),
+                              if (!widget.embeddedInMenuShell)
+                                Padding(
+                                  padding: const EdgeInsets.all(8),
+                                  child: Row(
+                                    children: [
+                                      if (widget.onBack != null)
+                                        IconButton(
+                                          tooltip: 'Back',
+                                          onPressed: widget.onBack,
+                                          icon: const Icon(Icons.arrow_back),
+                                        ),
+                                      const SizedBox(width: 8),
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text(
+                                            'FIELD MANUAL',
+                                            style: OrionTypography.microLabel(
+                                              size: 10,
+                                              color: uiTheme.textMuted,
+                                            ),
+                                          ),
+                                          OrionTitle(
+                                            'Codex',
+                                            size: 19,
+                                            color: uiTheme.textPrimary,
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              const SizedBox(width: 8),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'FIELD MANUAL',
-                                    style: OrionTypography.microLabel(
-                                      size: 10,
-                                      color: uiTheme.textMuted,
+                              // The chips join the field's tap region: mouse/stylus (and
+                              // web touch) taps outside a TextField unfocus it on
+                              // pointer-down, which would run before _selectSection's
+                              // re-tap guard and steal focus from a no-op chip re-tap.
+                              TextFieldTapRegion(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                  ),
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      color: orionChipFill,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: orionShelfEdge,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4),
+                                      child: Row(
+                                        children: [
+                                          for (
+                                            var i = 0;
+                                            i < _sections.length;
+                                            i++
+                                          )
+                                            Expanded(
+                                              child: _CodexTab(
+                                                label: _sections[i],
+                                                selected: _section == i,
+                                                onTap: () => _selectSection(i),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
                                     ),
                                   ),
-                                  OrionTitle(
-                                    'Codex',
-                                    size: 19,
-                                    color: uiTheme.textPrimary,
+                                ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                                child: TextField(
+                                  controller: _searchController,
+                                  onChanged: (_) => _applySearchUpdate(),
+                                  decoration: InputDecoration(
+                                    prefixIcon: const Icon(Icons.search),
+                                    labelText:
+                                        'Search ${_sections[_section].toLowerCase()}',
+                                    suffixIcon: _searchController.text.isEmpty
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Clear',
+                                            onPressed: () {
+                                              _searchController.clear();
+                                              _applySearchUpdate();
+                                            },
+                                            icon: const Icon(Icons.clear),
+                                          ),
                                   ),
-                                ],
+                                ),
                               ),
                             ],
                           ),
                         ),
-                      // The chips join the field's tap region: mouse/stylus (and
-                      // web touch) taps outside a TextField unfocus it on
-                      // pointer-down, which would run before _selectSection's
-                      // re-tap guard and steal focus from a no-op chip re-tap.
-                      TextFieldTapRegion(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: orionChipFill,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: orionShelfEdge,
-                                width: 1.5,
-                              ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4),
-                              child: Row(
-                                children: [
-                                  for (var i = 0; i < _sections.length; i++)
-                                    Expanded(
-                                      child: _CodexTab(
-                                        label: _sections[i],
-                                        selected: _section == i,
-                                        onTap: () => _selectSection(i),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (_) => _applySearchUpdate(),
-                          decoration: InputDecoration(
-                            prefixIcon: const Icon(Icons.search),
-                            labelText:
-                                'Search ${_sections[_section].toLowerCase()}',
-                            suffixIcon: _searchController.text.isEmpty
-                                ? null
-                                : IconButton(
-                                    tooltip: 'Clear',
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      _applySearchUpdate();
-                                    },
-                                    icon: const Icon(Icons.clear),
-                                  ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Expanded(
-                  // A user drag (dragDetails != null) unfocuses the search field
-                  // immediately — on a clamping list with zero scroll extent the
-                  // built-in onDrag dismissal never sees a scroll update.
-                  child: PageStorage(
-                    bucket: _pageStorageBucket,
-                    child: NotificationListener<ScrollStartNotification>(
-                      onNotification: (notification) {
-                        if (notification.dragDetails != null) {
-                          FocusScope.of(context).unfocus();
-                        }
-                        return false;
-                      },
-                      child: _body(),
                     ),
-                  ),
-                ),
-              ],
+                    const SizedBox(height: 8),
+                    Expanded(
+                      // A user drag (dragDetails != null) unfocuses the search field
+                      // immediately — on a clamping list with zero scroll extent the
+                      // built-in onDrag dismissal never sees a scroll update.
+                      child: PageStorage(
+                        bucket: _pageStorageBucket,
+                        child: NotificationListener<ScrollStartNotification>(
+                          onNotification: (notification) {
+                            if (notification.dragDetails != null) {
+                              FocusScope.of(context).unfocus();
+                            }
+                            return false;
+                          },
+                          child: _body(),
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
             ),
           ),
         ],

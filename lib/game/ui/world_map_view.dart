@@ -235,8 +235,14 @@ class _WorldMapViewState extends State<WorldMapView> {
                             ),
                           ),
                           for (final stage in widget.stages)
-                            Positioned.fromRect(
-                              rect: nodeRects[stage.id]!,
+                            // The name chip paints 20px past each side of the
+                            // 72px layout rect; the node box must cover that
+                            // painted footprint or its edges are untappable.
+                            Positioned(
+                              left: nodeRects[stage.id]!.left - 20,
+                              top: nodeRects[stage.id]!.top,
+                              width: nodeRects[stage.id]!.width + 40,
+                              height: nodeRects[stage.id]!.height,
                               child: _IllustratedStageNode(
                                 key: ValueKey('sector-stage-${stage.id}'),
                                 stage: stage,
@@ -752,8 +758,8 @@ class _IllustratedStageNode extends StatelessWidget {
               children: [
                 Positioned(
                   top: 0,
-                  left: 0,
-                  right: 0,
+                  left: 20,
+                  right: 20,
                   height: 76,
                   child: Stack(
                     key: ValueKey('stage-crest-${stage.id}'),
@@ -761,17 +767,33 @@ class _IllustratedStageNode extends StatelessWidget {
                     fit: StackFit.expand,
                     children: [
                       if (isRecommended) ...const [
-                        Center(child: _PulseRing(diameter: 108, width: 2)),
-                        Center(child: _PulseRing(diameter: 132, width: 1.5)),
+                        Center(
+                          child: OverflowBox(
+                            maxWidth: 108,
+                            maxHeight: 108,
+                            child: _PulseRing(diameter: 108, width: 2),
+                          ),
+                        ),
+                        Center(
+                          child: OverflowBox(
+                            maxWidth: 132,
+                            maxHeight: 132,
+                            child: _PulseRing(diameter: 132, width: 1.5),
+                          ),
+                        ),
                       ],
                       Center(
-                        child: _StageOrb(
-                          key: ValueKey('stage-status-ring-${stage.id}'),
-                          stage: stage,
-                          isLocked: isLocked,
-                          isRecommended: isRecommended,
-                          isSideOpen: isSideOpen,
-                          ringColor: statusColor,
+                        child: OverflowBox(
+                          maxWidth: 80,
+                          maxHeight: 80,
+                          child: _StageOrb(
+                            key: ValueKey('stage-status-ring-${stage.id}'),
+                            stage: stage,
+                            isLocked: isLocked,
+                            isRecommended: isRecommended,
+                            isSideOpen: isSideOpen,
+                            ringColor: statusColor,
+                          ),
                         ),
                       ),
                       if (isRecommended)
@@ -851,8 +873,8 @@ class _IllustratedStageNode extends StatelessWidget {
                 ),
                 Positioned(
                   top: 74,
-                  left: -20,
-                  right: -20,
+                  left: 0,
+                  right: 0,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [

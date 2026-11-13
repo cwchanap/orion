@@ -905,6 +905,54 @@ void main() {
     semantics.dispose();
   });
 
+  // Landscape phone with the keyboard up leaves ~160dp — the shell chrome
+  // must not push the tab bar off screen while search has focus.
+  testWidgets('keyboard-open landscape keeps the shell tab bar reachable', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(700, 360);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.viewInsets = const FakeViewPadding(bottom: 200);
+    addTearDown(tester.view.reset);
+    final selected = <OrionMenuDestination>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: OrionMenuShell(
+          destination: OrionMenuDestination.codex,
+          medalEarned: 0,
+          medalTotal: 21,
+          researchPoints: 0,
+          onDestinationSelected: selected.add,
+          onOpenSettings: () {},
+          child: CodexView(
+            progress: CampaignProgress(),
+            embeddedInMenuShell: true,
+          ),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    await tester.enterText(find.byType(TextField), 'zzzz');
+    await tester.pump();
+
+    // The ~90dp body leaves no room for a results row, but the field keeps
+    // the query and the shell must not error while it is focused.
+    expect(queryText(tester), 'zzzz');
+    final tabs = tester.getRect(find.byTooltip('Map'));
+    expect(
+      tabs.bottom,
+      lessThanOrEqualTo(360 - 200),
+      reason:
+          'the tab bar must remain above the keyboard, not overflow '
+          'below it: $tabs',
+    );
+    await tester.tap(find.byTooltip('Map'));
+    expect(selected, [OrionMenuDestination.sectors]);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('result cards keep full text scale outside the clamped chrome', (
     tester,
   ) async {

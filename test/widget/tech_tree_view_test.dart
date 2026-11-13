@@ -344,18 +344,21 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
-      MediaQuery(
-        data: MediaQueryData(textScaler: textScaler ?? TextScaler.noScaling),
-        child: MaterialApp(
-          theme: orionThemeData,
-          home: TechTreeView(
-            progress: progress,
-            techTree: techTree,
-            feedback: feedback,
-            isSavingProgress: isSavingProgress,
-            onPurchase: onPurchase,
-            onBack: onBack,
-          ),
+      MaterialApp(
+        theme: orionThemeData,
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: textScaler ?? TextScaler.noScaling),
+          child: child!,
+        ),
+        home: TechTreeView(
+          progress: progress,
+          techTree: techTree,
+          feedback: feedback,
+          isSavingProgress: isSavingProgress,
+          onPurchase: onPurchase,
+          onBack: onBack,
         ),
       ),
     );

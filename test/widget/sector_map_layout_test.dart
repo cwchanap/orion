@@ -129,7 +129,7 @@ void main() {
       );
       expect(
         layout.nodeRect(OrionCampaign.stages.last).top,
-        lessThanOrEqualTo(16),
+        SectorMapLayout.plotTopInset,
       );
       for (var i = 0; i < rects.length; i++) {
         for (var j = i + 1; j < rects.length; j++) {
