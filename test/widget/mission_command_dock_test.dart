@@ -1712,13 +1712,18 @@ void main() {
 
       expect(
         find.descendant(
-          of: find.byKey(const ValueKey('mission-wave-progress')),
+          of: find.byType(MissionCommandDock),
           matching: find.textContaining(RegExp(r'/\s*\d')),
         ),
         findsNothing,
         reason:
             'endless has no scripted wave total; a finite "/N" denominator '
             'would recycle stage-one pacing that does not exist here',
+      );
+      expect(
+        find.text('Wave ${session.snapshot().waveNumber}'),
+        findsOneWidget,
+        reason: 'the strip must still label the running endless wave',
       );
     });
 

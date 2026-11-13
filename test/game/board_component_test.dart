@@ -197,7 +197,7 @@ void main() {
     for (final failureCase in decoderCases) {
       for (final startFromRender in [false, true]) {
         test('decoder stage ${stage.name}: ${failureCase.name} from '
-            '${startFromRender ? 'render' : 'onLoad'}', () async {
+            '${startFromRender ? 'render' : 'onMount'}', () async {
           final source = await Flame.images.load(GameSpriteSheet.fileName);
           final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(source));
           final probe = _DecoderProbe(
@@ -238,7 +238,7 @@ void main() {
                 board.render(Canvas(recorder));
                 recorder.endRecording().dispose();
               } else {
-                board.onLoad();
+                board.onMount();
               }
               await board.ensureMarkerShadows().timeout(
                 const Duration(seconds: 2),
@@ -667,7 +667,7 @@ void main() {
   for (final failure in ['readback throw', 'readback null', 'upload throw']) {
     for (final startFromRender in [false, true]) {
       test('persistent $failure has bounded fallback from '
-          '${startFromRender ? 'render' : 'onLoad'}', () async {
+          '${startFromRender ? 'render' : 'onMount'}', () async {
         final source = await Flame.images.load(GameSpriteSheet.fileName);
         var attempts = 0;
         final silhouettes = <Image>[];
@@ -703,7 +703,7 @@ void main() {
         });
         final uncaught = <Object>[];
         await runZonedGuarded(() async {
-          if (!startFromRender) board.onLoad();
+          if (!startFromRender) board.onMount();
           for (var frame = 0; frame < 10; frame++) {
             final recorder = PictureRecorder();
             board.render(Canvas(recorder));
@@ -879,7 +879,7 @@ void main() {
 
   for (final startFromRender in [false, true]) {
     test('fire-and-forget marker bake errors stay inside the board from '
-        '${startFromRender ? 'render' : 'onLoad'}', () async {
+        '${startFromRender ? 'render' : 'onMount'}', () async {
       final sheet = _MarkerSheetProbe(
         GameSpriteSheet.fromImage(
           await Flame.images.load(GameSpriteSheet.fileName),
@@ -900,7 +900,7 @@ void main() {
           board.render(Canvas(recorder));
           recorder.endRecording().dispose();
         } else {
-          board.onLoad();
+          board.onMount();
         }
         await Future<void>.delayed(const Duration(milliseconds: 30));
       }, (error, stack) => uncaught.add(error));

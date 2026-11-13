@@ -33,8 +33,11 @@ final class SectorMapLayout {
   static const nodeSize = Size(72, 94);
 
   /// Vertical insets the node field keeps inside its own box. Anchored and
-  /// grid-placed nodes share this frame, so both baselines agree.
-  static const plotTopInset = 8.0;
+  /// grid-placed nodes share this frame, so both baselines agree. The top
+  /// inset also reserves headroom for the recommended node's NEXT flag,
+  /// which hangs 24px above its crest and would otherwise clip against the
+  /// scroll viewport for the topmost stage.
+  static const plotTopInset = 28.0;
   static const plotBottomInset = 8.0;
 
   /// Smallest node-top spread that keeps the tightest anchor pair a full

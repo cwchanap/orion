@@ -41,6 +41,16 @@ CampaignProgress mainCompleteProgress({
 
 const shellControlTooltips = ['Map', 'R&D', 'Codex', 'Settings'];
 
+// The shell's own scrollable chrome (tab bar, codex chrome) matches a bare
+// "vertical Scrollable" predicate; scope lookups to the map subtree.
+Finder mapVerticalScrollable() => find.descendant(
+  of: find.byType(WorldMapView),
+  matching: find.byWidgetPredicate(
+    (widget) =>
+        widget is Scrollable && widget.axisDirection == AxisDirection.down,
+  ),
+);
+
 Widget buildMap({
   required CampaignProgress progress,
   List<StageDefinition>? stages,
@@ -130,12 +140,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final scrollable = tester.state<ScrollableState>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is Scrollable && widget.axisDirection == AxisDirection.down,
-      ),
-    );
+    final scrollable = tester.state<ScrollableState>(mapVerticalScrollable());
     scrollable.position.jumpTo(20);
     await tester.pumpAndSettle();
     final hint = tester.getRect(find.text('SWIPE UP FOR MISSION'));
@@ -250,10 +255,7 @@ void main() {
 
       // Exactly one vertical scrollable exists (the chart+footer region),
       // and it has nothing to scroll.
-      final scrollableFinder = find.byWidgetPredicate(
-        (widget) =>
-            widget is Scrollable && widget.axisDirection == AxisDirection.down,
-      );
+      final scrollableFinder = mapVerticalScrollable();
       expect(scrollableFinder, findsOneWidget);
       final scrollable = tester.state<ScrollableState>(scrollableFinder);
       expect(scrollable.position.maxScrollExtent, 0);
@@ -396,11 +398,7 @@ void main() {
           // (where only the footer shows); pin it to the top for a
           // deterministic geometry check.
           final scrollable = tester.state<ScrollableState>(
-            find.byWidgetPredicate(
-              (widget) =>
-                  widget is Scrollable &&
-                  widget.axisDirection == AxisDirection.down,
-            ),
+            mapVerticalScrollable(),
           );
           scrollable.position.jumpTo(0);
           await tester.pump();
@@ -598,18 +596,22 @@ void main() {
 
       expect(find.text('SECTOR MAP'), findsOneWidget);
       // Capture every rect in one frame before any ensureVisible scroll
-      // shifts the coordinate frame between captures.
-      final rects = <Rect>[];
+      // shifts the coordinate frame between captures. The node box is wider
+      // than the 72px crest so the full name chip stays inside the tap
+      // target; the crests themselves must still not collide.
+      final crests = <Rect>[];
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder).width, closeTo(72, 0.001));
+        expect(tester.getSize(finder).width, closeTo(112, 0.001));
         expect(tester.getSize(finder).height, closeTo(94, 0.001));
-        rects.add(tester.getRect(finder));
+        crests.add(
+          tester.getRect(find.byKey(ValueKey('stage-crest-${stage.id}'))),
+        );
       }
-      for (var left = 0; left < rects.length; left += 1) {
-        for (var right = left + 1; right < rects.length; right += 1) {
-          expect(rects[left].overlaps(rects[right]), isFalse);
+      for (var left = 0; left < crests.length; left += 1) {
+        for (var right = left + 1; right < crests.length; right += 1) {
+          expect(crests[left].overlaps(crests[right]), isFalse);
         }
       }
       for (final stage in OrionCampaign.stages) {
@@ -764,6 +766,52 @@ void main() {
         reason: stage.id,
       );
     }
+  });
+
+  testWidgets('the recommended flag stays inside the scroll viewport for '
+      'the topmost stage', (tester) async {
+    // Every earlier main stage cleared leaves Singularity Core — the
+    // top-anchored node — as the recommendation, so its NEXT flag hangs
+    // above the plot's top edge if no headroom is reserved.
+    await tester.pumpWidget(
+      buildMap(
+        progress: CampaignProgress(
+          bestResultsByStageId: const {
+            'outpost-alpha': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'nebula-relay': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'asteroid-foundry': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'aurora-gate': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final flag = tester.getRect(
+      find.byKey(const ValueKey('stage-open-singularity-core')),
+    );
+    final viewport = tester.getRect(
+      find.byKey(const ValueKey('world-map-plot-viewport')),
+    );
+    expect(
+      viewport.contains(flag.topLeft) && viewport.contains(flag.bottomRight),
+      isTrue,
+      reason:
+          'the NEXT flag must render inside the scroll viewport: '
+          '$flag vs $viewport',
+    );
   });
 
   testWidgets('locked, available and cleared states are explicit without '
@@ -1765,21 +1813,24 @@ void main() {
 
       expect(find.text('SECTOR MAP'), findsOneWidget);
 
-      // Every stage node is rendered and sized 56x80.
-      final rects = <Rect>[];
+      // Every stage node renders a 112x94 hit box covering its full painted
+      // footprint — the 72px crest plus the wider name chip.
+      final crests = <Rect>[];
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder).width, closeTo(72, 0.001));
+        expect(tester.getSize(finder).width, closeTo(112, 0.001));
         expect(tester.getSize(finder).height, closeTo(94, 0.001));
-        rects.add(tester.getRect(finder));
+        crests.add(
+          tester.getRect(find.byKey(ValueKey('stage-crest-${stage.id}'))),
+        );
       }
 
-      // No two nodes overlap at 320px: the column step floors at nodeSize.width
-      // so adjacent targets stay tappable.
-      for (var i = 0; i < rects.length; i += 1) {
-        for (var j = i + 1; j < rects.length; j += 1) {
-          expect(rects[i].overlaps(rects[j]), isFalse);
+      // No two crests overlap at 320px: the column step floors at
+      // nodeSize.width so adjacent targets stay tappable.
+      for (var i = 0; i < crests.length; i += 1) {
+        for (var j = i + 1; j < crests.length; j += 1) {
+          expect(crests[i].overlaps(crests[j]), isFalse);
         }
       }
 
@@ -1823,11 +1874,7 @@ void main() {
       // The region below the fixed header is too short for the chart plus
       // footer, so its single vertical scrollable must have real extent.
       final verticalScroll = tester.state<ScrollableState>(
-        find.byWidgetPredicate(
-          (widget) =>
-              widget is Scrollable &&
-              widget.axisDirection == AxisDirection.down,
-        ),
+        mapVerticalScrollable(),
       );
       expect(verticalScroll.position.maxScrollExtent, greaterThan(0));
 
@@ -1870,10 +1917,7 @@ void main() {
     await tester.pump();
 
     final verticalScroll = tester.state<ScrollableState>(
-      find.byWidgetPredicate(
-        (widget) =>
-            widget is Scrollable && widget.axisDirection == AxisDirection.down,
-      ),
+      mapVerticalScrollable(),
     );
     // The scrollable rests at the top of the chart.
     expect(verticalScroll.position.pixels, 0);

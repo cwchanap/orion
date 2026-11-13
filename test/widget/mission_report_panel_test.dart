@@ -1821,7 +1821,13 @@ Future<void> _openDetails(WidgetTester tester) async {
 _collectLayoutErrors() {
   final errors = <FlutterErrorDetails>[];
   final previous = FlutterError.onError;
-  FlutterError.onError = errors.add;
+  FlutterError.onError = (details) {
+    if (details.exceptionAsString().contains('overflowed')) {
+      errors.add(details);
+    } else {
+      previous?.call(details);
+    }
+  };
   void restore() => FlutterError.onError = previous;
   addTearDown(restore);
   return (errors: errors, restore: restore);
