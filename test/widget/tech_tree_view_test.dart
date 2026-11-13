@@ -606,6 +606,141 @@ void main() {
     expect(purchases, 0);
   });
 
+  testWidgets('short-region detail scrolls the action inside the sheet', (
+    tester,
+  ) async {
+    await pumpTree(
+      tester,
+      progress: CampaignProgress(),
+      techTree: CampaignTechTree(),
+      onPurchase: (_) {},
+      onBack: () async {},
+    );
+    final upgrade = CampaignTechUpgrade.solarCapacitors;
+    await selectNode(tester, upgrade);
+
+    // Rotate to a landscape-short region with the detail already open: the
+    // sheet is shorter than the pinned chrome plus a usable scroll body, so
+    // the complete detail scrolls and the action is reached inside the
+    // sheet rather than pinned or painted past its bottom edge.
+    tester.view.physicalSize = const Size(640, 320);
+    tester.view.devicePixelRatio = 1;
+    await tester.pump();
+    expect(tester.takeException(), isNull);
+
+    final detail = detailFinder(upgrade);
+    final action = researchActionFinder(upgrade);
+    expectDetailActionPinned(action);
+    final sheetRect = tester.getRect(detail);
+    await tester.ensureVisible(action);
+    await tester.pump();
+    expect(
+      tester.getRect(action).bottom,
+      lessThanOrEqualTo(sheetRect.bottom + 0.5),
+    );
+    final hint = find.descendant(
+      of: detail,
+      matching: find.text('Need ${upgrade.cost} more points'),
+    );
+    expect(hint, findsOneWidget);
+    await tester.ensureVisible(hint);
+    await tester.pump();
+    final hintRect = tester.getRect(hint);
+    expect(hintRect.bottom, lessThanOrEqualTo(sheetRect.bottom + 0.5));
+    for (final scrollable
+        in find
+            .ancestor(of: hint, matching: find.byType(Scrollable))
+            .evaluate()) {
+      final viewport = tester.getRect(find.byWidget(scrollable.widget));
+      expect(hintRect.top, greaterThanOrEqualTo(viewport.top - 0.5));
+      expect(hintRect.bottom, lessThanOrEqualTo(viewport.bottom + 0.5));
+    }
+  });
+
+  testWidgets(
+    'moderate-short detail keeps the action pinned with a usable scroll body',
+    (tester) async {
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      final upgrade = CampaignTechUpgrade.solarCapacitors;
+      await selectNode(tester, upgrade);
+
+      // Tall enough to pin chrome plus a real scroll body: the action stays
+      // visible without scrolling and the unaffordable hint fits in the
+      // body viewport.
+      tester.view.physicalSize = const Size(640, 500);
+      tester.view.devicePixelRatio = 1;
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      final detail = detailFinder(upgrade);
+      final action = researchActionFinder(upgrade);
+      expectDetailActionPinned(action);
+      final sheetRect = tester.getRect(detail);
+      final actionRect = tester.getRect(action);
+      expect(actionRect.bottom, lessThanOrEqualTo(sheetRect.bottom + 0.5));
+      expect(
+        find.ancestor(of: action, matching: find.byType(Scrollable)),
+        findsNothing,
+        reason: 'the action is pinned chrome at this height',
+      );
+      final hint = find.descendant(
+        of: detail,
+        matching: find.text('Need ${upgrade.cost} more points'),
+      );
+      expect(hint, findsOneWidget);
+      await tester.ensureVisible(hint);
+      await tester.pump();
+      final hintRect = tester.getRect(hint);
+      for (final scrollable
+          in find
+              .ancestor(of: hint, matching: find.byType(Scrollable))
+              .evaluate()) {
+        final viewport = tester.getRect(find.byWidget(scrollable.widget));
+        expect(hintRect.top, greaterThanOrEqualTo(viewport.top - 0.5));
+        expect(hintRect.bottom, lessThanOrEqualTo(viewport.bottom + 0.5));
+      }
+    },
+  );
+
+  testWidgets(
+    'degenerate-height detail scrolls the whole sheet without overflow',
+    (tester) async {
+      await pumpTree(
+        tester,
+        progress: CampaignProgress(),
+        techTree: CampaignTechTree(),
+        onPurchase: (_) {},
+        onBack: () async {},
+      );
+      final upgrade = CampaignTechUpgrade.solarCapacitors;
+      await selectNode(tester, upgrade);
+
+      // Shorter than the pinned extent (e.g. the shell body above an open
+      // keyboard): the complete detail becomes the scroll content so the
+      // action is reached by scrolling and still renders inside the sheet.
+      tester.view.physicalSize = const Size(640, 220);
+      tester.view.devicePixelRatio = 1;
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      final detail = detailFinder(upgrade);
+      final action = researchActionFinder(upgrade);
+      expectDetailActionPinned(action);
+      await tester.ensureVisible(action);
+      await tester.pump();
+      expect(
+        tester.getRect(action).bottom,
+        lessThanOrEqualTo(tester.getRect(detail).bottom + 0.5),
+      );
+    },
+  );
+
   testWidgets(
     'selection survives failed-save rollback; detail reflects rolled-back state + feedback',
     (tester) async {
@@ -1900,6 +2035,11 @@ void main() {
       () => captureReactorRimFixture(boundaryKey, 'fixture-1g.png'),
     );
     await selectNode(tester, CampaignTechUpgrade.hardenedCore);
+    await tester.pumpAndSettle();
+    // The field is scrollable, so the contract is that every node can be
+    // revealed fully above the detail — not that the resting scroll offset
+    // happens to leave the last row clear.
+    await tester.ensureVisible(nodeFinder(CampaignTechUpgrade.laserTuning));
     await tester.pumpAndSettle();
     expect(
       tester.getRect(nodeFinder(CampaignTechUpgrade.laserTuning)).bottom,

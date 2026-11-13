@@ -101,6 +101,15 @@ class _WorldMapViewState extends State<WorldMapView> {
     return widget.feedback;
   }
 
+  VoidCallback? _stageTap(StageDefinition stage) {
+    if (_isBusy) return null;
+    if (widget.progress.statusFor(stage) == StageProgressStatus.locked) {
+      final callback = widget.onLockedStageSelected;
+      return callback == null ? null : () => callback(stage);
+    }
+    return () => widget.onStageSelected(stage);
+  }
+
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
@@ -235,13 +244,10 @@ class _WorldMapViewState extends State<WorldMapView> {
                             ),
                           ),
                           for (final stage in widget.stages)
-                            // The name chip paints 20px past each side of the
-                            // 72px layout rect; the node box must cover that
-                            // painted footprint or its edges are untappable.
                             Positioned(
-                              left: nodeRects[stage.id]!.left - 20,
+                              left: nodeRects[stage.id]!.left,
                               top: nodeRects[stage.id]!.top,
-                              width: nodeRects[stage.id]!.width + 40,
+                              width: nodeRects[stage.id]!.width,
                               height: nodeRects[stage.id]!.height,
                               child: _IllustratedStageNode(
                                 key: ValueKey('sector-stage-${stage.id}'),
@@ -253,10 +259,29 @@ class _WorldMapViewState extends State<WorldMapView> {
                                         .recommendedStage(widget.stages)
                                         ?.id ==
                                     stage.id,
-                                isBusy: _isBusy,
-                                onStageSelected: widget.onStageSelected,
-                                onLockedStageSelected:
-                                    widget.onLockedStageSelected,
+                                onTap: _stageTap(stage),
+                              ),
+                            ),
+                          // Captions are a second pass painted after every
+                          // crest, so a chip's own pixels always hit-test
+                          // before a neighbor's crest art and never get
+                          // stolen by an overlapping node box.
+                          for (final stage in widget.stages)
+                            Positioned(
+                              left: nodeRects[stage.id]!.left - 20,
+                              top: nodeRects[stage.id]!.top + 70,
+                              width: nodeRects[stage.id]!.width + 40,
+                              child: _StageCaption(
+                                key: ValueKey('sector-caption-${stage.id}'),
+                                stage: stage,
+                                status: widget.progress.statusFor(stage),
+                                result: widget.progress.resultFor(stage.id),
+                                isNext:
+                                    widget.progress
+                                        .recommendedStage(widget.stages)
+                                        ?.id ==
+                                    stage.id,
+                                onTap: _stageTap(stage),
                               ),
                             ),
                         ],
@@ -690,9 +715,7 @@ class _IllustratedStageNode extends StatelessWidget {
     required this.status,
     required this.result,
     required this.isNext,
-    required this.isBusy,
-    required this.onStageSelected,
-    required this.onLockedStageSelected,
+    required this.onTap,
   });
 
   final StageDefinition stage;
@@ -700,9 +723,7 @@ class _IllustratedStageNode extends StatelessWidget {
   final StageResult? result;
 
   final bool isNext;
-  final bool isBusy;
-  final ValueChanged<StageDefinition> onStageSelected;
-  final ValueChanged<StageDefinition>? onLockedStageSelected;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -712,11 +733,13 @@ class _IllustratedStageNode extends StatelessWidget {
     final isOpen = status == StageProgressStatus.unlocked;
     final isRecommended = isNext && isOpen;
     final isSideOpen = isOpen && !isRecommended && !stage.isMainPath;
-    final statusColor = isRecommended
-        ? uiTheme.systemCyan
-        : isSideOpen
-        ? uiTheme.systemViolet
-        : _statusColor(uiTheme, status, result);
+    final statusColor = _stageStatusColor(
+      uiTheme,
+      stage,
+      status,
+      result,
+      isNext,
+    );
     final rewardLabel = stageRewardLabel(stage, isCleared: isCleared);
     // A committed clear is the only path to owning the stage's blueprint,
     // so the node's own cleared status is the Recovered/Locked signal.
@@ -736,7 +759,6 @@ class _IllustratedStageNode extends StatelessWidget {
       ?rewardLabel,
       ?blueprintLabel,
     ].join(' • ');
-    final onTap = _onTap(isLocked);
 
     return Semantics(
       button: true,
@@ -753,13 +775,9 @@ class _IllustratedStageNode extends StatelessWidget {
             borderRadius: BorderRadius.circular(28),
             splashColor: statusColor.withValues(alpha: 0.20),
             highlightColor: statusColor.withValues(alpha: 0.10),
-            child: Stack(
-              clipBehavior: Clip.none,
+            child: Column(
               children: [
-                Positioned(
-                  top: 0,
-                  left: 20,
-                  right: 20,
+                SizedBox(
                   height: 76,
                   child: Stack(
                     key: ValueKey('stage-crest-${stage.id}'),
@@ -871,25 +889,6 @@ class _IllustratedStageNode extends StatelessWidget {
                     ],
                   ),
                 ),
-                Positioned(
-                  top: 74,
-                  left: 0,
-                  right: 0,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      _NodeNameChip(
-                        stage: stage,
-                        isRecommended: isRecommended,
-                        color: isLocked ? uiTheme.textMuted : statusColor,
-                      ),
-                      if (isCleared && result != null) ...[
-                        const SizedBox(height: 4),
-                        _MedalPips(rank: result!.medal.rank),
-                      ],
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
@@ -897,14 +896,65 @@ class _IllustratedStageNode extends StatelessWidget {
       ),
     );
   }
+}
 
-  VoidCallback? _onTap(bool isLocked) {
-    if (isBusy) return null;
-    if (isLocked) {
-      final callback = onLockedStageSelected;
-      return callback == null ? null : () => callback(stage);
-    }
-    return () => onStageSelected(stage);
+// The caption chip and medal pips live in a second paint pass above every
+// crest, so the chip's own InkWell resolves taps across its painted width —
+// including past the 72px layout rect — without an overlapping neighbor's
+// box claiming them first.
+class _StageCaption extends StatelessWidget {
+  const _StageCaption({
+    super.key,
+    required this.stage,
+    required this.status,
+    required this.result,
+    required this.isNext,
+    required this.onTap,
+  });
+
+  final StageDefinition stage;
+  final StageProgressStatus status;
+  final StageResult? result;
+  final bool isNext;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final isLocked = status == StageProgressStatus.locked;
+    final isCleared = status == StageProgressStatus.cleared;
+    final isRecommended = isNext && status == StageProgressStatus.unlocked;
+    final statusColor = _stageStatusColor(
+      uiTheme,
+      stage,
+      status,
+      result,
+      isNext,
+    );
+    // The crest node already carries the stage's full semantics; the chip
+    // is a redundant visual target.
+    return ExcludeSemantics(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            splashColor: statusColor.withValues(alpha: 0.20),
+            highlightColor: statusColor.withValues(alpha: 0.10),
+            child: _NodeNameChip(
+              stage: stage,
+              isRecommended: isRecommended,
+              color: isLocked ? uiTheme.textMuted : statusColor,
+            ),
+          ),
+          if (isCleared && result != null) ...[
+            const SizedBox(height: 4),
+            _MedalPips(rank: result!.medal.rank),
+          ],
+        ],
+      ),
+    );
   }
 }
 
@@ -1270,6 +1320,23 @@ void _drawDashedLine(
     );
     travelled += dash + gap;
   }
+}
+
+Color _stageStatusColor(
+  OrionUiTheme uiTheme,
+  StageDefinition stage,
+  StageProgressStatus status,
+  StageResult? result,
+  bool isNext,
+) {
+  final isRecommended = isNext && status == StageProgressStatus.unlocked;
+  final isSideOpen =
+      status == StageProgressStatus.unlocked &&
+      !isRecommended &&
+      !stage.isMainPath;
+  if (isRecommended) return uiTheme.systemCyan;
+  if (isSideOpen) return uiTheme.systemViolet;
+  return _statusColor(uiTheme, status, result);
 }
 
 Color _statusColor(
