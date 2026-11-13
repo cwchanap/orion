@@ -659,13 +659,10 @@ void main() {
       // own target — and must select THIS stage, never a neighbor whose box
       // could overlap the caption band.
       for (final x in [chipRect.left + 1, chipRect.right - 1]) {
+        selected.clear();
         await tester.tapAt(Offset(x, chipRect.center.dy));
         await tester.pump();
-        expect(
-          selected.isNotEmpty && selected.last == stage.id,
-          isTrue,
-          reason: '${stage.id} caption-edge tap',
-        );
+        expect(selected, [stage.id], reason: '${stage.id} caption-edge tap');
       }
     }
   });
