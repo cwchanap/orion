@@ -90,6 +90,20 @@ class StageBriefingSheet extends StatelessWidget {
         horizontal: largeText,
       ),
     ];
+    final medalCriteria = [
+      _BriefingIntelRow(
+        icon: medalIcon(StageMedal.gold),
+        color: uiTheme.creditGold,
+        title: '$startingBaseHealth/$startingBaseHealth',
+        detail: 'GOLD · NO LEAKS',
+      ),
+      _BriefingIntelRow(
+        icon: medalIcon(StageMedal.silver),
+        color: uiTheme.textMuted,
+        title: '${GameBalance.silverMedalThreshold}+ HULL',
+        detail: 'SILVER',
+      ),
+    ];
 
     return Material(
       color: uiTheme.voidBlack,
@@ -231,29 +245,18 @@ class StageBriefingSheet extends StatelessWidget {
                               const SizedBox(height: 16),
                               _BriefingThreatProfile(stage: stage),
                               const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _BriefingIntelRow(
-                                      icon: medalIcon(StageMedal.gold),
-                                      color: uiTheme.creditGold,
-                                      title:
-                                          '$startingBaseHealth/$startingBaseHealth',
-                                      detail: 'GOLD · NO LEAKS',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _BriefingIntelRow(
-                                      icon: medalIcon(StageMedal.silver),
-                                      color: uiTheme.textMuted,
-                                      title:
-                                          '${GameBalance.silverMedalThreshold}+ HULL',
-                                      detail: 'SILVER',
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              if (largeText) ...[
+                                medalCriteria[0],
+                                const SizedBox(height: 8),
+                                medalCriteria[1],
+                              ] else
+                                Row(
+                                  children: [
+                                    Expanded(child: medalCriteria[0]),
+                                    const SizedBox(width: 8),
+                                    Expanded(child: medalCriteria[1]),
+                                  ],
+                                ),
                               if (metadata.length > 1) ...[
                                 const SizedBox(height: 16),
                                 Text(
