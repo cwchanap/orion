@@ -596,14 +596,14 @@ void main() {
 
       expect(find.text('SECTOR MAP'), findsOneWidget);
       // Capture every rect in one frame before any ensureVisible scroll
-      // shifts the coordinate frame between captures. The node box is wider
-      // than the 72px crest so the full name chip stays inside the tap
-      // target; the crests themselves must still not collide.
+      // shifts the coordinate frame between captures. The node box stays on
+      // the 72px layout rect — captions paint in a second pass carrying
+      // their own target — and the crests themselves must not collide.
       final crests = <Rect>[];
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder).width, closeTo(112, 0.001));
+        expect(tester.getSize(finder).width, closeTo(72, 0.001));
         expect(tester.getSize(finder).height, closeTo(94, 0.001));
         crests.add(
           tester.getRect(find.byKey(ValueKey('stage-crest-${stage.id}'))),
@@ -623,6 +623,52 @@ void main() {
       expect(selected, OrionCampaign.stages.map((stage) => stage.id).toList());
     },
   );
+
+  testWidgets('taps at both caption edges select the painted stage', (
+    tester,
+  ) async {
+    await tester.binding.setSurfaceSize(const Size(375, 812));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final selected = <String>[];
+
+    await tester.pumpWidget(
+      buildMap(
+        progress: clearedCampaignProgress(),
+        onStageSelected: (stage) => selected.add(stage.id),
+      ),
+    );
+
+    for (final stage in OrionCampaign.stages) {
+      final node = find.byKey(ValueKey('sector-stage-${stage.id}'));
+      await tester.ensureVisible(node);
+      await tester.pump();
+      // The caption chip is the decorated Container above the label; it is
+      // painted in a second pass with its own tap target wider than the
+      // 72px crest box.
+      final caption = find.byKey(ValueKey('sector-caption-${stage.id}'));
+      expect(caption, findsOneWidget, reason: stage.id);
+      final chip = find.ancestor(
+        of: find.descendant(of: caption, matching: find.text(stage.mapLabel)),
+        matching: find.byWidgetPredicate(
+          (widget) => widget is Container && widget.decoration is BoxDecoration,
+        ),
+      );
+      expect(chip, findsOneWidget, reason: stage.id);
+      final chipRect = tester.getRect(chip);
+      // Taps at the caption's visible left and right edges must reach its
+      // own target — and must select THIS stage, never a neighbor whose box
+      // could overlap the caption band.
+      for (final x in [chipRect.left + 1, chipRect.right - 1]) {
+        await tester.tapAt(Offset(x, chipRect.center.dy));
+        await tester.pump();
+        expect(
+          selected.isNotEmpty && selected.last == stage.id,
+          isTrue,
+          reason: '${stage.id} caption-edge tap',
+        );
+      }
+    }
+  });
 
   testWidgets('optional missions use smaller circular crests', (tester) async {
     await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
@@ -896,7 +942,7 @@ void main() {
       Color labelColor(String stageId, String label) {
         final text = tester.widget<Text>(
           find.descendant(
-            of: find.byKey(ValueKey('sector-stage-$stageId')),
+            of: find.byKey(ValueKey('sector-caption-$stageId')),
             matching: find.text(label),
           ),
         );
@@ -1228,7 +1274,9 @@ void main() {
         ),
       ),
     );
-    final foundry = find.byKey(const ValueKey('sector-stage-asteroid-foundry'));
+    final foundry = find.byKey(
+      const ValueKey('sector-caption-asteroid-foundry'),
+    );
     expect(
       find.descendant(of: foundry, matching: find.text('03 ·')),
       findsOneWidget,
@@ -1813,13 +1861,13 @@ void main() {
 
       expect(find.text('SECTOR MAP'), findsOneWidget);
 
-      // Every stage node renders a 112x94 hit box covering its full painted
-      // footprint — the 72px crest plus the wider name chip.
+      // Every stage node renders the 72x94 layout rect — the wider name
+      // chip carries its own tap target instead of a shared widened box.
       final crests = <Rect>[];
       for (final stage in OrionCampaign.stages) {
         final finder = find.byKey(ValueKey('sector-stage-${stage.id}'));
         expect(finder, findsOneWidget);
-        expect(tester.getSize(finder).width, closeTo(112, 0.001));
+        expect(tester.getSize(finder).width, closeTo(72, 0.001));
         expect(tester.getSize(finder).height, closeTo(94, 0.001));
         crests.add(
           tester.getRect(find.byKey(ValueKey('stage-crest-${stage.id}'))),

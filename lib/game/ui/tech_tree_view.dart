@@ -60,7 +60,12 @@ const _detailSurfaceChrome = 31.0;
 
 /// Header, gaps and the pinned action the detail sheet cannot compress: the
 /// field reservation must yield before this height is taken from the sheet.
-const _detailPinnedExtent = 124.0;
+const _detailPinnedExtent = 140.0;
+
+/// Minimum scroll viewport the pinned layout must leave for the detail
+/// body. Below this the complete detail scrolls as one region, since a
+/// pinned header and action would leave only a sliver to scroll.
+const _detailMinScrollBody = 40.0;
 
 Path _hexPath(Size size) {
   final w = size.width;
@@ -826,8 +831,15 @@ class _TechDetail extends StatelessWidget {
         icon: const Icon(Icons.close, size: 18),
       ),
     );
+    // The compact header is pinned chrome, so its texts are capped at the
+    // kit's secondary-text scale; the large-text layout keeps full scale
+    // because its header and description both live inside scrollable space.
+    final headerScaler = largeText
+        ? null
+        : MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 1.15);
     final titleText = Text(
       upgrade.label,
+      textScaler: headerScaler,
       // Detail-panel heading for the selected node; reuses the
       // panel's own systemViolet border accent rather than the
       // screen title role (already used once above) or the
@@ -837,6 +849,7 @@ class _TechDetail extends StatelessWidget {
     );
     final descriptionText = Text(
       upgrade.description,
+      textScaler: headerScaler,
       style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
     );
     final effectText = Text(
@@ -847,6 +860,67 @@ class _TechDetail extends StatelessWidget {
       'Cost: ${upgrade.cost} pts',
       style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
     );
+    final header = largeText
+        ? Row(
+            children: [
+              Expanded(child: titleText),
+              closeButton,
+            ],
+          )
+        : Row(
+            children: [
+              headerIcon,
+              const SizedBox(width: 10),
+              Expanded(child: titleText),
+              closeButton,
+            ],
+          );
+    final detailBody = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // The description is a compressible line, so it scrolls with the
+        // body instead of growing the pinned header past its budget.
+        if (!largeText) ...[descriptionText, const SizedBox(height: 4)],
+        effectText,
+        const SizedBox(height: 2),
+        costText,
+        if (!isPurchased && !canAfford) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Need ${upgrade.cost - unspent} more points',
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: uiTheme.dangerRed,
+            ),
+          ),
+        ],
+        if (largeText) ...[const SizedBox(height: 6), descriptionText],
+      ],
+    );
+    final action = largeText
+        ? _buildAction(
+            uiTheme,
+            isPurchased,
+            canPurchase,
+            canAfford,
+            compactLabel: true,
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              _costColumn(uiTheme),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildAction(
+                  uiTheme,
+                  isPurchased,
+                  canPurchase,
+                  canAfford,
+                ),
+              ),
+            ],
+          );
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -857,94 +931,39 @@ class _TechDetail extends StatelessWidget {
             : const EdgeInsets.all(14),
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (largeText)
-                Row(
+          // The scroll body carries every compressible line — description,
+          // effect, cost and the unaffordable hint — so only the header and
+          // the action stay pinned. Below the pinned extent plus a usable
+          // body viewport even those cannot fit, so the complete detail
+          // becomes the scroll content rather than overflowing.
+          child: maxHeight >= _detailPinnedExtent + _detailMinScrollBody
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(child: titleText),
-                    closeButton,
+                    header,
+                    const SizedBox(height: 10),
+                    Flexible(
+                      fit: FlexFit.loose,
+                      child: _TechDetailScroll(child: detailBody),
+                    ),
+                    const SizedBox(height: 10),
+                    action,
                   ],
                 )
-              else
-                Row(
-                  children: [
-                    headerIcon,
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          titleText,
-                          const SizedBox(height: 2),
-                          descriptionText,
-                        ],
-                      ),
-                    ),
-                    closeButton,
-                  ],
-                ),
-              const SizedBox(height: 10),
-              Flexible(
-                fit: FlexFit.loose,
-                child: _TechDetailScroll(
+              : _TechDetailScroll(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      effectText,
-                      const SizedBox(height: 2),
-                      costText,
-                      if (largeText && !isPurchased && !canAfford) ...[
-                        const SizedBox(height: 6),
-                        Text(
-                          'Need ${upgrade.cost - unspent} more points',
-                          style: OrionTypography.microLabel(
-                            size: 10,
-                            color: uiTheme.dangerRed,
-                          ),
-                        ),
-                      ],
-                      if (largeText) ...[
-                        const SizedBox(height: 6),
-                        descriptionText,
-                      ],
+                      header,
+                      const SizedBox(height: 10),
+                      detailBody,
+                      const SizedBox(height: 10),
+                      action,
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: 10),
-              if (largeText)
-                _buildAction(
-                  uiTheme,
-                  isPurchased,
-                  canPurchase,
-                  canAfford,
-                  unspent,
-                  compactLabel: true,
-                  showHint: false,
-                )
-              else
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    _costColumn(uiTheme),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: _buildAction(
-                        uiTheme,
-                        isPurchased,
-                        canPurchase,
-                        canAfford,
-                        unspent,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
         ),
       ),
     );
@@ -970,10 +989,8 @@ class _TechDetail extends StatelessWidget {
     OrionUiTheme uiTheme,
     bool isPurchased,
     bool canPurchase,
-    bool canAfford,
-    int unspent, {
+    bool canAfford, {
     bool compactLabel = false,
-    bool showHint = true,
   }) {
     if (isPurchased) {
       return DecoratedBox(
@@ -1001,31 +1018,13 @@ class _TechDetail extends StatelessWidget {
       );
     }
     if (!canAfford) {
-      final needed = upgrade.cost - unspent;
-      final button = OrionPrimaryButton(
+      return OrionPrimaryButton(
         label: 'Research',
         icon: Icons.diamond,
         variant: OrionButtonVariant.secondary,
         height: 52,
         labelSize: compactLabel ? 10 : 13,
         onPressed: null, // disabled
-      );
-      if (!showHint) {
-        return button;
-      }
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          button,
-          const SizedBox(height: 6),
-          Text(
-            'Need $needed more points',
-            style: OrionTypography.microLabel(
-              size: 10,
-              color: uiTheme.dangerRed,
-            ),
-          ),
-        ],
       );
     }
     // Affordable but a save is in flight — show a disabled Purchase button
@@ -1069,7 +1068,7 @@ class _TechDetailScrollState extends State<_TechDetailScroll> {
       thumbVisibility: true,
       child: SingleChildScrollView(
         controller: _controller,
-        padding: const EdgeInsets.only(right: 6),
+        padding: const EdgeInsets.only(right: 6, bottom: 6),
         child: widget.child,
       ),
     );
