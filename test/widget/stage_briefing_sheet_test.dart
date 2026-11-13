@@ -552,6 +552,35 @@ void main() {
     );
   });
 
+  for (final scale in [3.0, 4.0]) {
+    testWidgets('medal criteria keep whole words at 320 and ${scale}x', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        viewport: const Size(320, 568),
+        textScaler: TextScaler.linear(scale),
+      );
+      for (final (text, word) in [
+        ('GOLD · NO LEAKS', 'LEAKS'),
+        ('SILVER', 'SILVER'),
+      ]) {
+        final paragraph = tester.renderObject<RenderParagraph>(find.text(text));
+        final start = text.indexOf(word);
+        expect(
+          paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: start, extentOffset: start + word.length),
+          ),
+          hasLength(1),
+          reason: '$word must not split across lines',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('blueprint heading stays in one piece at 320 and 4x', (
     tester,
   ) async {
