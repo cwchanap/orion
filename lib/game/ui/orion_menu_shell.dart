@@ -59,6 +59,13 @@ class OrionMenuShell extends StatelessWidget {
                   medalTotal: medalTotal,
                   researchPoints: researchPoints,
                   onOpenSettings: settingsEnabled ? onOpenSettings : null,
+                )
+              else
+                const SafeArea(
+                  left: false,
+                  right: false,
+                  bottom: false,
+                  child: SizedBox.shrink(),
                 ),
               if (feedback != null) _FeedbackLine(message: feedback!),
               Expanded(
@@ -362,6 +369,7 @@ class _Tab extends StatelessWidget {
     return Expanded(
       child: Semantics(
         button: true,
+        enabled: active,
         selected: selected,
         label: label,
         child: Tooltip(

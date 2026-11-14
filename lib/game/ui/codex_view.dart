@@ -564,15 +564,21 @@ class _CodexViewState extends State<CodexView> {
     if (scaler.scale(10) <= 15) return 4;
     var widest = 0.0;
     final style = OrionTypography.microLabel(size: 10);
-    for (final label in labels) {
-      for (final word in label.split(' ')) {
-        final painter = TextPainter(
-          text: TextSpan(text: word, style: style),
-          textDirection: TextDirection.ltr,
-          textScaler: scaler,
-        )..layout();
-        if (painter.width > widest) widest = painter.width;
+    final painter = TextPainter(
+      textDirection: TextDirection.ltr,
+      textScaler: scaler,
+    );
+    try {
+      for (final label in labels) {
+        for (final word in label.split(' ')) {
+          painter
+            ..text = TextSpan(text: word, style: style)
+            ..layout();
+          if (painter.width > widest) widest = painter.width;
+        }
       }
+    } finally {
+      painter.dispose();
     }
     const gap = 8;
     final tile = widest + 14;
@@ -1157,29 +1163,13 @@ class _CodexTab extends StatefulWidget {
 }
 
 class _CodexTabState extends State<_CodexTab> {
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_onFocusChange);
-  }
-
-  void _onFocusChange() => setState(() {});
-
-  @override
-  void dispose() {
-    _focusNode.removeListener(_onFocusChange);
-    _focusNode.dispose();
-    super.dispose();
-  }
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final focused = _focusNode.hasFocus;
     return InkWell(
-      focusNode: _focusNode,
+      onFocusChange: (focused) => setState(() => _focused = focused),
       onTap: widget.onTap,
       borderRadius: BorderRadius.circular(10),
       child: Semantics(
@@ -1192,7 +1182,7 @@ class _CodexTabState extends State<_CodexTab> {
             decoration: BoxDecoration(
               gradient: widget.selected ? orionSecondaryFill : null,
               borderRadius: BorderRadius.circular(10),
-              border: focused
+              border: _focused
                   ? Border.all(color: uiTheme.systemCyan, width: 1.5)
                   : null,
               boxShadow: widget.selected
@@ -1224,7 +1214,96 @@ class _CodexTabState extends State<_CodexTab> {
   }
 }
 
-class _CodexTile extends StatefulWidget {
+class _CodexCardTile extends StatefulWidget {
+  const _CodexCardTile({
+    required this.tileKey,
+    required this.label,
+    required this.selected,
+    required this.onSelect,
+    required this.padding,
+    required this.child,
+  });
+
+  final Key tileKey;
+  final String label;
+  final bool selected;
+  final VoidCallback onSelect;
+  final EdgeInsetsGeometry padding;
+  final Widget child;
+
+  @override
+  State<_CodexCardTile> createState() => _CodexCardTileState();
+}
+
+class _CodexCardTileState extends State<_CodexCardTile> {
+  bool _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return InkWell(
+      onFocusChange: (focused) => setState(() => _focused = focused),
+      onTap: widget.onSelect,
+      borderRadius: BorderRadius.circular(12),
+      child: Semantics(
+        button: true,
+        selected: widget.selected,
+        label: widget.label,
+        child: ExcludeSemantics(
+          child: ConstrainedBox(
+            key: widget.tileKey,
+            constraints: const BoxConstraints(minHeight: 92),
+            child: Stack(
+              children: [
+                const Positioned.fill(
+                  child: OrionSurface(
+                    role: OrionSurfaceRole.card,
+                    radius: 12,
+                    padding: EdgeInsets.zero,
+                    child: SizedBox.expand(),
+                  ),
+                ),
+                if (widget.selected)
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: uiTheme.systemCyan,
+                          width: 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: uiTheme.systemCyan.withValues(alpha: .35),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                if (_focused)
+                  Positioned.fill(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: uiTheme.systemViolet,
+                          width: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                Padding(padding: widget.padding, child: widget.child),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CodexTile extends StatelessWidget {
   const _CodexTile({
     required this.entry,
     required this.selected,
@@ -1236,131 +1315,51 @@ class _CodexTile extends StatefulWidget {
   final VoidCallback onSelect;
 
   @override
-  State<_CodexTile> createState() => _CodexTileState();
-}
-
-class _CodexTileState extends State<_CodexTile> {
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_onFocusChange);
-  }
-
-  void _onFocusChange() => setState(() {});
-
-  @override
-  void dispose() {
-    _focusNode.removeListener(_onFocusChange);
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final entry = widget.entry;
-    final focused = _focusNode.hasFocus;
-    return InkWell(
-      focusNode: _focusNode,
-      onTap: widget.onSelect,
-      borderRadius: BorderRadius.circular(12),
-      child: Semantics(
-        button: true,
-        selected: widget.selected,
-        label: entry.label,
-        child: ExcludeSemantics(
-          child: ConstrainedBox(
-            key: ValueKey('codex-tile-${entry.type.name}'),
-            constraints: const BoxConstraints(minHeight: 92),
-            child: Stack(
-              children: [
-                const Positioned.fill(
-                  child: OrionSurface(
-                    role: OrionSurfaceRole.card,
-                    radius: 12,
-                    padding: EdgeInsets.zero,
-                    child: SizedBox.expand(),
-                  ),
-                ),
-                if (widget.selected)
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: uiTheme.systemCyan,
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: uiTheme.systemCyan.withValues(alpha: .35),
-                            blurRadius: 16,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (focused)
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: uiTheme.systemViolet,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: Text(
-                          'W${entry.unlockWave}',
-                          style: OrionTypography.microLabel(
-                            size: 10,
-                            color: uiTheme.textDim,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Center(
-                        child: OrionAtlasSprite(
-                          art: OrionArt.tower(entry.type),
-                          size: const Size.square(46),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        entry.label,
-                        textAlign: TextAlign.center,
-                        style: OrionTypography.microLabel(
-                          size: 10,
-                          color: widget.selected
-                              ? uiTheme.systemCyan
-                              : uiTheme.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+    return _CodexCardTile(
+      tileKey: ValueKey('codex-tile-${entry.type.name}'),
+      label: entry.label,
+      selected: selected,
+      onSelect: onSelect,
+      padding: const EdgeInsets.fromLTRB(6, 6, 6, 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text(
+              'W${entry.unlockWave}',
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: uiTheme.textDim,
+              ),
             ),
           ),
-        ),
+          const SizedBox(height: 4),
+          Center(
+            child: OrionAtlasSprite(
+              art: OrionArt.tower(entry.type),
+              size: const Size.square(46),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            entry.label,
+            textAlign: TextAlign.center,
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: selected ? uiTheme.systemCyan : uiTheme.textMuted,
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _EnemyTile extends StatefulWidget {
+class _EnemyTile extends StatelessWidget {
   const _EnemyTile({
     required this.entry,
     required this.selected,
@@ -1372,138 +1371,55 @@ class _EnemyTile extends StatefulWidget {
   final VoidCallback onSelect;
 
   @override
-  State<_EnemyTile> createState() => _EnemyTileState();
-}
-
-class _EnemyTileState extends State<_EnemyTile> {
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_onFocusChange);
-  }
-
-  void _onFocusChange() => setState(() {});
-
-  @override
-  void dispose() {
-    _focusNode.removeListener(_onFocusChange);
-    _focusNode.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final entry = widget.entry;
-    final focused = _focusNode.hasFocus;
     final traitArts = [
       for (final tr in entry.traits) OrionArt.trait(tr),
     ].nonNulls.toList();
-    return InkWell(
-      focusNode: _focusNode,
-      onTap: widget.onSelect,
-      borderRadius: BorderRadius.circular(12),
-      child: Semantics(
-        button: true,
-        selected: widget.selected,
-        label: entry.label,
-        child: ExcludeSemantics(
-          child: ConstrainedBox(
-            key: ValueKey('codex-enemy-tile-${entry.archetype.name}'),
-            constraints: const BoxConstraints(minHeight: 92),
-            child: Stack(
-              children: [
-                const Positioned.fill(
-                  child: OrionSurface(
-                    role: OrionSurfaceRole.card,
-                    radius: 12,
-                    padding: EdgeInsets.zero,
-                    child: SizedBox.expand(),
-                  ),
+    return _CodexCardTile(
+      tileKey: ValueKey('codex-enemy-tile-${entry.archetype.name}'),
+      label: entry.label,
+      selected: selected,
+      onSelect: onSelect,
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: OrionAtlasSprite(
+              art: OrionArt.previewGroup(
+                WavePreviewGroup(
+                  enemyCount: 1,
+                  label: entry.label,
+                  traits: entry.traits.toSet(),
                 ),
-                if (widget.selected)
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: uiTheme.systemCyan,
-                          width: 1.5,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: uiTheme.systemCyan.withValues(alpha: .35),
-                            blurRadius: 16,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                if (focused)
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: uiTheme.systemViolet,
-                          width: 1.5,
-                        ),
-                      ),
-                    ),
-                  ),
-                Padding(
-                  padding: const EdgeInsets.all(8),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Center(
-                        child: OrionAtlasSprite(
-                          art: OrionArt.previewGroup(
-                            WavePreviewGroup(
-                              enemyCount: 1,
-                              label: entry.label,
-                              traits: entry.traits.toSet(),
-                            ),
-                          ),
-                          size: const Size.square(46),
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        entry.label,
-                        textAlign: TextAlign.center,
-                        style: OrionTypography.microLabel(
-                          size: 10,
-                          color: widget.selected
-                              ? uiTheme.systemCyan
-                              : uiTheme.textMuted,
-                        ),
-                      ),
-                      if (traitArts.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 4),
-                          child: Wrap(
-                            alignment: WrapAlignment.center,
-                            spacing: 4,
-                            children: [
-                              for (final art in traitArts)
-                                OrionAtlasSprite(
-                                  art: art,
-                                  size: const Size.square(14),
-                                ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
+              ),
+              size: const Size.square(46),
             ),
           ),
-        ),
+          const SizedBox(height: 4),
+          Text(
+            entry.label,
+            textAlign: TextAlign.center,
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: selected ? uiTheme.systemCyan : uiTheme.textMuted,
+            ),
+          ),
+          if (traitArts.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 4,
+                children: [
+                  for (final art in traitArts)
+                    OrionAtlasSprite(art: art, size: const Size.square(14)),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

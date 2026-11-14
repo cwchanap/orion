@@ -704,23 +704,7 @@ class _SpeedSegment extends StatefulWidget {
 }
 
 class _SpeedSegmentState extends State<_SpeedSegment> {
-  final FocusNode _focusNode = FocusNode();
-
-  @override
-  void initState() {
-    super.initState();
-    _focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void dispose() {
-    _focusNode
-      ..removeListener(_onFocusChange)
-      ..dispose();
-    super.dispose();
-  }
-
-  void _onFocusChange() => setState(() {});
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
@@ -736,12 +720,12 @@ class _SpeedSegmentState extends State<_SpeedSegment> {
       enabled: widget.enabled,
       selected: widget.selected,
       inMutuallyExclusiveGroup: true,
-      focused: _focusNode.hasPrimaryFocus,
+      focused: _focused,
       label: 'Speed $label',
       onTap: activate,
       child: ExcludeSemantics(
         child: InkResponse(
-          focusNode: _focusNode,
+          onFocusChange: (focused) => setState(() => _focused = focused),
           onTap: activate,
           containedInkWell: true,
           highlightShape: BoxShape.rectangle,
@@ -752,7 +736,7 @@ class _SpeedSegmentState extends State<_SpeedSegment> {
             padding: const EdgeInsets.symmetric(horizontal: 6),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(10),
-              border: _focusNode.hasPrimaryFocus
+              border: _focused
                   ? Border.all(color: uiTheme.systemCyan, width: 1.5)
                   : null,
               gradient: widget.selected ? orionSecondaryFill : null,

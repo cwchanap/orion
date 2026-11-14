@@ -264,14 +264,15 @@ class EnemyOverlayLayout {
   static const double _heavyBadgeCornerRadiusFactor = 0.1363636364;
   static const double _normalBarWidthFactor = 2.25;
   static const double _expandedBarWidthFactor = 2.8;
-  static const double _spriteClearanceFactor = 2.25;
+  static const double spriteExtentFactor = 1.75;
+  static const double _spriteClearanceFactor = spriteExtentFactor + 0.5;
   static const double _healthTrailingGapFactor = 0.0909090909;
   static const double _badgeTrailingGapFactor = 0.1818181818;
-  // EnemyComponent draws its sprite at 2.4 x radius (half-extent 1.2), so the
-  // corrosion ring must exceed that to sit around the sprite instead of on
-  // it; the slow ring is deliberately larger so both stay visible together.
-  static const double _corrodedRingRadiusFactor = 1.9;
-  static const double _slowedRingRadiusFactor = 2.1;
+  // EnemyComponent draws its sprite at spriteExtentFactor * 2 x radius
+  // (half-extent spriteExtentFactor), so the corrosion ring sits just outside
+  // the sprite and the slow ring sits further out so both stay visible together.
+  static const double _corrodedRingRadiusFactor = spriteExtentFactor + 0.15;
+  static const double _slowedRingRadiusFactor = spriteExtentFactor + 0.35;
 
   /// Top of the overlay region, measured relative to the enemy center.
   final double originY;

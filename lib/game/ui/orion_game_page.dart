@@ -110,6 +110,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   CampaignProgressStore? _store;
   String? _mapFeedback;
   String? _techTreeFeedback;
+  String? _shellFeedback;
   FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
   FeedbackPreferencesStore? _feedbackPreferencesStore;
   bool _feedbackPreferencesLoaded = false;
@@ -574,7 +575,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
       onOpenSectors: () => _openMenuDestination(OrionMenuDestination.sectors),
       onOpenResearch: () => _openMenuDestination(OrionMenuDestination.research),
       onOpenCodex: () => _openMenuDestination(OrionMenuDestination.codex),
-      onOpenSettings: _feedbackPreferencesLoaded && !_isSavingFeedback
+      onOpenSettings:
+          _feedbackPreferencesLoaded && !_isSavingFeedback && !_isBusy
           ? _openFeedbackSettings
           : null,
     );
@@ -610,17 +612,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
           OrionCampaign.stages,
           _techTree,
         ),
-        feedback: null,
+        feedback: _mapFeedback,
         isSavingProgress: _isSavingProgress,
         isResetting: _isResetting,
         onStageSelected: _showStageBriefing,
         onLockedStageSelected: _showLockedStageFeedback,
       ),
     };
-    final bodyEchoesMapFeedback =
-        _activeView == _ShellView.techTree &&
-        _techTreeFeedback != null &&
-        _techTreeFeedback == _mapFeedback;
     return OrionMenuShell(
       destination: destination,
       medalEarned: CampaignTechTree.totalMedalRank(_progress),
@@ -631,7 +629,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
           _feedbackPreferencesLoaded && !_isSavingFeedback && !_isBusy,
       onDestinationSelected: _openMenuDestination,
       onOpenSettings: _feedbackPreferencesLoaded ? _openFeedbackSettings : null,
-      feedback: bodyEchoesMapFeedback ? null : _mapFeedback,
+      feedback: _activeView == _ShellView.worldMap ? null : _shellFeedback,
       child: body,
     );
   }
@@ -654,6 +652,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
     setState(() {
       _techTreeFeedback = null;
+      _shellFeedback = null;
       _activeView = target;
     });
   }
@@ -1188,7 +1187,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   Future<void> _openFeedbackSettings() async {
-    if (_isSavingFeedback || !_feedbackPreferencesLoaded) {
+    if (_isSavingFeedback || !_feedbackPreferencesLoaded || _isBusy) {
       return;
     }
     final result = await showModalBottomSheet<FeedbackSettingsResult>(
@@ -1261,7 +1260,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return false;
       }
       setState(() {
-        _mapFeedback = _feedbackSaveFailureMessage;
+        _setActiveDestinationFeedback(_feedbackSaveFailureMessage);
       });
       return false;
     }
@@ -1278,6 +1277,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
         if (_mapFeedback == _feedbackSaveFailureMessage) {
           _mapFeedback = null;
         }
+        if (_shellFeedback == _feedbackSaveFailureMessage) {
+          _shellFeedback = null;
+        }
       });
       _syncMusic();
     } catch (_) {
@@ -1287,7 +1289,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return false;
       }
       setState(() {
-        _mapFeedback = _feedbackSaveFailureMessage;
+        _setActiveDestinationFeedback(_feedbackSaveFailureMessage);
       });
     } finally {
       _isSavingFeedback = false;
@@ -1352,6 +1354,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     setState(() {
       _mapFeedback = null;
+      _shellFeedback = null;
       _listenToGame(game);
       _inspectedTowerId = null;
       _boardViewport = null;
@@ -1769,7 +1772,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
 
       setState(() {
-        _mapFeedback = 'Could not reset campaign progress.';
+        _setActiveDestinationFeedback('Could not reset campaign progress.');
       });
       return;
     }
@@ -1800,8 +1803,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committedProgress = CampaignProgress();
         _committedTechTree = CampaignTechTree();
         _listenToGame(null);
-        _activeView = _ShellView.worldMap;
-        _mapFeedback = 'Campaign reset.';
+        if (_activeView == _ShellView.stage) {
+          _activeView = _ShellView.worldMap;
+        }
+        _techTreeFeedback = null;
+        _mapFeedback = null;
+        _shellFeedback = null;
+        _setActiveDestinationFeedback('Campaign reset.');
         _pendingSaves = 0;
         _isSavingProgress = false;
       });
@@ -1814,7 +1822,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // during the drain, so no save is skipped. New saves capture the new
       // generation and persist normally.
       setState(() {
-        _mapFeedback = 'Could not reset campaign progress.';
+        _setActiveDestinationFeedback('Could not reset campaign progress.');
       });
     } finally {
       _isResetting = false;
@@ -1839,6 +1847,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
     if (_pendingSaves <= 0) {
       _pendingSaves = 0;
       _setSavingProgress(false);
+    }
+  }
+
+  void _setActiveDestinationFeedback(String message) {
+    if (_activeView == _ShellView.techTree || _activeView == _ShellView.codex) {
+      _shellFeedback = message;
+    } else {
+      _mapFeedback = message;
     }
   }
 

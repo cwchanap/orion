@@ -1332,6 +1332,42 @@ void main() {
     expect(createdGame, isNull);
   });
 
+  testWidgets('locked stage feedback stays in map slot without shifting nodes '
+      'or leaking to other tabs', (tester) async {
+    await tester.pumpWidget(testGamePage());
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Core'));
+    await tester.pump();
+    final coreTopBefore = tester.getTopLeft(find.text('Core')).dy;
+    final alphaTopBefore = tester.getTopLeft(find.text('Alpha')).dy;
+
+    await tester.tap(find.text('Core'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Singularity Core is locked.'), findsOneWidget);
+    expect(
+      tester.getTopLeft(find.text('Core')).dy,
+      closeTo(coreTopBefore, 0.01),
+    );
+    expect(
+      tester.getTopLeft(find.text('Alpha')).dy,
+      closeTo(alphaTopBefore, 0.01),
+    );
+
+    await tester.tap(find.byTooltip('Codex'));
+    await tester.pumpAndSettle();
+    expect(find.text('Singularity Core is locked.'), findsNothing);
+
+    await tester.tap(find.byTooltip('R&D'));
+    await tester.pumpAndSettle();
+    expect(find.text('Singularity Core is locked.'), findsNothing);
+
+    await tester.tap(find.byTooltip('Map'));
+    await tester.pumpAndSettle();
+    expect(find.text('Singularity Core is locked.'), findsOneWidget);
+  });
+
   testWidgets('reset confirmation clears campaign progress', (tester) async {
     SharedPreferences.setMockInitialValues({
       'orion.campaign.progress': CampaignProgressCodec.encode(
@@ -3670,6 +3706,58 @@ void main() {
     expect(find.text('SECTOR MAP'), findsNothing);
     expect(store.resetCalls, 1);
     expect(store.progress.bestResultsByStageId.keys, {'outpost-alpha'});
+  });
+
+  testWidgets('successful reset from Codex keeps Codex active', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+    );
+
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Codex'));
+    await tester.pumpAndSettle();
+    expect(findOrionTitle('Codex'), findsOneWidget);
+
+    await openResetCampaignDialog(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Campaign reset.'), findsOneWidget);
+    expect(findOrionTitle('Codex'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsNothing);
+    expect(store.resetCalls, 1);
+    expect(store.progress.bestResultsByStageId, isEmpty);
+  });
+
+  testWidgets('successful reset from Title keeps Title active and Settings '
+      'respects in-flight busy state', (tester) async {
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      delayResets: true,
+    );
+
+    await tester.pumpWidget(
+      testGamePage(progressStore: store, startOnWorldMap: false),
+    );
+    await tester.pumpAndSettle();
+
+    await openResetCampaignDialog(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pump();
+
+    // While the reset is in flight, Title Settings must remain disabled.
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pump();
+    expect(find.text('Reset Campaign'), findsNothing);
+
+    store.resetCompletions.single.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Campaign reset.'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsNothing);
+    expect(store.resetCalls, 1);
   });
 
   testWidgets('successful reset after a pending save drains wipes the store', (

@@ -100,8 +100,24 @@ final class SectorMapLayout {
   /// anchor fit needs [minNodeSpan]; unanchored grid rows need one node
   /// height per row step. The caller should grow the plot (and scroll)
   /// rather than let nodes overlap below this height.
-  double get minContentHeight {
-    final gridSpan = _hasUnanchoredStages ? maxRow * nodeSize.height : 0.0;
+  double get minContentHeight =>
+      _minContentHeight(maxRow, _hasUnanchoredStages);
+
+  static double minContentHeightFor(List<StageDefinition> stages) {
+    if (stages.isEmpty) {
+      throw ArgumentError.value(stages, 'stages', 'Must not be empty');
+    }
+    var maxRow = stages.first.mapRow;
+    var hasUnanchoredStages = false;
+    for (final stage in stages) {
+      if (stage.mapRow > maxRow) maxRow = stage.mapRow;
+      if (!_anchors.containsKey(stage.id)) hasUnanchoredStages = true;
+    }
+    return _minContentHeight(maxRow, hasUnanchoredStages);
+  }
+
+  static double _minContentHeight(int maxRow, bool hasUnanchoredStages) {
+    final gridSpan = hasUnanchoredStages ? maxRow * nodeSize.height : 0.0;
     return plotTopInset +
         plotBottomInset +
         nodeSize.height +

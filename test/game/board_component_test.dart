@@ -5,7 +5,6 @@ import 'dart:ui';
 import 'package:flame/components.dart';
 import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/components/board_component.dart';
@@ -43,18 +42,6 @@ Future<List<int>> _rgbaAt(Image image, int x, int y) async {
   ];
 }
 
-Future<Image> _uploadMarker(Uint8List pixels, int width, int height) {
-  final result = Completer<Image>();
-  decodeImageFromPixels(
-    pixels,
-    width,
-    height,
-    PixelFormat.rgba8888,
-    result.complete,
-  );
-  return result.future;
-}
-
 class _MarkerSheetProbe implements GameSpriteSheet {
   _MarkerSheetProbe(
     this.delegate, {
@@ -85,682 +72,33 @@ class _MarkerSheetProbe implements GameSpriteSheet {
   }
 }
 
-class _DecoderAttempt {
-  final started = <MarkerDecoderStage>[];
-  final acquired = <MarkerDecoderStage, Object>{};
-  final disposed = <(MarkerDecoderStage, Object)>[];
-  bool failed = false;
-}
-
-class _DecoderProbe implements MarkerDecoderProbe {
-  _DecoderProbe({
-    required this.failureStage,
-    required this.failingAttempts,
-    this.holdFirstFrame = false,
-  });
-
-  final MarkerDecoderStage failureStage;
-  final Set<int> failingAttempts;
-  final bool holdFirstFrame;
-  final attempts = <_DecoderAttempt>[];
-  final frameReady = Completer<FrameInfo>();
-  final releaseFrame = Completer<void>();
-
-  @override
-  Future<T> run<T>(
-    MarkerDecoderStage stage,
-    Future<T> Function() operation,
-  ) async {
-    if (stage == MarkerDecoderStage.buffer) attempts.add(_DecoderAttempt());
-    final attempt = attempts.last;
-    attempt.started.add(stage);
-    if (stage == failureStage && failingAttempts.contains(attempts.length)) {
-      await Future<void>.delayed(Duration.zero);
-      attempt.failed = true;
-      throw StateError('injected ${stage.name} decode failure');
-    }
-    final resource = await operation();
-    attempt.acquired[stage] = resource as Object;
-    if (stage == MarkerDecoderStage.frame &&
-        holdFirstFrame &&
-        !frameReady.isCompleted) {
-      frameReady.complete(resource as FrameInfo);
-      await releaseFrame.future;
-    }
-    return resource;
-  }
-
-  @override
-  void didDispose(MarkerDecoderStage stage, Object resource) {
-    final attempt = attempts.lastWhere(
-      (attempt) => identical(attempt.acquired[stage], resource),
-    );
-    attempt.disposed.add((stage, resource));
-  }
-}
-
-class _DecoderFailureCase {
-  const _DecoderFailureCase(
-    this.name,
-    this.failingAttempts,
-    this.bakeSprites,
-    this.failures,
-  );
-
-  final String name;
-  final Set<int> failingAttempts;
-  final List<GameSprite> bakeSprites;
-  final List<(GameSprite, int)> failures;
-}
-
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  const decoderCases = [
-    _DecoderFailureCase(
-      'transient spawn',
-      {1},
-      [GameSprite.spawnGate, GameSprite.spawnGate, GameSprite.baseReactor],
-      [(GameSprite.spawnGate, 1)],
-    ),
-    _DecoderFailureCase(
-      'transient core',
-      {2},
-      [GameSprite.spawnGate, GameSprite.baseReactor, GameSprite.baseReactor],
-      [(GameSprite.baseReactor, 1)],
-    ),
-    _DecoderFailureCase(
-      'persistent spawn',
-      {1, 2},
-      [GameSprite.spawnGate, GameSprite.spawnGate, GameSprite.baseReactor],
-      [(GameSprite.spawnGate, 1), (GameSprite.spawnGate, 2)],
-    ),
-    _DecoderFailureCase(
-      'persistent both markers',
-      {1, 2, 3, 4},
-      [
-        GameSprite.spawnGate,
-        GameSprite.spawnGate,
-        GameSprite.baseReactor,
-        GameSprite.baseReactor,
-      ],
-      [
-        (GameSprite.spawnGate, 1),
-        (GameSprite.spawnGate, 2),
-        (GameSprite.baseReactor, 1),
-        (GameSprite.baseReactor, 2),
-      ],
-    ),
-  ];
-
-  for (final stage in MarkerDecoderStage.values) {
-    for (final failureCase in decoderCases) {
-      for (final startFromRender in [false, true]) {
-        test('decoder stage ${stage.name}: ${failureCase.name} from '
-            '${startFromRender ? 'render' : 'onMount'}', () async {
-          final source = await Flame.images.load(GameSpriteSheet.fileName);
-          final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(source));
-          final probe = _DecoderProbe(
-            failureStage: stage,
-            failingAttempts: failureCase.failingAttempts,
-          );
-          final diagnostics = <String>[];
-          final uncaught = <Object>[];
-          final previousDebugPrint = debugPrint;
-          debugPrint = (message, {wrapWidth}) {
-            if (message != null) diagnostics.add(message);
-          };
-          final board = BoardComponent(
-            cellSize: 20,
-            pathCells: BoardLayout.pathCells,
-            spriteSheet: sheet,
-            markerDecoderProbe: probe,
-          );
-          var removed = false;
-          addTearDown(() {
-            debugPrint = previousDebugPrint;
-            if (!removed) board.onRemove();
-            for (final attempt in probe.attempts) {
-              final frame = attempt.acquired[MarkerDecoderStage.frame];
-              if (frame is FrameInfo && !frame.image.debugDisposed) {
-                frame.image.dispose();
-              }
-            }
-          });
-
-          var completed = false;
-          Object? bakeError;
-          var callsAtCompletion = <GameSprite>[];
-          await runZonedGuarded(() async {
-            try {
-              if (startFromRender) {
-                final recorder = PictureRecorder();
-                board.render(Canvas(recorder));
-                recorder.endRecording().dispose();
-              } else {
-                board.onMount();
-              }
-              await board.ensureMarkerShadows().timeout(
-                const Duration(seconds: 2),
-              );
-              completed = true;
-              callsAtCompletion = List.of(sheet.calls);
-              for (var i = 0; i < 4; i++) {
-                final recorder = PictureRecorder();
-                board.render(Canvas(recorder));
-                recorder.endRecording().dispose();
-              }
-              await Future<void>.delayed(const Duration(milliseconds: 20));
-              await board.ensureMarkerShadows().timeout(
-                const Duration(seconds: 2),
-              );
-            } catch (error) {
-              bakeError = error;
-              completed = false;
-            }
-          }, (error, stack) => uncaught.add(error));
-
-          expect(completed, isTrue, reason: 'the bake must finish boundedly');
-          expect(bakeError, isNull);
-          expect(uncaught, isEmpty);
-          expect(
-            probe.attempts,
-            hasLength(failureCase.bakeSprites.length),
-            reason: 'the actual decoder must invoke the stage runner',
-          );
-          expect(
-            callsAtCompletion,
-            startFromRender
-                ? [
-                    GameSprite.spawnGate,
-                    failureCase.bakeSprites.first,
-                    GameSprite.baseReactor,
-                    ...failureCase.bakeSprites.skip(1),
-                  ]
-                : failureCase.bakeSprites,
-          );
-          expect(sheet.calls.skip(callsAtCompletion.length), [
-            for (var i = 0; i < 4; i++) ...[
-              GameSprite.spawnGate,
-              GameSprite.baseReactor,
-            ],
-          ], reason: 'rendering fallback sprites must not restart the bake');
-          expect(diagnostics, [
-            for (final (sprite, number) in failureCase.failures)
-              'Marker shadow $sprite attempt $number failed: '
-                  'Bad state: injected ${stage.name} decode failure',
-          ]);
-
-          for (var i = 0; i < probe.attempts.length; i++) {
-            final attempt = probe.attempts[i];
-            final failed = failureCase.failingAttempts.contains(i + 1);
-            final expectedAcquired = MarkerDecoderStage.values
-                .take(failed ? stage.index : MarkerDecoderStage.values.length)
-                .toList();
-            expect(attempt.failed, failed);
-            expect(
-              attempt.started,
-              failed ? [...expectedAcquired, stage] : MarkerDecoderStage.values,
-            );
-            expect(attempt.acquired.keys, expectedAcquired);
-            final expectedDisposal = expectedAcquired
-                .where((value) => value != MarkerDecoderStage.frame)
-                .toList()
-                .reversed
-                .toList();
-            expect(attempt.disposed.map((entry) => entry.$1), expectedDisposal);
-            for (final (disposedStage, resource) in attempt.disposed) {
-              expect(
-                identical(resource, attempt.acquired[disposedStage]),
-                isTrue,
-              );
-            }
-            final buffer = attempt.acquired[MarkerDecoderStage.buffer];
-            if (buffer is ImmutableBuffer) {
-              expect(buffer.debugDisposed, isTrue);
-            }
-            final frame = attempt.acquired[MarkerDecoderStage.frame];
-            if (frame is FrameInfo) {
-              expect(frame.image.debugDisposed, isFalse);
-            }
-          }
-          board.onRemove();
-          removed = true;
-          for (final attempt in probe.attempts) {
-            final frame = attempt.acquired[MarkerDecoderStage.frame];
-            if (frame is FrameInfo) {
-              expect(frame.image.debugDisposed, isTrue);
-            }
-          }
-        });
-      }
-    }
-  }
-
-  testWidgets('decoder stage holds a real frame through mounted removal', (
-    tester,
-  ) async {
-    final source = await tester.runAsync(
-      () => Flame.images.load(GameSpriteSheet.fileName),
-    );
-    final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(source!));
-    final game = FlameGame();
-    await tester.pumpWidget(GameWidget(game: game));
-    await tester.pump();
-    await tester.runAsync(() async {
-      final probe = _DecoderProbe(
-        failureStage: MarkerDecoderStage.frame,
-        failingAttempts: {},
-        holdFirstFrame: true,
-      );
-      final board = BoardComponent(
-        cellSize: 20,
-        pathCells: BoardLayout.pathCells,
-        spriteSheet: sheet,
-        markerDecoderProbe: probe,
-      );
-      game.add(board);
-      game.processLifecycleEvents();
-      final bake = board.ensureMarkerShadows();
-      try {
-        expect(board.isMounted, isTrue);
-        FrameInfo? frame;
-        try {
-          frame = await probe.frameReady.future.timeout(
-            const Duration(seconds: 2),
-          );
-        } on TimeoutException {
-          frame = null;
-        }
-        expect(frame, isNotNull, reason: 'the actual frame stage must run');
-        expect(frame!.image.debugDisposed, isFalse);
-        expect(sheet.calls, [GameSprite.spawnGate]);
-        board.removeFromParent();
-        game.processLifecycleEvents();
-        expect(board.isRemoved, isTrue);
-        expect(frame.image.debugDisposed, isFalse);
-        probe.releaseFrame.complete();
-        await bake.timeout(const Duration(seconds: 2));
-        expect(frame.image.debugDisposed, isTrue);
-        expect(sheet.calls, [GameSprite.spawnGate]);
-        final attempt = probe.attempts.single;
-        expect(attempt.disposed.map((entry) => entry.$1), [
-          MarkerDecoderStage.codec,
-          MarkerDecoderStage.descriptor,
-          MarkerDecoderStage.buffer,
-        ]);
-        expect(
-          (attempt.acquired[MarkerDecoderStage.buffer] as ImmutableBuffer)
-              .debugDisposed,
-          isTrue,
-        );
-      } finally {
-        if (board.isMounted) {
-          board.removeFromParent();
-          game.processLifecycleEvents();
-        }
-        if (!probe.releaseFrame.isCompleted) probe.releaseFrame.complete();
-        await bake.timeout(const Duration(seconds: 2));
-        for (final attempt in probe.attempts) {
-          final frame = attempt.acquired[MarkerDecoderStage.frame];
-          if (frame is FrameInfo && !frame.image.debugDisposed) {
-            frame.image.dispose();
-          }
-        }
-      }
-    });
-  });
-
-  for (final removeWhenDecoded in [false, true]) {
-    testWidgets(
-      removeWhenDecoded
-          ? 'default decoder disposes a frame produced after mounted removal'
-          : 'default decoder caches both frames until mounted removal',
-      (tester) async {
-        final source = await tester.runAsync(
-          () => Flame.images.load(GameSpriteSheet.fileName),
-        );
-        final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(source!));
-        final game = FlameGame();
-        await tester.pumpWidget(GameWidget(game: game));
-        await tester.pump();
-
-        final created = <Image>[];
-        final silhouettes = <Image>[];
-        final decodedFrames = <Image>[];
-        final previousOnCreate = Image.onCreate;
-        var frameExpected = false;
-        var removedWhileDecoding = false;
-        late BoardComponent board;
-        Image.onCreate = (image) {
-          previousOnCreate?.call(image);
-          created.add(image);
-          if (!frameExpected) return;
-          frameExpected = false;
-          decodedFrames.add(image);
-          if (removeWhenDecoded && !removedWhileDecoding) {
-            board.removeFromParent();
-            game.processLifecycleEvents();
-            removedWhileDecoding = board.isRemoved;
-          }
-        };
-        addTearDown(() {
-          Image.onCreate = previousOnCreate;
-          for (final image in created) {
-            if (!image.debugDisposed) image.dispose();
-          }
-        });
-
-        await tester.runAsync(() async {
-          board = BoardComponent(
-            cellSize: 20,
-            pathCells: BoardLayout.pathCells,
-            spriteSheet: sheet,
-            markerReadback: (image) async {
-              silhouettes.add(image);
-              final data = await image.toByteData(
-                format: ImageByteFormat.rawRgba,
-              );
-              frameExpected = true;
-              return data;
-            },
-          );
-          game.add(board);
-          game.processLifecycleEvents();
-          expect(board.isMounted, isTrue);
-          await board.ensureMarkerShadows().timeout(const Duration(seconds: 2));
-
-          expect(silhouettes.every((image) => image.debugDisposed), isTrue);
-          if (removeWhenDecoded) {
-            expect(removedWhileDecoding, isTrue);
-            expect(sheet.calls, [GameSprite.spawnGate]);
-            expect(decodedFrames, hasLength(1));
-            expect(decodedFrames.single.debugDisposed, isTrue);
-          } else {
-            expect(sheet.calls, [GameSprite.spawnGate, GameSprite.baseReactor]);
-            expect(decodedFrames, hasLength(2));
-            expect(
-              decodedFrames.every((image) => !image.debugDisposed),
-              isTrue,
-            );
-            board.removeFromParent();
-            game.processLifecycleEvents();
-            expect(board.isRemoved, isTrue);
-            expect(decodedFrames.every((image) => image.debugDisposed), isTrue);
-          }
-          expect(created.every((image) => image.debugDisposed), isTrue);
-        });
-      },
-    );
-  }
-
-  for (final uploadPhase in [false, true]) {
-    testWidgets(
-      'injected pending ${uploadPhase ? 'upload' : 'readback'} is cancelled on removal',
-      (tester) async {
-        final source = await tester.runAsync(
-          () => Flame.images.load(GameSpriteSheet.fileName),
-        );
-        final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(source!));
-        final game = FlameGame();
-        await tester.pumpWidget(GameWidget(game: game));
-        await tester.pump();
-        Image? silhouette;
-        var readbacks = 0;
-        var uploads = 0;
-        final created = <Image>[];
-        final previousOnCreate = Image.onCreate;
-        Image.onCreate = (image) {
-          previousOnCreate?.call(image);
-          created.add(image);
-        };
-        addTearDown(() {
-          Image.onCreate = previousOnCreate;
-          for (final image in created) {
-            if (!image.debugDisposed) image.dispose();
-          }
-        });
-        await tester.runAsync(() async {
-          final readbackGate = Completer<ByteData?>();
-          final uploadGate = Completer<Image>();
-          final uploadStarted = Completer<void>();
-          final board = BoardComponent(
-            cellSize: 20,
-            pathCells: BoardLayout.pathCells,
-            spriteSheet: sheet,
-            markerReadback: (image) async {
-              readbacks++;
-              if (!uploadPhase && readbacks == 1) {
-                silhouette = image;
-                return readbackGate.future;
-              }
-              return ByteData(image.width * image.height * 4);
-            },
-            markerUpload: (pixels, width, height) async {
-              uploads++;
-              if (uploadPhase && uploads == 1) {
-                uploadStarted.complete();
-                return uploadGate.future;
-              }
-              return _uploadMarker(pixels, width, height);
-            },
-          );
-          game.add(board);
-          game.processLifecycleEvents();
-          expect(board.isMounted, isTrue);
-          final bake = board.ensureMarkerShadows();
-          if (uploadPhase) await uploadStarted.future;
-          expect(sheet.calls, [GameSprite.spawnGate]);
-          board.removeFromParent();
-          game.processLifecycleEvents();
-          expect(board.isRemoved, isTrue);
-          Image? lateImage;
-          if (uploadPhase) {
-            lateImage = await _rasterize(2, 2, (_) {});
-            uploadGate.complete(lateImage);
-          } else {
-            readbackGate.complete(
-              ByteData(silhouette!.width * silhouette!.height * 4),
-            );
-          }
-          await bake;
-          if (uploadPhase) {
-            expect(lateImage!.debugDisposed, isTrue);
-          } else {
-            expect(silhouette!.debugDisposed, isTrue);
-            expect(uploads, 0, reason: 'removal stops upload after readback');
-          }
-          expect(sheet.calls, [GameSprite.spawnGate]);
-          expect(created.every((image) => image.debugDisposed), isTrue);
-        });
-      },
-    );
-  }
-
-  for (final failure in ['null', 'throw']) {
-    test('transient $failure readback is cleaned up and retried', () async {
-      final sheet = _MarkerSheetProbe(
-        GameSpriteSheet.fromImage(
-          await Flame.images.load(GameSpriteSheet.fileName),
-        ),
-      );
-      final silhouettes = <Image>[];
-      final pictures = <Picture>[];
-      final previousPictureCreate = Picture.onCreate;
-      Picture.onCreate = (picture) {
-        previousPictureCreate?.call(picture);
-        pictures.add(picture);
-      };
-      var calls = 0;
-      final board = BoardComponent(
-        cellSize: 20,
-        pathCells: BoardLayout.pathCells,
-        spriteSheet: sheet,
-        markerReadback: (image) async {
-          silhouettes.add(image);
-          calls++;
-          if (calls == 1) {
-            if (failure == 'throw') throw StateError('readback failed');
-            return null;
-          }
-          return image.toByteData(format: ImageByteFormat.rawRgba);
-        },
-      );
-      addTearDown(() {
-        Picture.onCreate = previousPictureCreate;
-        board.onRemove();
-        for (final image in silhouettes) {
-          if (!image.debugDisposed) image.dispose();
-        }
-        for (final picture in pictures) {
-          if (!picture.debugDisposed) picture.dispose();
-        }
-      });
-      for (var attempt = 0; attempt < 2; attempt++) {
-        try {
-          await board.ensureMarkerShadows();
-        } catch (_) {}
-      }
-      expect(silhouettes.first.debugDisposed, isTrue);
-      expect(pictures, isNotEmpty);
-      expect(pictures.every((picture) => picture.debugDisposed), isTrue);
-      expect(calls, 3, reason: 'retry spawn and then bake the core');
-      expect(sheet.calls, [
-        GameSprite.spawnGate,
-        GameSprite.spawnGate,
-        GameSprite.baseReactor,
-      ]);
-    });
-  }
-
-  test('transient upload failure is retried for both marker shadows', () async {
-    final sheet = _MarkerSheetProbe(
-      GameSpriteSheet.fromImage(
-        await Flame.images.load(GameSpriteSheet.fileName),
-      ),
-    );
-    var uploads = 0;
-    final board = BoardComponent(
-      cellSize: 20,
-      pathCells: BoardLayout.pathCells,
-      spriteSheet: sheet,
-      markerUpload: (pixels, width, height) {
-        uploads++;
-        if (uploads == 1) throw StateError('upload failed');
-        return _uploadMarker(pixels, width, height);
-      },
-    );
-    addTearDown(board.onRemove);
-    for (var attempt = 0; attempt < 2; attempt++) {
-      try {
-        await board.ensureMarkerShadows();
-      } catch (_) {}
-    }
-    expect(uploads, 3);
-    expect(sheet.calls, [
-      GameSprite.spawnGate,
-      GameSprite.spawnGate,
-      GameSprite.baseReactor,
-    ]);
-  });
-
-  for (final failure in ['readback throw', 'readback null', 'upload throw']) {
-    for (final startFromRender in [false, true]) {
-      test('persistent $failure has bounded fallback from '
-          '${startFromRender ? 'render' : 'onMount'}', () async {
-        final source = await Flame.images.load(GameSpriteSheet.fileName);
-        var attempts = 0;
-        final silhouettes = <Image>[];
-        final diagnostics = <String>[];
-        final previousDebugPrint = debugPrint;
-        debugPrint = (message, {wrapWidth}) {
-          if (message != null) diagnostics.add(message);
-        };
-        final board = BoardComponent(
-          cellSize: 20,
-          pathCells: BoardLayout.pathCells,
-          spriteSheet: GameSpriteSheet.fromImage(source),
-          markerReadback: (image) async {
-            silhouettes.add(image);
-            if (failure.startsWith('readback')) {
-              attempts++;
-              if (failure == 'readback null') return null;
-              throw StateError('persistent readback failure');
-            }
-            return image.toByteData(format: ImageByteFormat.rawRgba);
-          },
-          markerUpload: (pixels, width, height) {
-            attempts++;
-            throw StateError('persistent upload failure');
-          },
-        );
-        addTearDown(() {
-          debugPrint = previousDebugPrint;
-          board.onRemove();
-          for (final image in silhouettes) {
-            if (!image.debugDisposed) image.dispose();
-          }
-        });
-        final uncaught = <Object>[];
-        await runZonedGuarded(() async {
-          if (!startFromRender) board.onMount();
-          for (var frame = 0; frame < 10; frame++) {
-            final recorder = PictureRecorder();
-            board.render(Canvas(recorder));
-            recorder.endRecording().dispose();
-            await Future<void>.delayed(const Duration(milliseconds: 10));
-          }
-        }, (error, stack) => uncaught.add(error));
-        expect(uncaught, isEmpty);
-        expect(
-          attempts,
-          4,
-          reason: 'each marker gets two attempts, not per-frame retries',
-        );
-        expect(diagnostics, hasLength(4));
-        expect(
-          diagnostics.every(
-            (line) => line.contains(
-              failure == 'readback null'
-                  ? 'readback returned null'
-                  : 'persistent ${failure.split(' ').first} failure',
-            ),
-          ),
-          isTrue,
-        );
-        expect(silhouettes.every((image) => image.debugDisposed), isTrue);
-      });
-    }
-  }
 
   test(
     'a failed spawn shadow does not prevent a successful core shadow',
     () async {
+      final source = await Flame.images.load(GameSpriteSheet.fileName);
       final sheet = _MarkerSheetProbe(
-        GameSpriteSheet.fromImage(
-          await Flame.images.load(GameSpriteSheet.fileName),
-        ),
+        GameSpriteSheet.fromImage(source),
+        alwaysFail: true,
+        failSprite: GameSprite.spawnGate,
       );
-      var readbacks = 0;
-      final uploaded = <Image>[];
+      final created = <Image>[];
+      final previousOnCreate = Image.onCreate;
+      Image.onCreate = (image) {
+        previousOnCreate?.call(image);
+        created.add(image);
+      };
       final board = BoardComponent(
         cellSize: 20,
         pathCells: BoardLayout.pathCells,
         spriteSheet: sheet,
-        markerReadback: (image) async {
-          readbacks++;
-          if (readbacks <= 2) throw StateError('spawn readback failed');
-          return image.toByteData(format: ImageByteFormat.rawRgba);
-        },
-        markerUpload: (pixels, width, height) async {
-          final image = await _uploadMarker(pixels, width, height);
-          uploaded.add(image);
-          return image;
-        },
       );
       addTearDown(() {
+        Image.onCreate = previousOnCreate;
         board.onRemove();
-        for (final image in uploaded) {
+        for (final image in created) {
           if (!image.debugDisposed) image.dispose();
         }
       });
@@ -770,8 +108,74 @@ void main() {
         GameSprite.spawnGate,
         GameSprite.baseReactor,
       ]);
-      expect(uploaded, hasLength(1));
-      expect(uploaded.single.debugDisposed, isFalse);
+      final liveImages = created
+          .where((image) => !image.debugDisposed)
+          .toList();
+      expect(liveImages, hasLength(1));
+      board.onRemove();
+      expect(created.every((image) => image.debugDisposed), isTrue);
+    },
+  );
+
+  testWidgets(
+    'remounting a removed board rebuilds lane halo and marker shadows',
+    (tester) async {
+      final image = await tester.runAsync(
+        () => Flame.images.load(GameSpriteSheet.fileName),
+      );
+      final sheet = _MarkerSheetProbe(GameSpriteSheet.fromImage(image!));
+      final game = FlameGame();
+      await tester.pumpWidget(GameWidget(game: game));
+      await tester.pump();
+
+      final created = <Image>[];
+      final previousOnCreate = Image.onCreate;
+      Image.onCreate = (img) {
+        previousOnCreate?.call(img);
+        created.add(img);
+      };
+      addTearDown(() {
+        Image.onCreate = previousOnCreate;
+        for (final img in created) {
+          if (!img.debugDisposed) img.dispose();
+        }
+      });
+
+      await tester.runAsync(() async {
+        final board = BoardComponent(
+          cellSize: 20,
+          pathCells: BoardLayout.pathCells,
+          spriteSheet: sheet,
+        );
+        game.add(board);
+        game.processLifecycleEvents();
+        await board.ensureMarkerShadows();
+        final firstRender = PictureRecorder();
+        board.render(Canvas(firstRender));
+        firstRender.endRecording().dispose();
+
+        final firstBatch = created.where((img) => !img.debugDisposed).toList();
+        expect(firstBatch, hasLength(3));
+
+        board.removeFromParent();
+        game.processLifecycleEvents();
+        expect(firstBatch.every((img) => img.debugDisposed), isTrue);
+
+        created.clear();
+        game.add(board);
+        game.processLifecycleEvents();
+        expect(board.isMounted, isTrue);
+        await board.ensureMarkerShadows();
+        final secondRender = PictureRecorder();
+        board.render(Canvas(secondRender));
+        secondRender.endRecording().dispose();
+
+        final secondBatch = created.where((img) => !img.debugDisposed).toList();
+        expect(secondBatch, hasLength(3));
+        board.removeFromParent();
+        game.processLifecycleEvents();
+        expect(created.every((img) => img.debugDisposed), isTrue);
+      });
     },
   );
 

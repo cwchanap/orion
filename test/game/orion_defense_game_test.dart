@@ -1596,6 +1596,29 @@ void main() {
       expect(enemy.pathProgress, closeTo(34.5, 0.001));
     });
 
+    test('onGameResize with unchanged cellSize reuses BoardComponent', () {
+      final game = OrionDefenseGame(stage: _singleEnemyStage());
+      game.onGameResize(Vector2(400, 800));
+      game.processLifecycleEvents();
+
+      final initialBoard = game.children.whereType<BoardComponent>().single;
+      final initialBackdrop = game.children
+          .whereType<BoardBackdropComponent>()
+          .single;
+
+      game.onGameResize(Vector2(400, 900));
+      game.processLifecycleEvents();
+
+      final boardsAfter = game.children.whereType<BoardComponent>().toList();
+      final backdropsAfter = game.children
+          .whereType<BoardBackdropComponent>()
+          .toList();
+      expect(boardsAfter, hasLength(1));
+      expect(identical(boardsAfter.single, initialBoard), isTrue);
+      expect(backdropsAfter, hasLength(1));
+      expect(identical(backdropsAfter.single, initialBackdrop), isTrue);
+    });
+
     test('swarm kill callback awards rounded stage bounty', () {
       final game = OrionDefenseGame(
         stage: _modifierStage(

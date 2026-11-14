@@ -401,11 +401,13 @@ class _ShortcutRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
     return Row(
       children: [
         Expanded(
           child: _GhostAction(
             icon: Icons.public_rounded,
+            iconColor: uiTheme.systemCyan,
             label: 'Sectors',
             tooltip: 'Sectors',
             onPressed: busy ? null : onOpenSectors,
@@ -415,6 +417,7 @@ class _ShortcutRow extends StatelessWidget {
         Expanded(
           child: _GhostAction(
             icon: Icons.biotech_rounded,
+            iconColor: uiTheme.systemViolet,
             label: 'R&D',
             tooltip: 'R&D',
             onPressed: busy ? null : onOpenResearch,
@@ -424,6 +427,7 @@ class _ShortcutRow extends StatelessWidget {
         Expanded(
           child: _GhostAction(
             icon: Icons.menu_book_rounded,
+            iconColor: uiTheme.systemCyan,
             label: 'Codex',
             tooltip: 'Codex',
             onPressed: busy ? null : onOpenCodex,
@@ -433,6 +437,7 @@ class _ShortcutRow extends StatelessWidget {
         Expanded(
           child: _GhostAction(
             icon: Icons.settings_rounded,
+            iconColor: uiTheme.textMuted,
             label: 'Settings',
             tooltip: 'Settings',
             iconOnly: true,
@@ -447,6 +452,7 @@ class _ShortcutRow extends StatelessWidget {
 class _GhostAction extends StatelessWidget {
   const _GhostAction({
     required this.icon,
+    required this.iconColor,
     required this.label,
     required this.tooltip,
     required this.onPressed,
@@ -454,6 +460,7 @@ class _GhostAction extends StatelessWidget {
   });
 
   final IconData icon;
+  final Color iconColor;
   final String label;
   final String tooltip;
   final VoidCallback? onPressed;
@@ -491,15 +498,7 @@ class _GhostAction extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        icon,
-                        size: 22,
-                        color: iconOnly
-                            ? uiTheme.textMuted
-                            : icon == Icons.biotech_rounded
-                            ? uiTheme.systemViolet
-                            : uiTheme.systemCyan,
-                      ),
+                      Icon(icon, size: 22, color: iconColor),
                       if (!iconOnly) ...[
                         const SizedBox(height: 4),
                         FittedBox(

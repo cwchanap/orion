@@ -734,34 +734,68 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _boardOrigin = boardOrigin;
     _updateBoardTransform();
     // The skin fills the viewport; the grid sits above the command dock.
-    _boardBackdrop?.removeFromParent();
-    _boardBackdrop = BoardBackdropComponent(
-      image: _boardImage,
-      size: gameSize.clone(),
-      priority: -1,
-    );
-    add(_boardBackdrop!);
-    _board?.removeFromParent();
-    _board =
-        BoardComponent(
-            cellSize: _cellSize,
-            pathCells: stage.pathCells,
-            selectedCell: _selectedTower?.position ?? _selectedCell,
-            spriteSheet: _spriteSheet,
-            pathTiles: _pathTiles,
-            position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
-            priority: 0,
-          )
-          ..selectedRange = _selectedTower == null
-              ? 0
-              : _session.resolveTowerStats(_selectedTower!).range;
-    add(_board!);
+    final existingBackdrop = _boardBackdrop;
+    if (existingBackdrop != null &&
+        identical(existingBackdrop.image, _boardImage)) {
+      existingBackdrop.size = gameSize.clone();
+      if (existingBackdrop.parent == null) {
+        add(existingBackdrop);
+      }
+    } else {
+      existingBackdrop?.removeFromParent();
+      _boardBackdrop = BoardBackdropComponent(
+        image: _boardImage,
+        size: gameSize.clone(),
+        priority: -1,
+      );
+      add(_boardBackdrop!);
+    }
+
+    final selectedCell = _selectedTower?.position ?? _selectedCell;
+    final selectedRange = _selectedTower == null
+        ? 0.0
+        : _session.resolveTowerStats(_selectedTower!).range;
+    final existingBoard = _board;
+    if (existingBoard != null &&
+        existingBoard.cellSize == _cellSize &&
+        identical(existingBoard.spriteSheet, _spriteSheet) &&
+        identical(existingBoard.pathTiles, _pathTiles) &&
+        _samePathCells(existingBoard.pathCells, stage.pathCells)) {
+      existingBoard
+        ..position = Vector2(_boardOrigin.dx, _boardOrigin.dy)
+        ..selectedCell = selectedCell
+        ..selectedRange = selectedRange;
+      if (existingBoard.parent == null) {
+        add(existingBoard);
+      }
+    } else {
+      existingBoard?.removeFromParent();
+      _board = BoardComponent(
+        cellSize: _cellSize,
+        pathCells: stage.pathCells,
+        selectedCell: selectedCell,
+        spriteSheet: _spriteSheet,
+        pathTiles: _pathTiles,
+        position: Vector2(_boardOrigin.dx, _boardOrigin.dy),
+        priority: 0,
+      )..selectedRange = selectedRange;
+      add(_board!);
+    }
     _syncBoardPreview();
 
     for (final tower in _towerComponents.values) {
       tower.position = _cellCenter(tower.placedTower.position);
       tower.radius = _towerRadius;
     }
+  }
+
+  static bool _samePathCells(List<GridPosition> a, List<GridPosition> b) {
+    if (identical(a, b)) return true;
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i += 1) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
   }
 
   void _addTowerComponent(PlacedTower tower) {

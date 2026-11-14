@@ -91,15 +91,12 @@ class MissionChrome extends StatefulWidget {
 class _MissionChromeState extends State<MissionChrome> {
   final _hudKey = GlobalKey();
   final _dockKey = GlobalKey();
-  final _scannerKey = GlobalKey();
   final _modulesKey = GlobalKey();
   Size? _measuredSize;
   double? _measuredTextScale;
   double _topReserve = 0;
   double _bottomReserve = 0;
   double _modulesReserve = 0;
-  double _scannerReserve = 0;
-  bool _scannerDockMounted = false;
   Rect? _lastViewport;
 
   void _scheduleViewportMeasure() {
@@ -123,13 +120,10 @@ class _MissionChromeState extends State<MissionChrome> {
     }
     // Keep the field stable when selecting a cell or starting a wave makes
     // the dock shorter. Text scaling and viewport changes still get measured.
-    final scanner =
-        _scannerKey.currentContext?.findRenderObject() as RenderBox?;
     final modules =
         _modulesKey.currentContext?.findRenderObject() as RenderBox?;
-    // The scanner is build-phase only, while the acquired-module control
-    // renders in any phase — reserve below the lowest top-band control so
-    // the board viewport never starts under chrome.
+    // Reserve below the lowest top-band control (HUD or expanded modules
+    // panel) so the board viewport never starts under top chrome.
     var top = 8.0;
     final hudEdge =
         box.globalToLocal(hud.localToGlobal(Offset(0, hud.size.height))).dy + 8;
@@ -148,16 +142,9 @@ class _MissionChromeState extends State<MissionChrome> {
                   )
                   .dy +
               8;
-    _scannerReserve = _scannerDockMounted || scanner == null
-        ? 0
-        : box
-                  .globalToLocal(
-                    scanner.localToGlobal(Offset(0, scanner.size.height)),
-                  )
-                  .dy +
-              8;
-    var topEdge = _topReserve > _modulesReserve ? _topReserve : _modulesReserve;
-    if (_scannerReserve > topEdge) topEdge = _scannerReserve;
+    final topEdge = _topReserve > _modulesReserve
+        ? _topReserve
+        : _modulesReserve;
     final bottom =
         box.size.height -
         box.globalToLocal(dock.localToGlobal(Offset.zero)).dy +
@@ -185,9 +172,7 @@ class _MissionChromeState extends State<MissionChrome> {
         widget.snapshot.nextWavePreview != null &&
         widget.snapshot.pendingRunModuleOffer == null &&
         !widget.snapshot.isEnded;
-    _scannerDockMounted = showScanner;
     NextWaveScanner buildScanner() => NextWaveScanner(
-      key: _scannerKey,
       preview: widget.snapshot.nextWavePreview!,
       onStartWave: widget.onStartWave,
       modifierTitles: widget.snapshot.stageModifiers.isEmpty

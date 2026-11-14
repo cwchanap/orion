@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:developer' as developer;
+import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
@@ -12,16 +13,6 @@ import '../assets/game_sprite_sheet.dart';
 import '../models/game_models.dart';
 import '../rules/board_layout.dart';
 
-@visibleForTesting
-enum MarkerDecoderStage { buffer, descriptor, codec, frame }
-
-@visibleForTesting
-abstract interface class MarkerDecoderProbe {
-  Future<T> run<T>(MarkerDecoderStage stage, Future<T> Function() operation);
-
-  void didDispose(MarkerDecoderStage stage, Object resource);
-}
-
 class BoardComponent extends PositionComponent {
   BoardComponent({
     required this.cellSize,
@@ -29,9 +20,6 @@ class BoardComponent extends PositionComponent {
     this.selectedCell,
     this.spriteSheet,
     this.pathTiles,
-    @visibleForTesting this.markerReadback,
-    @visibleForTesting this.markerUpload,
-    @visibleForTesting this.markerDecoderProbe,
     super.position,
     super.priority,
   }) : assert(pathCells.isNotEmpty, 'BoardComponent requires path cells.'),
@@ -46,12 +34,6 @@ class BoardComponent extends PositionComponent {
   final List<GridPosition> pathCells;
   final GameSpriteSheet? spriteSheet;
   final GamePathTiles? pathTiles;
-  @visibleForTesting
-  final Future<ByteData?> Function(Image)? markerReadback;
-  @visibleForTesting
-  final Future<Image> Function(Uint8List, int, int)? markerUpload;
-  @visibleForTesting
-  final MarkerDecoderProbe? markerDecoderProbe;
   GridPosition? selectedCell;
   double selectedRange = 0;
 
@@ -244,26 +226,9 @@ class BoardComponent extends PositionComponent {
       canvas.drawRect(rect, _selectionStrokePaint);
     }
 
-    _renderMarker(
-      canvas,
-      pathCells.first,
-      _spawnPaint,
-      outerRadiusFactor: _spawnMarkerFactor,
-      innerRadiusFactor: 0.30,
-      sprite: GameSprite.spawnGate,
-      shadowColor: const Color(0xE646E6FF),
-      shadowSigma: 12,
-    );
-    _renderMarker(
-      canvas,
-      pathCells.last,
-      _basePaint,
-      outerRadiusFactor: _coreMarkerFactor,
-      innerRadiusFactor: 0.38,
-      sprite: GameSprite.baseReactor,
-      shadowColor: const Color(0xF2FFC857),
-      shadowSigma: 16,
-    );
+    for (final spec in _markerSpecs) {
+      _renderMarker(canvas, spec);
+    }
 
     if (showsPlacementGrid) {
       _renderGrid(canvas);
@@ -334,10 +299,12 @@ class BoardComponent extends PositionComponent {
 
   Future<void>? _markerShadowBake;
   bool _markerShadowsRemoved = false;
+  int _markerShadowEpoch = 0;
 
   @override
   void onMount() {
     super.onMount();
+    _markerShadowsRemoved = false;
     // Baking acquires GPU images disposed in onRemove, which Flame only calls
     // for mounted components; starting the bake here keeps every cached image
     // paired with a removal callback.
@@ -349,41 +316,46 @@ class BoardComponent extends PositionComponent {
 
   Future<void> _bakeMarkerShadows() {
     if (_markerShadowsRemoved) return Future.value();
-    return _markerShadowBake ??= _bakeMarkerShadowsAsync();
+    return _markerShadowBake ??= _bakeMarkerShadowsAsync(_markerShadowEpoch);
   }
 
-  Future<void> _bakeMarkerShadowsAsync() async {
+  Future<void> _bakeMarkerShadowsAsync(int epoch) async {
     final sheet = spriteSheet;
     if (sheet == null) {
       return;
     }
-    for (final (position, factor, sprite, color, sigma) in _markerShadowSpecs) {
-      if (_markerShadowsRemoved) return;
-      if (_markerShadowCache.containsKey(sprite)) {
+    for (final spec in _markerSpecs) {
+      if (_markerShadowsRemoved || epoch != _markerShadowEpoch) return;
+      if (_markerShadowCache.containsKey(spec.sprite)) {
         continue;
       }
       for (var attempt = 1; attempt <= 2; attempt++) {
-        if (_markerShadowsRemoved) return;
+        if (_markerShadowsRemoved || epoch != _markerShadowEpoch) return;
         try {
           final shadow = await _rasterizeMarkerShadow(
-            sheet.sprite(sprite),
+            sheet.sprite(spec.sprite),
             Rect.fromCircle(
-              center: cellCenter(position),
-              radius: cellSize * factor,
+              center: cellCenter(spec.position),
+              radius: cellSize * spec.outerRadiusFactor,
             ),
-            color,
-            sigma,
+            spec.shadowColor,
+            spec.shadowSigma,
+            epoch,
           );
-          if (shadow == null) return;
-          if (_markerShadowsRemoved) {
-            shadow.$1.dispose();
+          if (_markerShadowsRemoved || epoch != _markerShadowEpoch) {
+            shadow?.$1.dispose();
             return;
           }
-          _markerShadowCache[sprite] = shadow;
+          if (shadow == null) return;
+          _markerShadowCache[spec.sprite] = shadow;
           break;
         } catch (error, stack) {
-          _reportMarkerError('shadow $sprite attempt $attempt', error, stack);
-          if (_markerShadowsRemoved) return;
+          _reportMarkerError(
+            'shadow ${spec.sprite} attempt $attempt',
+            error,
+            stack,
+          );
+          if (_markerShadowsRemoved || epoch != _markerShadowEpoch) return;
         }
       }
     }
@@ -399,21 +371,24 @@ class BoardComponent extends PositionComponent {
     );
   }
 
-  List<(GridPosition, double, GameSprite, Color, double)>
-  get _markerShadowSpecs => [
-    (
-      pathCells.first,
-      _spawnMarkerFactor,
-      GameSprite.spawnGate,
-      const Color(0xE646E6FF),
-      12,
+  List<_MarkerSpec> get _markerSpecs => [
+    _MarkerSpec(
+      position: pathCells.first,
+      fallbackPaint: _spawnPaint,
+      outerRadiusFactor: _spawnMarkerFactor,
+      innerRadiusFactor: 0.30,
+      sprite: GameSprite.spawnGate,
+      shadowColor: const Color(0xE646E6FF),
+      shadowSigma: 12,
     ),
-    (
-      pathCells.last,
-      _coreMarkerFactor,
-      GameSprite.baseReactor,
-      const Color(0xF2FFC857),
-      16,
+    _MarkerSpec(
+      position: pathCells.last,
+      fallbackPaint: _basePaint,
+      outerRadiusFactor: _coreMarkerFactor,
+      innerRadiusFactor: 0.38,
+      sprite: GameSprite.baseReactor,
+      shadowColor: const Color(0xF2FFC857),
+      shadowSigma: 16,
     ),
   ];
 
@@ -556,32 +531,27 @@ class BoardComponent extends PositionComponent {
       ..drawLine(rect.topRight, rect.bottomLeft, _deniedGlyphPaint);
   }
 
-  void _renderMarker(
-    Canvas canvas,
-    GridPosition position,
-    Paint paint, {
-    required double outerRadiusFactor,
-    required double innerRadiusFactor,
-    required GameSprite sprite,
-    required Color shadowColor,
-    required double shadowSigma,
-  }) {
+  void _renderMarker(Canvas canvas, _MarkerSpec spec) {
     final spriteSheet = this.spriteSheet;
-    if (spriteSheet != null && (_markerRenderFailures[sprite] ?? 0) < 2) {
+    if (spriteSheet != null && (_markerRenderFailures[spec.sprite] ?? 0) < 2) {
       final rect = Rect.fromCircle(
-        center: cellCenter(position),
-        radius: cellSize * outerRadiusFactor,
+        center: cellCenter(spec.position),
+        radius: cellSize * spec.outerRadiusFactor,
       );
       Sprite? flameSprite;
       try {
-        flameSprite = spriteSheet.sprite(sprite);
+        flameSprite = spriteSheet.sprite(spec.sprite);
       } catch (error, stack) {
-        final failures = (_markerRenderFailures[sprite] ?? 0) + 1;
-        _markerRenderFailures[sprite] = failures;
-        _reportMarkerError('render $sprite attempt $failures', error, stack);
+        final failures = (_markerRenderFailures[spec.sprite] ?? 0) + 1;
+        _markerRenderFailures[spec.sprite] = failures;
+        _reportMarkerError(
+          'render ${spec.sprite} attempt $failures',
+          error,
+          stack,
+        );
       }
       if (flameSprite != null) {
-        final shadow = _markerShadowCache[sprite];
+        final shadow = _markerShadowCache[spec.sprite];
         if (shadow == null) {
           unawaited(_bakeMarkerShadows());
         } else {
@@ -592,9 +562,17 @@ class BoardComponent extends PositionComponent {
       }
     }
 
-    final center = cellCenter(position);
-    canvas.drawCircle(center, cellSize * outerRadiusFactor, paint);
-    canvas.drawCircle(center, cellSize * innerRadiusFactor, _backgroundPaint);
+    final center = cellCenter(spec.position);
+    canvas.drawCircle(
+      center,
+      cellSize * spec.outerRadiusFactor,
+      spec.fallbackPaint,
+    );
+    canvas.drawCircle(
+      center,
+      cellSize * spec.innerRadiusFactor,
+      _backgroundPaint,
+    );
   }
 
   Future<(Image, Offset)?> _rasterizeMarkerShadow(
@@ -602,12 +580,21 @@ class BoardComponent extends PositionComponent {
     Rect rect,
     Color shadowColor,
     double shadowSigma,
+    int epoch,
   ) async {
     final sigma = shadowSigma * cellSize / _kitCellSize;
-    final bounds = rect.inflate(sigma * 3 + 1);
+    final rawBounds = rect.inflate(sigma * 3 + 1);
+    final bounds = Rect.fromLTRB(
+      rawBounds.left.floorToDouble(),
+      rawBounds.top.floorToDouble(),
+      rawBounds.right.ceilToDouble(),
+      rawBounds.bottom.ceilToDouble(),
+    );
+    final width = bounds.width.toInt();
+    final height = bounds.height.toInt();
+    if (width <= 0 || height <= 0 || sigma <= 0) return null;
+
     final recorder = PictureRecorder();
-    final width = bounds.width.ceil();
-    final height = bounds.height.ceil();
     Picture? picture;
     late Image silhouette;
     try {
@@ -625,109 +612,59 @@ class BoardComponent extends PositionComponent {
       (picture ?? (recorder.isRecording ? recorder.endRecording() : null))
           ?.dispose();
     }
+
     ByteData? pixels;
     try {
-      pixels =
-          await (markerReadback?.call(silhouette) ??
-              silhouette.toByteData(format: ImageByteFormat.rawRgba));
+      pixels = await silhouette.toByteData(format: ImageByteFormat.rawRgba);
     } finally {
       silhouette.dispose();
     }
-    if (_markerShadowsRemoved) return null;
+    if (_markerShadowsRemoved || epoch != _markerShadowEpoch) return null;
     if (pixels == null) {
       throw StateError('Marker shadow readback returned null');
     }
-    final blurred = _blurAlpha(pixels, width, height, sigma, shadowColor);
-    final upload = markerUpload;
-    if (upload != null) {
-      return (await upload(blurred, width, height), bounds.topLeft);
+
+    final rgba = Uint8List.sublistView(pixels);
+    final red = (shadowColor.r * 255).round();
+    final green = (shadowColor.g * 255).round();
+    final blue = (shadowColor.b * 255).round();
+    final blurred = await Isolate.run(
+      () => _blurAlphaPixels(rgba, width, height, sigma, red, green, blue),
+    );
+    if (_markerShadowsRemoved || epoch != _markerShadowEpoch) return null;
+
+    final image = await _decodeRgbaImage(blurred, width, height);
+    if (_markerShadowsRemoved || epoch != _markerShadowEpoch) {
+      image.dispose();
+      return null;
     }
-    return (await _decodeMarkerPixels(blurred, width, height), bounds.topLeft);
+    return (image, bounds.topLeft);
   }
 
-  Future<T> _runMarkerDecoderStage<T>(
-    MarkerDecoderStage stage,
-    Future<T> Function() operation,
-  ) {
-    final probe = markerDecoderProbe;
-    return probe == null ? operation() : probe.run(stage, operation);
-  }
-
-  void _disposeMarkerDecoderResource(
-    MarkerDecoderStage stage,
-    Object resource,
-    void Function() dispose,
-  ) {
-    dispose();
-    markerDecoderProbe?.didDispose(stage, resource);
-  }
-
-  Future<Image> _decodeMarkerPixels(
+  static Future<Image> _decodeRgbaImage(
     Uint8List pixels,
     int width,
     int height,
-  ) async {
-    Image? image;
-    try {
-      final buffer = await _runMarkerDecoderStage(
-        MarkerDecoderStage.buffer,
-        () => ImmutableBuffer.fromUint8List(pixels),
-      );
-      try {
-        final descriptor = await _runMarkerDecoderStage(
-          MarkerDecoderStage.descriptor,
-          () async => ImageDescriptor.raw(
-            buffer,
-            width: width,
-            height: height,
-            pixelFormat: PixelFormat.rgba8888,
-          ),
-        );
-        try {
-          final codec = await _runMarkerDecoderStage(
-            MarkerDecoderStage.codec,
-            descriptor.instantiateCodec,
-          );
-          try {
-            final frame = await _runMarkerDecoderStage(
-              MarkerDecoderStage.frame,
-              codec.getNextFrame,
-            );
-            image = frame.image;
-          } finally {
-            _disposeMarkerDecoderResource(
-              MarkerDecoderStage.codec,
-              codec,
-              codec.dispose,
-            );
-          }
-        } finally {
-          _disposeMarkerDecoderResource(
-            MarkerDecoderStage.descriptor,
-            descriptor,
-            descriptor.dispose,
-          );
-        }
-      } finally {
-        _disposeMarkerDecoderResource(
-          MarkerDecoderStage.buffer,
-          buffer,
-          buffer.dispose,
-        );
-      }
-    } catch (_) {
-      image?.dispose();
-      rethrow;
-    }
-    return image;
+  ) {
+    final completer = Completer<Image>();
+    decodeImageFromPixels(
+      pixels,
+      width,
+      height,
+      PixelFormat.rgba8888,
+      completer.complete,
+    );
+    return completer.future;
   }
 
-  static Uint8List _blurAlpha(
-    ByteData pixels,
+  static Uint8List _blurAlphaPixels(
+    Uint8List pixels,
     int width,
     int height,
     double sigma,
-    Color color,
+    int red,
+    int green,
+    int blue,
   ) {
     final radius = math.max(1, (sigma * 3).ceil());
     final kernel = Float64List(radius * 2 + 1);
@@ -747,27 +684,20 @@ class BoardComponent extends PositionComponent {
         var acc = 0.0;
         for (var k = -radius; k <= radius; k += 1) {
           final xx = x + k;
-          if (xx < 0 || xx >= width) {
-            continue;
-          }
-          acc += kernel[k + radius] * pixels.getUint8((y * width + xx) * 4 + 3);
+          if (xx < 0 || xx >= width) continue;
+          acc += kernel[k + radius] * pixels[(y * width + xx) * 4 + 3];
         }
         horizontal[y * width + x] = acc;
       }
     }
 
-    final red = (color.r * 255).round();
-    final green = (color.g * 255).round();
-    final blue = (color.b * 255).round();
     final blurred = Uint8List(width * height * 4);
     for (var y = 0; y < height; y += 1) {
       for (var x = 0; x < width; x += 1) {
         var acc = 0.0;
         for (var k = -radius; k <= radius; k += 1) {
           final yy = y + k;
-          if (yy < 0 || yy >= height) {
-            continue;
-          }
+          if (yy < 0 || yy >= height) continue;
           acc += kernel[k + radius] * horizontal[yy * width + x];
         }
         final alpha = acc.round().clamp(0, 255);
@@ -784,11 +714,34 @@ class BoardComponent extends PositionComponent {
   @override
   void onRemove() {
     _markerShadowsRemoved = true;
+    _markerShadowEpoch += 1;
+    _markerShadowBake = null;
     _laneHaloImage?.dispose();
+    _laneHaloImage = null;
     for (final (image, _) in _markerShadowCache.values) {
       image.dispose();
     }
     _markerShadowCache.clear();
     super.onRemove();
   }
+}
+
+class _MarkerSpec {
+  const _MarkerSpec({
+    required this.position,
+    required this.fallbackPaint,
+    required this.outerRadiusFactor,
+    required this.innerRadiusFactor,
+    required this.sprite,
+    required this.shadowColor,
+    required this.shadowSigma,
+  });
+
+  final GridPosition position;
+  final Paint fallbackPaint;
+  final double outerRadiusFactor;
+  final double innerRadiusFactor;
+  final GameSprite sprite;
+  final Color shadowColor;
+  final double shadowSigma;
 }

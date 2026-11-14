@@ -207,15 +207,16 @@ class _WorldMapViewState extends State<WorldMapView> {
                       final regionSize = region.biggest;
                       final plotHeight = math.max(
                         regionSize.height - _footerReserveExtent,
-                        SectorMapLayout.fromStages(
-                          stages: widget.stages,
-                          size: Size(regionSize.width, 0),
-                        ).minContentHeight,
+                        SectorMapLayout.minContentHeightFor(widget.stages),
                       );
                       final sectorLayout = SectorMapLayout.fromStages(
                         stages: widget.stages,
                         size: Size(regionSize.width, plotHeight),
                       );
+                      final recommendedStage = widget.progress.recommendedStage(
+                        widget.stages,
+                      );
+                      final recommendedStageId = recommendedStage?.id;
                       final nodeRects = {
                         for (final stage in widget.stages)
                           stage.id: sectorLayout.nodeRect(stage),
@@ -254,11 +255,7 @@ class _WorldMapViewState extends State<WorldMapView> {
                                 stage: stage,
                                 status: widget.progress.statusFor(stage),
                                 result: widget.progress.resultFor(stage.id),
-                                isNext:
-                                    widget.progress
-                                        .recommendedStage(widget.stages)
-                                        ?.id ==
-                                    stage.id,
+                                isNext: recommendedStageId == stage.id,
                                 onTap: _stageTap(stage),
                               ),
                             ),
@@ -276,11 +273,7 @@ class _WorldMapViewState extends State<WorldMapView> {
                                 stage: stage,
                                 status: widget.progress.statusFor(stage),
                                 result: widget.progress.resultFor(stage.id),
-                                isNext:
-                                    widget.progress
-                                        .recommendedStage(widget.stages)
-                                        ?.id ==
-                                    stage.id,
+                                isNext: recommendedStageId == stage.id,
                                 onTap: _stageTap(stage),
                               ),
                             ),
@@ -340,7 +333,14 @@ class _WorldMapViewState extends State<WorldMapView> {
                                       10,
                                     ),
                                     child: _MissionDestination(
-                                      stages: widget.stages,
+                                      stage: recommendedStage,
+                                      sectorNumber: recommendedStage == null
+                                          ? 0
+                                          : (recommendedStage.mainPathOrder ??
+                                                widget.stages.indexOf(
+                                                      recommendedStage,
+                                                    ) +
+                                                    1),
                                       progress: widget.progress,
                                       campaignModifiers:
                                           widget.campaignModifiers ??
@@ -1365,19 +1365,21 @@ String _statusLabel(StageProgressStatus status) {
 /// The next playable mission, using the same campaign status as its map node.
 class _MissionDestination extends StatelessWidget {
   const _MissionDestination({
-    required this.stages,
+    required this.stage,
+    required this.sectorNumber,
     required this.progress,
     required this.campaignModifiers,
     required this.onStageSelected,
   });
-  final List<StageDefinition> stages;
+  final StageDefinition? stage;
+  final int sectorNumber;
   final CampaignProgress progress;
   final CampaignModifiers campaignModifiers;
   final ValueChanged<StageDefinition>? onStageSelected;
 
   @override
   Widget build(BuildContext context) {
-    final stage = progress.recommendedStage(stages);
+    final stage = this.stage;
     if (stage == null) return const SizedBox.shrink();
     final theme = OrionUiTheme.of(context);
     final status = progress.statusFor(stage);
@@ -1438,7 +1440,7 @@ class _MissionDestination extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'SECTOR ${(stage.mainPathOrder ?? stages.indexOf(stage) + 1).toString().padLeft(2, '0')} / $qualifier',
+                          'SECTOR ${sectorNumber.toString().padLeft(2, '0')} / $qualifier',
                           // Two clamped lines, not one unclamped: at 3x system
                           // text the single line ellipsized the qualifier (the
                           // informative part) inside the ~110px column.
