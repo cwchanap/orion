@@ -667,6 +667,53 @@ void main() {
     }
   });
 
+  testWidgets('medal pips never steal a tap from the crest they overlap', (
+    tester,
+  ) async {
+    // A short viewport forces the plot to its minimum content height, where
+    // the closest anchored pair (Singularity Core over Aurora Gate) sits
+    // ~97px apart and the upper node's cleared caption hangs its medal pips
+    // across the lower crest's top edge. The pips are display-only: a tap
+    // landing on one must fall through to the node beneath it.
+    await tester.binding.setSurfaceSize(const Size(375, 600));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+    final selected = <String>[];
+
+    await tester.pumpWidget(
+      buildMap(
+        progress: clearedCampaignProgress(),
+        onStageSelected: (stage) => selected.add(stage.id),
+      ),
+    );
+
+    final auroraNode = find.byKey(const ValueKey('sector-stage-aurora-gate'));
+    await tester.ensureVisible(auroraNode);
+    await tester.pump();
+
+    final pips = find.descendant(
+      of: find.byKey(const ValueKey('sector-caption-singularity-core')),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is Container &&
+            widget.decoration is BoxDecoration &&
+            (widget.decoration! as BoxDecoration).shape == BoxShape.circle,
+      ),
+    );
+    expect(pips, findsNWidgets(3));
+    // The middle pip sits on Singularity Core's center line, directly over
+    // Aurora Gate's crest.
+    final tapPoint = tester.getRect(pips.at(1)).center;
+    expect(
+      tester.getRect(auroraNode).contains(tapPoint),
+      isTrue,
+      reason: 'the pip must overlap Aurora Gate for this tap to regress',
+    );
+
+    await tester.tapAt(tapPoint);
+    await tester.pump();
+    expect(selected, ['aurora-gate']);
+  });
+
   testWidgets('optional missions use smaller circular crests', (tester) async {
     await tester.pumpWidget(buildMap(progress: clearedCampaignProgress()));
 
