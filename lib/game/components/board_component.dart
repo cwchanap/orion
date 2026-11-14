@@ -1,12 +1,12 @@
 import 'dart:async';
 import 'dart:developer' as developer;
-import 'dart:isolate';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flame/components.dart';
-import 'package:flutter/foundation.dart' show debugPrint, visibleForTesting;
+import 'package:flutter/foundation.dart'
+    show compute, debugPrint, visibleForTesting;
 
 import '../assets/game_path_tiles.dart';
 import '../assets/game_sprite_sheet.dart';
@@ -628,9 +628,15 @@ class BoardComponent extends PositionComponent {
     final red = (shadowColor.r * 255).round();
     final green = (shadowColor.g * 255).round();
     final blue = (shadowColor.b * 255).round();
-    final blurred = await Isolate.run(
-      () => _blurAlphaPixels(rgba, width, height, sigma, red, green, blue),
-    );
+    final blurred = await compute(_blurAlphaPixels, (
+      rgba,
+      width,
+      height,
+      sigma,
+      red,
+      green,
+      blue,
+    ));
     if (_markerShadowsRemoved || epoch != _markerShadowEpoch) return null;
 
     final image = await _decodeRgbaImage(blurred, width, height);
@@ -658,14 +664,9 @@ class BoardComponent extends PositionComponent {
   }
 
   static Uint8List _blurAlphaPixels(
-    Uint8List pixels,
-    int width,
-    int height,
-    double sigma,
-    int red,
-    int green,
-    int blue,
+    (Uint8List, int, int, double, int, int, int) message,
   ) {
+    final (pixels, width, height, sigma, red, green, blue) = message;
     final radius = math.max(1, (sigma * 3).ceil());
     final kernel = Float64List(radius * 2 + 1);
     var kernelSum = 0.0;
