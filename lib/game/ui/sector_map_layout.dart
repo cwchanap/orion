@@ -36,9 +36,12 @@ final class SectorMapLayout {
   /// grid-placed nodes share this frame, so both baselines agree. The top
   /// inset also reserves headroom for the recommended node's NEXT flag,
   /// which hangs 24px above its crest and would otherwise clip against the
-  /// scroll viewport for the topmost stage.
+  /// scroll viewport for the topmost stage. The bottom inset likewise
+  /// reserves room for the bottommost node's caption — its chip and medal
+  /// pips reach ~17px below the node rect and would clip against the
+  /// plot's own bounds.
   static const plotTopInset = 28.0;
-  static const plotBottomInset = 8.0;
+  static const plotBottomInset = 24.0;
 
   /// Smallest node-top spread that keeps the tightest anchor pair a full
   /// node apart. The closest pair (singularity-core/aurora-gate and
