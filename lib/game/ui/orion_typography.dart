@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import 'orion_ui_theme.dart';
 
@@ -124,8 +125,9 @@ class OrionTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     final style = OrionTypography.title(color: color, size: size);
     final resolved = shadows == null ? style : style.copyWith(shadows: shadows);
+    final upper = data.toUpperCase();
     final plainTitle = Text(
-      data.toUpperCase(),
+      upper,
       textAlign: textAlign,
       maxLines: maxLines,
       overflow: overflow,
@@ -134,57 +136,314 @@ class OrionTitle extends StatelessWidget {
     );
     Widget title = plainTitle;
     if (maxLines == null && overflow == null) {
-      title = LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth.isInfinite) {
-            return plainTitle;
-          }
-          final scaler = textScaler ?? MediaQuery.textScalerOf(context);
-          final words = data.toUpperCase().split(' ');
-          final allFit = words.every((word) {
-            final painter = TextPainter(
-              text: TextSpan(text: word, style: resolved),
-              textDirection: Directionality.of(context),
-              textScaler: scaler,
-            )..layout();
-            final fits = painter.width <= constraints.maxWidth;
-            painter.dispose();
-            return fits;
-          });
-          if (allFit) {
-            return plainTitle;
-          }
-          final space = TextPainter(
-            text: TextSpan(text: ' ', style: resolved),
-            textDirection: Directionality.of(context),
-            textScaler: scaler,
-          )..layout();
-          final spaceWidth = space.width;
-          space.dispose();
-          return Wrap(
-            alignment: switch (textAlign) {
-              TextAlign.right || TextAlign.end => WrapAlignment.end,
-              TextAlign.center => WrapAlignment.center,
-              _ => WrapAlignment.start,
-            },
-            spacing: spaceWidth,
-            runSpacing: 4,
-            children: [
-              for (final word in words)
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text(word, textScaler: scaler, style: resolved),
-                ),
-            ],
-          );
-        },
-      );
+      final words = upper.split(' ');
+      if (words.length <= 1) {
+        title = FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: switch (textAlign) {
+            TextAlign.right || TextAlign.end => Alignment.centerRight,
+            TextAlign.center => Alignment.center,
+            _ => Alignment.centerLeft,
+          },
+          child: plainTitle,
+        );
+      } else {
+        title = _AdaptiveMultiWordTitle(
+          upper: upper,
+          words: words,
+          style: resolved,
+          textAlign: textAlign,
+          textScaler: textScaler ?? MediaQuery.textScalerOf(context),
+          plainTitle: plainTitle,
+        );
+      }
     }
     return Semantics(
       label: data,
       child: ExcludeSemantics(child: title),
     );
   }
+}
+
+class _AdaptiveMultiWordTitle extends StatefulWidget {
+  const _AdaptiveMultiWordTitle({
+    required this.upper,
+    required this.words,
+    required this.style,
+    required this.textAlign,
+    required this.textScaler,
+    required this.plainTitle,
+  });
+
+  final String upper;
+  final List<String> words;
+  final TextStyle style;
+  final TextAlign? textAlign;
+  final TextScaler textScaler;
+  final Widget plainTitle;
+
+  @override
+  State<_AdaptiveMultiWordTitle> createState() =>
+      _AdaptiveMultiWordTitleState();
+}
+
+class _AdaptiveMultiWordTitleState extends State<_AdaptiveMultiWordTitle> {
+  TextDirection? _measuredDirection;
+  double _widestWord = 0;
+  double _spaceWidth = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _measureIfNeeded();
+  }
+
+  @override
+  void didUpdateWidget(_AdaptiveMultiWordTitle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.upper != widget.upper ||
+        oldWidget.style != widget.style ||
+        oldWidget.textScaler != widget.textScaler) {
+      _measuredDirection = null;
+      _measureIfNeeded();
+    }
+  }
+
+  void _measureIfNeeded() {
+    final direction = Directionality.of(context);
+    if (_measuredDirection == direction) return;
+    _measuredDirection = direction;
+    final painter = TextPainter(
+      textDirection: direction,
+      textScaler: widget.textScaler,
+    );
+    try {
+      var widest = 0.0;
+      for (final word in widget.words) {
+        painter
+          ..text = TextSpan(text: word, style: widget.style)
+          ..layout();
+        if (painter.width > widest) widest = painter.width;
+      }
+      painter
+        ..text = TextSpan(text: ' ', style: widget.style)
+        ..layout();
+      _widestWord = widest;
+      _spaceWidth = painter.width;
+    } finally {
+      painter.dispose();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final direction = Directionality.of(context);
+    return _IntrinsicTitleBuilder(
+      upper: widget.upper,
+      style: widget.style,
+      textScaler: widget.textScaler,
+      textDirection: direction,
+      textAlign: widget.textAlign,
+      builder: (context, constraints) {
+        if (constraints.maxWidth.isInfinite ||
+            _widestWord <= constraints.maxWidth) {
+          return widget.plainTitle;
+        }
+        return Wrap(
+          alignment: switch (widget.textAlign) {
+            TextAlign.right || TextAlign.end => WrapAlignment.end,
+            TextAlign.center => WrapAlignment.center,
+            _ => WrapAlignment.start,
+          },
+          spacing: _spaceWidth,
+          runSpacing: 4,
+          children: [
+            for (final word in widget.words)
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  word,
+                  textScaler: widget.textScaler,
+                  style: widget.style,
+                ),
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _IntrinsicTitleBuilder extends ConstrainedLayoutBuilder<BoxConstraints> {
+  const _IntrinsicTitleBuilder({
+    required super.builder,
+    required this.upper,
+    required this.style,
+    required this.textScaler,
+    required this.textDirection,
+    required this.textAlign,
+  });
+
+  final String upper;
+  final TextStyle style;
+  final TextScaler textScaler;
+  final TextDirection textDirection;
+  final TextAlign? textAlign;
+
+  @override
+  RenderAbstractLayoutBuilderMixin<BoxConstraints, RenderBox>
+  createRenderObject(BuildContext context) => _RenderIntrinsicTitleBuilder(
+    upper,
+    style,
+    textScaler,
+    textDirection,
+    textAlign,
+  );
+
+  @override
+  void updateRenderObject(
+    BuildContext context,
+    _RenderIntrinsicTitleBuilder renderObject,
+  ) {
+    renderObject
+      ..upper = upper
+      ..style = style
+      ..textScaler = textScaler
+      ..textDirection = textDirection
+      ..textAlign = textAlign;
+  }
+}
+
+class _RenderIntrinsicTitleBuilder extends RenderBox
+    with
+        RenderObjectWithChildMixin<RenderBox>,
+        RenderObjectWithLayoutCallbackMixin,
+        RenderAbstractLayoutBuilderMixin<BoxConstraints, RenderBox> {
+  _RenderIntrinsicTitleBuilder(
+    this._upper,
+    this._style,
+    this._textScaler,
+    this._textDirection,
+    this._textAlign,
+  );
+
+  String _upper;
+  TextStyle _style;
+  TextScaler _textScaler;
+  TextDirection _textDirection;
+  TextAlign? _textAlign;
+  TextPainter? _intrinsicPainter;
+
+  set upper(String value) {
+    if (_upper == value) return;
+    _upper = value;
+    _intrinsicPainter?.text = TextSpan(text: _upper, style: _style);
+    markNeedsLayout();
+  }
+
+  set style(TextStyle value) {
+    if (_style == value) return;
+    _style = value;
+    _intrinsicPainter?.text = TextSpan(text: _upper, style: _style);
+    markNeedsLayout();
+  }
+
+  set textScaler(TextScaler value) {
+    if (_textScaler == value) return;
+    _textScaler = value;
+    _intrinsicPainter?.textScaler = value;
+    markNeedsLayout();
+  }
+
+  set textDirection(TextDirection value) {
+    if (_textDirection == value) return;
+    _textDirection = value;
+    _intrinsicPainter?.textDirection = value;
+    markNeedsLayout();
+  }
+
+  set textAlign(TextAlign? value) {
+    if (_textAlign == value) return;
+    _textAlign = value;
+    _intrinsicPainter?.textAlign = value ?? TextAlign.start;
+    markNeedsLayout();
+  }
+
+  TextPainter get _painter => _intrinsicPainter ??= TextPainter(
+    text: TextSpan(text: _upper, style: _style),
+    textAlign: _textAlign ?? TextAlign.start,
+    textDirection: _textDirection,
+    textScaler: _textScaler,
+  );
+
+  @override
+  void dispose() {
+    _intrinsicPainter?.dispose();
+    _intrinsicPainter = null;
+    super.dispose();
+  }
+
+  @override
+  double computeMinIntrinsicWidth(double height) {
+    final painter = _painter..layout();
+    return painter.minIntrinsicWidth;
+  }
+
+  @override
+  double computeMaxIntrinsicWidth(double height) {
+    final painter = _painter..layout();
+    return painter.maxIntrinsicWidth;
+  }
+
+  @override
+  double computeMinIntrinsicHeight(double width) {
+    final painter = _painter..layout(maxWidth: width);
+    return painter.height;
+  }
+
+  @override
+  double computeMaxIntrinsicHeight(double width) =>
+      computeMinIntrinsicHeight(width);
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final painter = _painter
+      ..layout(minWidth: constraints.minWidth, maxWidth: constraints.maxWidth);
+    return constraints.constrain(painter.size);
+  }
+
+  @override
+  double? computeDryBaseline(
+    BoxConstraints constraints,
+    TextBaseline baseline,
+  ) {
+    final painter = _painter
+      ..layout(minWidth: constraints.minWidth, maxWidth: constraints.maxWidth);
+    return painter.computeDistanceToActualBaseline(baseline);
+  }
+
+  @override
+  void performLayout() {
+    runLayoutCallback();
+    child?.layout(constraints, parentUsesSize: true);
+    size = constraints.constrain(child?.size ?? Size.zero);
+  }
+
+  @override
+  double? computeDistanceToActualBaseline(TextBaseline baseline) =>
+      child?.getDistanceToActualBaseline(baseline) ??
+      super.computeDistanceToActualBaseline(baseline);
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (child != null) {
+      context.paintChild(child!, offset);
+    }
+  }
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      child?.hitTest(result, position: position) ?? false;
 }
 
 /// A micro-label. Exists so call sites read as intent, not as styling.

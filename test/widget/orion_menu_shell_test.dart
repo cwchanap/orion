@@ -226,6 +226,16 @@ void main() {
 
     for (final tab in const ['Map', 'R&D', 'Codex']) {
       await tester.tap(find.byTooltip(tab));
+      final semantics = tester.widget<Semantics>(
+        find.ancestor(
+          of: find.byTooltip(tab),
+          matching: find.byWidgetPredicate(
+            (widget) =>
+                widget is Semantics && widget.properties.selected != null,
+          ),
+        ),
+      );
+      expect(semantics.properties.enabled, isFalse);
     }
     expect(selected, isEmpty);
 
@@ -299,5 +309,33 @@ void main() {
     expect(feedbackRect.top, greaterThanOrEqualTo(gearRect.bottom));
     expect(childRect.top, greaterThanOrEqualTo(feedbackRect.bottom));
     expect(tabRect.top, greaterThanOrEqualTo(childRect.bottom));
+  });
+
+  testWidgets('keyboard open keeps the top safe-area inset for the child', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(360, 640),
+          padding: EdgeInsets.only(top: 44, bottom: 34),
+          viewPadding: EdgeInsets.only(top: 44, bottom: 34),
+          viewInsets: EdgeInsets.only(bottom: 260),
+        ),
+        child: buildShell(
+          feedback: 'Saving campaign progress…',
+          child: const ColoredBox(
+            key: ValueKey('shell-child'),
+            color: Colors.black,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byTooltip('Settings'), findsNothing);
+    final feedbackRect = tester.getRect(find.text('Saving campaign progress…'));
+    final childRect = tester.getRect(find.byKey(const ValueKey('shell-child')));
+    expect(feedbackRect.top, greaterThanOrEqualTo(44));
+    expect(childRect.top, greaterThanOrEqualTo(feedbackRect.bottom));
   });
 }

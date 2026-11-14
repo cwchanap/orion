@@ -145,4 +145,36 @@ void main() {
     );
     expect(titleArrow, closeTo(chakraTitleArrow, 0.01));
   });
+
+  testWidgets('OrionTitle supports intrinsic width and height queries', (
+    tester,
+  ) async {
+    await loadRealFonts();
+
+    for (final titleText in ['ORION', 'OUTPOST ALPHA', 'ASTEROID FOUNDRY']) {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: IntrinsicWidth(
+                child: IntrinsicHeight(
+                  child: OrionTitle(
+                    titleText,
+                    color: const Color(0xFFF4F8FB),
+                    size: 24,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      final size = tester.getSize(find.byType(OrionTitle));
+      expect(size.width, greaterThan(0));
+      expect(size.height, greaterThan(0));
+    }
+  });
 }

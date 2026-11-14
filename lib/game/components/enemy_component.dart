@@ -52,7 +52,8 @@ class EnemyComponent extends CircleComponent {
 
   static final EnemyOverlayRenderer _overlayRenderer = EnemyOverlayRenderer();
 
-  static const double spriteExtentFactor = 1.75;
+  static const double spriteExtentFactor =
+      EnemyOverlayLayout.spriteExtentFactor;
 
   // read-through getters to logic
   double get health => logic.health;
