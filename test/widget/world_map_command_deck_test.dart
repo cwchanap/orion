@@ -857,6 +857,40 @@ void main() {
     );
   });
 
+  testWidgets('the cleared bottommost stage caption stays inside the plot', (
+    tester,
+  ) async {
+    // Outpost Alpha anchors the plot's bottom edge. A cleared caption adds
+    // medal pips below the name chip, and the plot Stack clips children
+    // past its bounds — without a reserved bottom inset the pips lose
+    // their lower edge.
+    await tester.pumpWidget(
+      buildMap(
+        progress: CampaignProgress(
+          bestResultsByStageId: const {
+            'outpost-alpha': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final caption = tester.getRect(
+      find.byKey(const ValueKey('sector-caption-outpost-alpha')),
+    );
+    final plot = tester.getRect(find.byKey(const ValueKey('world-map-plot')));
+    expect(
+      plot.contains(caption.bottomCenter),
+      isTrue,
+      reason:
+          'the bottommost caption must render inside the plot, which clips '
+          'overflow: $caption vs $plot',
+    );
+  });
+
   testWidgets('locked, available and cleared states are explicit without '
       'color alone', (tester) async {
     // Outpost Alpha cleared with a gold medal -> Nebula Relay available; the
