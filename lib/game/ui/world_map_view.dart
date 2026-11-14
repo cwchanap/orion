@@ -1091,21 +1091,25 @@ class _MedalPips extends StatelessWidget {
       uiTheme.medalSilver,
       uiTheme.creditGold,
     ];
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < 3; i += 1) ...[
-          if (i > 0) const SizedBox(width: 4),
-          Container(
-            width: 15,
-            height: 15,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: i < rank ? tiers[i] : orionPipEmpty,
+    // Display-only: on a compact plot the pips overlap the next crest's top
+    // edge and must not claim taps aimed at that node.
+    return IgnorePointer(
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < 3; i += 1) ...[
+            if (i > 0) const SizedBox(width: 4),
+            Container(
+              width: 15,
+              height: 15,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: i < rank ? tiers[i] : orionPipEmpty,
+              ),
             ),
-          ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }
