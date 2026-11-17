@@ -71,7 +71,7 @@ Future<OrionDefenseGame> _startRadialMission(
   await tester.pump(const Duration(milliseconds: 400));
   expect(game!.isMounted, isTrue);
   game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
-  game!.placeTower(TowerType.laser);
+  game!.placeTower(Character.haruto);
   game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
   await tester.pump();
   await tester.pump();
@@ -89,7 +89,7 @@ void main() {
       final boundary = GlobalKey();
       final tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(4, 5),
       );
       await tester.pumpWidget(
@@ -163,7 +163,7 @@ void main() {
     expect(game!.isMounted, isTrue);
     void placeAndSelect() {
       game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
-      game!.placeTower(TowerType.laser);
+      game!.placeTower(Character.haruto);
       game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
     }
 
@@ -344,7 +344,6 @@ void main() {
             onToggleAutoStart: () => autoToggles++,
             onPlaceTower: (_) {},
             onUpgrade: () {},
-            onSpecialize: (_) {},
             onTargetingChanged: (_) {},
             onSell: () {},
           ),
@@ -407,7 +406,7 @@ void main() {
                     phase: phase,
                     selectedTower: PlacedTower(
                       id: 1,
-                      type: TowerType.laser,
+                      character: Character.haruto,
                       position: const GridPosition(4, 5),
                       targetingMode: mode,
                     ),
@@ -457,7 +456,7 @@ void main() {
               snapshot: commandDeckSnapshot(
                 selectedTower: PlacedTower(
                   id: 1,
-                  type: TowerType.laser,
+                  character: Character.haruto,
                   position: const GridPosition(4, 5),
                 ),
                 selectedTowerStats: GameBalance.towerStats(
@@ -514,12 +513,9 @@ void main() {
         var inspected = 0;
         final tower = PlacedTower(
           id: 1,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: const GridPosition(4, 5),
           level: level,
-          specialization: level == 3
-              ? GameBalance.specializationsFor(TowerType.laser).first
-              : null,
         );
         await tester.pumpWidget(
           MaterialApp(
@@ -535,7 +531,7 @@ void main() {
                       specialization: tower.specialization,
                     ),
                   ),
-                  onUpgrade: () {},
+                  onUpgrade: () => inspected++,
                   onInspect: () => inspected++,
                   onSell: () {},
                   onTargetingChanged: (_) {},
@@ -545,13 +541,13 @@ void main() {
           ),
         );
         if (level == 2) {
-          expect(find.byTooltip('Specialize tower'), findsOneWidget);
-          await tester.tap(find.byTooltip('Specialize tower'));
+          expect(find.byTooltip('Upgrade 120'), findsOneWidget);
+          await tester.tap(find.byTooltip('Upgrade 120'));
           expect(inspected, 1);
         } else {
-          // A max-level tower cannot specialize; the action must not
+          // A max-level tower cannot upgrade; the action must not
           // advertise it. The badge is inert — inspect stays dedicated below.
-          expect(find.byTooltip('Specialize tower'), findsNothing);
+          expect(find.byTooltip('Upgrade 120'), findsNothing);
           expect(find.byTooltip('Max level'), findsOneWidget);
           await tester.tap(find.byTooltip('Max level'));
           expect(inspected, 0);
@@ -645,7 +641,9 @@ void main() {
       final game = await _startRadialMission(tester, boundary, scale);
       // Move the selected tower near the bottom to exercise the radial clamp.
       game.handleBoardTap(game.boardCellCenter(const GridPosition(4, 10)));
-      game.placeTower(TowerType.laser);
+      // Haruto is already deployed at (4,5) — character identity means one
+      // deployment per member, so the second card is a different member.
+      game.placeTower(Character.mio);
       game.handleBoardTap(game.boardCellCenter(const GridPosition(4, 10)));
       await tester.pump();
       await tester.pump();
@@ -768,10 +766,9 @@ void main() {
       final boundary = GlobalKey();
       final tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(4, 5),
         level: 3,
-        specialization: GameBalance.specializationsFor(TowerType.laser).first,
       );
       final errors = <FlutterErrorDetails>[];
       final prior = FlutterError.onError;

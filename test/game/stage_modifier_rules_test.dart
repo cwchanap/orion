@@ -262,28 +262,21 @@ void main() {
     final towers = <PlacedTower>[
       const PlacedTower(
         id: 1,
-        type: TowerType.gravityWell,
+        character: Character.ren,
         position: GridPosition(0, 0),
       ),
       const PlacedTower(
         id: 2,
-        type: TowerType.gravityWell,
+        character: Character.ren,
         position: GridPosition(0, 0),
         level: 2,
       ),
+      // Tier 3 carries Ren's fixed signature automatically.
       const PlacedTower(
         id: 3,
-        type: TowerType.gravityWell,
+        character: Character.ren,
         position: GridPosition(0, 0),
         level: 3,
-        specialization: TowerSpecialization.singularityWell,
-      ),
-      const PlacedTower(
-        id: 4,
-        type: TowerType.gravityWell,
-        position: GridPosition(0, 0),
-        level: 3,
-        specialization: TowerSpecialization.crushWell,
       ),
     ];
 

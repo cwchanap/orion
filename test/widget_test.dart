@@ -280,7 +280,7 @@ void main() {
       expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
 
       final start = tester.getCenter(
-        find.byKey(const ValueKey('tower-card-laser')),
+        find.byKey(const ValueKey('tower-card-haruto')),
       );
       final holdTarget = globalFor(const GridPosition(4, 5));
       final gesture = await tester.startGesture(start);
@@ -433,7 +433,7 @@ void main() {
         () => captureReactorRimFixture(boundaryKey, 'fixture-1a$suffix.png'),
       );
       game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
-      game!.placeTower(TowerType.laser);
+      game!.placeTower(Character.haruto);
       game!.handleBoardTap(game!.boardCellCenter(const GridPosition(4, 5)));
       await tester.pump();
       await tester.pump();
@@ -870,7 +870,7 @@ void main() {
     // pointer position — not at the selected cell.
     final laserCost = GameBalance.towerStats(TowerType.laser, level: 1).cost;
     final start = tester.getCenter(
-      find.byKey(const ValueKey('tower-card-laser')),
+      find.byKey(const ValueKey('tower-card-haruto')),
     );
     final dropTarget = globalFor(const GridPosition(4, 0));
     final gesture = await tester.startGesture(start);
@@ -882,7 +882,7 @@ void main() {
 
     expect(game!.children.whereType<TowerComponent>(), hasLength(1));
     expect(game!.snapshot.gold, GameBalance.startingGold - laserCost);
-    expect(game!.placementPreview.type, isNull);
+    expect(game!.placementPreview.character, isNull);
 
     // Board interaction recovers after the drag ended: the next selection
     // goes through and leaves no preview state behind.
@@ -1058,7 +1058,7 @@ void main() {
 
     final tower = const PlacedTower(
       id: 1,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(1, 1),
     );
     game!.stateNotifier.value = commandDeckSnapshot(
@@ -3962,12 +3962,26 @@ void main() {
   });
 
   test('snapshot exposes the current tower unlocks', () {
-    final session = GameSession.initial();
+    // Squad unlocks follow the wave schedule on the squad's own styles:
+    // wave-1 styles first, railgun after Wave 1 clears.
+    final session = GameSession.initial(
+      squad: const {
+        Character.haruto: 1,
+        Character.mio: 1,
+        Character.jin: 1,
+        Character.elena: 1,
+        Character.kaito: 1,
+      },
+    );
 
+    // Squad styles are all placeable from wave 1 under the squad model;
+    // the deduplicated list stays stable across waves.
     expect(session.snapshot().unlockedTowerTypes, [
       TowerType.laser,
       TowerType.rocket,
       TowerType.cryo,
+      TowerType.railgun,
+      TowerType.ionChain,
     ]);
 
     expect(session.startWave(), isTrue);
@@ -3978,6 +3992,7 @@ void main() {
       TowerType.rocket,
       TowerType.cryo,
       TowerType.railgun,
+      TowerType.ionChain,
     ]);
   });
 
@@ -3991,7 +4006,9 @@ void main() {
   });
 
   test('snapshot tower unlocks cannot be mutated after capture', () {
-    final snapshot = GameSession.initial().snapshot();
+    final snapshot = GameSession.initial(
+      squad: const {Character.haruto: 1, Character.mio: 1, Character.jin: 1},
+    ).snapshot();
 
     expect(
       () => snapshot.unlockedTowerTypes[0] = TowerType.droneBay,
@@ -4188,7 +4205,7 @@ void main() {
       final snapshot = game!.stateNotifier.value;
       const selectedTower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
         targetingMode: TowerTargetingMode.strongest,
       );
@@ -4243,7 +4260,7 @@ void main() {
     final snapshot = game!.stateNotifier.value;
     const selectedTower = PlacedTower(
       id: 1,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(0, 0),
     );
     game!.stateNotifier.value = GameSnapshot(
@@ -4295,7 +4312,7 @@ void main() {
     final snapshot = game!.stateNotifier.value;
     const selectedTower = PlacedTower(
       id: 1,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(0, 0),
       targetingMode: TowerTargetingMode.first,
     );
@@ -4353,7 +4370,7 @@ void main() {
     final snapshot = game!.stateNotifier.value;
     const selectedTower = PlacedTower(
       id: 1,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(0, 0),
     );
     game!.stateNotifier.value = GameSnapshot(
@@ -5363,7 +5380,7 @@ void main() {
     expect(tester.takeException(), isNull);
 
     // Picking the laser mounts the tower and moves on to the wave copy.
-    await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+    await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
     await tester.pump();
     await tester.pump();
     expect(
@@ -5458,7 +5475,7 @@ void main() {
       // Long-press-drag Laser from the persistent rail onto a buildable cell;
       // the soft callout never joins the gesture arena.
       final start = tester.getCenter(
-        find.byKey(const ValueKey('tower-card-laser')),
+        find.byKey(const ValueKey('tower-card-haruto')),
       );
       final dropTarget = boardCellPoint(tester, game, const GridPosition(4, 8));
       final gesture = await tester.startGesture(start);
@@ -5494,7 +5511,7 @@ void main() {
 
       // Build and upgrade the laser out of order, before Wave 1 ever starts.
       await tapBoardCell(tester, game, const GridPosition(2, 2));
-      await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+      await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
       await tester.pump();
       await tester.pump();
       await tapBoardCell(tester, game, const GridPosition(2, 2));
@@ -5525,13 +5542,34 @@ void main() {
     'selecting a tower while gold is short of the upgrade cost shows no '
     'callout on the disabled Upgrade button',
     (tester) async {
+      final drainStore = InMemoryCampaignProgressStore(
+        knownStages: OrionCampaign.stages,
+      );
+      await drainStore.save(
+        CampaignSave(
+          progress: CampaignProgress(),
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 1,
+            Character.jin: 1,
+            Character.elena: 1,
+          },
+          squad: const [
+            Character.haruto,
+            Character.mio,
+            Character.jin,
+            Character.elena,
+          ],
+        ),
+      );
       final game = await pumpMountedMission(
         tester,
         firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
+        progressStore: drainStore,
       );
 
       await tapBoardCell(tester, game, const GridPosition(2, 2));
-      await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+      await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
       await tester.pump();
       await tester.pump();
       await tester.tap(find.byTooltip('Start Wave'));
@@ -5548,7 +5586,9 @@ void main() {
       );
 
       // Drain gold below the 70g upgrade cost so the selected tower's
-      // Upgrade button renders disabled. Row 0 is entirely buildable.
+      // Upgrade button renders disabled. Upgrading any tower would mark the
+      // milestone learned, so drain with placements only — needs a seeded
+      // squad bigger than the two-member starter.
       const fillerCells = [
         GridPosition(0, 0),
         GridPosition(1, 0),
@@ -5557,10 +5597,18 @@ void main() {
         GridPosition(5, 0),
         GridPosition(7, 0),
       ];
+      const drainSquad = [
+        Character.haruto,
+        Character.mio,
+        Character.jin,
+        Character.elena,
+      ];
       var placed = 0;
-      while (game.snapshot.gold >= 70 && placed < fillerCells.length) {
+      while (game.snapshot.gold >= 70 && placed < drainSquad.length) {
         await tapBoardCell(tester, game, fillerCells[placed]);
-        await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+        await tester.tap(
+          find.byKey(ValueKey('tower-card-${drainSquad[placed].name}')),
+        );
         await tester.pump();
         await tester.pump();
         placed += 1;
@@ -5624,7 +5672,7 @@ void main() {
 
       // Reach the Wave-3 scanner lesson with the laser still at Level 1.
       await tapBoardCell(tester, game, const GridPosition(2, 2));
-      await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+      await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
       await tester.pump();
       await tester.pump();
       await tester.tap(find.byTooltip('Start Wave'));
@@ -6286,7 +6334,6 @@ void main() {
                           onToggleAutoStart: game.toggleAutoStart,
                           onPlaceTower: game.placeTower,
                           onUpgrade: game.upgradeSelectedTower,
-                          onSpecialize: game.specializeSelectedTower,
                           onTargetingChanged: game.setTargetingMode,
                           onSell: game.sellSelectedTower,
                           onBoardViewportChanged: (viewport) {

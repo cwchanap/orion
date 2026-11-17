@@ -42,7 +42,7 @@ GameSnapshot _snapshot({
 PlacedTower _tower({int level = 1}) {
   return PlacedTower(
     id: 1,
-    type: TowerType.laser,
+    character: Character.haruto,
     position: const GridPosition(2, 2),
     level: level,
   );

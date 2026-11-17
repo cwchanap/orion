@@ -35,7 +35,6 @@ class MissionChrome extends StatefulWidget {
     required this.onToggleAutoStart,
     required this.onPlaceTower,
     required this.onUpgrade,
-    required this.onSpecialize,
     required this.onTargetingChanged,
     required this.onSell,
     this.onPlacementPreviewEvent,
@@ -62,9 +61,8 @@ class MissionChrome extends StatefulWidget {
   final VoidCallback onTogglePause;
   final ValueChanged<double> onSpeedSelected;
   final VoidCallback onToggleAutoStart;
-  final ValueChanged<TowerType> onPlaceTower;
+  final ValueChanged<Character> onPlaceTower;
   final VoidCallback onUpgrade;
-  final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
   final VoidCallback onSell;
 
@@ -304,7 +302,6 @@ class _MissionChromeState extends State<MissionChrome> {
                           onStartWave: widget.onStartWave,
                           onPlaceTower: widget.onPlaceTower,
                           onUpgrade: widget.onUpgrade,
-                          onSpecialize: widget.onSpecialize,
                           onTargetingChanged: widget.onTargetingChanged,
                           onSell: widget.onSell,
                           onPlacementPreviewEvent:
@@ -420,7 +417,7 @@ class TowerRadialActions extends StatelessWidget {
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
 
   /// Optional first-mission guide anchor wrapped around the top
-  /// Upgrade/Specialize surface only.
+  /// Upgrade surface only.
   final Key? upgradeGuideAnchorKey;
 
   /// Optional contextual-tip anchor wrapped around the bottom targeting
@@ -439,7 +436,7 @@ class TowerRadialActions extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Guide anchor wraps the top Upgrade/Specialize surface; the
+            // Guide anchor wraps the top Upgrade surface; the
             // surface itself (and its tooltip/semantics) is unchanged.
             if (upgradeGuideAnchorKey != null)
               KeyedSubtree(
@@ -531,48 +528,37 @@ class TowerRadialActions extends StatelessWidget {
     );
   }
 
-  /// The top Upgrade/Specialize surface, unchanged; split out only so the
-  /// optional guide anchor can wrap it.
+  /// The top Upgrade surface, unchanged; split out only so the
+  /// optional guide anchor can wrap it. One action walks all three tiers;
+  /// the tier-2→3 step applies the member's fixed signature.
   Widget _upgradeSurface(OrionUiTheme t, TextStyle labelStyle) {
     final tower = snapshot.selectedTower!;
     final stats = snapshot.selectedTowerStats;
+    final nextCost = stats?.nextUpgradeCost;
     final canUpgrade =
         snapshot.phase == GamePhase.build &&
         tower.canUpgrade &&
-        stats != null &&
-        snapshot.gold >= stats.upgradeCost;
-    final actionEnabled = tower.canUpgrade ? canUpgrade : tower.canSpecialize;
+        nextCost != null &&
+        snapshot.gold >= nextCost;
     return _radialFab(
       t,
       IconButton(
         constraints: const BoxConstraints(minWidth: 64, minHeight: 56),
-        tooltip: tower.canUpgrade
-            ? 'Upgrade ${stats?.upgradeCost ?? ''}'
-            : tower.canSpecialize
-            ? 'Specialize tower'
-            : 'Max level',
-        onPressed: tower.canUpgrade
-            ? (canUpgrade ? onUpgrade : null)
-            : tower.canSpecialize
-            ? onInspect
-            : null,
+        tooltip: tower.canUpgrade ? 'Upgrade ${nextCost ?? ''}' : 'Max level',
+        onPressed: tower.canUpgrade && canUpgrade ? onUpgrade : null,
         icon: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              tower.canUpgrade
-                  ? Icons.upgrade
-                  : tower.canSpecialize
-                  ? Icons.auto_awesome
-                  : Icons.check,
-              color: actionEnabled ? t.systemCyan : t.textMuted,
+              tower.canUpgrade ? Icons.upgrade : Icons.check,
+              color: canUpgrade ? t.systemCyan : t.textMuted,
               size: 22,
             ),
-            if (tower.canUpgrade && stats != null)
+            if (tower.canUpgrade && nextCost != null)
               Text(
-                '${stats.upgradeCost}',
+                '$nextCost',
                 style: labelStyle.copyWith(
-                  color: actionEnabled ? t.creditGold : t.textMuted,
+                  color: canUpgrade ? t.creditGold : t.textMuted,
                 ),
               ),
           ],

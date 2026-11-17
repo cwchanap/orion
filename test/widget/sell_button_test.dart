@@ -16,7 +16,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
     );
@@ -30,7 +30,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
     );
@@ -46,7 +46,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
       phase: GamePhase.wave,
@@ -63,7 +63,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
     );
@@ -93,7 +93,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
     );
@@ -113,7 +113,7 @@ void main() {
         tester,
         const PlacedTower(
           id: 1,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(0, 0),
           level: 2,
         ),
@@ -130,7 +130,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.droneBay,
+        character: Character.tetsuo,
         position: GridPosition(0, 0),
       ),
       selectedTowerStats: stats,
@@ -158,7 +158,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
       selectedTowerStats: stats,
@@ -200,7 +200,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.cryo,
+        character: Character.jin,
         position: GridPosition(0, 0),
       ),
       selectedTowerStats: stats,
@@ -228,7 +228,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.rocket,
+        character: Character.mio,
         position: GridPosition(0, 0),
       ),
       selectedTowerStats: stats,
@@ -254,7 +254,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.nanite,
+        character: Character.shiori,
         position: GridPosition(0, 0),
       ),
       selectedTowerStats: stats,
@@ -279,7 +279,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
       acquiredRunModules: const [RunModuleId.heavyCaliber],
@@ -310,7 +310,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       ),
       pendingRunModuleOffer: offer,
@@ -336,7 +336,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
         level: 2,
       ),
@@ -377,7 +377,7 @@ void main() {
       tester,
       const PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
         level: 2,
       ),

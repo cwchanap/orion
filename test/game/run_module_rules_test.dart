@@ -365,13 +365,16 @@ void main() {
   });
 
   group('beneficiaryCount', () {
-    PlacedTower tower(int id, TowerType type) =>
-        PlacedTower(id: id, type: type, position: GridPosition(id, 4));
+    PlacedTower tower(int id, Character character) => PlacedTower(
+      id: id,
+      character: character,
+      position: GridPosition(id, 4),
+    );
 
     final towers = [
-      tower(1, TowerType.cryo),
-      tower(2, TowerType.cryo),
-      tower(3, TowerType.laser),
+      tower(1, Character.jin),
+      tower(2, Character.rin),
+      tower(3, Character.haruto),
     ];
 
     int count(RunModuleId id, Iterable<PlacedTower> placed) =>
@@ -395,9 +398,13 @@ void main() {
       ];
       for (final (id, family) in familyCases) {
         expect(runModuleDefinition(id).tower, family, reason: id.name);
-        expect(count(id, [tower(1, family)]), 1, reason: id.name);
+        final member = Character.values.firstWhere((c) => c.style == family);
+        expect(count(id, [tower(1, member)]), 1, reason: id.name);
         final unrelated = TowerType.values.firstWhere((type) => type != family);
-        expect(count(id, [tower(2, unrelated)]), 0, reason: id.name);
+        final outsider = Character.values.firstWhere(
+          (c) => c.style == unrelated,
+        );
+        expect(count(id, [tower(2, outsider)]), 0, reason: id.name);
       }
     });
 

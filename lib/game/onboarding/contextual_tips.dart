@@ -8,7 +8,7 @@ enum ContextualTip {
   nanite,
   gravityWell,
   droneBay,
-  specialization,
+  signature,
   targeting,
   stageModifier,
 }
@@ -18,17 +18,18 @@ enum ContextualTip {
 String contextualTipCopy(ContextualTip tip) => switch (tip) {
   ContextualTip.bossWave =>
     'Boss ahead. Check the scanner and prepare your defense.',
-  ContextualTip.railgun => 'Railgun unlocked. Pierces enemies in a line.',
+  ContextualTip.railgun =>
+    'Railgun member in your squad. Pierces enemies in a line.',
   ContextualTip.ionChain =>
-    'Ion Chain unlocked. Lightning jumps between targets.',
+    'Ion Chain member in your squad. Lightning jumps between targets.',
   ContextualTip.nanite =>
-    'Nanite unlocked. Corrodes armor to help other towers.',
+    'Nanite member in your squad. Corrodes armor to help other towers.',
   ContextualTip.gravityWell =>
-    'Gravity Well unlocked. Damages enemies within its field.',
+    'Gravity Well member in your squad. Damages enemies within its field.',
   ContextualTip.droneBay =>
-    'Drone Bay unlocked. Launches autonomous interceptors.',
-  ContextualTip.specialization =>
-    'Specialization ready. Choose one of two ways to evolve this tower.',
+    'Drone Bay member in your squad. Launches autonomous interceptors.',
+  ContextualTip.signature =>
+    'Signature ready. Upgrade this member to tier 3 to apply it.',
   ContextualTip.targeting =>
     'Targeting modes. Choose which enemies this tower attacks first.',
   ContextualTip.stageModifier =>
@@ -46,24 +47,24 @@ const Map<ContextualTip, TowerType> contextualTipTowerTypes = {
   ContextualTip.droneBay: TowerType.droneBay,
 };
 
-/// The placed tower the specialization tip points at while nothing is
-/// selected: the first level-2 unspecialized tower whose specialization
-/// the player can currently afford. Shared by the resolver and the page
-/// so both agree on the same board-cell target.
-PlacedTower? specializationCandidateIn(GameSnapshot snapshot) {
+/// The placed tower the signature tip points at while nothing is
+/// selected: the first tier-2 tower whose fixed signature step (the
+/// tier-2→3 upgrade) the player can currently afford. Shared by the
+/// resolver and the page so both agree on the same board-cell target.
+PlacedTower? signatureCandidateIn(GameSnapshot snapshot) {
   for (final tower in snapshot.placedTowers) {
-    if (tower.canSpecialize && _canAffordSpecialization(snapshot, tower)) {
+    if (tower.level == 2 && _canAffordSignature(snapshot, tower)) {
       return tower;
     }
   }
   return null;
 }
 
-/// Specialization costs are per-type constants — modifiers never adjust
-/// them, so the base level-2 lookup is authoritative for any tower that
-/// can specialize. Guides only toward an affordable action, mirroring the
-/// HPA-412 upgrade tip's gold check.
-bool _canAffordSpecialization(GameSnapshot snapshot, PlacedTower tower) =>
+/// The tier-2→3 signature price is a per-style constant — modifiers never
+/// adjust it, so the base level-2 lookup is authoritative. Guides only
+/// toward an affordable action, mirroring the HPA-412 upgrade tip's gold
+/// check.
+bool _canAffordSignature(GameSnapshot snapshot, PlacedTower tower) =>
     snapshot.gold >=
     GameBalance.towerStats(tower.type, level: 2).specializationCost;
 
@@ -92,26 +93,27 @@ ContextualTip? contextualTipFor(
       snapshot.selectedTower == null) {
     for (final entry in contextualTipTowerTypes.entries) {
       if (!seen.contains(entry.key) &&
-          snapshot.unlockedTowerTypes.contains(entry.value)) {
+          snapshot.unlockedTowerTypes.contains(entry.value) &&
+          snapshot.squad.any((member) => member.style == entry.value)) {
         return entry.key;
       }
     }
     return null;
   }
 
-  // Tower selected: the specialization tip may point ONLY at this very
+  // Tower selected: the signature tip may point ONLY at this very
   // tower's radial progression surface — a different selected tower must
   // never inherit another tower's Upgrade-button lesson — so otherwise the
   // radial targeting action is the candidate. Both actions live on the
   // mounted radial, which the build-phase gate above keeps enabled. An
-  // unaffordable specialization opens an inspector whose options are all
-  // disabled — silence until gold covers it, exactly like the upgrade tip.
+  // unaffordable signature step would dead-end on the same surface —
+  // silence until gold covers it, exactly like the upgrade tip.
   final selectedTower = snapshot.selectedTower;
   if (selectedTower != null) {
-    if (!seen.contains(ContextualTip.specialization) &&
-        selectedTower.canSpecialize &&
-        _canAffordSpecialization(snapshot, selectedTower)) {
-      return ContextualTip.specialization;
+    if (!seen.contains(ContextualTip.signature) &&
+        selectedTower.level == 2 &&
+        _canAffordSignature(snapshot, selectedTower)) {
+      return ContextualTip.signature;
     }
     if (!seen.contains(ContextualTip.targeting)) {
       return ContextualTip.targeting;
@@ -127,7 +129,7 @@ ContextualTip? contextualTipFor(
   }
 
   // Nothing selected. Boss first (the collapsed scanner is usable only
-  // now), then specialization pointing at a qualifying placed tower's
+  // now), then signature pointing at a qualifying placed tower's
   // board cell. The modifier tip belongs to the separate stage-briefing
   // route and is never resolved here.
   if (!seen.contains(ContextualTip.bossWave)) {
@@ -136,9 +138,9 @@ ContextualTip? contextualTipFor(
       return ContextualTip.bossWave;
     }
   }
-  if (!seen.contains(ContextualTip.specialization) &&
-      specializationCandidateIn(snapshot) != null) {
-    return ContextualTip.specialization;
+  if (!seen.contains(ContextualTip.signature) &&
+      signatureCandidateIn(snapshot) != null) {
+    return ContextualTip.signature;
   }
   return null;
 }
@@ -151,10 +153,10 @@ Set<ContextualTip> learnedTipsIn(GameSnapshot snapshot) {
     for (final entry in contextualTipTowerTypes.entries)
       if (snapshot.placedTowers.any((tower) => tower.type == entry.value))
         entry.key,
-    // Specializing any tower or changing any tower off the default
+    // Reaching tier 3 on any member or changing any tower off the default
     // targeting mode demonstrates those lessons for the whole run.
     if (snapshot.placedTowers.any((tower) => tower.specialization != null))
-      ContextualTip.specialization,
+      ContextualTip.signature,
     if (snapshot.placedTowers.any(
       (tower) => tower.targetingMode != TowerTargetingMode.first,
     ))

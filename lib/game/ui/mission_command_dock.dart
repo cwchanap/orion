@@ -20,9 +20,9 @@ sealed class TowerPlacementPreviewEvent {
 }
 
 final class TowerPlacementPreviewBegin extends TowerPlacementPreviewEvent {
-  const TowerPlacementPreviewBegin(this.type);
+  const TowerPlacementPreviewBegin(this.character);
 
-  final TowerType type;
+  final Character character;
 }
 
 final class TowerPlacementPreviewUpdate extends TowerPlacementPreviewEvent {
@@ -41,11 +41,11 @@ final class TowerPlacementPreviewCancel extends TowerPlacementPreviewEvent {
   const TowerPlacementPreviewCancel();
 }
 
-/// One guide anchor over exactly one build-rail card: which tower type the
+/// One guide anchor over exactly one build-rail card: which squad member the
 /// guide points at, and the key wrapping that card. The same key is never
 /// attached to two cards (or both dock branches) at once — the page owns it
 /// and supplies it only while a single card is the active guide target.
-typedef TowerCardGuideAnchor = ({TowerType type, Key anchorKey});
+typedef TowerCardGuideAnchor = ({Character character, Key anchorKey});
 
 class MissionCommandDock extends StatelessWidget {
   const MissionCommandDock({
@@ -57,7 +57,6 @@ class MissionCommandDock extends StatelessWidget {
     required this.onStartWave,
     required this.onPlaceTower,
     required this.onUpgrade,
-    required this.onSpecialize,
     required this.onTargetingChanged,
     required this.onSell,
     this.onPlacementPreviewEvent,
@@ -87,9 +86,8 @@ class MissionCommandDock extends StatelessWidget {
   final ValueChanged<double> onSpeedSelected;
   final VoidCallback onToggleAutoStart;
   final VoidCallback onStartWave;
-  final ValueChanged<TowerType> onPlaceTower;
+  final ValueChanged<Character> onPlaceTower;
   final VoidCallback onUpgrade;
-  final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
   final VoidCallback onSell;
   final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
@@ -119,7 +117,9 @@ class MissionCommandDock extends StatelessWidget {
         TowerBuildRail(
           phase: snapshot.phase,
           gold: snapshot.gold,
-          unlockedTowerTypes: snapshot.unlockedTowerTypes,
+          squad: snapshot.squad,
+          squadLevels: snapshot.squadLevels,
+          deployedCharacters: snapshot.deployedCharacters,
           onPlaceTower: onPlaceTower,
           onPlacementPreviewEvent: onPlacementPreviewEvent,
           // Selected-cell branch only: see [towerCardGuideAnchor].
@@ -169,7 +169,9 @@ class MissionCommandDock extends StatelessWidget {
                     key: const ValueKey('command-dock-persistent-rail'),
                     phase: snapshot.phase,
                     gold: snapshot.gold,
-                    unlockedTowerTypes: snapshot.unlockedTowerTypes,
+                    squad: snapshot.squad,
+                    squadLevels: snapshot.squadLevels,
+                    deployedCharacters: snapshot.deployedCharacters,
                     onPlaceTower: onPlaceTower,
                     onPlacementPreviewEvent: onPlacementPreviewEvent,
                   ),
@@ -819,7 +821,9 @@ class TowerBuildRail extends StatefulWidget {
     super.key,
     required this.phase,
     required this.gold,
-    required this.unlockedTowerTypes,
+    required this.squad,
+    required this.squadLevels,
+    required this.deployedCharacters,
     required this.onPlaceTower,
     this.onPlacementPreviewEvent,
     this.towerCardGuideAnchor,
@@ -827,8 +831,12 @@ class TowerBuildRail extends StatefulWidget {
 
   final GamePhase phase;
   final int gold;
-  final List<TowerType> unlockedTowerTypes;
-  final ValueChanged<TowerType> onPlaceTower;
+
+  /// The ordered squad roster — one card per member, in selection order.
+  final List<Character> squad;
+  final Map<Character, int> squadLevels;
+  final Set<Character> deployedCharacters;
+  final ValueChanged<Character> onPlaceTower;
   final ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent;
 
   /// Optional guide anchor for exactly one card. Supplied only by the
@@ -840,10 +848,10 @@ class TowerBuildRail extends StatefulWidget {
 }
 
 class _TowerBuildRailState extends State<TowerBuildRail> {
-  /// Local transient drag presentation: the lifted tower and the latest
+  /// Local transient drag presentation: the lifted member and the latest
   /// global pointer position. Nothing here reaches game state — the game
   /// resolves validity, mutation, and cleanup through the emitted events.
-  TowerType? _activeDraggedType;
+  Character? _activeDraggedCharacter;
   Offset? _latestGlobalPointer;
 
   @override
@@ -855,11 +863,11 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   @override
   void didUpdateWidget(TowerBuildRail oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // A changed (or freshly attached) target type is a new activation; the
+    // A changed (or freshly attached) target member is a new activation; the
     // same activation rebuilding must never re-scroll — the user may have
     // scrolled elsewhere in between.
-    if (widget.towerCardGuideAnchor?.type !=
-        oldWidget.towerCardGuideAnchor?.type) {
+    if (widget.towerCardGuideAnchor?.character !=
+        oldWidget.towerCardGuideAnchor?.character) {
       _revealAnchorCard();
     }
   }
@@ -868,10 +876,12 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   /// the branch switch has laid the card out), centered, reduced-motion
   /// aware. Detaching the anchor during the frame cancels the reveal.
   void _revealAnchorCard() {
-    final type = widget.towerCardGuideAnchor?.type;
-    if (type == null) return;
+    final character = widget.towerCardGuideAnchor?.character;
+    if (character == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || widget.towerCardGuideAnchor?.type != type) return;
+      if (!mounted || widget.towerCardGuideAnchor?.character != character) {
+        return;
+      }
       final key = widget.towerCardGuideAnchor?.anchorKey;
       final context = key is GlobalKey ? key.currentContext : null;
       if (context == null || !context.mounted) return;
@@ -912,41 +922,42 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
 
   /// Builds one rail card, wrapping it in the guide anchor when it is the
   /// single active target. The card's own ValueKey stays untouched.
-  Widget _buildCard(TowerType type, double cardHeight) {
+  Widget _buildCard(Character character, double cardHeight) {
     final card = _TowerBuildCard(
-      type: type,
+      character: character,
+      characterLevel: widget.squadLevels[character] ?? 1,
       cardHeight: cardHeight,
       phase: widget.phase,
       gold: widget.gold,
-      unlocked: widget.unlockedTowerTypes.contains(type),
+      deployed: widget.deployedCharacters.contains(character),
       onPlaceTower: widget.onPlaceTower,
-      onDragStarted: () => _handleDragStarted(type),
-      onDragUpdate: (position) => _handleDragUpdate(type, position),
-      onDragEnded: () => _handleDragEnded(type),
-      onDragCanceled: () => _handleDragCanceled(type),
-      onPointerUp: (position) => _handlePointerUp(type, position),
+      onDragStarted: () => _handleDragStarted(character),
+      onDragUpdate: (position) => _handleDragUpdate(character, position),
+      onDragEnded: () => _handleDragEnded(character),
+      onDragCanceled: () => _handleDragCanceled(character),
+      onPointerUp: (position) => _handlePointerUp(character, position),
     );
     final anchor = widget.towerCardGuideAnchor;
-    if (anchor == null || type != anchor.type) return card;
+    if (anchor == null || character != anchor.character) return card;
     return KeyedSubtree(key: anchor.anchorKey, child: card);
   }
 
   /// Each card owns its recognizer, so `maxSimultaneousDrags: 1` cannot stop
   /// a second finger starting a drag on a different card. Every handler is
-  /// gated on [type] matching [_activeDraggedType]: a second card's drag
-  /// still animates its ghost but emits no events, so it can never overwrite
-  /// the airborne preview or commit the wrong tower.
-  void _handleDragStarted(TowerType type) {
-    if (_activeDraggedType != null) return;
+  /// gated on [character] matching [_activeDraggedCharacter]: a second card's
+  /// drag still animates its ghost but emits no events, so it can never
+  /// overwrite the airborne preview or commit the wrong member.
+  void _handleDragStarted(Character character) {
+    if (_activeDraggedCharacter != null) return;
     setState(() {
-      _activeDraggedType = type;
+      _activeDraggedCharacter = character;
       _latestGlobalPointer = null;
     });
-    _emit(TowerPlacementPreviewBegin(type));
+    _emit(TowerPlacementPreviewBegin(character));
   }
 
-  void _handleDragUpdate(TowerType type, Offset globalPosition) {
-    if (_activeDraggedType != type) return;
+  void _handleDragUpdate(Character character, Offset globalPosition) {
+    if (_activeDraggedCharacter != character) return;
     _latestGlobalPointer = globalPosition;
     _emit(TowerPlacementPreviewUpdate(globalPosition));
   }
@@ -958,19 +969,21 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   /// drag end, ahead of the deferred settle. Only recorded once updates have
   /// streamed: a release that never moved stays a cancel, never a commit at
   /// the card's own position.
-  void _handlePointerUp(TowerType type, Offset position) {
-    if (_activeDraggedType != type || _latestGlobalPointer == null) return;
+  void _handlePointerUp(Character character, Offset position) {
+    if (_activeDraggedCharacter != character || _latestGlobalPointer == null) {
+      return;
+    }
     _latestGlobalPointer = position;
   }
 
-  void _handleDragEnded(TowerType type) {
-    if (_activeDraggedType != type) return;
+  void _handleDragEnded(Character character) {
+    if (_activeDraggedCharacter != character) return;
     // Settle one microtask later so the paired onPointerUp — dispatched
     // synchronously right after this callback — can supply the true release
     // coordinate before the commit reads it.
     scheduleMicrotask(() {
-      if (!mounted || _activeDraggedType != type) return;
-      setState(() => _activeDraggedType = null);
+      if (!mounted || _activeDraggedCharacter != character) return;
+      setState(() => _activeDraggedCharacter = null);
       final pointer = _latestGlobalPointer;
       _latestGlobalPointer = null;
       if (pointer != null) {
@@ -985,12 +998,12 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
   /// notification shade, app switcher, or rail unmount). This SDK has no
   /// onDragCancel callback and surfaces cancels as onDragEnd — the raw
   /// pointer cancel preempts it here, and the trailing drag end is ignored
-  /// by the [type] gate because the active type is already cleared.
+  /// by the [character] gate because the active member is already cleared.
   /// Never commits at the last pointer — always cancels the preview.
-  void _handleDragCanceled(TowerType type) {
-    if (_activeDraggedType != type) return;
+  void _handleDragCanceled(Character character) {
+    if (_activeDraggedCharacter != character) return;
     setState(() {
-      _activeDraggedType = null;
+      _activeDraggedCharacter = null;
       _latestGlobalPointer = null;
     });
     _emit(TowerPlacementPreviewCancel());
@@ -1011,17 +1024,17 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
         height: cardHeight + 12,
         child: Stack(
           children: [
-            // Eight fixed cards: one eager Row in a scroll view. Every card
-            // is always built, so the guide can anchor and reveal any card
-            // (even offscreen) — lazy viewport items could not. The padding
-            // stays INSIDE the scrollable: outside it clips cards 14px from
-            // the screen edge and swallows drags that start in the strip.
-            // Each card keeps what ListView supplied for free: an indexed
-            // semantics node and its own repaint boundary, while
-            // semanticChildCount restores the "of 8" collection size a
-            // SingleChildScrollView cannot announce ("item N of 8").
+            // One card per squad member, in order: one eager Row in a
+            // scroll view. Every card is always built, so the guide can
+            // anchor and reveal any card (even offscreen) — lazy viewport
+            // items could not. The padding stays INSIDE the scrollable:
+            // outside it clips cards 14px from the screen edge and swallows
+            // drags that start in the strip. Each card keeps what ListView
+            // supplied for free: an indexed semantics node and its own
+            // repaint boundary, while semanticChildCount restores the "of N"
+            // collection size a SingleChildScrollView cannot announce.
             CustomScrollView(
-              semanticChildCount: TowerType.values.length,
+              semanticChildCount: widget.squad.length,
               scrollDirection: Axis.horizontal,
               slivers: [
                 SliverPadding(
@@ -1032,13 +1045,13 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
                   sliver: SliverToBoxAdapter(
                     child: Row(
                       children: [
-                        for (final (index, type)
-                            in TowerType.values.indexed) ...[
+                        for (final (index, character)
+                            in widget.squad.indexed) ...[
                           if (index > 0) const SizedBox(width: 8),
                           RepaintBoundary(
                             child: IndexedSemantics(
                               index: index,
-                              child: _buildCard(type, cardHeight),
+                              child: _buildCard(character, cardHeight),
                             ),
                           ),
                         ],
@@ -1050,7 +1063,7 @@ class _TowerBuildRailState extends State<TowerBuildRail> {
             ),
             // 1e treatment: the rail reads DROP TO BUILD while a long-press
             // drag is airborne. Overlay only — the rail's height never shifts.
-            if (_activeDraggedType != null)
+            if (_activeDraggedCharacter != null)
               Positioned(
                 left: 0,
                 right: 0,
@@ -1122,11 +1135,12 @@ double _largeTextTowerCostSize(TextScaler scaler) => 10 + 6 / scaler.scale(1);
 
 class _TowerBuildCard extends StatelessWidget {
   const _TowerBuildCard({
-    required this.type,
+    required this.character,
+    required this.characterLevel,
     required this.cardHeight,
     required this.phase,
     required this.gold,
-    required this.unlocked,
+    required this.deployed,
     required this.onPlaceTower,
     this.onDragStarted,
     this.onDragUpdate,
@@ -1135,12 +1149,17 @@ class _TowerBuildCard extends StatelessWidget {
     this.onPointerUp,
   });
 
-  final TowerType type;
+  final Character character;
+
+  /// The member's persistent profile level, shown on the card.
+  final int characterLevel;
   final double cardHeight;
   final GamePhase phase;
   final int gold;
-  final bool unlocked;
-  final ValueChanged<TowerType> onPlaceTower;
+
+  /// Whether this member is already on the field — one deployment each.
+  final bool deployed;
+  final ValueChanged<Character> onPlaceTower;
 
   /// Long-press drag wiring. Only invoked for eligible cards (build phase +
   /// unlocked); affordability stays authority-driven (game validation).
@@ -1163,13 +1182,13 @@ class _TowerBuildCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stats = GameBalance.towerStats(type, level: 1);
+    final stats = GameBalance.towerStats(character.style, level: 1);
     final affordable = gold >= stats.cost;
-    final canAttempt = phase == GamePhase.build && unlocked;
+    final canAttempt = phase == GamePhase.build && !deployed;
     final uiTheme = OrionUiTheme.of(context);
     final cardLabel = _cardLabel(stats, affordable);
-    final onTap = canAttempt ? () => onPlaceTower(type) : null;
-    final accent = !unlocked
+    final onTap = canAttempt ? () => onPlaceTower(character) : null;
+    final accent = deployed
         ? uiTheme.frameSteel
         : affordable
         ? uiTheme.systemCyan
@@ -1179,7 +1198,7 @@ class _TowerBuildCard extends StatelessWidget {
     final textScaler = requestedScaler;
     final scaleFactor = textScaler.scale(1);
     final sprite = OrionAtlasSprite(
-      art: OrionArt.tower(type),
+      art: OrionArt.tower(character.style),
       size: const Size(58, 58),
     );
     final nameStyle = OrionTypography.microLabel(
@@ -1188,7 +1207,7 @@ class _TowerBuildCard extends StatelessWidget {
     );
     final priceStyle = OrionTypography.readout(
       size: compact ? _largeTextTowerCostSize(textScaler) : 14,
-      color: !unlocked
+      color: deployed
           ? uiTheme.textMuted
           : affordable
           ? uiTheme.creditGold
@@ -1214,7 +1233,7 @@ class _TowerBuildCard extends StatelessWidget {
             baseWidth,
             58.0 +
                 math.max(
-                  textWidth(type.label.toUpperCase(), nameStyle),
+                  textWidth(character.displayName.toUpperCase(), nameStyle),
                   textWidth('${stats.cost}', priceStyle),
                 ),
           )
@@ -1226,7 +1245,7 @@ class _TowerBuildCard extends StatelessWidget {
         children: [
           Opacity(
             opacity: affordable ? 1 : 0.48,
-            child: unlocked
+            child: !deployed
                 ? sprite
                 : ColorFiltered(
                     colorFilter: const ColorFilter.matrix(<double>[
@@ -1254,8 +1273,12 @@ class _TowerBuildCard extends StatelessWidget {
                     child: sprite,
                   ),
           ),
-          if (!unlocked)
-            Icon(Icons.lock_outline, size: 17, color: uiTheme.textMuted),
+          if (deployed)
+            Icon(
+              Icons.check_circle_outline,
+              size: 17,
+              color: uiTheme.textMuted,
+            ),
         ],
       ),
     );
@@ -1266,12 +1289,24 @@ class _TowerBuildCard extends StatelessWidget {
       style: priceStyle,
     );
     final name = Text(
-      type.label.toUpperCase(),
+      character.displayName.toUpperCase(),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
       textScaler: textScaler,
       style: nameStyle,
+    );
+    // Persistent level is a corner badge so a 3x scale can never squeeze the
+    // member's name or add a third card row.
+    final levelBadge = Positioned(
+      top: 2,
+      right: 4,
+      child: Text(
+        'LV.$characterLevel',
+        maxLines: 1,
+        textScaler: textScaler,
+        style: priceStyle,
+      ),
     );
 
     final card = Semantics(
@@ -1281,7 +1316,7 @@ class _TowerBuildCard extends StatelessWidget {
       onTap: onTap,
       excludeSemantics: true,
       child: SizedBox(
-        key: ValueKey('tower-card-${type.name}'),
+        key: ValueKey('tower-card-${character.name}'),
         width: cardWidth,
         height: cardHeight,
         child: OrionSurface(
@@ -1297,32 +1332,44 @@ class _TowerBuildCard extends StatelessWidget {
               highlightShape: BoxShape.rectangle,
               splashColor: accent.withValues(alpha: 0.18),
               highlightColor: accent.withValues(alpha: 0.10),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 2, right: 2, bottom: 6),
-                child: compact
-                    ? Row(
-                        children: [
-                          SizedBox(width: 42, child: art),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [name, price],
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        mainAxisAlignment: MainAxisAlignment.end,
-                        children: [
-                          Flexible(child: art),
-                          const SizedBox(height: 2),
-                          price,
-                          const SizedBox(height: 1),
-                          name,
-                        ],
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Padding(
+                      padding: const EdgeInsets.only(
+                        left: 2,
+                        right: 2,
+                        bottom: 6,
                       ),
+                      child: compact
+                          ? Row(
+                              children: [
+                                SizedBox(width: 42, child: art),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [name, price],
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Flexible(child: art),
+                                const SizedBox(height: 2),
+                                price,
+                                const SizedBox(height: 1),
+                                name,
+                              ],
+                            ),
+                    ),
+                  ),
+                  levelBadge,
+                ],
               ),
             ),
           ),
@@ -1330,8 +1377,8 @@ class _TowerBuildCard extends StatelessWidget {
       ),
     );
 
-    // Locked or wrong-phase cards never begin a preview; affordability stays
-    // authority-driven (the game denies on validate/place).
+    // Deployed or wrong-phase cards never begin a preview; affordability
+    // stays authority-driven (the game denies on validate/place).
     if (!canAttempt) {
       return card;
     }
@@ -1347,8 +1394,8 @@ class _TowerBuildCard extends StatelessWidget {
     return Listener(
       onPointerCancel: (_) => onDragCanceled?.call(),
       onPointerUp: (event) => onPointerUp?.call(event.position),
-      child: LongPressDraggable<TowerType>(
-        data: type,
+      child: LongPressDraggable<Character>(
+        data: character,
         // Per-card cap only: it stops two drags on THIS card. A second finger
         // on a different card still starts a drag — the rail gates those
         // events on the active type so they can never reach the preview.
@@ -1368,7 +1415,7 @@ class _TowerBuildCard extends StatelessWidget {
   /// the real need instead of pretending placement is allowed.
   Widget _buildDragFeedback(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final stats = GameBalance.towerStats(type, level: 1);
+    final stats = GameBalance.towerStats(character.style, level: 1);
     final affordable = gold >= stats.cost;
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -1384,7 +1431,7 @@ class _TowerBuildCard extends StatelessWidget {
             ],
           ),
           child: OrionAtlasSprite(
-            art: OrionArt.tower(type),
+            art: OrionArt.tower(character.style),
             size: const Size(64, 64),
           ),
         ),
@@ -1437,11 +1484,10 @@ class _TowerBuildCard extends StatelessWidget {
   }
 
   String _cardLabel(TowerStats stats, bool affordable) {
-    final state = unlocked
-        ? 'unlocked'
-        : 'locked until wave ${GameBalance.towerUnlockWave(type)}';
+    final state = deployed ? 'already deployed' : 'ready';
     final affordability = affordable ? 'affordable' : 'unaffordable';
-    return '${type.label}, $state, cost ${stats.cost}, $affordability, '
-        'place on selected cell';
+    return '${character.displayName} level $characterLevel '
+        '(${character.style.label}), $state, cost ${stats.cost}, '
+        '$affordability, place on selected cell';
   }
 }

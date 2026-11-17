@@ -23,6 +23,7 @@ class GameSession {
     int? baseHealth,
     Iterable<RunModuleId>? availableRunModules,
     ModuleOfferPicker? offerPicker,
+    Map<Character, int>? squad,
   }) {
     final resolvedStage = stage ?? OrionCampaign.stageOne;
     final resolvedGold = gold ?? campaignModifiers.adjustedStartingGold;
@@ -40,8 +41,17 @@ class GameSession {
       startingBaseHealth: resolvedBaseHealth,
       availableRunModules: availableRunModules ?? RunModuleUnlocks.baseModules,
       offerPicker: offerPicker ?? RandomModuleOfferPicker(),
+      squad: squad ?? _starterSquad,
     );
   }
+
+  /// Fresh-profile default when the caller supplies no squad (HPA-922):
+  /// Haruto and Mio at level 1, mirroring `CampaignSave.starterOwnedLevels`
+  /// without pulling the persistence layer into the rules package.
+  static const Map<Character, int> _starterSquad = {
+    Character.haruto: 1,
+    Character.mio: 1,
+  };
 
   GameSession._({
     required this.stage,
@@ -51,6 +61,7 @@ class GameSession {
     required int startingBaseHealth,
     required Iterable<RunModuleId> availableRunModules,
     required ModuleOfferPicker offerPicker,
+    required Map<Character, int> squad,
   }) : _campaignModifiers = campaignModifiers,
        _startingGold = startingGold,
        _startingBaseHealth = startingBaseHealth,
@@ -59,6 +70,7 @@ class GameSession {
        ),
        _gold = startingGold,
        _baseHealth = startingBaseHealth,
+       _squad = Map<Character, int>.unmodifiable(squad),
        _offerPicker = offerPicker {
     if (stage.waves.isEmpty) {
       throw ArgumentError.value(
@@ -72,6 +84,10 @@ class GameSession {
   final StageDefinition stage;
   final RunMode mode;
   final ModuleOfferPicker _offerPicker;
+
+  /// Selected squad members mapped to their persistent profile level,
+  /// insertion-ordered as the squad roster (HPA-922).
+  final Map<Character, int> _squad;
   final Map<GridPosition, PlacedTower> _towersByPosition = {};
   final List<RunModuleId> _acquiredRunModules = [];
   int _startingGold;
@@ -100,11 +116,25 @@ class GameSession {
   RunModuleOffer? get pendingRunModuleOffer => _pendingRunModuleOffer;
   List<RunModuleId> get acquiredRunModules =>
       List.unmodifiable(_acquiredRunModules);
+
+  /// The ordered squad roster launched with this battle — one entry per
+  /// member, in selection order.
+  List<Character> get squad => List.unmodifiable(_squad.keys);
+
+  /// The persistent level a squad member carries into this battle, or null
+  /// when the character is not in the squad.
+  int? squadLevel(Character character) => _squad[character];
+
+  /// Internal projection consumed by the scanner and module draft: the
+  /// squad's combat styles deduplicated in squad order. Deployment legality
+  /// itself is character-based — [validatePlacement] checks squad membership,
+  /// never this list.
   List<TowerType> get unlockedTowerTypes {
-    final nextWaveNumber = _waveIndex + 1;
-    return TowerType.values
-        .where((type) => GameBalance.towerUnlockWave(type) <= nextWaveNumber)
-        .toList(growable: false);
+    final styles = <TowerType>{};
+    for (final character in _squad.keys) {
+      styles.add(character.style);
+    }
+    return List.unmodifiable(styles);
   }
 
   WaveDefinition? get activeWave {
@@ -122,6 +152,10 @@ class GameSession {
       : 1;
 
   bool isTowerUnlocked(TowerType type) => unlockedTowerTypes.contains(type);
+
+  /// Whether [character] is currently deployed on the field.
+  bool isCharacterDeployed(Character character) =>
+      _towersByPosition.values.any((tower) => tower.character == character);
 
   bool get _canMutateBuild =>
       _phase == GamePhase.build && _pendingRunModuleOffer == null;
@@ -179,6 +213,8 @@ class GameSession {
       stageName: stage.name,
       stageLabel: stage.mapLabel,
       unlockedTowerTypes: unlockedTypes,
+      squad: squad,
+      squadLevels: _squad,
       stageModifiers: stage.modifiers,
       nextWavePreview: nextWavePreview,
       selectedCell: selectedCell,
@@ -202,15 +238,6 @@ class GameSession {
           selectedTower != null && selectedTower.canUpgrade
           ? resolveTowerStats(selectedTower.upgraded())
           : null,
-      selectedTowerSpecializationStats:
-          selectedTower != null && selectedTower.canSpecialize
-          ? {
-              for (final spec in GameBalance.specializationsFor(
-                selectedTower.type,
-              ))
-                spec: resolveTowerStats(selectedTower.specialized(spec)),
-            }
-          : const {},
       pendingRunModuleBeneficiaries: {
         for (final id in _pendingRunModuleOffer?.moduleIds ?? const [])
           id: RunModuleRules.beneficiaryCount(
@@ -230,7 +257,13 @@ class GameSession {
     );
   }
 
-  PlacementResult validatePlacement(GridPosition position, TowerType type) {
+  /// The sole placement-validity authority (HPA-922): phase, draft lock,
+  /// bounds, path and occupancy first, then squad membership, the
+  /// one-deployment-per-character rule, and finally gold.
+  PlacementResult validatePlacement(
+    GridPosition position,
+    Character character,
+  ) {
     if (_phase != GamePhase.build) {
       return const PlacementResult.denied(PlacementFailure.invalidPhase);
     }
@@ -246,33 +279,42 @@ class GameSession {
     if (_towersByPosition.containsKey(position)) {
       return const PlacementResult.denied(PlacementFailure.occupied);
     }
-    if (!isTowerUnlocked(type)) {
-      return const PlacementResult.denied(PlacementFailure.lockedTower);
+    if (!_squad.containsKey(character)) {
+      return const PlacementResult.denied(PlacementFailure.notInSquad);
     }
-    final cost = GameBalance.towerStats(type, level: 1).cost;
+    if (isCharacterDeployed(character)) {
+      return const PlacementResult.denied(PlacementFailure.alreadyDeployed);
+    }
+    final cost = GameBalance.towerStats(character.style, level: 1).cost;
     if (_gold < cost) {
       return const PlacementResult.denied(PlacementFailure.insufficientGold);
     }
     return const PlacementResult.allowed();
   }
 
-  PlacementResult placeTower(GridPosition position, TowerType type) {
-    final result = validatePlacement(position, type);
+  PlacementResult placeTower(GridPosition position, Character character) {
+    final result = validatePlacement(position, character);
     if (!result.isAllowed) {
       return result;
     }
 
-    final stats = GameBalance.towerStats(type, level: 1);
+    final stats = GameBalance.towerStats(character.style, level: 1);
     _gold -= stats.cost;
     _towersByPosition[position] = PlacedTower(
       id: _nextTowerId,
-      type: type,
+      character: character,
+      characterLevel: _squad[character]!,
       position: position,
     );
     _nextTowerId += 1;
     return result;
   }
 
+  /// The single three-tier progression action (HPA-922): tier 1→2 charges
+  /// [TowerStats.upgradeCost], tier 2→3 charges
+  /// [TowerStats.specializationCost] and applies the character's fixed
+  /// signature automatically. Price, gate and mutation all read the shared
+  /// [TowerStats.nextUpgradeCost] transition.
   bool upgradeTower(int towerId) {
     if (!_canMutateBuild) {
       return false;
@@ -289,37 +331,13 @@ class GameSession {
     }
 
     final stats = GameBalance.towerStats(tower.type, level: tower.level);
-    if (_gold < stats.upgradeCost) {
+    final cost = stats.nextUpgradeCost!;
+    if (_gold < cost) {
       return false;
     }
 
-    _gold -= stats.upgradeCost;
+    _gold -= cost;
     _towersByPosition[entry.key] = tower.upgraded();
-    return true;
-  }
-
-  bool specializeTower(int towerId, TowerSpecialization specialization) {
-    if (!_canMutateBuild) {
-      return false;
-    }
-
-    final entry = _findTowerEntry(towerId);
-    if (entry == null) {
-      return false;
-    }
-
-    final tower = entry.value;
-    if (!tower.canSpecialize || specialization.type != tower.type) {
-      return false;
-    }
-
-    final stats = GameBalance.towerStats(tower.type, level: 2);
-    if (_gold < stats.specializationCost) {
-      return false;
-    }
-
-    _gold -= stats.specializationCost;
-    _towersByPosition[entry.key] = tower.specialized(specialization);
     return true;
   }
 

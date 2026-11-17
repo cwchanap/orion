@@ -17,7 +17,6 @@ class TowerInspector extends StatelessWidget {
     super.key,
     required this.snapshot,
     required this.onUpgrade,
-    required this.onSpecialize,
     required this.onTargetingChanged,
     required this.onSell,
     required this.sellRefund,
@@ -26,7 +25,6 @@ class TowerInspector extends StatelessWidget {
 
   final GameSnapshot snapshot;
   final VoidCallback onUpgrade;
-  final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
   final VoidCallback onSell;
   final int sellRefund;
@@ -99,15 +97,18 @@ class TowerInspector extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             OrionTitle(
-                              tower.type.label,
+                              tower.character.displayName,
                               size: 22,
                               color: uiTheme.textPrimary,
                             ),
                             const SizedBox(height: 2),
                             OrionText.micro(
                               tower.specialization == null
-                                  ? 'Level ${tower.level}'
-                                  : 'Level ${tower.level} • '
+                                  ? 'Lv.${tower.characterLevel} • '
+                                        'Tier ${tower.level} '
+                                        '(${tower.type.label})'
+                                  : 'Lv.${tower.characterLevel} • '
+                                        'Tier ${tower.level} • '
                                         '${tower.specialization!.label}',
                               color: uiTheme.textMuted,
                               size: 10,
@@ -137,7 +138,6 @@ class TowerInspector extends StatelessWidget {
                       child: _InspectorBody(
                         snapshot: snapshot,
                         tower: tower,
-                        onSpecialize: onSpecialize,
                         onTargetingChanged: onTargetingChanged,
                       ),
                     ),
@@ -193,13 +193,11 @@ class _InspectorBody extends StatelessWidget {
   const _InspectorBody({
     required this.snapshot,
     required this.tower,
-    required this.onSpecialize,
     required this.onTargetingChanged,
   });
 
   final GameSnapshot snapshot;
   final PlacedTower tower;
-  final ValueChanged<TowerSpecialization> onSpecialize;
   final ValueChanged<TowerTargetingMode> onTargetingChanged;
 
   @override
@@ -256,7 +254,6 @@ class _InspectorBody extends StatelessWidget {
           tower: tower,
           stats: stats,
           canMutate: canMutate,
-          onSpecialize: onSpecialize,
         ),
       ],
     );
@@ -379,18 +376,15 @@ String _spokenRows(List<_PreviewRow> rows) => rows
     .join('. ');
 
 class _StatPreview extends StatelessWidget {
-  const _StatPreview({super.key, required this.rows, this.centered = false});
+  const _StatPreview({super.key, required this.rows});
 
   final List<_PreviewRow> rows;
-  final bool centered;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     return Column(
-      crossAxisAlignment: centered
-          ? CrossAxisAlignment.center
-          : CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         for (final row in rows)
@@ -415,7 +409,7 @@ class _StatPreview extends StatelessWidget {
                   ),
                 ],
               ),
-              textAlign: centered ? TextAlign.center : TextAlign.start,
+              textAlign: TextAlign.start,
             ),
           ),
       ],
@@ -521,9 +515,8 @@ class _ProgressionFooter extends StatelessWidget {
         height: 48,
       );
     } else if (tower.canUpgrade) {
-      final cost = stats?.upgradeCost;
-      final enabled =
-          canMutate && stats != null && snapshot.gold >= stats.upgradeCost;
+      final cost = stats?.nextUpgradeCost;
+      final enabled = canMutate && cost != null && snapshot.gold >= cost;
       final label = cost == null ? 'Upgrade' : 'Upgrade $cost';
       action = Semantics(
         key: const ValueKey('tower-upgrade'),
@@ -563,24 +556,40 @@ class _ProgressionActions extends StatelessWidget {
     required this.tower,
     required this.stats,
     required this.canMutate,
-    required this.onSpecialize,
   });
 
   final GameSnapshot snapshot;
   final PlacedTower tower;
   final TowerStats? stats;
   final bool canMutate;
-  final ValueChanged<TowerSpecialization> onSpecialize;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final character = tower.character;
+
+    // Tier 3 reached: the fixed signature is already on the tower — show it
+    // read-only. There is no specialization choice.
     if (tower.isMaxLevel) {
-      return const SizedBox.shrink();
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          OrionText.micro('SIGNATURE', color: uiTheme.textMuted, size: 11),
+          const SizedBox(height: 6),
+          _SignaturePanel(
+            character: character,
+            body: '${character.signature.label} — ${character.signature.role}',
+          ),
+        ],
+      );
     }
 
     final resolvedStats = stats;
     if (tower.canUpgrade) {
+      // Tier 2 → 3 applies the member's fixed signature automatically, so
+      // the shared upgrade preview IS the signature preview.
+      final isSignatureStep = tower.level == 2;
       final candidate = snapshot.selectedTowerUpgradeStats;
       final rows = resolvedStats == null || candidate == null
           ? const <_PreviewRow>[]
@@ -590,14 +599,26 @@ class _ProgressionActions extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           OrionText.micro(
-            'UPGRADE - LV ${tower.level + 1}',
+            isSignatureStep
+                ? 'SIGNATURE - TIER 3'
+                : 'UPGRADE - TIER ${tower.level + 1}',
             color: uiTheme.textMuted,
             size: 11,
           ),
+          if (isSignatureStep) ...[
+            const SizedBox(height: 6),
+            _SignaturePanel(
+              character: character,
+              body:
+                  '${character.signature.label} — ${character.signature.role}',
+            ),
+          ],
           if (rows.isNotEmpty) ...[
             const SizedBox(height: 4),
             Semantics(
-              label: 'Upgrade preview. ${_spokenRows(rows)}',
+              label:
+                  '${isSignatureStep ? 'Signature' : 'Upgrade'} preview. '
+                  '${_spokenRows(rows)}',
               readOnly: true,
               container: true,
               excludeSemantics: true,
@@ -611,149 +632,70 @@ class _ProgressionActions extends StatelessWidget {
       );
     }
 
-    final cost = resolvedStats?.specializationCost;
-    final enabled =
-        canMutate &&
-        resolvedStats != null &&
-        snapshot.gold >= resolvedStats.specializationCost;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        OrionText.micro(
-          'SPECIALIZE - LV ${tower.level + 1}',
-          color: uiTheme.textMuted,
-          size: 11,
-        ),
-        const SizedBox(height: 6),
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final (index, specialization)
-                in GameBalance.specializationsFor(tower.type).indexed) ...[
-              if (index > 0) const SizedBox(width: 8),
-              Expanded(
-                child: _SpecializationCard(
-                  towerType: tower.type,
-                  specialization: specialization,
-                  currentStats: resolvedStats,
-                  candidateStats:
-                      snapshot.selectedTowerSpecializationStats[specialization],
-                  cost: cost,
-                  enabled: enabled,
-                  onSpecialize: onSpecialize,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ],
-    );
+    return const SizedBox.shrink();
   }
 }
 
-class _SpecializationCard extends StatelessWidget {
-  const _SpecializationCard({
-    required this.towerType,
-    required this.specialization,
-    required this.currentStats,
-    required this.candidateStats,
-    required this.cost,
-    required this.enabled,
-    required this.onSpecialize,
-  });
+/// Read-only panel describing a member's fixed tier-3 signature — shown both
+/// as the tier-2→3 preview and as the applied state on a maxed tower.
+class _SignaturePanel extends StatelessWidget {
+  const _SignaturePanel({required this.character, required this.body});
 
-  final TowerType towerType;
-  final TowerSpecialization specialization;
-  final TowerStats? currentStats;
-  final TowerStats? candidateStats;
-  final int? cost;
-  final bool enabled;
-  final ValueChanged<TowerSpecialization> onSpecialize;
+  final Character character;
+  final String body;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final current = currentStats;
-    final candidate = candidateStats;
-    final rows = current == null || candidate == null
-        ? const <_PreviewRow>[]
-        : _previewRows(current, candidate);
-    final title = cost == null
-        ? specialization.label
-        : '${specialization.label} $cost';
     return Semantics(
-      key: ValueKey('tower-specialization-${specialization.name}'),
-      button: true,
-      enabled: enabled,
-      onTap: enabled ? () => onSpecialize(specialization) : null,
+      key: ValueKey('tower-signature-${character.signature.name}'),
+      readOnly: true,
+      container: true,
       excludeSemantics: true,
-      label: [
-        '$title. ${specialization.role}',
-        if (rows.isNotEmpty) _spokenRows(rows),
-      ].join(' '),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: enabled ? () => onSpecialize(specialization) : null,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-          decoration: BoxDecoration(
-            color: uiTheme.panelRaised.withValues(alpha: 0.9),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: enabled
-                  ? uiTheme.systemViolet.withValues(alpha: 0.55)
-                  : uiTheme.frameSteel.withValues(alpha: 0.45),
+      label:
+          '${character.displayName}\'s signature '
+          '${character.signatureName}: $body',
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 10),
+        decoration: BoxDecoration(
+          color: uiTheme.panelRaised.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: uiTheme.systemViolet.withValues(alpha: 0.45),
+          ),
+        ),
+        child: Row(
+          children: [
+            OrionAtlasSprite(
+              art: OrionArt.specialization(character.signature),
+              size: const Size(48, 48),
             ),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              OrionAtlasSprite(
-                art: OrionArt.specialization(specialization),
-                size: const Size(62, 62),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                specialization.label,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: OrionTypography.microLabel(
-                  size: 11,
-                  color: uiTheme.systemViolet,
-                ),
-              ),
-              const SizedBox(height: 2),
-              if (cost != null)
-                Text(
-                  '$cost',
-                  style: OrionTypography.readout(
-                    size: 16,
-                    color: uiTheme.creditGold,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    character.signatureName.toUpperCase(),
+                    style: OrionTypography.microLabel(
+                      size: 11,
+                      color: uiTheme.systemViolet,
+                    ),
                   ),
-                ),
-              const SizedBox(height: 6),
-              Text(
-                specialization.role,
-                textAlign: TextAlign.center,
-                style: OrionTypography.microLabel(
-                  size: 10,
-                  color: uiTheme.textMuted,
-                ),
-              ),
-              if (rows.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                _StatPreview(
-                  key: ValueKey(
-                    'tower-specialization-preview-${specialization.name}',
+                  const SizedBox(height: 2),
+                  Text(
+                    body,
+                    style: OrionTypography.microLabel(
+                      size: 10,
+                      color: uiTheme.textMuted,
+                    ),
                   ),
-                  rows: rows,
-                  centered: true,
-                ),
-              ],
-            ],
-          ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

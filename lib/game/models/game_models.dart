@@ -298,7 +298,8 @@ enum PlacementFailure {
   pathBlocked,
   occupied,
   insufficientGold,
-  lockedTower,
+  notInSquad,
+  alreadyDeployed,
 }
 
 enum TowerTargetingMode {
@@ -448,8 +449,7 @@ class TowerStats {
   final double clusterBurstDamageMultiplier;
   final double clusterBurstRadius;
 
-  bool get canUpgrade => level == 1;
-  bool get canSpecialize => level == 2;
+  bool get canUpgrade => level < 3;
 
   /// The one authoritative price of the next battle-tier transition: tier 1→2
   /// costs [upgradeCost], tier 2→3 (signature) costs [specializationCost], and
@@ -684,58 +684,56 @@ class WavePreview {
       groups.where((g) => GameBalance.bosses.any((b) => b.name == g.label));
 }
 
+/// A deployed squad member (HPA-922). Identity is the [Character] plus its
+/// persistent [characterLevel]; the battle-tier progression lives in [level]
+/// (1–3), where tier 3 is always the character's fixed [Character.signature].
 class PlacedTower {
   const PlacedTower({
     required this.id,
-    required this.type,
+    required this.character,
     required this.position,
+    this.characterLevel = 1,
     this.level = 1,
-    this.specialization,
     this.targetingMode = TowerTargetingMode.first,
   });
 
   final int id;
-  final TowerType type;
+
+  /// The deployed squad member — one deployment per character per battle.
+  final Character character;
+
+  /// The character's persistent profile level, scaling damage channels.
+  final int characterLevel;
   final GridPosition position;
+
+  /// Battle tier: 1 base, 2 upgraded, 3 signature. Distinct from
+  /// [characterLevel], which is the persistent profile progression.
   final int level;
-  final TowerSpecialization? specialization;
   final TowerTargetingMode targetingMode;
 
-  bool get canUpgrade => level == 1;
-  bool get canSpecialize => level == 2;
+  /// The combat style backing stats, modules and effects — derived from the
+  /// character so two squad members may share it while staying distinct.
+  TowerType get type => character.style;
+
+  /// The fixed tier-3 signature; null below tier 3 by construction.
+  TowerSpecialization? get specialization =>
+      level == 3 ? character.signature : null;
+
+  bool get canUpgrade => level < 3;
   bool get isMaxLevel => level >= 3;
 
+  /// One merged progression step: tier 1→2, then tier 2→3 which applies the
+  /// character's fixed signature automatically.
   PlacedTower upgraded() {
     if (!canUpgrade) {
-      throw StateError('Tower can only be upgraded from level 1');
+      throw StateError('Tower can only be upgraded below level 3');
     }
     return PlacedTower(
       id: id,
-      type: type,
+      character: character,
+      characterLevel: characterLevel,
       position: position,
-      level: 2,
-      specialization: specialization,
-      targetingMode: targetingMode,
-    );
-  }
-
-  PlacedTower specialized(TowerSpecialization specialization) {
-    if (!canSpecialize) {
-      throw StateError('Tower can only be specialized from level 2');
-    }
-    if (specialization.type != type) {
-      throw ArgumentError.value(
-        specialization,
-        'specialization',
-        'Specialization must match tower type',
-      );
-    }
-    return PlacedTower(
-      id: id,
-      type: type,
-      position: position,
-      level: 3,
-      specialization: specialization,
+      level: level + 1,
       targetingMode: targetingMode,
     );
   }
@@ -743,10 +741,10 @@ class PlacedTower {
   PlacedTower copyWith({TowerTargetingMode? targetingMode}) {
     return PlacedTower(
       id: id,
-      type: type,
+      character: character,
+      characterLevel: characterLevel,
       position: position,
       level: level,
-      specialization: specialization,
       targetingMode: targetingMode ?? this.targetingMode,
     );
   }
@@ -768,6 +766,11 @@ class GameSnapshot {
     required this.stageName,
     required this.stageLabel,
     required List<TowerType> unlockedTowerTypes,
+    List<Character> squad = const [Character.haruto, Character.mio],
+    Map<Character, int> squadLevels = const {
+      Character.haruto: 1,
+      Character.mio: 1,
+    },
     required List<StageModifier> stageModifiers,
     this.nextWavePreview,
     required this.selectedCell,
@@ -784,16 +787,13 @@ class GameSnapshot {
     List<PlacedTower> placedTowers = const [],
     this.selectedTowerStats,
     this.selectedTowerUpgradeStats,
-    Map<TowerSpecialization, TowerStats> selectedTowerSpecializationStats =
-        const {},
     Map<RunModuleId, int> pendingRunModuleBeneficiaries = const {},
   }) : unlockedTowerTypes = List.unmodifiable(unlockedTowerTypes),
+       squad = List.unmodifiable(squad),
+       squadLevels = Map.unmodifiable(squadLevels),
        stageModifiers = List.unmodifiable(stageModifiers),
        acquiredRunModules = List.unmodifiable(acquiredRunModules),
        placedTowers = List.unmodifiable(placedTowers),
-       selectedTowerSpecializationStats = Map.unmodifiable(
-         selectedTowerSpecializationStats,
-       ),
        pendingRunModuleBeneficiaries = Map.unmodifiable(
          pendingRunModuleBeneficiaries,
        );
@@ -812,6 +812,14 @@ class GameSnapshot {
   final String stageName;
   final String stageLabel;
   final List<TowerType> unlockedTowerTypes;
+
+  /// The ordered squad roster launched with this battle (HPA-922) — one
+  /// entry per member, preserved separately from the deduplicated
+  /// [unlockedTowerTypes] style list that scanner/module systems consume.
+  final List<Character> squad;
+
+  /// Persistent profile level per [squad] member, keyed by character.
+  final Map<Character, int> squadLevels;
   final List<StageModifier> stageModifiers;
   final WavePreview? nextWavePreview;
   final GridPosition? selectedCell;
@@ -837,17 +845,20 @@ class GameSnapshot {
   final List<PlacedTower> placedTowers;
   final TowerStats? selectedTowerStats;
 
-  /// Resolved Level 2 stats for [selectedTower]; non-null only while it can
-  /// still be upgraded.
+  /// Resolved stats for [selectedTower]'s next battle tier — Level 2 for a
+  /// tier-1 tower, or the fixed signature stats at tier 2→3. Non-null only
+  /// while the tower can still upgrade.
   final TowerStats? selectedTowerUpgradeStats;
-
-  /// Resolved stats for each specialization of [selectedTower]; non-empty
-  /// only while it can be specialized.
-  final Map<TowerSpecialization, TowerStats> selectedTowerSpecializationStats;
 
   /// Placed towers each offered Salvage Module would affect; non-empty only
   /// while a module draft is pending.
   final Map<RunModuleId, int> pendingRunModuleBeneficiaries;
+
+  /// Squad members currently on the field — the dock greys these out since
+  /// each character deploys at most once.
+  Set<Character> get deployedCharacters => {
+    for (final tower in placedTowers) tower.character,
+  };
 
   bool get canStartWave =>
       phase == GamePhase.build && pendingRunModuleOffer == null;

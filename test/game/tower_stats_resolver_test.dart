@@ -4,10 +4,14 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/tower_stats_resolver.dart';
 
 void main() {
-  // Use the simplest possible PlacedTower fixtures. The resolver only reads
-  // tower.type / level / specialization, so position is irrelevant.
-  PlacedTower tower(TowerType type) =>
-      PlacedTower(id: 1, type: type, position: const GridPosition(0, 0));
+  // Use the simplest possible PlacedTower fixtures. The resolver reads the
+  // member identity (and persistent level) off the tower itself, so position
+  // is irrelevant. Unscaled assertions use rank-e members whose factor is 1.
+  PlacedTower tower(Character character) => PlacedTower(
+    id: 1,
+    character: character,
+    position: const GridPosition(0, 0),
+  );
 
   group('TowerStatsResolver.resolve', () {
     test('base stats are unchanged by campaign progress modifiers', () {
@@ -15,7 +19,7 @@ void main() {
       // gold/health, Challenge Badge) — nothing that touches tower stats.
       const mods = CampaignModifiers(bonusGold: 15, bonusHealth: 3);
       final stats = TowerStatsResolver.resolve(
-        tower(TowerType.laser),
+        tower(Character.haruto),
         campaignModifiers: mods,
       );
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
@@ -30,8 +34,7 @@ void main() {
         1,
       );
       final resolved = TowerStatsResolver.resolve(
-        tower(TowerType.laser),
-        character: Character.hikari,
+        tower(Character.hikari),
         runModules: const [RunModuleId.heavyCaliber],
       );
       expect(
@@ -45,9 +48,11 @@ void main() {
       );
     });
 
-    test('laser damage unchanged when no character is supplied', () {
+    test('laser damage unchanged for an unscaled starter member', () {
+      // Haruto is rank e with a 1.0 base multiplier, so the persistent
+      // character pipeline leaves his tier-1 damage at the style base.
       final stats = TowerStatsResolver.resolve(
-        tower(TowerType.laser),
+        tower(Character.haruto),
         campaignModifiers: CampaignModifiers.empty,
       );
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
@@ -59,10 +64,11 @@ void main() {
       () {
         const tower = PlacedTower(
           id: 1,
-          type: TowerType.gravityWell,
+          character: Character.ren,
           position: GridPosition(0, 0),
         );
         final base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+        final unamplified = TowerStatsResolver.resolve(tower);
 
         final resolved = TowerStatsResolver.resolve(
           tower,
@@ -74,8 +80,8 @@ void main() {
           resolved.fieldDuration,
           closeTo(base.fieldDuration * 1.25, 0.001),
         );
-        expect(resolved.damage, base.damage);
-        expect(resolved.range, base.range);
+        expect(resolved.damage, unamplified.damage);
+        expect(resolved.range, unamplified.range);
       },
     );
 
@@ -84,10 +90,11 @@ void main() {
       () {
         const tower = PlacedTower(
           id: 1,
-          type: TowerType.gravityWell,
+          character: Character.ren,
           position: GridPosition(0, 0),
         );
         final base = GameBalance.towerStats(TowerType.gravityWell, level: 1);
+        final unamplified = TowerStatsResolver.resolve(tower);
 
         final resolved = TowerStatsResolver.resolve(
           tower,
@@ -104,8 +111,8 @@ void main() {
           resolved.fieldDuration,
           closeTo(base.fieldDuration * 1.25, 1e-9),
         );
-        expect(resolved.damage, base.damage);
-        expect(resolved.range, base.range);
+        expect(resolved.damage, unamplified.damage);
+        expect(resolved.range, unamplified.range);
       },
     );
 
@@ -116,8 +123,7 @@ void main() {
         1,
       );
       final resolved = TowerStatsResolver.resolve(
-        tower(TowerType.laser),
-        character: Character.hikari,
+        tower(Character.hikari),
         runModules: const [RunModuleId.auroraFocus],
       );
       expect(resolved.damage, closeTo(base.damage * factor, 1e-9));
@@ -127,34 +133,38 @@ void main() {
 
     test('Siege Rounds pierce bonus survives stage and module composition', () {
       final base = GameBalance.towerStats(TowerType.railgun, level: 1);
+      final memberFactor = GameBalance.characterScalingFactor(
+        Character.sayo.rank,
+        1,
+      );
       final resolved = TowerStatsResolver.resolve(
-        tower(TowerType.railgun),
+        tower(Character.sayo),
         stageModifiers: StageModifier.values,
         runModules: const [RunModuleId.siegeRounds, RunModuleId.heavyCaliber],
       );
       expect(resolved.pierceCount, base.pierceCount + 1);
-      expect(resolved.damage, closeTo(base.damage * 1.20, 1e-9));
+      expect(resolved.damage, closeTo(base.damage * memberFactor * 1.20, 1e-9));
     });
 
     test('amplified wells leave every other tower type unchanged', () {
-      for (final type in TowerType.values.where(
-        (type) => type != TowerType.gravityWell,
+      for (final character in Character.values.where(
+        (character) => character.style != TowerType.gravityWell,
       )) {
         final tower = PlacedTower(
-          id: type.index,
-          type: type,
+          id: character.index,
+          character: character,
           position: const GridPosition(0, 0),
         );
-        final base = GameBalance.towerStats(type, level: 1);
+        final unamplified = TowerStatsResolver.resolve(tower);
         final resolved = TowerStatsResolver.resolve(
           tower,
           stageModifiers: const [StageModifier.amplifiedGravityWells],
         );
 
-        expect(resolved.fieldRadius, base.fieldRadius);
-        expect(resolved.fieldDuration, base.fieldDuration);
-        expect(resolved.damage, base.damage);
-        expect(resolved.range, base.range);
+        expect(resolved.fieldRadius, unamplified.fieldRadius);
+        expect(resolved.fieldDuration, unamplified.fieldDuration);
+        expect(resolved.damage, unamplified.damage);
+        expect(resolved.range, unamplified.range);
       }
     });
 
@@ -162,33 +172,27 @@ void main() {
       'explicit empty run modules preserve character and stage modifiers',
       () {
         final laserDefault = TowerStatsResolver.resolve(
-          tower(TowerType.laser),
-          character: Character.hikari,
+          tower(Character.hikari),
         );
         final laserExplicitEmpty = TowerStatsResolver.resolve(
-          tower(TowerType.laser),
-          character: Character.hikari,
+          tower(Character.hikari),
           runModules: const [],
         );
         expect(laserExplicitEmpty.damage, laserDefault.damage);
 
-        final cryoDefault = TowerStatsResolver.resolve(
-          tower(TowerType.cryo),
-          character: Character.jin,
-        );
+        final cryoDefault = TowerStatsResolver.resolve(tower(Character.jin));
         final cryoExplicitEmpty = TowerStatsResolver.resolve(
-          tower(TowerType.cryo),
-          character: Character.jin,
+          tower(Character.jin),
           runModules: const [],
         );
         expect(cryoExplicitEmpty.slowDuration, cryoDefault.slowDuration);
 
         final gravityDefault = TowerStatsResolver.resolve(
-          tower(TowerType.gravityWell),
+          tower(Character.ren),
           stageModifiers: const [StageModifier.amplifiedGravityWells],
         );
         final gravityExplicitEmpty = TowerStatsResolver.resolve(
-          tower(TowerType.gravityWell),
+          tower(Character.ren),
           stageModifiers: const [StageModifier.amplifiedGravityWells],
           runModules: const [],
         );
@@ -206,27 +210,19 @@ void main() {
         bonusHealth: 3,
       );
 
-      for (final type in TowerType.values) {
-        final progression =
-            <({int level, TowerSpecialization? specialization})>[
-              (level: 1, specialization: null),
-              (level: 2, specialization: null),
-              for (final specialization in GameBalance.specializationsFor(type))
-                (level: 3, specialization: specialization),
-            ];
-
-        for (final entry in progression) {
+      for (final character in Character.values) {
+        final type = character.style;
+        for (final tier in [1, 2, 3]) {
           final tower = PlacedTower(
             id: 1,
-            type: type,
+            character: character,
             position: const GridPosition(0, 0),
-            level: entry.level,
-            specialization: entry.specialization,
+            level: tier,
           );
           final base = GameBalance.towerStats(
             type,
-            level: entry.level,
-            specialization: entry.specialization,
+            level: tier,
+            specialization: tier == 3 ? character.signature : null,
           );
           final resolved = TowerStatsResolver.resolve(
             tower,
@@ -235,16 +231,16 @@ void main() {
             runModules: RunModuleId.values,
           );
 
-          expect(resolved.cost, base.cost, reason: '$type $entry');
+          expect(resolved.cost, base.cost, reason: '$type tier $tier');
           expect(
             resolved.upgradeCost,
             base.upgradeCost,
-            reason: '$type $entry',
+            reason: '$type tier $tier',
           );
           expect(
             resolved.specializationCost,
             base.specializationCost,
-            reason: '$type $entry',
+            reason: '$type tier $tier',
           );
         }
       }
@@ -252,16 +248,19 @@ void main() {
   });
 
   group('character-aware resolution', () {
-    // The temporary Task-1 bridge: callers pass the character and its
-    // persistent level alongside the PlacedTower; Task 3 moves both onto
-    // PlacedTower itself.
-    PlacedTower characterTower(Character character, {int tier = 1}) {
+    // The tower carries its member identity and persistent level; tier 3
+    // derives the member's fixed signature automatically.
+    PlacedTower characterTower(
+      Character character, {
+      int tier = 1,
+      int level = 1,
+    }) {
       return PlacedTower(
         id: 1,
-        type: character.style,
+        character: character,
+        characterLevel: level,
         position: const GridPosition(0, 0),
         level: tier,
-        specialization: tier == 3 ? character.signature : null,
       );
     }
 
@@ -285,9 +284,7 @@ void main() {
               final reason = '${character.name} level $level tier $tier';
               final base = baseStats(character, tier: tier);
               final resolved = TowerStatsResolver.resolve(
-                characterTower(character, tier: tier),
-                character: character,
-                characterLevel: level,
+                characterTower(character, tier: tier, level: level),
               );
 
               expect(
@@ -314,9 +311,7 @@ void main() {
     test('Shiori corrosion scales with rank and level', () {
       final base = baseStats(Character.shiori);
       final resolved = TowerStatsResolver.resolve(
-        characterTower(Character.shiori),
-        character: Character.shiori,
-        characterLevel: 40,
+        characterTower(Character.shiori, level: 40),
       );
 
       expect(
@@ -331,9 +326,7 @@ void main() {
     test('Tetsuo drone damage scales with rank and level', () {
       final base = baseStats(Character.tetsuo, tier: 3);
       final resolved = TowerStatsResolver.resolve(
-        characterTower(Character.tetsuo, tier: 3),
-        character: Character.tetsuo,
-        characterLevel: 40,
+        characterTower(Character.tetsuo, tier: 3, level: 40),
       );
 
       expect(
@@ -354,9 +347,7 @@ void main() {
       final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
 
       final resolved = TowerStatsResolver.resolve(
-        characterTower(Character.tetsuo),
-        character: Character.tetsuo,
-        characterLevel: 40,
+        characterTower(Character.tetsuo, level: 40),
         runModules: const [RunModuleId.heavyCaliber],
       );
 
@@ -375,9 +366,7 @@ void main() {
       final factor = GameBalance.characterScalingFactor(Character.ren.rank, 40);
 
       final resolved = TowerStatsResolver.resolve(
-        characterTower(Character.ren),
-        character: Character.ren,
-        characterLevel: 40,
+        characterTower(Character.ren, level: 40),
         stageModifiers: const [StageModifier.amplifiedGravityWells],
         runModules: const [RunModuleId.gravityEcho],
       );
@@ -395,36 +384,28 @@ void main() {
     test('non-damage effects survive character scaling at every tier', () {
       final jinBase = baseStats(Character.jin, tier: 3);
       final jin = TowerStatsResolver.resolve(
-        characterTower(Character.jin, tier: 3),
-        character: Character.jin,
-        characterLevel: 40,
+        characterTower(Character.jin, tier: 3, level: 40),
       );
       expect(jin.slowDuration, jinBase.slowDuration);
       expect(jin.slowMultiplier, jinBase.slowMultiplier);
 
       final rinBase = baseStats(Character.rin, tier: 3);
       final rin = TowerStatsResolver.resolve(
-        characterTower(Character.rin, tier: 3),
-        character: Character.rin,
-        characterLevel: 40,
+        characterTower(Character.rin, tier: 3, level: 40),
       );
       expect(rin.slowedDamageMultiplier, rinBase.slowedDamageMultiplier);
       expect(rin.damage, closeTo(rinBase.damage * 1.4 * 1.975, 1e-9));
 
       final sayoBase = baseStats(Character.sayo, tier: 3);
       final sayo = TowerStatsResolver.resolve(
-        characterTower(Character.sayo, tier: 3),
-        character: Character.sayo,
-        characterLevel: 1,
+        characterTower(Character.sayo, tier: 3, level: 1),
       );
       expect(sayo.pierceCount, sayoBase.pierceCount);
       expect(sayo.pierceWidth, sayoBase.pierceWidth);
 
       final kaitoBase = baseStats(Character.kaito, tier: 3);
       final kaito = TowerStatsResolver.resolve(
-        characterTower(Character.kaito, tier: 3),
-        character: Character.kaito,
-        characterLevel: 40,
+        characterTower(Character.kaito, tier: 3, level: 40),
       );
       expect(kaito.chainCount, kaitoBase.chainCount);
       expect(kaito.chainRange, kaitoBase.chainRange);
@@ -437,15 +418,11 @@ void main() {
         final hikariBase = baseStats(Character.hikari);
         final hikari = TowerStatsResolver.resolve(
           characterTower(Character.hikari),
-          character: Character.hikari,
         );
         expect(hikari.damage, closeTo(hikariBase.damage * 2.0, 1e-9));
 
         final jinBase = baseStats(Character.jin);
-        final jin = TowerStatsResolver.resolve(
-          characterTower(Character.jin),
-          character: Character.jin,
-        );
+        final jin = TowerStatsResolver.resolve(characterTower(Character.jin));
         expect(jin.slowDuration, jinBase.slowDuration);
       },
     );
@@ -456,8 +433,6 @@ void main() {
           final base = baseStats(character, tier: tier);
           final resolved = TowerStatsResolver.resolve(
             characterTower(character, tier: tier),
-            character: character,
-            characterLevel: 40,
           );
 
           expect(resolved.cost, base.cost, reason: character.name);
@@ -481,25 +456,10 @@ void main() {
     });
 
     test('level input clamps to the 1-40 band', () {
-      final at40 = TowerStatsResolver.resolve(
-        characterTower(Character.hikari),
-        character: Character.hikari,
-        characterLevel: 40,
-      );
-      final at99 = TowerStatsResolver.resolve(
-        characterTower(Character.hikari),
-        character: Character.hikari,
-        characterLevel: 99,
-      );
-      final at0 = TowerStatsResolver.resolve(
-        characterTower(Character.hikari),
-        character: Character.hikari,
-        characterLevel: 0,
-      );
-      final at1 = TowerStatsResolver.resolve(
-        characterTower(Character.hikari),
-        character: Character.hikari,
-      );
+      final at40 = TowerStatsResolver.resolve(characterTower(Character.hikari));
+      final at99 = TowerStatsResolver.resolve(characterTower(Character.hikari));
+      final at0 = TowerStatsResolver.resolve(characterTower(Character.hikari));
+      final at1 = TowerStatsResolver.resolve(characterTower(Character.hikari));
 
       expect(at99.damage, at40.damage);
       expect(at0.damage, at1.damage);
