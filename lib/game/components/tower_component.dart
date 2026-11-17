@@ -45,7 +45,9 @@ class TowerComponent extends CircleComponent {
 
   /// The member's approved HPA-924 full-body chibi, preloaded for the active
   /// squad at game onLoad. `null` keeps the legacy socket/sheet rendering.
-  final Sprite? chibiSprite;
+  /// Mutable: a placement committed while the chibi was still in flight is
+  /// backfilled by the game once the sprite resolves.
+  Sprite? chibiSprite;
 
   final Paint _strokePaint = Paint()
     ..color = const Color(0xCCFFFFFF)
