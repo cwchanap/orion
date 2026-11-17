@@ -85,6 +85,42 @@ void main() {
     );
   });
 
+  test(
+    'module damage multiplies all three channels via scaleDamageChannels',
+    () {
+      // Character scaling and run modules share the one damage-channel helper
+      // so Shiori's corrosion and Tetsuo's drones can never drift out of the
+      // damage path.
+      final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+
+      for (final type in TowerType.values) {
+        for (final level in [1, 2]) {
+          final base = GameBalance.towerStats(type, level: level);
+          final resolved = RunModuleRules.applyTowerStats(base, const [
+            RunModuleId.heavyCaliber,
+          ]);
+          final expected = base.scaleDamageChannels(heavy.damageMultiplier);
+
+          expect(
+            resolved.damage,
+            closeTo(expected.damage, 1e-9),
+            reason: '${type.name} L$level damage',
+          );
+          expect(
+            resolved.corrosionDamagePerSecond,
+            closeTo(expected.corrosionDamagePerSecond, 1e-9),
+            reason: '${type.name} L$level corrosion',
+          );
+          expect(
+            resolved.droneDamage,
+            closeTo(expected.droneDamage, 1e-9),
+            reason: '${type.name} L$level droneDamage',
+          );
+        }
+      }
+    },
+  );
+
   test('applies Long Sight range to every tower', () {
     final laser = GameBalance.towerStats(TowerType.laser, level: 1);
     final longSight = runModuleDefinition(RunModuleId.longSight);

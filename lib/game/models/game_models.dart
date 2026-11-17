@@ -80,6 +80,180 @@ enum TowerSpecialization {
   };
 }
 
+/// Persistent roster rank, ordered weakest to strongest. The damage-channel
+/// multiplier for each rank lives in [GameBalance.characterRankMultipliers].
+enum CharacterRank {
+  e('E'),
+  d('D'),
+  c('C'),
+  b('B'),
+  a('A'),
+  s('S');
+
+  const CharacterRank(this.label);
+  final String label;
+}
+
+/// One of the twelve Last Hearth roster members (HPA-922). Each character is
+/// bound to a fixed [signature] specialization; its combat [style] is derived
+/// from `signature.type` so a character can never carry a mismatched style.
+/// [Character.values] is the Camp display order; [Character.name] is the
+/// stable lowercase save key and per-character art folder.
+enum Character {
+  hikari(
+    rank: CharacterRank.s,
+    fullName: 'Hikari Amatsu, Dawnbringer',
+    role: 'Prism laser vanguard',
+    bio:
+        'First light of the Last Hearth. Her split-beam volleys break the '
+        'front of every assault.',
+    signature: TowerSpecialization.prismLaser,
+    signatureName: 'Dawnbreak',
+  ),
+  jin(
+    rank: CharacterRank.s,
+    fullName: 'Jin Kamishiro, the Thawed One',
+    role: 'Deep-freeze controller',
+    bio:
+        'Pulled from the ice and still half-frozen, Jin locks whole columns '
+        'in place so the Hearth can breathe.',
+    signature: TowerSpecialization.deepFreeze,
+    signatureName: 'Absolute Zero',
+  ),
+  akane(
+    rank: CharacterRank.a,
+    fullName: 'Akane Hinomori',
+    role: 'Siege rocket bombardier',
+    bio:
+        "Keeper of the Hearth's biggest guns, Akane answers every armored "
+        'push with one overwhelming barrage.',
+    signature: TowerSpecialization.siegeRocket,
+    signatureName: 'Hearthfire',
+  ),
+  ren(
+    rank: CharacterRank.a,
+    fullName: 'Ren Kurosawa',
+    role: 'Gravity field anchor',
+    bio:
+        'A quiet tactician who bends the field itself, dragging attackers '
+        'into singularities they cannot escape.',
+    signature: TowerSpecialization.singularityWell,
+    signatureName: 'Crushing Field',
+  ),
+  elena(
+    rank: CharacterRank.b,
+    fullName: 'Elena Volkova',
+    role: 'Anti-armor railgunner',
+    bio:
+        'A marksman who reads plating like scripture; her magnetized rounds '
+        'find the seam in every hull.',
+    signature: TowerSpecialization.magneticRailgun,
+    signatureName: 'Heat Sight',
+  ),
+  shiori(
+    rank: CharacterRank.b,
+    fullName: 'Dr. Shiori Kusanagi',
+    role: 'Nanite corrosion specialist',
+    bio:
+        "The Hearth's resident chemist. Her dissolver swarms strip armor "
+        'molecule by molecule.',
+    signature: TowerSpecialization.dissolverNanites,
+    signatureName: 'Dissolving Serum',
+  ),
+  rin(
+    rank: CharacterRank.c,
+    fullName: 'Rin Fuyutsuki',
+    role: 'Frostbite skirmisher',
+    bio:
+        'Quick, cold and relentless — Rin punishes anything already slowed '
+        'by the winter line.',
+    signature: TowerSpecialization.frostbite,
+    signatureName: 'Frostbite',
+  ),
+  kaito(
+    rank: CharacterRank.c,
+    fullName: 'Kaito Narumi',
+    role: 'Storm chain gunner',
+    bio:
+        'A self-taught engineer whose relay coils arc lightning across '
+        'whole packs of drones.',
+    signature: TowerSpecialization.stormRelay,
+    signatureName: 'Live Wire',
+  ),
+  sayo(
+    rank: CharacterRank.d,
+    fullName: 'Sayo Kitami',
+    role: 'Piercing railgunner',
+    bio:
+        'Patient and precise, Sayo lines up shots that skewer an entire '
+        'column in one discharge.',
+    signature: TowerSpecialization.lanceRailgun,
+    signatureName: 'Through Shot',
+  ),
+  tetsuo(
+    rank: CharacterRank.d,
+    fullName: 'Tetsuo Kanda',
+    role: 'Drone bay handler',
+    bio:
+        'A salvage-yard tinkerer whose patched-together interceptors swarm '
+        'anything that slips the line.',
+    signature: TowerSpecialization.interceptorBay,
+    signatureName: 'Scrap Swarm',
+  ),
+  haruto(
+    rank: CharacterRank.e,
+    fullName: 'Haruto Sakaki',
+    role: 'Pulse laser gunner',
+    bio:
+        "One of the Hearth's newest defenders. Nothing fancy — a steady "
+        'volley that never misses twice.',
+    signature: TowerSpecialization.pulseLaser,
+    signatureName: 'Steady Volley',
+  ),
+  mio(
+    rank: CharacterRank.e,
+    fullName: 'Mio Tachibana',
+    role: 'Cluster rocket rocketeer',
+    bio:
+        "The Hearth's cook turned rocketeer; her cluster shells burst over "
+        'attackers like a kitchen flare.',
+    signature: TowerSpecialization.clusterRocket,
+    signatureName: 'Kitchen Fire',
+  );
+
+  const Character({
+    required this.rank,
+    required this.fullName,
+    required this.role,
+    required this.bio,
+    required this.signature,
+    required this.signatureName,
+  });
+
+  final CharacterRank rank;
+
+  /// Full roster name with epithet, used on the character sheet.
+  final String fullName;
+
+  /// One-line combat role shared by the Camp roster and character sheet.
+  final String role;
+  final String bio;
+
+  /// The fixed tier-3 specialization this character always deploys.
+  final TowerSpecialization signature;
+
+  /// Working skill name shown for [signature] in the UI.
+  final String signatureName;
+
+  /// The internal combat style backing this character's stats, modules and
+  /// effects — derived from the signature so it can never drift.
+  TowerType get style => signature.type;
+
+  /// Short given-name label for rosters and docks, derived from the stable
+  /// lowercase [name] key ('hikari' → 'Hikari').
+  String get displayName => name[0].toUpperCase() + name.substring(1);
+}
+
 enum EnemyTrait {
   armored('Armored'),
   shielded('Shielded'),
@@ -276,6 +450,28 @@ class TowerStats {
 
   bool get canUpgrade => level == 1;
   bool get canSpecialize => level == 2;
+
+  /// The one authoritative price of the next battle-tier transition: tier 1→2
+  /// costs [upgradeCost], tier 2→3 (signature) costs [specializationCost], and
+  /// a maxed tier 3 has no next cost. Callers must never read [upgradeCost]
+  /// when [level] is 2.
+  int? get nextUpgradeCost => switch (level) {
+    1 => upgradeCost,
+    2 => specializationCost,
+    _ => null,
+  };
+
+  /// Returns a copy with the three damage channels — [damage],
+  /// [corrosionDamagePerSecond] and [droneDamage] — multiplied by [factor].
+  /// Shared by character rank/level scaling and run-module damage effects so
+  /// every channel always scales together; all other fields are untouched.
+  TowerStats scaleDamageChannels(double factor) {
+    return copyWith(
+      damage: damage * factor,
+      corrosionDamagePerSecond: corrosionDamagePerSecond * factor,
+      droneDamage: droneDamage * factor,
+    );
+  }
 
   /// Returns a copy with overridden fields. Exposes the fields runtime stat
   /// resolvers need to mutate: `damage` and `slowDuration` for campaign tech
@@ -864,6 +1060,31 @@ class GameBalance {
 
   // Per-loop endless health/shield/regen multiplier on enemy stats.
   static const double endlessLoopHealthGrowth = 1.6;
+
+  // Character rank → damage-channel multipliers (HPA-922). Initial shared
+  // values; Task 4's headless balance pass may tune them.
+  static const Map<CharacterRank, double> characterRankMultipliers = {
+    CharacterRank.e: 1.0,
+    CharacterRank.d: 1.2,
+    CharacterRank.c: 1.4,
+    CharacterRank.b: 1.6,
+    CharacterRank.a: 1.8,
+    CharacterRank.s: 2.0,
+  };
+
+  // Damage-channel growth per persistent character level above 1.
+  static const double characterLevelGrowthPerLevel = 0.025;
+  static const int characterMaxLevel = 40;
+
+  /// Combined rank+level multiplier applied to a character's damage channels
+  /// (via [TowerStats.scaleDamageChannels]) before stage modifiers and run
+  /// modules: `rank * (1 + (level - 1) * growth)`. [level] is clamped to the
+  /// 1–[characterMaxLevel] persistent band.
+  static double characterScalingFactor(CharacterRank rank, int level) {
+    final clampedLevel = level.clamp(1, characterMaxLevel);
+    return characterRankMultipliers[rank]! *
+        (1 + (clampedLevel - 1) * characterLevelGrowthPerLevel);
+  }
 
   // Campaign tech-tree upgrade costs. Total is 20 (intentional 1-pt slack
   // below the 21-pt max medal rank: 7 stages × 3 rank). Tests assert this.

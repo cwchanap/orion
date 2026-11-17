@@ -300,4 +300,263 @@ void main() {
       }
     });
   });
+
+  group('character-aware resolution', () {
+    // The temporary Task-1 bridge: callers pass the character and its
+    // persistent level alongside the PlacedTower; Task 3 moves both onto
+    // PlacedTower itself.
+    PlacedTower characterTower(Character character, {int tier = 1}) {
+      return PlacedTower(
+        id: 1,
+        type: character.style,
+        position: const GridPosition(0, 0),
+        level: tier,
+        specialization: tier == 3 ? character.signature : null,
+      );
+    }
+
+    TowerStats baseStats(Character character, {int tier = 1}) =>
+        GameBalance.towerStats(
+          character.style,
+          level: tier,
+          specialization: tier == 3 ? character.signature : null,
+        );
+
+    test(
+      'every roster member scales all three damage channels at levels 1 and 40',
+      () {
+        for (final character in Character.values) {
+          for (final level in [1, 40]) {
+            final factor = GameBalance.characterScalingFactor(
+              character.rank,
+              level,
+            );
+            for (final tier in [1, 2, 3]) {
+              final reason = '${character.name} level $level tier $tier';
+              final base = baseStats(character, tier: tier);
+              final resolved = TowerStatsResolver.resolve(
+                characterTower(character, tier: tier),
+                character: character,
+                characterLevel: level,
+              );
+
+              expect(
+                resolved.damage,
+                closeTo(base.damage * factor, 1e-9),
+                reason: reason,
+              );
+              expect(
+                resolved.corrosionDamagePerSecond,
+                closeTo(base.corrosionDamagePerSecond * factor, 1e-9),
+                reason: reason,
+              );
+              expect(
+                resolved.droneDamage,
+                closeTo(base.droneDamage * factor, 1e-9),
+                reason: reason,
+              );
+            }
+          }
+        }
+      },
+    );
+
+    test('Shiori corrosion scales with rank and level', () {
+      final base = baseStats(Character.shiori);
+      final resolved = TowerStatsResolver.resolve(
+        characterTower(Character.shiori),
+        character: Character.shiori,
+        characterLevel: 40,
+      );
+
+      expect(
+        resolved.corrosionDamagePerSecond,
+        closeTo(base.corrosionDamagePerSecond * 1.6 * 1.975, 1e-9),
+      );
+      expect(resolved.damage, closeTo(base.damage * 1.6 * 1.975, 1e-9));
+      expect(resolved.armorShred, base.armorShred);
+      expect(resolved.corrosionDuration, base.corrosionDuration);
+    });
+
+    test('Tetsuo drone damage scales with rank and level', () {
+      final base = baseStats(Character.tetsuo, tier: 3);
+      final resolved = TowerStatsResolver.resolve(
+        characterTower(Character.tetsuo, tier: 3),
+        character: Character.tetsuo,
+        characterLevel: 40,
+      );
+
+      expect(
+        resolved.droneDamage,
+        closeTo(base.droneDamage * 1.2 * 1.975, 1e-9),
+      );
+      expect(resolved.droneCount, base.droneCount);
+      expect(resolved.maxActiveDrones, base.maxActiveDrones);
+      expect(resolved.droneAttackInterval, base.droneAttackInterval);
+    });
+
+    test('character scaling applies before run modules', () {
+      final base = baseStats(Character.tetsuo);
+      final factor = GameBalance.characterScalingFactor(
+        Character.tetsuo.rank,
+        40,
+      );
+      final heavy = runModuleDefinition(RunModuleId.heavyCaliber);
+
+      final resolved = TowerStatsResolver.resolve(
+        characterTower(Character.tetsuo),
+        character: Character.tetsuo,
+        characterLevel: 40,
+        runModules: const [RunModuleId.heavyCaliber],
+      );
+
+      expect(
+        resolved.droneDamage,
+        closeTo(base.droneDamage * factor * heavy.damageMultiplier, 1e-9),
+      );
+      expect(
+        resolved.fireInterval,
+        closeTo(base.fireInterval * heavy.fireIntervalMultiplier, 1e-9),
+      );
+    });
+
+    test('character scaling composes with stage field amplification', () {
+      final base = baseStats(Character.ren);
+      final factor = GameBalance.characterScalingFactor(Character.ren.rank, 40);
+
+      final resolved = TowerStatsResolver.resolve(
+        characterTower(Character.ren),
+        character: Character.ren,
+        characterLevel: 40,
+        stageModifiers: const [StageModifier.amplifiedGravityWells],
+        runModules: const [RunModuleId.gravityEcho],
+      );
+
+      // The rank/level factor never leaks into field channels; stage then
+      // module multipliers compose on top of the untouched base radius.
+      expect(
+        resolved.fieldRadius,
+        closeTo(base.fieldRadius * 1.20 * 1.15, 1e-9),
+      );
+      expect(resolved.fieldDuration, closeTo(base.fieldDuration * 1.25, 1e-9));
+      expect(resolved.damage, closeTo(base.damage * factor, 1e-9));
+    });
+
+    test('non-damage effects survive character scaling at every tier', () {
+      final jinBase = baseStats(Character.jin, tier: 3);
+      final jin = TowerStatsResolver.resolve(
+        characterTower(Character.jin, tier: 3),
+        character: Character.jin,
+        characterLevel: 40,
+      );
+      expect(jin.slowDuration, jinBase.slowDuration);
+      expect(jin.slowMultiplier, jinBase.slowMultiplier);
+
+      final rinBase = baseStats(Character.rin, tier: 3);
+      final rin = TowerStatsResolver.resolve(
+        characterTower(Character.rin, tier: 3),
+        character: Character.rin,
+        characterLevel: 40,
+      );
+      expect(rin.slowedDamageMultiplier, rinBase.slowedDamageMultiplier);
+      expect(rin.damage, closeTo(rinBase.damage * 1.4 * 1.975, 1e-9));
+
+      final sayoBase = baseStats(Character.sayo, tier: 3);
+      final sayo = TowerStatsResolver.resolve(
+        characterTower(Character.sayo, tier: 3),
+        character: Character.sayo,
+        characterLevel: 1,
+      );
+      expect(sayo.pierceCount, sayoBase.pierceCount);
+      expect(sayo.pierceWidth, sayoBase.pierceWidth);
+
+      final kaitoBase = baseStats(Character.kaito, tier: 3);
+      final kaito = TowerStatsResolver.resolve(
+        characterTower(Character.kaito, tier: 3),
+        character: Character.kaito,
+        characterLevel: 40,
+      );
+      expect(kaito.chainCount, kaitoBase.chainCount);
+      expect(kaito.chainRange, kaitoBase.chainRange);
+      expect(kaito.chainFalloff, kaitoBase.chainFalloff);
+    });
+
+    test(
+      'character calls skip the legacy tech-tree damage/slow bonus step',
+      () {
+        final hikariBase = baseStats(Character.hikari);
+        final hikari = TowerStatsResolver.resolve(
+          characterTower(Character.hikari),
+          character: Character.hikari,
+          campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+        );
+        expect(hikari.damage, closeTo(hikariBase.damage * 2.0, 1e-9));
+
+        final jinBase = baseStats(Character.jin);
+        final jin = TowerStatsResolver.resolve(
+          characterTower(Character.jin),
+          character: Character.jin,
+          campaignModifiers: const CampaignModifiers(
+            cryoSlowDurationBonus: 0.30,
+          ),
+        );
+        expect(jin.slowDuration, jinBase.slowDuration);
+      },
+    );
+
+    test('character scaling preserves style-based prices and tier costs', () {
+      for (final character in Character.values) {
+        for (final tier in [1, 2, 3]) {
+          final base = baseStats(character, tier: tier);
+          final resolved = TowerStatsResolver.resolve(
+            characterTower(character, tier: tier),
+            character: character,
+            characterLevel: 40,
+          );
+
+          expect(resolved.cost, base.cost, reason: character.name);
+          expect(
+            resolved.upgradeCost,
+            base.upgradeCost,
+            reason: character.name,
+          );
+          expect(
+            resolved.specializationCost,
+            base.specializationCost,
+            reason: character.name,
+          );
+          expect(
+            resolved.nextUpgradeCost,
+            base.nextUpgradeCost,
+            reason: character.name,
+          );
+        }
+      }
+    });
+
+    test('level input clamps to the 1-40 band', () {
+      final at40 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari),
+        character: Character.hikari,
+        characterLevel: 40,
+      );
+      final at99 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari),
+        character: Character.hikari,
+        characterLevel: 99,
+      );
+      final at0 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari),
+        character: Character.hikari,
+        characterLevel: 0,
+      );
+      final at1 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari),
+        character: Character.hikari,
+      );
+
+      expect(at99.damage, at40.damage);
+      expect(at0.damage, at1.damage);
+    });
+  });
 }
