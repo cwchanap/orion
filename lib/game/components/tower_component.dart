@@ -21,6 +21,7 @@ class TowerComponent extends CircleComponent {
     required this.launchProjectile,
     this.spriteSheet,
     this.towerVarietySheet,
+    this.chibiSprite,
     double radius = 15,
     super.priority,
   }) : placedTower = tower,
@@ -30,7 +31,9 @@ class TowerComponent extends CircleComponent {
          anchor: Anchor.center,
          position: center.clone(),
          paint: Paint()..color = _towerColor(tower.type),
-       );
+       ) {
+    _ringPaint.color = _rankColor(tower.character.rank);
+  }
 
   PlacedTower placedTower;
   TowerStats stats;
@@ -40,10 +43,25 @@ class TowerComponent extends CircleComponent {
   final GameSpriteSheet? spriteSheet;
   final GameTowerVarietySheet? towerVarietySheet;
 
+  /// The member's approved HPA-924 full-body chibi, preloaded for the active
+  /// squad at game onLoad. `null` keeps the legacy socket/sheet rendering.
+  final Sprite? chibiSprite;
+
   final Paint _strokePaint = Paint()
     ..color = const Color(0xCCFFFFFF)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 2;
+
+  /// Rank-colored deployment ring under the chibi's feet.
+  final Paint _ringPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 2.2;
+
+  final Paint _ringGlowPaint = Paint()..style = PaintingStyle.fill;
+
+  /// The chibi ships 512px; it renders at `radius * 4.2`, so keep a filtered
+  /// downsample rather than aliasing the approved art.
+  final Paint _chibiPaint = Paint()..filterQuality = FilterQuality.medium;
 
   double _cooldownRemaining = 0;
 
@@ -51,6 +69,7 @@ class TowerComponent extends CircleComponent {
     placedTower = tower;
     stats = resolveStats(tower);
     paint.color = _towerColor(tower.type);
+    _ringPaint.color = _rankColor(tower.character.rank);
   }
 
   @override
@@ -72,6 +91,29 @@ class TowerComponent extends CircleComponent {
 
   @override
   void render(Canvas canvas) {
+    final chibi = chibiSprite;
+    if (chibi != null) {
+      // The member stands centered on a squashed platform ring; its feet sit
+      // on the socket point so the ring's lower arc reads as ground.
+      final ring = Rect.fromCenter(
+        center: Offset(radius, radius),
+        width: radius * 2.6,
+        height: radius * 1.3,
+      );
+      _ringGlowPaint.color = _ringPaint.color.withValues(alpha: 0.22);
+      canvas.drawOval(ring, _ringGlowPaint);
+      canvas.drawOval(ring, _ringPaint);
+      chibi.render(
+        canvas,
+        position: Vector2(radius, radius),
+        // Art can overhang the socket; targeting and placement keep their original geometry.
+        size: Vector2.all(radius * 4.2),
+        anchor: Anchor.bottomCenter,
+        overridePaint: _chibiPaint,
+      );
+      return;
+    }
+
     final sprite = _towerSprite();
     if (sprite == null) {
       super.render(canvas);
@@ -105,6 +147,20 @@ class TowerComponent extends CircleComponent {
       return null;
     }
     return spriteSheet.sprite(GameSpriteSheet.spriteForTower(placedTower.type));
+  }
+
+  /// Rank ring colors mirror the Camp roster mapping
+  /// (`camp_view.dart` / `OrionUiTheme.dark`) so a member reads at the same
+  /// tier in battle as on the roster screen.
+  static Color _rankColor(CharacterRank rank) {
+    return switch (rank) {
+      CharacterRank.s => const Color(0xFFFFC857),
+      CharacterRank.a => const Color(0xFFA98BFF),
+      CharacterRank.b => const Color(0xFF46E6FF),
+      CharacterRank.c => const Color(0xFF7BE495),
+      CharacterRank.d => const Color(0xFFCFDBE6),
+      CharacterRank.e => const Color(0xFFD9925A),
+    };
   }
 
   static Color _towerColor(TowerType type) {
