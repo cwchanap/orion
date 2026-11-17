@@ -78,6 +78,18 @@ flutter:
     - assets/images/reactor_rim_ui/backdrops/
     - assets/images/reactor_rim_ui/crests/
     - assets/images/reactor_rim_ui/boards/
+    - assets/images/characters/hikari/
+    - assets/images/characters/jin/
+    - assets/images/characters/akane/
+    - assets/images/characters/ren/
+    - assets/images/characters/elena/
+    - assets/images/characters/shiori/
+    - assets/images/characters/rin/
+    - assets/images/characters/kaito/
+    - assets/images/characters/sayo/
+    - assets/images/characters/tetsuo/
+    - assets/images/characters/haruto/
+    - assets/images/characters/mio/
     - assets/audio/confirm.wav
     - assets/audio/clear.wav
     - assets/audio/victory.wav

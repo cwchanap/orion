@@ -12,6 +12,7 @@ import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
 import 'package:orion/game/rules/board_layout.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -82,10 +83,17 @@ void main() {
         GameSpriteSheet.fileName,
         GameTowerVarietySheet.fileName,
         GameBossSheet.fileName,
+        // onLoad also preloads the active squad's chibis — this game runs
+        // the default starter squad.
+        for (final member in [Character.haruto, Character.mio])
+          OrionArt.characterChibi(member).fileName,
       ]) {
         await game.images.load(name);
       }
     });
+    // A stalled onLoad earlier in this file leaves its pending future in the
+    // descriptor memo; drop it so the warmed cache is the one resolved.
+    OrionArtDescriptor.resetSpriteCache();
     await tester.pumpWidget(GameWidget(game: game));
     await tester.pump();
     await tester.pump();

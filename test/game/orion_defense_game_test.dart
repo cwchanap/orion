@@ -1,6 +1,7 @@
 import 'dart:ui' show Canvas, PictureRecorder, Rect;
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
+import 'package:flame/flame.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
@@ -21,6 +22,7 @@ import 'package:orion/game/rules/board_layout.dart';
 import 'package:orion/game/rules/enemy_overlay_state.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
 import 'package:orion/game/rules/run_module_unlocks.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 
 import 'game_test_fixtures.dart';
 
@@ -182,6 +184,86 @@ void main() {
       expect(game.snapshot.phase, GamePhase.build);
       expect(game.hasLayout, isTrue);
     });
+
+    test('onLoad preloads chibi sprites for the active squad only — not '
+        'portraits or off-squad members', () async {
+      Flame.images.clearCache();
+      OrionArtDescriptor.resetSpriteCache();
+      addTearDown(Flame.images.clearCache);
+      addTearDown(OrionArtDescriptor.resetSpriteCache);
+
+      final game = OrionDefenseGame(
+        squad: const {Character.haruto: 1, Character.mio: 1},
+      );
+      game.onGameResize(Vector2(800, 1200));
+      await game.onLoad();
+
+      for (final member in const [Character.haruto, Character.mio]) {
+        expect(
+          Flame.images.containsKey(OrionArt.characterChibi(member).fileName),
+          isTrue,
+          reason: '${member.name} chibi must preload at battle onLoad',
+        );
+        expect(
+          Flame.images
+              .fromCache(OrionArt.characterChibi(member).fileName)
+              .width,
+          512,
+          reason: '${member.name} chibi is the approved 512px PNG',
+        );
+      }
+      for (final member in Character.values.where(
+        (member) => member != Character.haruto && member != Character.mio,
+      )) {
+        expect(
+          Flame.images.containsKey(OrionArt.characterChibi(member).fileName),
+          isFalse,
+          reason:
+              '${member.name} is off-squad; preloading all twelve chibis '
+              'is what this test guards against',
+        );
+      }
+      expect(
+        Flame.images.containsKey(
+          OrionArt.characterPortrait(Character.haruto).fileName,
+        ),
+        isFalse,
+        reason:
+            'portraits load when the Camp/sheet UI asks for them, not at '
+            'battle onLoad',
+      );
+    });
+
+    test(
+      'a deployed squad member carries the preloaded chibi onto the board',
+      () async {
+        Flame.images.clearCache();
+        OrionArtDescriptor.resetSpriteCache();
+        addTearDown(Flame.images.clearCache);
+        addTearDown(OrionArtDescriptor.resetSpriteCache);
+
+        final game = OrionDefenseGame(squad: testStarterSquad);
+        game.onGameResize(Vector2(800, 1200));
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+        await game.onLoad();
+        game.processLifecycleEvents();
+
+        game.handleBoardTap(game.boardCellCenter(const GridPosition(4, 5)));
+        game.placeTower(Character.haruto);
+        game.processLifecycleEvents();
+
+        final component = game.children.whereType<TowerComponent>().single;
+        final chibi = component.chibiSprite;
+        expect(
+          chibi,
+          isNotNull,
+          reason: 'the onLoad squad preload must reach the deployed component',
+        );
+        expect(chibi!.srcSize.x, 512);
+        expect(chibi.srcSize.y, 512);
+      },
+    );
 
     test('can be constructed for another stage', () {
       final stage = OrionCampaign.stageById('nebula-relay');

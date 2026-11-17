@@ -158,6 +158,34 @@ abstract final class OrionArt {
       ),
   });
 
+  /// Per-member HPA-924 art: full-size 1024x1536 portraits and transparent
+  /// 512x512 full-body chibis under `characters/{character.name}/`. Both are
+  /// whole-frame descriptors — the approved frames ship no extra margin to
+  /// crop away.
+  static final Map<Character, OrionArtDescriptor> _characterPortraits =
+      Map.unmodifiable({
+        for (final character in Character.values)
+          character: OrionArtDescriptor(
+            fileName: 'characters/${character.name}/portrait.png',
+            sourceRectFor: _fullRectFor,
+            semanticLabel: '${character.displayName} portrait',
+            fallbackIcon: Icons.person,
+            filterQuality: FilterQuality.medium,
+          ),
+      });
+
+  static final Map<Character, OrionArtDescriptor> _characterChibis =
+      Map.unmodifiable({
+        for (final character in Character.values)
+          character: OrionArtDescriptor(
+            fileName: 'characters/${character.name}/chibi.png',
+            sourceRectFor: _fullRectFor,
+            semanticLabel: '${character.displayName} chibi',
+            fallbackIcon: Icons.person_outline,
+            filterQuality: FilterQuality.medium,
+          ),
+      });
+
   static final OrionArtDescriptor _basicDrone = OrionArtDescriptor(
     fileName: GameSpriteSheet.fileName,
     sourceRectFor: ({required imageWidth, required imageHeight}) =>
@@ -283,6 +311,12 @@ abstract final class OrionArt {
   ) => _specializations[specialization]!;
 
   static OrionArtDescriptor tower(TowerType type) => _towers[type]!;
+
+  static OrionArtDescriptor characterPortrait(Character character) =>
+      _characterPortraits[character]!;
+
+  static OrionArtDescriptor characterChibi(Character character) =>
+      _characterChibis[character]!;
 
   static OrionArtDescriptor boss(BossSprite sprite) => _bosses[sprite]!;
 

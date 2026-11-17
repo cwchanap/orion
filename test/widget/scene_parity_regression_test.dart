@@ -41,6 +41,10 @@ Future<OrionDefenseGame> _startRadialMission(
       'orion_sprite_sheet.png',
       'orion_tower_variety_sheet.png',
       'orion_boss_sheet.png',
+      // onLoad also preloads the active squad's chibis — the default page
+      // mounts the starter squad.
+      'characters/haruto/chibi.png',
+      'characters/mio/chibi.png',
     ]) {
       await Flame.images.load(name);
     }
@@ -147,6 +151,10 @@ void main() {
         'orion_sprite_sheet.png',
         'orion_tower_variety_sheet.png',
         'orion_boss_sheet.png',
+        // onLoad also preloads the active squad's chibis — the default page
+        // mounts the starter squad.
+        'characters/haruto/chibi.png',
+        'characters/mio/chibi.png',
       ]) {
         await Flame.images.load(name);
       }

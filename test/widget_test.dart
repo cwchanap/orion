@@ -189,10 +189,17 @@ void main() {
           'orion_sprite_sheet.png',
           'orion_tower_variety_sheet.png',
           'orion_boss_sheet.png',
+          // onLoad also preloads the active squad's chibis — the default
+          // page mounts the starter squad.
+          'characters/haruto/chibi.png',
+          'characters/mio/chibi.png',
         ]) {
           await Flame.images.load(name);
         }
       });
+      // A cold-mount earlier in this file can leave pending futures in the
+      // descriptor memo; clear it so the warmed cache is the one used.
+      OrionArtDescriptor.resetSpriteCache();
       addTearDown(Flame.images.clearCache);
       OrionDefenseGame? game;
       await tester.pumpWidget(
@@ -241,10 +248,15 @@ void main() {
           'orion_sprite_sheet.png',
           'orion_tower_variety_sheet.png',
           'orion_boss_sheet.png',
+          // onLoad also preloads the active squad's chibis — the default
+          // page mounts the starter squad.
+          'characters/haruto/chibi.png',
+          'characters/mio/chibi.png',
         ]) {
           await Flame.images.load(name);
         }
       });
+      OrionArtDescriptor.resetSpriteCache();
 
       final boundaryKey = GlobalKey();
       OrionDefenseGame? game;
@@ -345,6 +357,10 @@ void main() {
           'orion_sprite_sheet.png',
           'orion_tower_variety_sheet.png',
           'orion_boss_sheet.png',
+          // onLoad also preloads the active squad's chibis — the default
+          // page mounts the starter squad.
+          'characters/haruto/chibi.png',
+          'characters/mio/chibi.png',
         ]) {
           await Flame.images.load(name);
         }
@@ -5566,6 +5582,13 @@ void main() {
         tester,
         firstMissionGuideStore: InMemoryFirstMissionGuideStore(),
         progressStore: drainStore,
+        // The warm-up must cover every chibi this seeded squad preloads.
+        squad: const [
+          Character.haruto,
+          Character.mio,
+          Character.jin,
+          Character.elena,
+        ],
       );
 
       await tapBoardCell(tester, game, const GridPosition(2, 2));
@@ -6728,6 +6751,10 @@ void main() {
 /// so a mounted game's onLoad resolves instantly, pumps [testGamePage] at the
 /// 360x640 guided-path viewport, starts the stage named by [mapLabel] from
 /// its briefing, and returns the mounted game.
+///
+/// [squad] must name the members the mounted game's progress store will
+/// launch with: onLoad preloads exactly those chibis, so the warm-up has to
+/// cover them and nothing more.
 Future<OrionDefenseGame> pumpMountedMission(
   WidgetTester tester, {
   String mapLabel = 'Alpha',
@@ -6735,13 +6762,14 @@ Future<OrionDefenseGame> pumpMountedMission(
   CampaignProgressStore? progressStore,
   FirstMissionGuideStore? firstMissionGuideStore,
   ModuleOfferPicker? moduleOfferPicker,
+  Iterable<Character> squad = CampaignSave.starterSquad,
   Size viewSize = const Size(360, 640),
 }) async {
   tester.view.physicalSize = viewSize;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.runAsync(loadRealFonts);
-  await _warmGameImages(tester);
+  await _warmGameImages(tester, squad: squad);
   // Tear the mounted game down so its live ticker never outlives the test.
   addTearDown(() async {
     await tester.pumpWidget(const SizedBox.shrink());
@@ -6783,16 +6811,37 @@ const _gameImageNames = [
   'orion_boss_sheet.png',
 ];
 
-/// Whether this process has already decoded the game sprite sheets into
-/// Flame's global cache. The warm cache deliberately outlives these tests:
-/// they are the last tests in this file, and each test file runs in its own
-/// isolate, so no other test observes the cache state. Re-decoding real
-/// engine images per test has proven to stall late in a long suite when an
-/// earlier test's codec callback was dropped across the fake-async boundary.
-bool _gameImagesWarmed = false;
+/// Names this helper has already decoded. The warm cache deliberately
+/// outlives these tests: they are the last tests in this file, and each
+/// test file runs in its own isolate, so no other test observes the cache
+/// state. Re-decoding real engine images per test has proven to stall late
+/// in a long suite when an earlier test's codec callback was dropped across
+/// the fake-async boundary.
+final Set<String> _warmedGameImages = {};
 
-Future<void> _warmGameImages(WidgetTester tester) async {
-  if (_gameImagesWarmed) {
+/// Warms the sheets plus the chibis for exactly [squad] — the same set
+/// onLoad preloads for the mounted game.
+///
+/// A name only counts as warm when this helper warmed it AND it is still in
+/// Flame's cache: `containsKey` alone also reports the dead pending entries
+/// a cold-mount test leaves behind, and a clearCache teardown between tests
+/// empties names this helper decoded earlier.
+Future<void> _warmGameImages(
+  WidgetTester tester, {
+  Iterable<Character> squad = CampaignSave.starterSquad,
+}) async {
+  final names = {
+    ..._gameImageNames,
+    for (final member in squad) OrionArt.characterChibi(member).fileName,
+  };
+  // The descriptor memo can hold a pending future from an earlier cold-mount
+  // test in this process; drop it so this fixture's warmed cache is the one
+  // the mounted game's onLoad resolves against.
+  OrionArtDescriptor.resetSpriteCache();
+  if (names.every(
+    (name) =>
+        _warmedGameImages.contains(name) && Flame.images.containsKey(name),
+  )) {
     return;
   }
   // Flame's Images.load caches the pending future itself (`_assets[name] ??=
@@ -6802,7 +6851,8 @@ Future<void> _warmGameImages(WidgetTester tester) async {
   // load of the same name would await the dead future and stall. Dropping
   // them first lets the real runAsync decodes below register fresh entries.
   Flame.images.clearCache();
-  for (final name in _gameImageNames) {
+  OrionArtDescriptor.resetSpriteCache();
+  for (final name in names) {
     var loaded = false;
     for (var attempt = 0; attempt < 3 && !loaded; attempt++) {
       try {
@@ -6817,8 +6867,8 @@ Future<void> _warmGameImages(WidgetTester tester) async {
     if (!loaded) {
       fail('Timed out loading $name for the mounted-game fixture.');
     }
+    _warmedGameImages.add(name);
   }
-  _gameImagesWarmed = true;
 }
 
 /// Advances the mounted game in fixed update slices — the direct

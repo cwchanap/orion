@@ -31,6 +31,7 @@ import 'rules/game_session.dart';
 import 'rules/module_offer_picker.dart';
 import 'rules/stage_modifier_rules.dart';
 import 'rules/tower_targeting.dart';
+import 'ui/orion_atlas_sprite.dart';
 
 class StageCompletion {
   const StageCompletion({required this.stage, required this.result});
@@ -120,6 +121,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   GameBossSheet? _bossSheet;
   Image? _boardImage;
   BoardBackdropComponent? _boardBackdrop;
+  // Active-squad chibi sprites resolved at onLoad through the shared
+  // OrionArtDescriptor path; a member absent here falls back to the legacy
+  // socket rendering on the board.
+  final Map<Character, Sprite> _chibiSprites = {};
   final Map<int, TowerComponent> _towerComponents = {};
   final Map<int, EnemyComponent> _activeEnemyComponents = {};
   int? _inspectedEnemyId;
@@ -169,6 +174,17 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _spriteSheet = await GameSpriteSheet.load(images);
     _towerVarietySheet = await GameTowerVarietySheet.load(images);
     _bossSheet = await GameBossSheet.load(images);
+    // Only the active squad's chibis are battle art; portraits stay lazy for
+    // the Camp/roster UI and off-squad members are never touched.
+    for (final member in _session.squad) {
+      try {
+        _chibiSprites[member] = await OrionArt.characterChibi(member).sprite;
+      } catch (_) {
+        // Missing art must not stall the battle: the member deploys with the
+        // legacy socket rendering instead.
+        debugPrint('chibi preload failed for ${member.name}');
+      }
+    }
     _layoutBoard(size);
     _publishSnapshot();
   }
@@ -787,6 +803,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       launchProjectile: _launchProjectile,
       spriteSheet: _spriteSheet,
       towerVarietySheet: _towerVarietySheet,
+      chibiSprite: _chibiSprites[tower.character],
       priority: 10,
     );
     _towerComponents[tower.id] = component;
