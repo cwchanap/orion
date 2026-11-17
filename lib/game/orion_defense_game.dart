@@ -185,6 +185,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
         debugPrint('chibi preload failed for ${member.name}');
       }
     }
+    // The dock allows placements while the awaits above are in flight; any
+    // component built in that window captured a null chibi, so hand it the
+    // resolved sprite. Members whose load failed keep the socket render.
+    for (final component in _towerComponents.values) {
+      component.chibiSprite ??= _chibiSprites[component.placedTower.character];
+    }
     _layoutBoard(size);
     _publishSnapshot();
   }

@@ -1,4 +1,6 @@
-import 'dart:ui' show Canvas, PictureRecorder, Rect;
+import 'dart:async';
+import 'dart:ui' show Canvas, Image, PictureRecorder, Rect;
+import 'package:flame/cache.dart';
 import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/flame.dart';
@@ -110,6 +112,25 @@ final class _FixedModuleOfferPicker implements ModuleOfferPicker {
     expect(requested, hasLength(count));
     expect(requested.every(candidates.contains), isTrue);
     return List.unmodifiable(requested);
+  }
+}
+
+/// Delays [load] for the named files until [gate] completes — a real
+/// loader barrier on the shared `Flame.images` seam OrionArtDescriptor
+/// awaits, used to hold a member's chibi mid-flight while a placement
+/// commits.
+class _GatedImages extends Images {
+  _GatedImages({required this.gate, required this.delayed});
+
+  final Future<void> gate;
+  final Set<String> delayed;
+
+  @override
+  Future<Image> load(String fileName, {String? key, String? package}) async {
+    if (delayed.contains(fileName)) {
+      await gate;
+    }
+    return super.load(fileName, key: key, package: package);
   }
 }
 
@@ -264,6 +285,54 @@ void main() {
         expect(chibi.srcSize.y, 512);
       },
     );
+
+    test('a placement committed while its chibi is still loading upgrades '
+        'to the resolved sprite instead of staying legacy', () async {
+      final gate = Completer<void>();
+      final realImages = Flame.images;
+      Flame.images = _GatedImages(
+        gate: gate.future,
+        delayed: {OrionArt.characterChibi(Character.mio).fileName},
+      );
+      OrionArtDescriptor.resetSpriteCache();
+      addTearDown(() => Flame.images = realImages);
+      addTearDown(OrionArtDescriptor.resetSpriteCache);
+
+      final game = OrionDefenseGame(squad: testStarterSquad);
+      game.onGameResize(Vector2(800, 1200));
+      // ignore: invalid_use_of_internal_member
+      game.setMounted();
+      final onLoadDone = game.onLoad();
+
+      // The persistent dock can commit a placement while onLoad is still
+      // awaiting mio's chibi decode.
+      game.handleBoardTap(game.boardCellCenter(const GridPosition(4, 5)));
+      game.placeTower(Character.mio);
+      game.processLifecycleEvents();
+
+      final component = game.children.whereType<TowerComponent>().single;
+      expect(component.placedTower.character, Character.mio);
+      expect(
+        component.chibiSprite,
+        isNull,
+        reason: 'the chibi is still gated, so the socket renders for now',
+      );
+
+      gate.complete();
+      await onLoadDone;
+      game.processLifecycleEvents();
+
+      final chibi = component.chibiSprite;
+      expect(
+        chibi,
+        isNotNull,
+        reason:
+            'a mid-load placement must pick up the chibi once it '
+            'resolves rather than rendering the legacy socket all battle',
+      );
+      expect(chibi!.srcSize.x, 512);
+      expect(chibi.srcSize.y, 512);
+    });
 
     test('can be constructed for another stage', () {
       final stage = OrionCampaign.stageById('nebula-relay');
