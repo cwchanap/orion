@@ -25,3 +25,59 @@ StageDefinition stageWithWaveCount(
     modifiers: modifiers,
   );
 }
+
+/// Fresh-profile starter squad (Haruto and Mio at level 1) — mirrors
+/// `CampaignSave.starterOwnedLevels` without importing the persistence layer.
+const Map<Character, int> testStarterSquad = {
+  Character.haruto: 1,
+  Character.mio: 1,
+};
+
+/// Every roster member at level 1, for tests that deploy freely and do not
+/// exercise squad-membership rules.
+final Map<Character, int> testFullSquad = {
+  for (final character in Character.values) character: 1,
+};
+
+/// The first roster member whose combat [style] matches [type] — the
+/// canonical character stand-in when a test only cares about the style.
+Character testCharacterFor(TowerType type) =>
+    Character.values.firstWhere((character) => character.style == type);
+
+/// Builds a [PlacedTower] in the old test style. [character] wins; next a
+/// [specialization] picks the member who owns that fixed signature (and
+/// forces tier 3); otherwise [type] picks the first member with that style.
+/// The signature cannot be chosen freely — it is the member's own.
+PlacedTower testTower({
+  int id = 1,
+  TowerType? type,
+  TowerSpecialization? specialization,
+  Character? character,
+  int characterLevel = 1,
+  required GridPosition position,
+  int level = 1,
+  TowerTargetingMode targetingMode = TowerTargetingMode.first,
+}) {
+  final resolved =
+      character ??
+      (specialization != null
+          ? Character.values.firstWhere(
+              (member) => member.signature == specialization,
+            )
+          : testCharacterFor(type!));
+  if (specialization != null && resolved.signature != specialization) {
+    throw ArgumentError.value(
+      specialization,
+      'specialization',
+      'must be the character fixed signature',
+    );
+  }
+  return PlacedTower(
+    id: id,
+    character: resolved,
+    characterLevel: characterLevel,
+    position: position,
+    level: specialization != null ? 3 : level,
+    targetingMode: targetingMode,
+  );
+}

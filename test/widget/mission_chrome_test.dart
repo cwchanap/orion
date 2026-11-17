@@ -71,7 +71,6 @@ Widget chromeHost(
               onToggleAutoStart: () {},
               onPlaceTower: (_) {},
               onUpgrade: onUpgrade ?? () {},
-              onSpecialize: (_) {},
               onTargetingChanged: onTargetingChanged ?? (_) {},
               onSell: onSell ?? () {},
               towerAnchor: towerAnchor,
@@ -125,7 +124,7 @@ void main() {
       // One long-press drag passes its begin/update/commit family through
       // MissionChrome untouched.
       final start = tester.getCenter(
-        find.byKey(const ValueKey('tower-card-laser')),
+        find.byKey(const ValueKey('tower-card-haruto')),
       );
       final gesture = await tester.startGesture(start);
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
@@ -1080,15 +1079,17 @@ void main() {
       of: find.byType(TowerBuildRail),
       matching: find.byType(Scrollable),
     );
-    for (final type in TowerType.values) {
-      final card = find.byKey(ValueKey('tower-card-${type.name}'));
+    for (final member in const [Character.haruto, Character.mio]) {
+      final card = find.byKey(ValueKey('tower-card-${member.name}'));
       final name = find.descendant(
         of: card,
-        matching: find.text(type.label.toUpperCase()),
+        matching: find.text(member.displayName.toUpperCase()),
       );
       final price = find.descendant(
         of: card,
-        matching: find.text('${GameBalance.towerStats(type, level: 1).cost}'),
+        matching: find.text(
+          '${GameBalance.towerStats(member.style, level: 1).cost}',
+        ),
       );
       for (final text in [name, price]) {
         final widget = tester.widget<Text>(text);
@@ -1105,12 +1106,12 @@ void main() {
       expect(
         bounds.left,
         greaterThanOrEqualTo(viewport.left - 0.1),
-        reason: type.label,
+        reason: member.name,
       );
       expect(
         bounds.right,
         lessThanOrEqualTo(viewport.right + 0.1),
-        reason: type.label,
+        reason: member.name,
       );
     }
     expect(tester.takeException(), isNull);
@@ -1132,10 +1133,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final next = find.byKey(const ValueKey('tower-card-rocket'));
+    final next = find.byKey(const ValueKey('tower-card-mio'));
     final nextLeft = tester.getTopLeft(next).dx;
     final gesture = await tester.startGesture(
-      tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+      tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
     );
     await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
     expect(events.single, isA<TowerPlacementPreviewBegin>());
@@ -1853,7 +1854,7 @@ void main() {
       // …and a tower selection keeps both collapsed.
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(1, 1),
       );
       await tester.pumpWidget(
@@ -1991,7 +1992,7 @@ void main() {
 
         const tower = PlacedTower(
           id: 1,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(4, 5),
         );
         await tester.pumpWidget(
@@ -2197,7 +2198,7 @@ void main() {
 
     const tower = PlacedTower(
       id: 1,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(1, 1),
     );
     final idleSnapshot = commandDeckSnapshot(
@@ -2242,7 +2243,7 @@ void main() {
       expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
       _expectWithinViewport(
         tester,
-        find.byKey(const ValueKey('tower-card-laser')),
+        find.byKey(const ValueKey('tower-card-haruto')),
         size,
       );
       _expectWithinViewport(tester, find.byType(MissionStatusHud), size);
@@ -2284,21 +2285,21 @@ void main() {
       // reveal the last one.
       _expectWithinViewport(
         tester,
-        find.byKey(const ValueKey('tower-card-laser')),
+        find.byKey(const ValueKey('tower-card-haruto')),
         _productViewport,
       );
       // Scroll until it is actually visible rather than by a fixed distance:
       // a -400 drag was calibrated to the old 64dp card and silently stopped
       // 22px short once the artboard's 70dp card widened the rail.
       await tester.scrollUntilVisible(
-        find.byKey(ValueKey('tower-card-${TowerType.values.last.name}')),
+        find.byKey(const ValueKey('tower-card-mio')),
         120,
         scrollable: find.byType(Scrollable).first,
       );
       await tester.pumpAndSettle();
       _expectWithinViewport(
         tester,
-        find.byKey(ValueKey('tower-card-${TowerType.values.last.name}')),
+        find.byKey(const ValueKey('tower-card-mio')),
         _productViewport,
       );
     },
@@ -2313,7 +2314,7 @@ void main() {
 
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(1, 1),
         level: 2,
       );
@@ -2590,7 +2591,7 @@ void main() {
 
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(1, 1),
       );
       var mapTaps = 0;
@@ -2757,7 +2758,7 @@ void main() {
           phase: phase,
           selectedTower: const PlacedTower(
             id: 8,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: GridPosition(4, 5),
           ),
           selectedTowerStats: GameBalance.towerStats(TowerType.laser, level: 1),

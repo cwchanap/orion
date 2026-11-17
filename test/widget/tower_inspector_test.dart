@@ -46,7 +46,7 @@ void main() {
   ) async {
     const tower = PlacedTower(
       id: 7,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(2, 3),
     );
     final resolved = GameBalance.towerStats(TowerType.laser, level: 1);
@@ -64,7 +64,6 @@ void main() {
             selectedTowerStats: resolved,
           ),
           onUpgrade: () => upgrades++,
-          onSpecialize: (_) {},
           onTargetingChanged: (mode) => targeting = mode,
           onSell: () => sells++,
           sellRefund: 41,
@@ -123,13 +122,12 @@ void main() {
           snapshot: commandDeckSnapshot(
             selectedTower: const PlacedTower(
               id: 7,
-              type: TowerType.cryo,
+              character: Character.jin,
               position: GridPosition(2, 3),
             ),
             selectedTowerStats: stats,
           ),
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
           sellRefund: 41,
@@ -169,12 +167,12 @@ void main() {
       for (final tower in [
         const PlacedTower(
           id: 7,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(2, 3),
         ),
         const PlacedTower(
           id: 8,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(2, 3),
           level: 2,
         ),
@@ -195,7 +193,6 @@ void main() {
                 selectedTowerStats: stats,
               ),
               onUpgrade: () => upgrades++,
-              onSpecialize: (_) => specializations++,
               onTargetingChanged: (_) => targets++,
               onSell: () => sells++,
               sellRefund: 41,
@@ -205,11 +202,8 @@ void main() {
 
         final actionKeys = <String>[
           if (tower.canUpgrade) 'tower-upgrade',
-          if (tower.canSpecialize)
-            for (final specialization in GameBalance.specializationsFor(
-              tower.type,
-            ))
-              'tower-specialization-${specialization.name}',
+          // One merged upgrade action; the tier-3 signature is applied by
+          // the same 'tower-upgrade' action, never a second control.
           'tower-target-strongest',
           'tower-sell',
         ];
@@ -237,7 +231,7 @@ void main() {
   ) async {
     final tower = const PlacedTower(
       id: 7,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(2, 3),
     );
     await tester.pumpWidget(
@@ -249,7 +243,6 @@ void main() {
             selectedTowerStats: null,
           ),
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
           sellRefund: 41,
@@ -277,10 +270,9 @@ void main() {
   ) async {
     final tower = const PlacedTower(
       id: 7,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(2, 3),
       level: 3,
-      specialization: TowerSpecialization.pulseLaser,
     );
     await tester.pumpWidget(
       MaterialApp(
@@ -295,7 +287,6 @@ void main() {
             ),
           ),
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
           sellRefund: 41,
@@ -320,13 +311,11 @@ void main() {
       // choices affordable and visible.
       final tower = const PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
         level: 2,
       );
       final stats = GameBalance.towerStats(tower.type, level: tower.level);
-      final specializations = GameBalance.specializationsFor(tower.type);
-      final chosen = <TowerSpecialization>[];
       await tester.pumpWidget(
         MaterialApp(
           theme: orionThemeData,
@@ -337,7 +326,6 @@ void main() {
               selectedTowerStats: stats,
             ),
             onUpgrade: () {},
-            onSpecialize: (specialization) => chosen.add(specialization),
             onTargetingChanged: (_) {},
             onSell: () {},
             sellRefund: 84,
@@ -356,57 +344,23 @@ void main() {
       );
       expect(heroArt.shortestSide, greaterThanOrEqualTo(56));
 
-      // The specialization choices surface under their own section label.
-      expect(find.text('SPECIALIZE - LV 3'), findsOneWidget);
+      // The fixed signature surfaces under its own section label — there is
+      // no free choice, only the member's signature applied at tier 3.
+      expect(find.text('SIGNATURE - TIER 3'), findsOneWidget);
 
-      // Each choice renders as an art-forward card with its resolved cost.
-      for (final specialization in specializations) {
-        final card = find.byKey(
-          ValueKey('tower-specialization-${specialization.name}'),
-        );
-        expect(card, findsOneWidget, reason: specialization.name);
-        final cardArt = tester.getSize(
-          find
-              .descendant(of: card, matching: find.byType(OrionAtlasSprite))
-              .first,
-        );
-        expect(
-          cardArt.shortestSide,
-          greaterThanOrEqualTo(28),
-          reason: specialization.name,
-        );
-        expect(
-          find.descendant(of: card, matching: find.text(specialization.label)),
-          findsOneWidget,
-          reason: specialization.name,
-        );
-        expect(
-          find.descendant(
-            of: card,
-            matching: find.text('${stats.specializationCost}'),
-          ),
-          findsOneWidget,
-          reason: specialization.name,
-        );
-      }
+      // The signature panel names the member's one fixed signature.
+      final panel = find.byKey(
+        ValueKey('tower-signature-${tower.character.signature.name}'),
+      );
+      expect(panel, findsOneWidget);
+      expect(
+        find.textContaining(tower.character.signature.label),
+        findsWidgets,
+      );
 
-      // Both cards call onSpecialize independently.
-      await tester.ensureVisible(
-        find.byKey(
-          ValueKey('tower-specialization-${specializations.first.name}'),
-        ),
-      );
-      await tester.tap(
-        find.byKey(
-          ValueKey('tower-specialization-${specializations.first.name}'),
-        ),
-      );
-      await tester.tap(
-        find.byKey(
-          ValueKey('tower-specialization-${specializations.last.name}'),
-        ),
-      );
-      expect(chosen, specializations);
+      // The tier-2->3 upgrade action carries the signature price.
+      await tester.ensureVisible(find.byKey(const ValueKey('tower-upgrade')));
+      expect(find.text('Upgrade ${stats.specializationCost}'), findsOneWidget);
 
       // Existing gauge pipeline stays TowerStatScale-driven, restyled with
       // per-stat accents and a readable gauge height.
@@ -439,7 +393,7 @@ void main() {
     });
     final tower = const PlacedTower(
       id: 7,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(2, 3),
       level: 2,
     );
@@ -466,19 +420,8 @@ void main() {
                       tower.type,
                       level: tower.level,
                     ),
-                    selectedTowerSpecializationStats: {
-                      for (final spec in GameBalance.specializationsFor(
-                        tower.type,
-                      ))
-                        spec: GameBalance.towerStats(
-                          tower.type,
-                          level: 3,
-                          specialization: spec,
-                        ),
-                    },
                   ),
                   onUpgrade: () {},
-                  onSpecialize: (_) {},
                   onTargetingChanged: (_) {},
                   onSell: () {},
                   sellRefund: 84,
@@ -506,7 +449,7 @@ void main() {
   testWidgets('inspector is a scene-covering sheet surface', (tester) async {
     const tower = PlacedTower(
       id: 7,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(2, 3),
     );
     await tester.pumpWidget(
@@ -521,7 +464,6 @@ void main() {
             ),
           ),
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
           sellRefund: 41,
@@ -543,7 +485,7 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     final tower = const PlacedTower(
       id: 7,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(2, 3),
       level: 2,
     );
@@ -559,7 +501,6 @@ void main() {
             ),
           ),
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
           sellRefund: 84,
@@ -587,10 +528,8 @@ void main() {
       required PlacedTower tower,
       required TowerStats stats,
       TowerStats? upgradeStats,
-      Map<TowerSpecialization, TowerStats> specializationStats = const {},
       int gold = 9999,
       VoidCallback? onUpgrade,
-      ValueChanged<TowerSpecialization>? onSpecialize,
     }) {
       return tester.pumpWidget(
         MaterialApp(
@@ -601,10 +540,8 @@ void main() {
               selectedTower: tower,
               selectedTowerStats: stats,
               selectedTowerUpgradeStats: upgradeStats,
-              selectedTowerSpecializationStats: specializationStats,
             ),
             onUpgrade: onUpgrade ?? () {},
-            onSpecialize: onSpecialize ?? (_) {},
             onTargetingChanged: (_) {},
             onSell: () {},
             sellRefund: 41,
@@ -627,7 +564,7 @@ void main() {
       addTearDown(tester.view.reset);
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
       );
       await pumpInspector(
@@ -655,24 +592,19 @@ void main() {
       addTearDown(tester.view.reset);
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.tetsuo,
         position: GridPosition(2, 3),
         level: 2,
       );
       await pumpInspector(
         tester,
         tower: tower,
-        stats: GameBalance.towerStats(TowerType.laser, level: 2),
-        specializationStats: {
-          for (final specialization in GameBalance.specializationsFor(
-            TowerType.laser,
-          ))
-            specialization: GameBalance.towerStats(
-              TowerType.laser,
-              level: 3,
-              specialization: specialization,
-            ),
-        },
+        stats: GameBalance.towerStats(TowerType.droneBay, level: 2),
+        upgradeStats: GameBalance.towerStats(
+          TowerType.droneBay,
+          level: 3,
+          specialization: Character.tetsuo.signature,
+        ),
       );
       await tester.pumpAndSettle();
       final scroll = tester.state<ScrollableState>(
@@ -691,7 +623,7 @@ void main() {
     ) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
       );
       final current = GameBalance.towerStats(TowerType.laser, level: 1);
@@ -705,7 +637,7 @@ void main() {
         onUpgrade: () => upgrades++,
       );
 
-      expect(find.text('UPGRADE - LV 2'), findsOneWidget);
+      expect(find.text('UPGRADE - TIER 2'), findsOneWidget);
       expect(
         find.byKey(const ValueKey('tower-upgrade-preview')),
         findsOneWidget,
@@ -762,7 +694,9 @@ void main() {
           tester,
           tower: PlacedTower(
             id: 7,
-            type: type,
+            character: Character.values.firstWhere(
+              (member) => member.style == type,
+            ),
             position: const GridPosition(2, 3),
           ),
           stats: GameBalance.towerStats(type, level: 1),
@@ -794,12 +728,12 @@ void main() {
       }
     });
 
-    testWidgets('specialization cards keep the four inspector metrics', (
+    testWidgets('signature preview keeps the inspector metrics', (
       tester,
     ) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.droneBay,
+        character: Character.tetsuo,
         position: GridPosition(2, 3),
         level: 2,
       );
@@ -807,24 +741,14 @@ void main() {
         tester,
         tower: tower,
         stats: GameBalance.towerStats(TowerType.droneBay, level: 2),
-        specializationStats: {
-          for (final spec in GameBalance.specializationsFor(TowerType.droneBay))
-            spec: GameBalance.towerStats(
-              TowerType.droneBay,
-              level: 3,
-              specialization: spec,
-            ),
-        },
+        upgradeStats: GameBalance.towerStats(
+          TowerType.droneBay,
+          level: 3,
+          specialization: Character.tetsuo.signature,
+        ),
       );
 
-      expect(
-        inPreview('tower-specialization-preview-hunterBay', 'DRONE DMG'),
-        findsOneWidget,
-      );
-      expect(
-        inPreview('tower-specialization-preview-hunterBay', 'DRONES'),
-        findsNothing,
-      );
+      expect(inPreview('tower-upgrade-preview', 'DRONE DMG'), findsOneWidget);
     });
 
     testWidgets('unchanged values are hidden from the comparison', (
@@ -832,7 +756,7 @@ void main() {
     ) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.cryo,
+        character: Character.jin,
         position: GridPosition(2, 3),
       );
       final current = GameBalance.towerStats(TowerType.cryo, level: 1);
@@ -854,7 +778,7 @@ void main() {
     ) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
       );
       final current = GameBalance.towerStats(TowerType.laser, level: 1);
@@ -864,63 +788,39 @@ void main() {
       expect(find.text('Upgrade ${current.upgradeCost}'), findsOneWidget);
     });
 
-    testWidgets('specialization cards explain role and payoff', (tester) async {
+    testWidgets('signature panel explains role and payoff', (tester) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.cryo,
+        character: Character.jin,
         position: GridPosition(2, 3),
         level: 2,
       );
       final current = GameBalance.towerStats(TowerType.cryo, level: 2);
-      final candidates = {
-        for (final spec in GameBalance.specializationsFor(TowerType.cryo))
-          spec: GameBalance.towerStats(
-            TowerType.cryo,
-            level: 3,
-            specialization: spec,
-          ),
-      };
-      final chosen = <TowerSpecialization>[];
       await pumpInspector(
         tester,
         tower: tower,
         stats: current,
-        specializationStats: candidates,
-        onSpecialize: chosen.add,
+        upgradeStats: GameBalance.towerStats(
+          TowerType.cryo,
+          level: 3,
+          specialization: Character.jin.signature,
+        ),
       );
 
-      for (final spec in candidates.keys) {
-        final card = find.byKey(ValueKey('tower-specialization-${spec.name}'));
-        expect(
-          find.descendant(of: card, matching: find.text(spec.role)),
-          findsOneWidget,
-          reason: spec.name,
-        );
-        expect(
-          find.byKey(ValueKey('tower-specialization-preview-${spec.name}')),
-          findsOneWidget,
-          reason: spec.name,
-        );
-      }
-
-      final deepFreeze = candidates[TowerSpecialization.deepFreeze]!;
+      // The one fixed signature: name + role sentence, read-only.
       expect(
-        inPreview(
-          'tower-specialization-preview-deepFreeze',
-          '${number(current.slowDuration)}s → '
-              '${number(deepFreeze.slowDuration)}s',
-        ),
+        find.byKey(ValueKey('tower-signature-${Character.jin.signature.name}')),
         findsOneWidget,
       );
+      expect(find.textContaining(Character.jin.signature.role), findsOneWidget);
 
       final semantics = tester.ensureSemantics();
       try {
         expect(
           find.bySemanticsLabel(
             RegExp(
-              '^Deep Freeze ${current.specializationCost}\\. '
-              '${RegExp.escape(TowerSpecialization.deepFreeze.role)} '
-              'Fire ',
+              "^Jin's signature ${Character.jin.signatureName}: "
+              '${RegExp.escape(Character.jin.signature.label)}',
             ),
           ),
           findsOneWidget,
@@ -928,22 +828,14 @@ void main() {
       } finally {
         semantics.dispose();
       }
-
-      await tester.ensureVisible(
-        find.byKey(const ValueKey('tower-specialization-frostbite')),
-      );
-      await tester.tap(
-        find.byKey(const ValueKey('tower-specialization-frostbite')),
-      );
-      expect(chosen, [TowerSpecialization.frostbite]);
     });
 
-    testWidgets('missing specialization preview keeps the role sentence', (
+    testWidgets('missing upgrade stats still keeps the signature panel', (
       tester,
     ) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
         level: 2,
       );
@@ -953,13 +845,20 @@ void main() {
         stats: GameBalance.towerStats(TowerType.laser, level: 2),
       );
 
-      for (final spec in GameBalance.specializationsFor(TowerType.laser)) {
-        expect(find.text(spec.role), findsOneWidget, reason: spec.name);
-        expect(
-          find.byKey(ValueKey('tower-specialization-preview-${spec.name}')),
-          findsNothing,
-        );
-      }
+      // No resolved upgrade stats: the fixed signature still reads its
+      // name and role; only the numeric preview is absent.
+      expect(find.text('SIGNATURE - TIER 3'), findsOneWidget);
+      expect(
+        find.byKey(
+          ValueKey('tower-signature-${Character.haruto.signature.name}'),
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(Character.haruto.signature.role),
+        findsOneWidget,
+      );
+      expect(find.byKey(const ValueKey('tower-upgrade-preview')), findsNothing);
     });
 
     for (final size in const [Size(360, 640), Size(390, 844)]) {
@@ -972,9 +871,12 @@ void main() {
 
           for (final type in TowerType.values) {
             for (final level in const [1, 2]) {
+              final member = Character.values.firstWhere(
+                (member) => member.style == type,
+              );
               final tower = PlacedTower(
                 id: 7,
-                type: type,
+                character: member,
                 position: const GridPosition(2, 3),
                 level: level,
               );
@@ -984,17 +886,11 @@ void main() {
                 stats: GameBalance.towerStats(type, level: level),
                 upgradeStats: level == 1
                     ? GameBalance.towerStats(type, level: 2)
-                    : null,
-                specializationStats: level == 2
-                    ? {
-                        for (final spec in GameBalance.specializationsFor(type))
-                          spec: GameBalance.towerStats(
-                            type,
-                            level: 3,
-                            specialization: spec,
-                          ),
-                      }
-                    : const {},
+                    : GameBalance.towerStats(
+                        type,
+                        level: 3,
+                        specialization: member.signature,
+                      ),
               );
               expect(
                 tester.takeException(),
@@ -1015,7 +911,6 @@ void main() {
       GamePhase phase = GamePhase.build,
       int gold = 9999,
       TowerStats? stats,
-      bool includeSpecializationStats = false,
       TextScaler textScaler = TextScaler.noScaling,
       VoidCallback? onSell,
       VoidCallback? onClose,
@@ -1042,23 +937,16 @@ void main() {
                     specialization: tower.specialization,
                   ),
               selectedTowerUpgradeStats: tower.canUpgrade
-                  ? GameBalance.towerStats(tower.type, level: tower.level + 1)
+                  ? GameBalance.towerStats(
+                      tower.type,
+                      level: tower.level + 1,
+                      specialization: tower.level + 1 == 3
+                          ? tower.character.signature
+                          : null,
+                    )
                   : null,
-              selectedTowerSpecializationStats: includeSpecializationStats
-                  ? {
-                      for (final spec in GameBalance.specializationsFor(
-                        tower.type,
-                      ))
-                        spec: GameBalance.towerStats(
-                          tower.type,
-                          level: tower.level + 1,
-                          specialization: spec,
-                        ),
-                    }
-                  : const {},
             ),
             onUpgrade: onUpgrade ?? () {},
-            onSpecialize: (_) {},
             onTargetingChanged: onTargetingChanged ?? (_) {},
             onSell: onSell ?? () {},
             sellRefund: 84,
@@ -1079,11 +967,10 @@ void main() {
         tester,
         tower: const PlacedTower(
           id: 7,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(2, 3),
           level: 2,
         ),
-        includeSpecializationStats: true,
       );
       await tester.pumpAndSettle();
       final viewport = tester.getRect(
@@ -1118,7 +1005,7 @@ void main() {
 
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
         level: 2,
       );
@@ -1127,7 +1014,7 @@ void main() {
       await pumpSheet(
         tester,
         tower: tower,
-        includeSpecializationStats: true,
+
         onSell: () => sells++,
         onClose: () => closes++,
       );
@@ -1173,11 +1060,11 @@ void main() {
 
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
         level: 2,
       );
-      await pumpSheet(tester, tower: tower, includeSpecializationStats: true);
+      await pumpSheet(tester, tower: tower);
 
       final before = tester.getRect(find.byKey(const ValueKey('tower-sell')));
       await tester.drag(
@@ -1203,7 +1090,7 @@ void main() {
 
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
       );
       final calls = <TowerTargetingMode>[];
@@ -1274,7 +1161,7 @@ void main() {
       (tester) async {
         const tower = PlacedTower(
           id: 7,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(2, 3),
           targetingMode: TowerTargetingMode.closest,
         );
@@ -1339,7 +1226,7 @@ void main() {
         'scale-derived fills', (tester) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.cryo,
+        character: Character.jin,
         position: GridPosition(2, 3),
       );
       final stats = GameBalance.towerStats(TowerType.cryo, level: 1);
@@ -1386,7 +1273,7 @@ void main() {
         'at least 10dp thick', (tester) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.cryo,
+        character: Character.jin,
         position: GridPosition(2, 3),
       );
       final stats = GameBalance.towerStats(TowerType.cryo, level: 1);
@@ -1440,7 +1327,7 @@ void main() {
 
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
         level: 2,
       );
@@ -1448,7 +1335,7 @@ void main() {
       await pumpSheet(
         tester,
         tower: tower,
-        includeSpecializationStats: true,
+
         textScaler: const TextScaler.linear(1.5),
         onSell: () => sells++,
       );
@@ -1495,11 +1382,11 @@ void main() {
 
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
         level: 2,
       );
-      await pumpSheet(tester, tower: tower, includeSpecializationStats: true);
+      await pumpSheet(tester, tower: tower);
 
       final scrollState = tester.state<ScrollableState>(
         find.descendant(
@@ -1515,11 +1402,8 @@ void main() {
       final viewport = tester.getRect(
         find.byKey(const ValueKey('tower-inspector-scroll')),
       );
-      final lastSpecialization = GameBalance.specializationsFor(
-        TowerType.laser,
-      ).last;
       final footer = tester.getRect(
-        find.byKey(ValueKey('tower-specialization-${lastSpecialization.name}')),
+        find.byKey(const ValueKey('tower-upgrade-preview')),
       );
       expect(footer.bottom, lessThanOrEqualTo(viewport.bottom));
     });
@@ -1539,7 +1423,7 @@ void main() {
 
         const tower = PlacedTower(
           id: 7,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(2, 3),
           targetingMode: TowerTargetingMode.strongest,
         );
@@ -1588,7 +1472,7 @@ void main() {
 
           const tower = PlacedTower(
             id: 7,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: GridPosition(2, 3),
           );
           var upgrades = 0;
@@ -1646,7 +1530,7 @@ void main() {
         'resolved cost', (tester) async {
       const tower = PlacedTower(
         id: 7,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(2, 3),
       );
       final stats = GameBalance.towerStats(TowerType.laser, level: 1);

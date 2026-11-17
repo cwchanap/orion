@@ -17,6 +17,18 @@ import '../widget_test.dart' as harness;
 
 const _bossCopy = 'Boss ahead. Check the scanner and prepare your defense.';
 
+/// A squad carrying every tip-family member, ordered so Drone Bay's card
+/// sits past the 360px rail viewport — the reveal test needs it offscreen.
+const _tipSquad = [
+  Character.haruto,
+  Character.mio,
+  Character.elena,
+  Character.kaito,
+  Character.shiori,
+  Character.ren,
+  Character.tetsuo,
+];
+
 /// Alpha's finale preview: ordinary groups plus the Relay Breaker boss.
 WavePreview _bossPreview({int waveNumber = 8}) => commandDeckPreview(
   waveNumber: waveNumber,
@@ -265,7 +277,7 @@ void main() {
         nextWavePreview: _bossPreview(),
         selectedTower: const PlacedTower(
           id: 1,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: GridPosition(2, 2),
         ),
       ),
@@ -386,10 +398,13 @@ void main() {
     await _project(
       tester,
       game,
-      commandDeckSnapshot(selectedCell: const GridPosition(2, 2)),
+      commandDeckSnapshot(
+        selectedCell: const GridPosition(2, 2),
+        squad: _tipSquad,
+      ),
     );
     expect(
-      find.text('Railgun unlocked. Pierces enemies in a line.'),
+      find.text('Railgun member in your squad. Pierces enemies in a line.'),
       findsOneWidget,
     );
 
@@ -498,9 +513,14 @@ void main() {
     final ref = await _pumpMission(tester, guideStore: store);
     final game = ref.game!;
     const cell = GridPosition(2, 2);
-    const ionCopy = 'Ion Chain unlocked. Lightning jumps between targets.';
+    const ionCopy =
+        'Ion Chain member in your squad. Lightning jumps between targets.';
 
-    await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+    await _project(
+      tester,
+      game,
+      commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
+    );
     await tester.tap(find.text('Got it'));
     await tester.pump();
     // The chained tip animates in — let the entrance finish or its Got it
@@ -638,14 +658,19 @@ void main() {
   );
 
   group('unlock tips on the selected-cell rail', () {
-    const railgunCopy = 'Railgun unlocked. Pierces enemies in a line.';
-    const ionChainCopy = 'Ion Chain unlocked. Lightning jumps between targets.';
+    const railgunCopy =
+        'Railgun member in your squad. Pierces enemies in a line.';
+    const ionChainCopy =
+        'Ion Chain member in your squad. Lightning jumps between targets.';
     const droneBayCopy =
-        'Drone Bay unlocked. Launches autonomous interceptors.';
+        'Drone Bay member in your squad. Launches autonomous interceptors.';
     const cell = GridPosition(2, 2);
 
-    PlacedTower placedTower(TowerType type, int id) =>
-        PlacedTower(id: id, type: type, position: GridPosition(2, 2 + id));
+    PlacedTower placedTower(Character member, int id) => PlacedTower(
+      id: id,
+      character: member,
+      position: GridPosition(2, 2 + id),
+    );
 
     testWidgets('tip anchors to the rail card; no Wave pill is present in '
         'this dock branch', (tester) async {
@@ -655,7 +680,7 @@ void main() {
       await _project(
         tester,
         ref.game!,
-        commandDeckSnapshot(selectedCell: cell),
+        commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
       );
 
       expect(find.text(railgunCopy), findsOneWidget);
@@ -694,7 +719,11 @@ void main() {
         final ref = await _pumpMission(tester, guideStore: preloaded);
         final game = ref.game!;
 
-        await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+        await _project(
+          tester,
+          game,
+          commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
+        );
         // The reveal animation's ticker starts in the mount frame's
         // post-frame callbacks, so its first tick lands one frame later;
         // give it its full 240ms window before asserting.
@@ -703,7 +732,7 @@ void main() {
 
         expect(find.text(droneBayCopy), findsOneWidget);
         final card = tester.getRect(
-          find.byKey(const ValueKey('tower-card-droneBay')),
+          find.byKey(const ValueKey('tower-card-tetsuo')),
         );
         expect(card.left, greaterThanOrEqualTo(0));
         expect(card.right, lessThanOrEqualTo(360));
@@ -733,13 +762,21 @@ void main() {
         final ref = await _pumpMission(tester, guideStore: store);
         final game = ref.game!;
 
-        await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+        await _project(
+          tester,
+          game,
+          commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
+        );
         expect(find.text(railgunCopy), findsOneWidget);
 
         // Deselect → idle branch (persistent rail, no anchor) runs through
         // the AnimatedSwitcher, then re-select → build branch again.
         await _project(tester, game, commandDeckSnapshot());
-        await _project(tester, game, commandDeckSnapshot(selectedCell: cell));
+        await _project(
+          tester,
+          game,
+          commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
+        );
 
         expect(tester.takeException(), isNull);
         expect(find.text(railgunCopy), findsOneWidget);
@@ -758,7 +795,7 @@ void main() {
       await _project(
         tester,
         game,
-        commandDeckSnapshot(placedTowers: [placedTower(TowerType.railgun, 1)]),
+        commandDeckSnapshot(placedTowers: [placedTower(Character.elena, 1)]),
       );
       await tester.pump();
       expect(await store.loadSeenTips(), {ContextualTip.railgun});
@@ -769,7 +806,8 @@ void main() {
         game,
         commandDeckSnapshot(
           selectedCell: cell,
-          placedTowers: [placedTower(TowerType.railgun, 1)],
+          squad: _tipSquad,
+          placedTowers: [placedTower(Character.elena, 1)],
         ),
       );
       expect(find.text(railgunCopy), findsNothing);
@@ -779,7 +817,7 @@ void main() {
 
   group('specialization and targeting tips', () {
     const specCopy =
-        'Specialization ready. Choose one of two ways to evolve this tower.';
+        'Signature ready. Upgrade this member to tier 3 to apply it.';
     const targetingCopy =
         'Targeting modes. Choose which enemies this tower attacks first.';
     final bubble = find.byKey(
@@ -790,7 +828,7 @@ void main() {
       GridPosition position = const GridPosition(2, 11),
     }) => PlacedTower(
       id: 7,
-      type: TowerType.railgun,
+      character: Character.elena,
       position: position,
       level: 2,
     );
@@ -848,7 +886,7 @@ void main() {
         );
 
         expect(find.text(specCopy), findsOneWidget);
-        final specialize = find.byTooltip('Specialize tower');
+        final specialize = find.byTooltip('Upgrade 210');
         expect(specialize, findsOneWidget);
         expect(
           tester.getRect(bubble).intersect(tester.getRect(specialize)),
@@ -874,7 +912,7 @@ void main() {
         final qualifying = levelTwoTower(position: const GridPosition(2, 2));
         final level1 = PlacedTower(
           id: 8,
-          type: TowerType.laser,
+          character: Character.haruto,
           position: const GridPosition(5, 8),
         );
 
@@ -918,7 +956,7 @@ void main() {
       // instead of over the Inspect/Salvage row above it.
       final level1 = PlacedTower(
         id: 8,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(5, 1),
       );
 
@@ -963,7 +1001,7 @@ void main() {
       final ref = await _pumpMission(tester, guideStore: store);
       final level1 = PlacedTower(
         id: 8,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(5, 8),
       );
       GameSnapshot withSelection() => commandDeckSnapshot(
@@ -994,7 +1032,7 @@ void main() {
       final game = ref.game!;
       final level1 = PlacedTower(
         id: 8,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(5, 8),
       );
       GameSnapshot withSelection() => commandDeckSnapshot(
@@ -1036,7 +1074,7 @@ void main() {
       final ref = await _pumpMission(tester, guideStore: store);
       final level1 = PlacedTower(
         id: 8,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(5, 5),
       );
       Future<GameSnapshot> withSelection() async {
@@ -1090,16 +1128,13 @@ void main() {
             placedTowers: [
               PlacedTower(
                 id: 7,
-                type: TowerType.laser,
+                character: Character.haruto,
                 position: const GridPosition(2, 2),
-                level: 2,
-                specialization: GameBalance.specializationsFor(
-                  TowerType.laser,
-                ).first,
+                level: 3,
               ),
               PlacedTower(
                 id: 8,
-                type: TowerType.laser,
+                character: Character.haruto,
                 position: const GridPosition(3, 4),
                 targetingMode: TowerTargetingMode.strongest,
               ),
@@ -1112,7 +1147,7 @@ void main() {
         expect(find.text(targetingCopy), findsNothing);
         expect(
           await store.loadSeenTips(),
-          containsAll({ContextualTip.specialization, ContextualTip.targeting}),
+          containsAll({ContextualTip.signature, ContextualTip.targeting}),
         );
       },
     );
@@ -1130,16 +1165,13 @@ void main() {
           placedTowers: [
             PlacedTower(
               id: 7,
-              type: TowerType.laser,
+              character: Character.haruto,
               position: const GridPosition(2, 2),
-              level: 2,
-              specialization: GameBalance.specializationsFor(
-                TowerType.laser,
-              ).first,
+              level: 3,
             ),
             PlacedTower(
               id: 8,
-              type: TowerType.laser,
+              character: Character.haruto,
               position: const GridPosition(3, 4),
               targetingMode: TowerTargetingMode.strongest,
             ),
@@ -1151,7 +1183,7 @@ void main() {
       expect(store.setSeenTipsCalls, 1);
       expect(
         await store.loadSeenTips(),
-        containsAll({ContextualTip.specialization, ContextualTip.targeting}),
+        containsAll({ContextualTip.signature, ContextualTip.targeting}),
       );
     });
   });

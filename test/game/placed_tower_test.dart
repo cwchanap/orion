@@ -17,7 +17,7 @@ void main() {
     test('defaults to First', () {
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       );
       expect(tower.targetingMode, TowerTargetingMode.first);
@@ -26,7 +26,7 @@ void main() {
     test('copyWith changes only the targeting mode', () {
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
       );
       final retargeted = tower.copyWith(
@@ -42,7 +42,7 @@ void main() {
     test('copyWith with no argument preserves the targeting mode', () {
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
         targetingMode: TowerTargetingMode.closest,
       );
@@ -53,22 +53,22 @@ void main() {
     test('upgraded preserves the targeting mode', () {
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
         targetingMode: TowerTargetingMode.weakest,
       );
       expect(tower.upgraded().targetingMode, TowerTargetingMode.weakest);
     });
 
-    test('specialized preserves the targeting mode', () {
+    test('tier-3 upgrade applies the member fixed signature', () {
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: GridPosition(0, 0),
         level: 2,
         targetingMode: TowerTargetingMode.closest,
       );
-      final specialized = tower.specialized(TowerSpecialization.pulseLaser);
+      final specialized = tower.upgraded();
       expect(specialized.targetingMode, TowerTargetingMode.closest);
       expect(specialized.level, 3);
       expect(specialized.specialization, TowerSpecialization.pulseLaser);

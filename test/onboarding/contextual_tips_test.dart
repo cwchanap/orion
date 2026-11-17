@@ -42,6 +42,7 @@ GameSnapshot _snapshot({
   ],
   bool selectedCellBuildable = true,
   List<PlacedTower> placedTowers = const [],
+  List<Character> squad = Character.values,
 }) {
   return GameSnapshot(
     phase: phase,
@@ -67,11 +68,12 @@ GameSnapshot _snapshot({
     autoStartCountdownRemaining: null,
     pendingRunModuleOffer: pendingRunModuleOffer,
     placedTowers: placedTowers,
+    squad: squad,
   );
 }
 
-PlacedTower _placed(TowerType type, int id) =>
-    PlacedTower(id: id, type: type, position: GridPosition(2, 2 + id));
+PlacedTower _placed(Character member, int id) =>
+    PlacedTower(id: id, character: member, position: GridPosition(2, 2 + id));
 
 void main() {
   group('ContextualTip enum', () {
@@ -83,7 +85,7 @@ void main() {
         'nanite',
         'gravityWell',
         'droneBay',
-        'specialization',
+        'signature',
         'targeting',
         'stageModifier',
       ]);
@@ -106,27 +108,27 @@ void main() {
       );
       expect(
         contextualTipCopy(ContextualTip.railgun),
-        'Railgun unlocked. Pierces enemies in a line.',
+        'Railgun member in your squad. Pierces enemies in a line.',
       );
       expect(
         contextualTipCopy(ContextualTip.ionChain),
-        'Ion Chain unlocked. Lightning jumps between targets.',
+        'Ion Chain member in your squad. Lightning jumps between targets.',
       );
       expect(
         contextualTipCopy(ContextualTip.nanite),
-        'Nanite unlocked. Corrodes armor to help other towers.',
+        'Nanite member in your squad. Corrodes armor to help other towers.',
       );
       expect(
         contextualTipCopy(ContextualTip.gravityWell),
-        'Gravity Well unlocked. Damages enemies within its field.',
+        'Gravity Well member in your squad. Damages enemies within its field.',
       );
       expect(
         contextualTipCopy(ContextualTip.droneBay),
-        'Drone Bay unlocked. Launches autonomous interceptors.',
+        'Drone Bay member in your squad. Launches autonomous interceptors.',
       );
       expect(
-        contextualTipCopy(ContextualTip.specialization),
-        'Specialization ready. Choose one of two ways to evolve this tower.',
+        contextualTipCopy(ContextualTip.signature),
+        'Signature ready. Upgrade this member to tier 3 to apply it.',
       );
       expect(
         contextualTipCopy(ContextualTip.targeting),
@@ -263,7 +265,7 @@ void main() {
             nextWavePreview: _bossPreview(),
             selectedTower: const PlacedTower(
               id: 1,
-              type: TowerType.laser,
+              character: Character.haruto,
               position: GridPosition(2, 2),
             ),
           ),
@@ -277,7 +279,7 @@ void main() {
             nextWavePreview: _bossPreview(),
             selectedTower: const PlacedTower(
               id: 1,
-              type: TowerType.laser,
+              character: Character.haruto,
               position: GridPosition(2, 2),
             ),
           ),
@@ -308,8 +310,8 @@ void main() {
     test('each placed unlock family marks exactly its own tip', () {
       final snapshot = _snapshot(
         placedTowers: [
-          _placed(TowerType.railgun, 1),
-          _placed(TowerType.droneBay, 2),
+          _placed(Character.elena, 1),
+          _placed(Character.tetsuo, 2),
         ],
       );
       expect(learnedTipsIn(snapshot), {
@@ -321,11 +323,11 @@ void main() {
     test('covers every unlock family in one board', () {
       final snapshot = _snapshot(
         placedTowers: [
-          _placed(TowerType.railgun, 1),
-          _placed(TowerType.ionChain, 2),
-          _placed(TowerType.nanite, 3),
-          _placed(TowerType.gravityWell, 4),
-          _placed(TowerType.droneBay, 5),
+          _placed(Character.elena, 1),
+          _placed(Character.kaito, 2),
+          _placed(Character.shiori, 3),
+          _placed(Character.ren, 4),
+          _placed(Character.tetsuo, 5),
         ],
       );
       expect(learnedTipsIn(snapshot), {
@@ -340,9 +342,9 @@ void main() {
     test('wave-1 families have no tips and teach nothing', () {
       final snapshot = _snapshot(
         placedTowers: [
-          _placed(TowerType.laser, 1),
-          _placed(TowerType.rocket, 2),
-          _placed(TowerType.cryo, 3),
+          _placed(Character.haruto, 1),
+          _placed(Character.mio, 2),
+          _placed(Character.jin, 3),
         ],
       );
       expect(learnedTipsIn(snapshot), isEmpty);
@@ -353,16 +355,13 @@ void main() {
         placedTowers: [
           PlacedTower(
             id: 1,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: const GridPosition(2, 5),
             level: 3,
-            specialization: GameBalance.specializationsFor(
-              TowerType.laser,
-            ).first,
           ),
         ],
       );
-      expect(learnedTipsIn(snapshot), {ContextualTip.specialization});
+      expect(learnedTipsIn(snapshot), {ContextualTip.signature});
     });
 
     test('a nondefault targeting mode marks targeting learned', () {
@@ -370,7 +369,7 @@ void main() {
         placedTowers: [
           PlacedTower(
             id: 1,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: const GridPosition(2, 5),
             targetingMode: TowerTargetingMode.strongest,
           ),
@@ -382,19 +381,16 @@ void main() {
     test('default towers teach neither specialization nor targeting', () {
       final snapshot = _snapshot(
         placedTowers: [
-          _placed(TowerType.laser, 1),
+          _placed(Character.haruto, 1),
           PlacedTower(
             id: 2,
-            type: TowerType.rocket,
+            character: Character.mio,
             position: const GridPosition(4, 5),
             level: 2,
           ),
         ],
       );
-      expect(
-        learnedTipsIn(snapshot),
-        isNot(contains(ContextualTip.specialization)),
-      );
+      expect(learnedTipsIn(snapshot), isNot(contains(ContextualTip.signature)));
       expect(learnedTipsIn(snapshot), isNot(contains(ContextualTip.targeting)));
     });
   });
@@ -503,7 +499,7 @@ void main() {
           _snapshot(
             unlockedTowerTypes: TowerType.values,
             selectedCell: cell,
-            selectedTower: _placed(TowerType.laser, 1),
+            selectedTower: _placed(Character.haruto, 1),
           ),
           {ContextualTip.targeting},
         ),
@@ -562,7 +558,7 @@ void main() {
       final snapshot = _snapshot(
         unlockedTowerTypes: TowerType.values,
         selectedCell: cell,
-        placedTowers: [_placed(TowerType.railgun, 1)],
+        placedTowers: [_placed(Character.elena, 1)],
       );
       expect(
         contextualTipFor(snapshot, learnedTipsIn(snapshot)),
@@ -592,7 +588,7 @@ void main() {
   group('specialization tip', () {
     final level2 = PlacedTower(
       id: 1,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: const GridPosition(2, 5),
       level: 2,
     );
@@ -600,10 +596,10 @@ void main() {
     test('nothing selected: aims at a placed level-2 unspecialized tower', () {
       expect(
         contextualTipFor(
-          _snapshot(placedTowers: [level2, _placed(TowerType.rocket, 2)]),
+          _snapshot(placedTowers: [level2, _placed(Character.mio, 2)]),
           {},
         ),
-        ContextualTip.specialization,
+        ContextualTip.signature,
       );
     });
 
@@ -616,7 +612,7 @@ void main() {
       // Once the boss lesson is seen, the same board yields specialization.
       expect(
         contextualTipFor(snapshot, {ContextualTip.bossWave}),
-        ContextualTip.specialization,
+        ContextualTip.signature,
       );
     });
 
@@ -624,14 +620,13 @@ void main() {
       // Only level-1 and level-3 towers: nothing left to specialize.
       final specialized = PlacedTower(
         id: 3,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(4, 5),
         level: 3,
-        specialization: GameBalance.specializationsFor(TowerType.laser).first,
       );
       expect(
         contextualTipFor(
-          _snapshot(placedTowers: [_placed(TowerType.laser, 1), specialized]),
+          _snapshot(placedTowers: [_placed(Character.haruto, 1), specialized]),
           {},
         ),
         isNull,
@@ -641,7 +636,7 @@ void main() {
     test('nothing selected: stays silent once specialization is seen', () {
       expect(
         contextualTipFor(_snapshot(placedTowers: [level2]), {
-          ContextualTip.specialization,
+          ContextualTip.signature,
         }),
         isNull,
       );
@@ -654,14 +649,14 @@ void main() {
       // HPA-412 upgrade tip's gold check.
       final pricey = PlacedTower(
         id: 1,
-        type: TowerType.railgun,
+        character: Character.elena,
         position: const GridPosition(2, 5),
         level: 2,
       );
       expect(contextualTipFor(_snapshot(placedTowers: [pricey]), {}), isNull);
       expect(
         contextualTipFor(_snapshot(gold: 300, placedTowers: [pricey]), {}),
-        ContextualTip.specialization,
+        ContextualTip.signature,
       );
     });
 
@@ -671,17 +666,17 @@ void main() {
       // specialize — not the earlier railgun on the board.
       final pricey = PlacedTower(
         id: 1,
-        type: TowerType.railgun,
+        character: Character.elena,
         position: const GridPosition(2, 5),
         level: 2,
       );
       final cheap = PlacedTower(
         id: 2,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(4, 5),
         level: 2,
       );
-      final candidate = specializationCandidateIn(
+      final candidate = signatureCandidateIn(
         _snapshot(placedTowers: [pricey, cheap]),
       );
       expect(candidate?.id, cheap.id);
@@ -693,7 +688,7 @@ void main() {
       // back once gold covers the cost.
       final pricey = PlacedTower(
         id: 1,
-        type: TowerType.railgun,
+        character: Character.elena,
         position: const GridPosition(2, 5),
         level: 2,
       );
@@ -713,7 +708,7 @@ void main() {
           ),
           {},
         ),
-        ContextualTip.specialization,
+        ContextualTip.signature,
       );
     });
 
@@ -725,7 +720,7 @@ void main() {
         selectedCell: level2.position,
         selectedTower: level2,
       );
-      expect(contextualTipFor(snapshot, {}), ContextualTip.specialization);
+      expect(contextualTipFor(snapshot, {}), ContextualTip.signature);
     });
 
     test(
@@ -734,7 +729,7 @@ void main() {
         // The board has a level-2 tower, but the SELECTED tower cannot
         // specialize: aiming at its Upgrade button would teach the wrong
         // control, so the resolver yields to targeting instead.
-        final other = _placed(TowerType.rocket, 2);
+        final other = _placed(Character.mio, 2);
         final snapshot = _snapshot(
           placedTowers: [level2, other],
           selectedCell: other.position,
@@ -795,7 +790,7 @@ void main() {
 
   group('targeting tip', () {
     test('a selected level-1 tower resolves targeting', () {
-      final tower = _placed(TowerType.laser, 1);
+      final tower = _placed(Character.haruto, 1);
       final snapshot = _snapshot(
         placedTowers: [tower],
         selectedCell: tower.position,
@@ -807,10 +802,9 @@ void main() {
     test('a selected specialized (level-3) tower resolves targeting', () {
       final tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(2, 5),
         level: 3,
-        specialization: GameBalance.specializationsFor(TowerType.laser).first,
       );
       final snapshot = _snapshot(
         placedTowers: [tower],
@@ -824,7 +818,7 @@ void main() {
         'targeting', () {
       final tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(2, 5),
         level: 2,
       );
@@ -834,7 +828,7 @@ void main() {
         selectedTower: tower,
       );
       expect(
-        contextualTipFor(snapshot, {ContextualTip.specialization}),
+        contextualTipFor(snapshot, {ContextualTip.signature}),
         ContextualTip.targeting,
       );
     });
@@ -842,7 +836,7 @@ void main() {
     test('specialization keeps priority over targeting for its own tower', () {
       final tower = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(2, 5),
         level: 2,
       );
@@ -851,11 +845,11 @@ void main() {
         selectedCell: tower.position,
         selectedTower: tower,
       );
-      expect(contextualTipFor(snapshot, {}), ContextualTip.specialization);
+      expect(contextualTipFor(snapshot, {}), ContextualTip.signature);
     });
 
     test('stays silent once targeting is seen', () {
-      final tower = _placed(TowerType.laser, 1);
+      final tower = _placed(Character.haruto, 1);
       final snapshot = _snapshot(
         placedTowers: [tower],
         selectedCell: tower.position,
@@ -865,7 +859,7 @@ void main() {
     });
 
     test('suppressed during combat, a draft, and ended sessions', () {
-      final tower = _placed(TowerType.laser, 1);
+      final tower = _placed(Character.haruto, 1);
       for (final (description, snapshot) in [
         (
           'wave',
@@ -915,42 +909,41 @@ void main() {
 
     test('nothing selected never resolves targeting', () {
       // The radial targeting button only exists while a tower is selected.
-      final tower = _placed(TowerType.laser, 1);
+      final tower = _placed(Character.haruto, 1);
       expect(contextualTipFor(_snapshot(placedTowers: [tower]), {}), isNull);
     });
   });
 
-  group('specializationCandidateIn', () {
+  group('signatureCandidateIn', () {
     test('returns the first placed level-2 unspecialized tower', () {
       final first = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(2, 5),
         level: 2,
       );
       final second = PlacedTower(
         id: 2,
-        type: TowerType.rocket,
+        character: Character.mio,
         position: const GridPosition(4, 5),
         level: 2,
       );
       final snapshot = _snapshot(
-        placedTowers: [_placed(TowerType.cryo, 3), first, second],
+        placedTowers: [_placed(Character.jin, 3), first, second],
       );
-      expect(specializationCandidateIn(snapshot), same(first));
+      expect(signatureCandidateIn(snapshot), same(first));
     });
 
     test('is null when no placed tower can specialize', () {
       final specialized = PlacedTower(
         id: 1,
-        type: TowerType.laser,
+        character: Character.haruto,
         position: const GridPosition(2, 5),
         level: 3,
-        specialization: GameBalance.specializationsFor(TowerType.laser).first,
       );
       expect(
-        specializationCandidateIn(
-          _snapshot(placedTowers: [_placed(TowerType.laser, 2), specialized]),
+        signatureCandidateIn(
+          _snapshot(placedTowers: [_placed(Character.haruto, 2), specialized]),
         ),
         isNull,
       );

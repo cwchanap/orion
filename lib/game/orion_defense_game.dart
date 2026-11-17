@@ -46,6 +46,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     Iterable<RunModuleId>? availableRunModules,
     ModuleOfferPicker? moduleOfferPicker,
+    Map<Character, int>? squad,
     this.onStageWon,
     this.onEndlessWaveCleared,
     this.onReturnToMap,
@@ -57,6 +58,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
          campaignModifiers: campaignModifiers,
          availableRunModules: availableRunModules,
          offerPicker: moduleOfferPicker,
+         squad: squad,
        ) {
     _resetPacing();
   }
@@ -84,7 +86,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   // Transient placement-preview presentation state (scene 1e). Never part of
   // GameSnapshot and never published by pointer moves; GameSession stays the
   // only validity/mutation authority.
-  TowerType? _previewType;
+  Character? _previewCharacter;
   GridPosition? _previewCell;
   bool _previewAllowed = false;
   double _previewRange = 0;
@@ -135,9 +137,9 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   /// Current transient placement-preview presentation state.
   @visibleForTesting
-  ({TowerType? type, GridPosition? cell, bool allowed, double range})
+  ({Character? character, GridPosition? cell, bool allowed, double range})
   get placementPreview => (
-    type: _previewType,
+    character: _previewCharacter,
     cell: _previewCell,
     allowed: _previewAllowed,
     range: _previewRange,
@@ -314,7 +316,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
-  void placeTower(TowerType type) {
+  void placeTower(Character character) {
     final position = _selectedCell;
     if (position == null) {
       _publishSnapshot(
@@ -322,13 +324,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       );
       return;
     }
-    _placeTowerAt(position, type);
+    _placeTowerAt(position, character);
   }
 
   /// Shared placement mutation for the tap path and the drag-commit path.
   /// GameSession.placeTower stays the only mutation authority.
-  void _placeTowerAt(GridPosition position, TowerType type) {
-    final result = _session.placeTower(position, type);
+  void _placeTowerAt(GridPosition position, Character character) {
+    final result = _session.placeTower(position, character);
     if (!result.isAllowed) {
       _publishSnapshot(feedback: _placementMessage(result.failure));
       return;
@@ -343,10 +345,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
-  /// Begins a drag placement preview. Stores the type only; validity is
+  /// Begins a drag placement preview. Stores the character only; validity is
   /// resolved per-pointer-update through GameSession.validatePlacement.
-  void beginTowerPlacementPreview(TowerType type) {
-    _previewType = type;
+  void beginTowerPlacementPreview(Character character) {
+    _previewCharacter = character;
     _previewCell = null;
     _previewAllowed = false;
     _previewRange = 0;
@@ -356,8 +358,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   /// Maps a GameWidget-local pointer position through boardCellAt and
   /// validates the candidate cell through the session. Publishes no snapshot.
   void updateTowerPlacementPreview(Offset canvasPosition) {
-    final type = _previewType;
-    if (type == null) {
+    final character = _previewCharacter;
+    if (character == null) {
       return;
     }
     final cell = boardCellAt(canvasPosition);
@@ -368,11 +370,16 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       _syncBoardPreview();
       return;
     }
-    final result = _session.validatePlacement(cell, type);
+    final result = _session.validatePlacement(cell, character);
     final double range = result.isAllowed
         ? _session
               .resolveTowerStats(
-                PlacedTower(id: -1, type: type, position: cell),
+                PlacedTower(
+                  id: -1,
+                  character: character,
+                  characterLevel: _session.squadLevel(character) ?? 1,
+                  position: cell,
+                ),
               )
               .range
         : 0;
@@ -386,8 +393,8 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
   /// position always cancels — it never falls back to the last candidate or
   /// the selected cell.
   void commitTowerPlacementPreview(Offset canvasPosition) {
-    final type = _previewType;
-    if (type == null) {
+    final character = _previewCharacter;
+    if (character == null) {
       return;
     }
     final cell = boardCellAt(canvasPosition);
@@ -395,11 +402,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (cell == null) {
       return;
     }
-    _placeTowerAt(cell, type);
+    _placeTowerAt(cell, character);
   }
 
   void cancelTowerPlacementPreview() {
-    _previewType = null;
+    _previewCharacter = null;
     _previewCell = null;
     _previewAllowed = false;
     _previewRange = 0;
@@ -411,13 +418,13 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (board == null) {
       return;
     }
-    board.previewActive = _previewType != null;
+    board.previewActive = _previewCharacter != null;
     board.previewBuildableCells = {
-      if (_previewType case final type?)
+      if (_previewCharacter case final character?)
         for (var row = 0; row < BoardLayout.rows; row++)
           for (var column = 0; column < BoardLayout.columns; column++)
             if (_session
-                .validatePlacement(GridPosition(column, row), type)
+                .validatePlacement(GridPosition(column, row), character)
                 .isAllowed)
               GridPosition(column, row),
     };
@@ -447,34 +454,6 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     if (upgradedTower != null && component != null) {
       component.updateTower(upgradedTower);
       _selectedTower = upgradedTower;
-    }
-    gameFeedback.towerConfirmed();
-    _publishSnapshot();
-  }
-
-  void specializeSelectedTower(TowerSpecialization specialization) {
-    final tower = _selectedTower;
-    if (tower == null) {
-      _publishSnapshot(
-        feedback: _draftBlockMessage() ?? 'Select a tower first.',
-      );
-      return;
-    }
-
-    if (!_session.specializeTower(tower.id, specialization)) {
-      _publishSnapshot(
-        feedback:
-            _draftBlockMessage() ??
-            _specializationMessage(tower, specialization),
-      );
-      return;
-    }
-
-    final specializedTower = _session.towerAt(tower.position);
-    final component = _towerComponents[tower.id];
-    if (specializedTower != null && component != null) {
-      component.updateTower(specializedTower);
-      _selectedTower = specializedTower;
     }
     gameFeedback.towerConfirmed();
     _publishSnapshot();
@@ -1370,9 +1349,10 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
       PlacementFailure.offBoard => 'Select a cell on the board.',
       PlacementFailure.pathBlocked => 'Cannot build on the enemy path.',
       PlacementFailure.occupied => 'That cell already has a tower.',
-      PlacementFailure.insufficientGold => 'Not enough gold for that tower.',
-      PlacementFailure.lockedTower => 'That tower unlocks after a later wave.',
-      null => 'Cannot place a tower there.',
+      PlacementFailure.insufficientGold => 'Not enough gold for that member.',
+      PlacementFailure.notInSquad => 'That member is not in this squad.',
+      PlacementFailure.alreadyDeployed => 'That member is already deployed.',
+      null => 'Cannot place a member there.',
     };
   }
 
@@ -1382,30 +1362,12 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   String _upgradeMessage(PlacedTower tower) {
     if (_session.phase != GamePhase.build) {
-      return 'Upgrade towers between waves.';
+      return 'Upgrade members between waves.';
     }
     if (!tower.canUpgrade) {
-      return 'Choose a specialization or use a maxed tower.';
+      return 'That member already carries their signature.';
     }
-    return 'Not enough gold to upgrade that tower.';
-  }
-
-  String _specializationMessage(
-    PlacedTower tower,
-    TowerSpecialization specialization,
-  ) {
-    if (_session.phase != GamePhase.build) {
-      return 'Specialize towers between waves.';
-    }
-    if (specialization.type != tower.type) {
-      return 'That specialization belongs to another tower.';
-    }
-    if (!tower.canSpecialize) {
-      return tower.isMaxLevel
-          ? 'That tower is already specialized.'
-          : 'Upgrade this tower before specializing.';
-    }
-    return 'Not enough gold to specialize that tower.';
+    return 'Not enough gold to upgrade that member.';
   }
 
   double get _towerRadius => (_cellSize * 0.28).clamp(8, 18).toDouble();

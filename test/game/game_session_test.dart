@@ -111,6 +111,7 @@ const _gravityCell = GridPosition(2, 2);
 /// Well towers placed at level 1.
 GameSession _modifiedSession() {
   final session = GameSession.initial(
+    squad: testFullSquad,
     stage: stageWithWaveCount(
       8,
       modifiers: const [StageModifier.amplifiedGravityWells],
@@ -119,8 +120,14 @@ GameSession _modifiedSession() {
     gold: 100000,
     offerPicker: _RecordingOfferPicker(),
   );
-  expect(session.placeTower(_laserCell, TowerType.laser).isAllowed, isTrue);
-  expect(session.placeTower(_cryoCell, TowerType.cryo).isAllowed, isTrue);
+  expect(
+    session.placeTower(_laserCell, testCharacterFor(TowerType.laser)).isAllowed,
+    isTrue,
+  );
+  expect(
+    session.placeTower(_cryoCell, testCharacterFor(TowerType.cryo)).isAllowed,
+    isTrue,
+  );
   for (final moduleId in [RunModuleId.heavyCaliber, RunModuleId.longSight]) {
     completeWave(session);
     completeWave(session);
@@ -131,7 +138,9 @@ GameSession _modifiedSession() {
     );
   }
   expect(
-    session.placeTower(_gravityCell, TowerType.gravityWell).isAllowed,
+    session
+        .placeTower(_gravityCell, testCharacterFor(TowerType.gravityWell))
+        .isAllowed,
     isTrue,
   );
   return session;
@@ -140,7 +149,7 @@ GameSession _modifiedSession() {
 void main() {
   group('GameSession', () {
     test('starts in build phase with approved economy', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(session.phase, GamePhase.build);
       expect(session.gold, GameBalance.startingGold);
@@ -149,20 +158,20 @@ void main() {
       expect(session.towers, isEmpty);
     });
 
-    test('starts with only the baseline towers unlocked', () {
+    test('exposes the starter squad styles as the deployment set', () {
       final session = GameSession.initial();
 
-      expect(session.unlockedTowerTypes, [
-        TowerType.laser,
-        TowerType.rocket,
-        TowerType.cryo,
-      ]);
+      // Starter squad is Haruto (laser) and Mio (rocket); the style list is
+      // deduplicated in squad order. Membership, not a wave clock, decides
+      // what may deploy.
+      expect(session.unlockedTowerTypes, [TowerType.laser, TowerType.rocket]);
+      expect(session.isTowerUnlocked(TowerType.laser), isTrue);
       expect(session.isTowerUnlocked(TowerType.railgun), isFalse);
       expect(session.isTowerUnlocked(TowerType.droneBay), isFalse);
     });
 
     test('snapshot exposes default mission pacing state', () {
-      final snapshot = GameSession.initial().snapshot();
+      final snapshot = GameSession.initial(squad: testFullSquad).snapshot();
 
       expect(snapshot.isPaused, isFalse);
       expect(snapshot.speedMultiplier, 1);
@@ -171,14 +180,14 @@ void main() {
     });
 
     test('snapshot carries read-only boss presence input', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(session.snapshot().bossActive, isFalse);
       expect(session.snapshot(bossActive: true).bossActive, isTrue);
     });
 
     test('snapshot can carry mission pacing state from the game layer', () {
-      final snapshot = GameSession.initial().snapshot(
+      final snapshot = GameSession.initial(squad: testFullSquad).snapshot(
         isPaused: true,
         speedMultiplier: 2,
         autoStartEnabled: true,
@@ -193,6 +202,7 @@ void main() {
 
     test('snapshot stage modifier list cannot be mutated', () {
       final snapshot = GameSession.initial(
+        squad: testFullSquad,
         stage: OrionCampaign.stageById('singularity-core'),
       ).snapshot();
 
@@ -203,7 +213,7 @@ void main() {
     });
 
     test('snapshot exposes next wave preview only during build phase', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       final firstPreview = session.snapshot().nextWavePreview;
 
@@ -271,6 +281,8 @@ void main() {
         mapRow: 0,
       );
 
+      // The starter squad's styles (laser, rocket) bound the recommendation:
+      // only laser counters regen among them.
       final preview = GameSession.initial(
         stage: stage,
       ).snapshot().nextWavePreview;
@@ -285,7 +297,7 @@ void main() {
     });
 
     test('snapshot preview carries final wave zero clear bonus', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       for (var wave = 0; wave < 7; wave += 1) {
         expect(session.startWave(), isTrue);
@@ -313,7 +325,7 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(stage: stage);
+      final session = GameSession.initial(squad: testFullSquad, stage: stage);
       final startingGold = session.gold;
 
       expect(session.snapshot().nextWavePreview?.clearBonus, 0);
@@ -326,7 +338,7 @@ void main() {
     });
 
     test('snapshot hides next wave preview after win and loss', () {
-      final wonSession = GameSession.initial();
+      final wonSession = GameSession.initial(squad: testFullSquad);
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
@@ -336,7 +348,7 @@ void main() {
       expect(wonSession.phase, GamePhase.won);
       expect(wonSession.snapshot().nextWavePreview, isNull);
 
-      final lostSession = GameSession.initial();
+      final lostSession = GameSession.initial(squad: testFullSquad);
       expect(lostSession.startWave(), isTrue);
       lostSession.damageBase(GameBalance.initialBaseHealth);
 
@@ -345,25 +357,37 @@ void main() {
     });
 
     test('validates invalid placements without spending gold', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(
         session
-            .validatePlacement(const GridPosition(-1, 0), TowerType.laser)
+            .validatePlacement(
+              const GridPosition(-1, 0),
+              testCharacterFor(TowerType.laser),
+            )
             .failure,
         PlacementFailure.offBoard,
       );
       expect(
         session
-            .validatePlacement(const GridPosition(0, 1), TowerType.laser)
+            .validatePlacement(
+              const GridPosition(0, 1),
+              testCharacterFor(TowerType.laser),
+            )
             .failure,
         PlacementFailure.pathBlocked,
       );
 
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
       expect(
         session
-            .validatePlacement(const GridPosition(0, 0), TowerType.cryo)
+            .validatePlacement(
+              const GridPosition(0, 0),
+              testCharacterFor(TowerType.cryo),
+            )
             .failure,
         PlacementFailure.occupied,
       );
@@ -371,11 +395,11 @@ void main() {
     });
 
     test('places towers and spends gold', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       final result = session.placeTower(
         const GridPosition(0, 0),
-        TowerType.rocket,
+        Character.mio,
       );
 
       expect(result.isAllowed, isTrue);
@@ -385,11 +409,11 @@ void main() {
     });
 
     test('denies purchase when gold is insufficient', () {
-      final session = GameSession.initial(gold: 40);
+      final session = GameSession.initial(squad: testFullSquad, gold: 40);
 
       final result = session.placeTower(
         const GridPosition(0, 0),
-        TowerType.laser,
+        Character.haruto,
       );
 
       expect(result.isAllowed, isFalse);
@@ -398,31 +422,31 @@ void main() {
       expect(session.towers, isEmpty);
     });
 
-    test('denies locked tower placement without spending gold', () {
+    test('denies off-squad placement without spending gold', () {
       final session = GameSession.initial(gold: 500);
 
       final result = session.placeTower(
         const GridPosition(0, 0),
-        TowerType.droneBay,
+        Character.tetsuo,
       );
 
       expect(result.isAllowed, isFalse);
-      expect(result.failure, PlacementFailure.lockedTower);
+      expect(result.failure, PlacementFailure.notInSquad);
       expect(session.gold, 500);
       expect(session.towers, isEmpty);
     });
 
     test('denies placement during an active wave without spending gold', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
       expect(session.startWave(), isTrue);
 
       final validation = session.validatePlacement(
         const GridPosition(0, 0),
-        TowerType.laser,
+        Character.haruto,
       );
       final result = session.placeTower(
         const GridPosition(0, 0),
-        TowerType.laser,
+        Character.haruto,
       );
 
       expect(validation.isAllowed, isFalse);
@@ -434,7 +458,7 @@ void main() {
     });
 
     test('denies placement after terminal states without spending gold', () {
-      final wonSession = GameSession.initial();
+      final wonSession = GameSession.initial(squad: testFullSquad);
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
@@ -443,7 +467,7 @@ void main() {
 
       final wonResult = wonSession.placeTower(
         const GridPosition(0, 0),
-        TowerType.laser,
+        Character.haruto,
       );
 
       expect(wonResult.isAllowed, isFalse);
@@ -451,13 +475,16 @@ void main() {
       expect(wonSession.gold, 150 + 30 + 40 + 50 + 65 + 80 + 95 + 115);
       expect(wonSession.towers, isEmpty);
 
-      final lostSession = GameSession.initial(baseHealth: 1);
+      final lostSession = GameSession.initial(
+        squad: testFullSquad,
+        baseHealth: 1,
+      );
       expect(lostSession.startWave(), isTrue);
       lostSession.damageBase(1);
 
       final lostResult = lostSession.placeTower(
         const GridPosition(0, 0),
-        TowerType.laser,
+        Character.haruto,
       );
 
       expect(lostResult.isAllowed, isFalse);
@@ -466,7 +493,7 @@ void main() {
       expect(lostSession.towers, isEmpty);
     });
 
-    test('unlocks towers after cleared waves and applies clear bonuses', () {
+    test('pays the authored clear bonus after each cleared wave', () {
       final session = GameSession.initial();
 
       expect(session.startWave(), isTrue);
@@ -474,13 +501,18 @@ void main() {
 
       expect(session.phase, GamePhase.build);
       expect(session.gold, 180);
-      expect(session.isTowerUnlocked(TowerType.railgun), isTrue);
-      expect(session.isTowerUnlocked(TowerType.ionChain), isFalse);
+      // Clearing a wave grants the clear bonus; the squad's style set is
+      // fixed at launch and does not grow with waves.
+      expect(session.unlockedTowerTypes, [TowerType.laser, TowerType.rocket]);
+      expect(session.isTowerUnlocked(TowerType.railgun), isFalse);
     });
 
     test('upgrades a tower once and spends gold', () {
-      final session = GameSession.initial(gold: 200);
-      session.placeTower(const GridPosition(0, 0), TowerType.cryo);
+      final session = GameSession.initial(squad: testFullSquad, gold: 200);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.cryo),
+      );
       final tower = session.towers.single;
 
       final upgraded = session.upgradeTower(tower.id);
@@ -494,8 +526,11 @@ void main() {
     test(
       'denies upgrade during wave without spending gold or changing level',
       () {
-        final session = GameSession.initial(gold: 200);
-        session.placeTower(const GridPosition(0, 0), TowerType.cryo);
+        final session = GameSession.initial(squad: testFullSquad, gold: 200);
+        session.placeTower(
+          const GridPosition(0, 0),
+          testCharacterFor(TowerType.cryo),
+        );
         final tower = session.towers.single;
         expect(session.startWave(), isTrue);
 
@@ -508,8 +543,11 @@ void main() {
     test(
       'denies upgrade after terminal states without spending gold or level',
       () {
-        final wonSession = GameSession.initial(gold: 200);
-        wonSession.placeTower(const GridPosition(0, 0), TowerType.cryo);
+        final wonSession = GameSession.initial(squad: testFullSquad, gold: 200);
+        wonSession.placeTower(
+          const GridPosition(0, 0),
+          testCharacterFor(TowerType.cryo),
+        );
         final wonTower = wonSession.towers.single;
         for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
           expect(wonSession.startWave(), isTrue);
@@ -521,8 +559,15 @@ void main() {
         expect(wonSession.towers.single.level, 1);
         expect(wonSession.gold, 130 + 30 + 40 + 50 + 65 + 80 + 95 + 115);
 
-        final lostSession = GameSession.initial(gold: 200, baseHealth: 1);
-        lostSession.placeTower(const GridPosition(0, 0), TowerType.cryo);
+        final lostSession = GameSession.initial(
+          squad: testFullSquad,
+          gold: 200,
+          baseHealth: 1,
+        );
+        lostSession.placeTower(
+          const GridPosition(0, 0),
+          testCharacterFor(TowerType.cryo),
+        );
         final lostTower = lostSession.towers.single;
         expect(lostSession.startWave(), isTrue);
         lostSession.damageBase(1);
@@ -534,8 +579,11 @@ void main() {
     );
 
     test('insufficient upgrade gold preserves tower level and gold', () {
-      final session = GameSession.initial(gold: 100);
-      session.placeTower(const GridPosition(0, 0), TowerType.cryo);
+      final session = GameSession.initial(squad: testFullSquad, gold: 100);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.cryo),
+      );
       final tower = session.towers.single;
 
       expect(session.upgradeTower(tower.id), isFalse);
@@ -544,15 +592,17 @@ void main() {
     });
 
     test('specializes a level two tower once and spends gold', () {
-      final session = GameSession.initial(gold: 500);
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final session = GameSession.initial(squad: testFullSquad, gold: 500);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
       final tower = session.towers.single;
       expect(session.upgradeTower(tower.id), isTrue);
 
-      final specialized = session.specializeTower(
-        tower.id,
-        TowerSpecialization.prismLaser,
-      );
+      // The tier-2->3 step is the same action; it applies Hikari's fixed
+      // prism signature automatically.
+      final specialized = session.upgradeTower(tower.id);
 
       expect(specialized, isTrue);
       expect(session.towers.single.level, 3);
@@ -561,80 +611,63 @@ void main() {
         TowerSpecialization.prismLaser,
       );
       expect(session.gold, 260);
-      expect(
-        session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
-        isFalse,
-      );
+      expect(session.upgradeTower(tower.id), isFalse);
       expect(session.gold, 260);
     });
 
-    test('rejects specialization in invalid states without spending gold', () {
-      final levelOneSession = GameSession.initial(gold: 500);
-      levelOneSession.placeTower(const GridPosition(0, 0), TowerType.laser);
-      final levelOneTower = levelOneSession.towers.single;
-
-      expect(
-        levelOneSession.specializeTower(
-          levelOneTower.id,
-          TowerSpecialization.prismLaser,
-        ),
-        isFalse,
+    test('tier-2 upgrade stays below the signature until the next step', () {
+      final session = GameSession.initial(squad: testFullSquad, gold: 500);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
       );
-      expect(levelOneSession.towers.single.level, 1);
-      expect(levelOneSession.gold, 450);
+      final tower = session.towers.single;
 
-      final wrongTowerSession = GameSession.initial(gold: 500);
-      wrongTowerSession.placeTower(const GridPosition(0, 0), TowerType.laser);
-      final wrongTower = wrongTowerSession.towers.single;
-      expect(wrongTowerSession.upgradeTower(wrongTower.id), isTrue);
-
-      expect(
-        wrongTowerSession.specializeTower(
-          wrongTower.id,
-          TowerSpecialization.siegeRocket,
-        ),
-        isFalse,
-      );
-      expect(wrongTowerSession.towers.single.level, 2);
-      expect(wrongTowerSession.towers.single.specialization, isNull);
-      expect(wrongTowerSession.gold, 380);
-
-      final activeWaveSession = GameSession.initial(gold: 500);
-      activeWaveSession.placeTower(const GridPosition(0, 0), TowerType.laser);
-      final activeWaveTower = activeWaveSession.towers.single;
-      expect(activeWaveSession.upgradeTower(activeWaveTower.id), isTrue);
-      expect(activeWaveSession.startWave(), isTrue);
-
-      expect(
-        activeWaveSession.specializeTower(
-          activeWaveTower.id,
-          TowerSpecialization.prismLaser,
-        ),
-        isFalse,
-      );
-      expect(activeWaveSession.towers.single.level, 2);
-      expect(activeWaveSession.towers.single.specialization, isNull);
-      expect(activeWaveSession.gold, 380);
+      // One upgrade moves tier 1 -> 2 only; the member's signature is not
+      // applied until the tier-3 step.
+      expect(session.upgradeTower(tower.id), isTrue);
+      expect(session.towers.single.level, 2);
+      expect(session.towers.single.specialization, isNull);
+      expect(session.gold, 380);
     });
 
-    test('insufficient specialization gold preserves tower level and gold', () {
-      final session = GameSession.initial(gold: 239);
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+    test('rejects tier-3 upgrade during a wave without spending gold', () {
+      final session = GameSession.initial(squad: testFullSquad, gold: 500);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
+      final tower = session.towers.single;
+      expect(session.upgradeTower(tower.id), isTrue);
+      expect(session.startWave(), isTrue);
+
+      expect(session.upgradeTower(tower.id), isFalse);
+      expect(session.towers.single.level, 2);
+      expect(session.towers.single.specialization, isNull);
+      expect(session.gold, 380);
+    });
+
+    test('insufficient signature gold preserves tower tier and gold', () {
+      final session = GameSession.initial(squad: testFullSquad, gold: 239);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
       final tower = session.towers.single;
       expect(session.upgradeTower(tower.id), isTrue);
 
-      expect(
-        session.specializeTower(tower.id, TowerSpecialization.prismLaser),
-        isFalse,
-      );
+      expect(session.upgradeTower(tower.id), isFalse);
       expect(session.towers.single.level, 2);
       expect(session.towers.single.specialization, isNull);
       expect(session.gold, 119);
     });
 
     test('sells a placed tower, refunds 70 percent, and frees the cell', () {
-      final session = GameSession.initial(gold: 200);
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final session = GameSession.initial(squad: testFullSquad, gold: 200);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
       final tower = session.towers.single;
       expect(session.gold, 150); // 200 - 50
 
@@ -647,17 +680,17 @@ void main() {
       // The cell is free for re-placement.
       final replace = session.placeTower(
         const GridPosition(0, 0),
-        TowerType.cryo,
+        Character.jin,
       );
       expect(replace.isAllowed, isTrue);
     });
 
     test('sellTower refunds upgraded and specialized investment', () {
-      final session = GameSession.initial(gold: 500);
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final session = GameSession.initial(squad: testFullSquad, gold: 500);
+      session.placeTower(const GridPosition(0, 0), Character.haruto);
       final tower = session.towers.single;
       session.upgradeTower(tower.id);
-      session.specializeTower(tower.id, TowerSpecialization.pulseLaser);
+      session.upgradeTower(tower.id);
 
       final refund = session.sellTower(session.towers.single.id);
 
@@ -668,8 +701,11 @@ void main() {
     test(
       'sellTower returns null during an active wave and keeps the tower',
       () {
-        final session = GameSession.initial(gold: 200);
-        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final session = GameSession.initial(squad: testFullSquad, gold: 200);
+        session.placeTower(
+          const GridPosition(0, 0),
+          testCharacterFor(TowerType.laser),
+        );
         final tower = session.towers.single;
         expect(session.startWave(), isTrue);
 
@@ -680,7 +716,7 @@ void main() {
     );
 
     test('sellTower returns null for an unknown tower id', () {
-      final session = GameSession.initial(gold: 200);
+      final session = GameSession.initial(squad: testFullSquad, gold: 200);
 
       expect(session.sellTower(999), isNull);
       expect(session.gold, 200);
@@ -688,15 +724,21 @@ void main() {
 
     group('targeting mode', () {
       test('newly placed tower defaults to First', () {
-        final session = GameSession.initial();
-        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final session = GameSession.initial(squad: testFullSquad);
+        session.placeTower(
+          const GridPosition(0, 0),
+          testCharacterFor(TowerType.laser),
+        );
 
         expect(session.towers.single.targetingMode, TowerTargetingMode.first);
       });
 
       test('setTargetingMode updates the mode during build phase', () {
-        final session = GameSession.initial();
-        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final session = GameSession.initial(squad: testFullSquad);
+        session.placeTower(
+          const GridPosition(0, 0),
+          testCharacterFor(TowerType.laser),
+        );
         final tower = session.towers.single;
 
         expect(
@@ -710,8 +752,11 @@ void main() {
       });
 
       test('setTargetingMode is denied during wave', () {
-        final session = GameSession.initial();
-        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final session = GameSession.initial(squad: testFullSquad);
+        session.placeTower(
+          const GridPosition(0, 0),
+          testCharacterFor(TowerType.laser),
+        );
         final tower = session.towers.single;
         expect(session.startWave(), isTrue);
 
@@ -723,7 +768,7 @@ void main() {
       });
 
       test('setTargetingMode returns false for an unknown tower id', () {
-        final session = GameSession.initial();
+        final session = GameSession.initial(squad: testFullSquad);
 
         expect(
           session.setTargetingMode(999, TowerTargetingMode.closest),
@@ -732,8 +777,8 @@ void main() {
       });
 
       test('targeting mode survives upgrade and specialization', () {
-        final session = GameSession.initial(gold: 500);
-        session.placeTower(const GridPosition(0, 0), TowerType.laser);
+        final session = GameSession.initial(squad: testFullSquad, gold: 500);
+        session.placeTower(const GridPosition(0, 0), Character.haruto);
         final tower = session.towers.single;
         expect(
           session.setTargetingMode(tower.id, TowerTargetingMode.closest),
@@ -743,16 +788,17 @@ void main() {
         expect(session.upgradeTower(tower.id), isTrue);
         expect(session.towers.single.targetingMode, TowerTargetingMode.closest);
 
+        expect(session.upgradeTower(tower.id), isTrue);
         expect(
-          session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
-          isTrue,
+          session.towers.single.specialization,
+          Character.haruto.signature,
         );
         expect(session.towers.single.targetingMode, TowerTargetingMode.closest);
       });
     });
 
     test('starts waves only from build phase', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(session.startWave(), isTrue);
       expect(session.phase, GamePhase.wave);
@@ -760,7 +806,7 @@ void main() {
     });
 
     test('progresses through all waves and wins after the final clear', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
@@ -773,7 +819,7 @@ void main() {
     });
 
     test('startWave remains false after won', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
@@ -786,7 +832,7 @@ void main() {
     });
 
     test('rewardKill mutates gold only during wave for positive rewards', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       session.rewardKill(8);
       expect(session.gold, GameBalance.startingGold);
@@ -802,7 +848,7 @@ void main() {
       session.rewardKill(8);
       expect(session.gold, GameBalance.startingGold + 8);
 
-      final wonSession = GameSession.initial();
+      final wonSession = GameSession.initial(squad: testFullSquad);
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
@@ -814,7 +860,7 @@ void main() {
     });
 
     test('damageBase mutates health only during wave for positive damage', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       session.damageBase(5);
       expect(session.baseHealth, GameBalance.initialBaseHealth);
@@ -831,7 +877,7 @@ void main() {
       session.damageBase(5);
       expect(session.baseHealth, 0);
 
-      final wonSession = GameSession.initial();
+      final wonSession = GameSession.initial(squad: testFullSquad);
       for (var wave = 0; wave < wonSession.stage.waves.length; wave += 1) {
         expect(wonSession.startWave(), isTrue);
         wonSession.finishActiveWave();
@@ -843,7 +889,7 @@ void main() {
     });
 
     test('loses when base health reaches zero and clamps health', () {
-      final session = GameSession.initial(baseHealth: 2);
+      final session = GameSession.initial(squad: testFullSquad, baseHealth: 2);
 
       expect(session.startWave(), isTrue);
       session.damageBase(5);
@@ -853,7 +899,7 @@ void main() {
     });
 
     test('loss cannot later become win by finishing the active wave', () {
-      final session = GameSession.initial(baseHealth: 1);
+      final session = GameSession.initial(squad: testFullSquad, baseHealth: 1);
 
       expect(session.startWave(), isTrue);
       session.damageBase(1);
@@ -864,8 +910,11 @@ void main() {
     });
 
     test('restart returns a clean initial state', () {
-      final session = GameSession.initial();
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final session = GameSession.initial(squad: testFullSquad);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
       session.startWave();
       session.damageBase(20);
 
@@ -879,17 +928,14 @@ void main() {
     });
 
     test('restart resets unlock progress and specialized towers', () {
-      final session = GameSession.initial(gold: 500);
+      final session = GameSession.initial(squad: testFullSquad, gold: 500);
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
       expect(session.isTowerUnlocked(TowerType.railgun), isTrue);
-      session.placeTower(const GridPosition(0, 0), TowerType.railgun);
+      session.placeTower(const GridPosition(0, 0), Character.elena);
       final tower = session.towers.single;
       expect(session.upgradeTower(tower.id), isTrue);
-      expect(
-        session.specializeTower(tower.id, TowerSpecialization.magneticRailgun),
-        isTrue,
-      );
+      expect(session.upgradeTower(tower.id), isTrue);
       expect(
         session.towers.single.specialization,
         TowerSpecialization.magneticRailgun,
@@ -899,28 +945,31 @@ void main() {
 
       expect(session.waveIndex, 0);
       expect(session.gold, session.startingGold);
-      expect(session.unlockedTowerTypes, [
-        TowerType.laser,
-        TowerType.rocket,
-        TowerType.cryo,
-      ]);
+      // The configured squad survives a restart unchanged.
+      expect(session.squad, Character.values);
       expect(session.towers, isEmpty);
     });
 
     test('restart resets tower IDs', () {
-      final session = GameSession.initial();
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      final session = GameSession.initial(squad: testFullSquad);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
 
       expect(session.towers.single.id, 1);
 
       session.restart();
-      session.placeTower(const GridPosition(0, 0), TowerType.laser);
+      session.placeTower(
+        const GridPosition(0, 0),
+        testCharacterFor(TowerType.laser),
+      );
 
       expect(session.towers.single.id, 1);
     });
 
     test('final wave win does not add a clear bonus', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       for (var wave = 0; wave < session.stage.waves.length; wave += 1) {
         expect(session.startWave(), isTrue);
@@ -946,7 +995,7 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(stage: stage);
+      final session = GameSession.initial(squad: testFullSquad, stage: stage);
 
       expect(session.stage, stage);
       expect(session.snapshot().stageId, 'test-stage');
@@ -978,17 +1027,23 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(stage: stage);
+      final session = GameSession.initial(squad: testFullSquad, stage: stage);
 
       expect(
         session
-            .validatePlacement(const GridPosition(0, 0), TowerType.laser)
+            .validatePlacement(
+              const GridPosition(0, 0),
+              testCharacterFor(TowerType.laser),
+            )
             .failure,
         PlacementFailure.pathBlocked,
       );
       expect(
         session
-            .validatePlacement(const GridPosition(0, 1), TowerType.laser)
+            .validatePlacement(
+              const GridPosition(0, 1),
+              testCharacterFor(TowerType.laser),
+            )
             .isAllowed,
         isTrue,
       );
@@ -1010,7 +1065,7 @@ void main() {
       );
 
       expect(
-        () => GameSession.initial(stage: stage),
+        () => GameSession.initial(squad: testFullSquad, stage: stage),
         throwsA(
           isA<ArgumentError>()
               .having((error) => error.invalidValue, 'invalidValue', stage.id)
@@ -1020,21 +1075,25 @@ void main() {
     });
 
     test('stores effective starting gold and base health', () {
-      final session = GameSession.initial(gold: 200, baseHealth: 25);
+      final session = GameSession.initial(
+        squad: testFullSquad,
+        gold: 200,
+        baseHealth: 25,
+      );
 
       expect(session.startingGold, 200);
       expect(session.startingBaseHealth, 25);
     });
 
     test('starting values default to GameBalance when no override', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(session.startingGold, GameBalance.startingGold);
       expect(session.startingBaseHealth, GameBalance.initialBaseHealth);
     });
 
     test('damageBase does not clamp below startingBaseHealth ceiling', () {
-      final session = GameSession.initial(baseHealth: 25);
+      final session = GameSession.initial(squad: testFullSquad, baseHealth: 25);
       session.startWave();
 
       session.damageBase(1);
@@ -1045,7 +1104,11 @@ void main() {
     test(
       'restart restores effective starting values, not GameBalance defaults',
       () {
-        final session = GameSession.initial(gold: 200, baseHealth: 25);
+        final session = GameSession.initial(
+          squad: testFullSquad,
+          gold: 200,
+          baseHealth: 25,
+        );
         session.startWave();
         session.damageBase(5);
         session.rewardKill(50);
@@ -1060,6 +1123,7 @@ void main() {
 
     test('Void Bastion resolves campaign health then stage penalty', () {
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: OrionCampaign.stageById('void-bastion'),
         campaignModifiers: const CampaignModifiers(bonusHealth: 5),
       );
@@ -1074,6 +1138,7 @@ void main() {
 
     test('Void Bastion applies the stage penalty to an explicit override', () {
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: OrionCampaign.stageById('void-bastion'),
         baseHealth: 4,
       );
@@ -1084,6 +1149,7 @@ void main() {
       'Void medal thresholds use resolved health and absolute Silver floor',
       () {
         final session = GameSession.initial(
+          squad: testFullSquad,
           stage: OrionCampaign.stageById('void-bastion'),
           campaignModifiers: const CampaignModifiers(bonusHealth: 5),
         );
@@ -1127,7 +1193,7 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(stage: stage);
+      final session = GameSession.initial(squad: testFullSquad, stage: stage);
 
       // enhancedClearBonus applies the 1.5× stage multiplier to the authored
       // 30-point bonus: 45 in both the preview and the payout.
@@ -1157,6 +1223,7 @@ void main() {
         ],
       ]);
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         offerPicker: picker,
       );
@@ -1218,6 +1285,7 @@ void main() {
           ],
         ]);
         final session = GameSession.initial(
+          squad: testFullSquad,
           stage: stageWithWaveCount(8),
           offerPicker: picker,
         );
@@ -1277,6 +1345,7 @@ void main() {
           ],
         ]);
         final session = GameSession.initial(
+          squad: testFullSquad,
           stage: stageWithWaveCount(8),
           offerPicker: picker,
         );
@@ -1331,6 +1400,7 @@ void main() {
         ],
       ]);
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         offerPicker: picker,
       );
@@ -1376,6 +1446,7 @@ void main() {
       for (final family in familyModuleByTower.entries) {
         final picker = _RecordingOfferPicker();
         final session = GameSession.initial(
+          squad: testFullSquad,
           stage: stageWithWaveCount(8),
           gold: 9999,
           offerPicker: picker,
@@ -1385,7 +1456,7 @@ void main() {
 
         if (session.isTowerUnlocked(family.key)) {
           expect(
-            session.placeTower(cell, family.key).isAllowed,
+            session.placeTower(cell, testCharacterFor(family.key)).isAllowed,
             isTrue,
             reason: '${family.key} must be placeable from wave 1',
           );
@@ -1407,7 +1478,7 @@ void main() {
           }
           if (session.isTowerUnlocked(family.key)) {
             expect(
-              session.placeTower(cell, family.key).isAllowed,
+              session.placeTower(cell, testCharacterFor(family.key)).isAllowed,
               isTrue,
               reason:
                   '${family.key} should be placeable at unlock wave '
@@ -1436,6 +1507,7 @@ void main() {
     test('eligible unplaced family module skips a full first pass', () {
       final picker = _RecordingOfferPicker();
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         offerPicker: picker,
         availableRunModules: {
@@ -1461,6 +1533,7 @@ void main() {
       () {
         final picker = _RecordingOfferPicker();
         final session = GameSession.initial(
+          squad: testFullSquad,
           stage: stageWithWaveCount(8),
           offerPicker: picker,
           availableRunModules: {
@@ -1509,6 +1582,7 @@ void main() {
     test('uncommitted family blueprints are never draft candidates', () {
       final picker = _RecordingOfferPicker();
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         gold: 9999,
         offerPicker: picker,
@@ -1529,7 +1603,9 @@ void main() {
         }
         if (session.isTowerUnlocked(TowerType.gravityWell)) {
           expect(
-            session.placeTower(cell, TowerType.gravityWell).isAllowed,
+            session
+                .placeTower(cell, testCharacterFor(TowerType.gravityWell))
+                .isAllowed,
             isTrue,
           );
         }
@@ -1564,7 +1640,10 @@ void main() {
 
     test('default session excludes the locked blueprint', () {
       final picker = _RecordingOfferPicker();
-      final session = GameSession.initial(offerPicker: picker);
+      final session = GameSession.initial(
+        squad: testFullSquad,
+        offerPicker: picker,
+      );
 
       clearTwoWaves(session);
 
@@ -1577,6 +1656,7 @@ void main() {
     test('explicit unlocked eligibility can offer Relay Calibration', () {
       final picker = _RecordingOfferPicker();
       final session = GameSession.initial(
+        squad: testFullSquad,
         offerPicker: picker,
         availableRunModules: {
           ...RunModuleUnlocks.baseModules,
@@ -1596,6 +1676,7 @@ void main() {
     test('eligible module set stays frozen during one attempt', () {
       final picker = _RecordingOfferPicker();
       final session = GameSession.initial(
+        squad: testFullSquad,
         offerPicker: picker,
         availableRunModules: RunModuleUnlocks.baseModules,
       );
@@ -1629,11 +1710,17 @@ void main() {
         ],
       ]);
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         offerPicker: picker,
       );
       expect(
-        session.placeTower(const GridPosition(2, 1), TowerType.laser).isAllowed,
+        session
+            .placeTower(
+              const GridPosition(2, 1),
+              testCharacterFor(TowerType.laser),
+            )
+            .isAllowed,
         isTrue,
       );
       completeWave(session);
@@ -1671,25 +1758,29 @@ void main() {
         ],
       ]);
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         gold: 500,
         offerPicker: picker,
       );
       const towerPosition = GridPosition(2, 1);
       expect(
-        session.placeTower(towerPosition, TowerType.laser).isAllowed,
+        session
+            .placeTower(towerPosition, testCharacterFor(TowerType.laser))
+            .isAllowed,
         isTrue,
       );
       final tower = session.towerAt(towerPosition)!;
       expect(session.upgradeTower(tower.id), isTrue);
 
-      // A separate level-1 tower isolates the upgrade gate: the level-2
-      // tower above can no longer upgrade (canUpgrade requires level == 1),
-      // so asserting upgradeTower on it would be vacuous. This tower still
-      // can upgrade, so a false result must be the pending draft blocking it.
+      // A separate level-1 member isolates the upgrade gate: Hikari is
+      // already deployed above, so Haruto (same laser style, distinct
+      // member) supplies the second tower.
       const upgradeCandidatePosition = GridPosition(4, 1);
       expect(
-        session.placeTower(upgradeCandidatePosition, TowerType.laser).isAllowed,
+        session
+            .placeTower(upgradeCandidatePosition, Character.haruto)
+            .isAllowed,
         isTrue,
       );
       final upgradeCandidate = session.towerAt(upgradeCandidatePosition)!;
@@ -1701,15 +1792,15 @@ void main() {
       final offer = session.pendingRunModuleOffer!;
       expect(
         session
-            .validatePlacement(const GridPosition(3, 1), TowerType.laser)
+            .validatePlacement(
+              const GridPosition(3, 1),
+              testCharacterFor(TowerType.laser),
+            )
             .failure,
         PlacementFailure.pendingModuleDraft,
       );
       expect(session.upgradeTower(upgradeCandidate.id), isFalse);
-      expect(
-        session.specializeTower(tower.id, TowerSpecialization.pulseLaser),
-        isFalse,
-      );
+      expect(session.upgradeTower(tower.id), isFalse);
       expect(session.sellTower(tower.id), isNull);
       expect(
         session.setTargetingMode(tower.id, TowerTargetingMode.strongest),
@@ -1727,7 +1818,7 @@ void main() {
       );
       expect(
         session
-            .validatePlacement(const GridPosition(3, 1), TowerType.laser)
+            .validatePlacement(const GridPosition(3, 1), Character.kaito)
             .isAllowed,
         isTrue,
       );
@@ -1738,19 +1829,25 @@ void main() {
 
   group('GameSession campaign modifiers', () {
     test('defaults to empty when omitted', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
       expect(session.campaignModifiers, CampaignModifiers.empty);
     });
 
     test('are stored on the session', () {
       const mods = CampaignModifiers(bonusGold: 30, bonusHealth: 5);
-      final session = GameSession.initial(campaignModifiers: mods);
+      final session = GameSession.initial(
+        squad: testFullSquad,
+        campaignModifiers: mods,
+      );
       expect(session.campaignModifiers, mods);
     });
 
     test('starting gold/health reflect them when no overrides', () {
       const mods = CampaignModifiers(bonusGold: 30, bonusHealth: 5);
-      final session = GameSession.initial(campaignModifiers: mods);
+      final session = GameSession.initial(
+        squad: testFullSquad,
+        campaignModifiers: mods,
+      );
       expect(session.startingGold, GameBalance.startingGold + 30);
       expect(session.startingBaseHealth, GameBalance.initialBaseHealth + 5);
     });
@@ -1758,6 +1855,7 @@ void main() {
     test('explicit gold/baseHealth overrides still win over them', () {
       const mods = CampaignModifiers(bonusGold: 30);
       final session = GameSession.initial(
+        squad: testFullSquad,
         campaignModifiers: mods,
         gold: 999,
         baseHealth: 999,
@@ -1767,7 +1865,7 @@ void main() {
     });
 
     test('wave-clear bonus pays the authored wave value', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
@@ -1779,7 +1877,10 @@ void main() {
     });
 
     test('clear bonus preview matches the authored Outpost Alpha value', () {
-      final session = GameSession.initial(stage: OrionCampaign.stageOne);
+      final session = GameSession.initial(
+        squad: testFullSquad,
+        stage: OrionCampaign.stageOne,
+      );
       final base = OrionCampaign.stageOne.waves.first.clearBonus;
 
       expect(session.snapshot().nextWavePreview?.clearBonus, base);
@@ -1788,7 +1889,7 @@ void main() {
     test(
       'restart refreshes starting resources from new campaign modifiers',
       () {
-        final session = GameSession.initial();
+        final session = GameSession.initial(squad: testFullSquad);
 
         expect(session.gold, GameBalance.startingGold);
         expect(session.startingBaseHealth, GameBalance.initialBaseHealth);
@@ -1830,27 +1931,31 @@ void main() {
     });
 
     test(
-      'specialization previews equal the real resolved stats after choosing',
+      'signature previews equal the real resolved stats after upgrading',
       () {
         for (final cell in [_laserCell, _cryoCell, _gravityCell]) {
-          final type = _modifiedSession().towerAt(cell)!.type;
-          for (final spec in GameBalance.specializationsFor(type)) {
-            final session = _modifiedSession();
-            final id = session.towerAt(cell)!.id;
-            expect(session.upgradeTower(id), isTrue);
-            final preview = session
-                .snapshot(selectedTower: session.towerAt(cell))
-                .selectedTowerSpecializationStats[spec];
-            expect(preview, isNotNull, reason: spec.name);
+          final session = _modifiedSession();
+          final tower = session.towerAt(cell)!;
+          final id = tower.id;
+          expect(session.upgradeTower(id), isTrue);
+          // At tier 2 the shared next-tier preview IS the fixed signature.
+          final preview = session
+              .snapshot(selectedTower: session.towerAt(cell))
+              .selectedTowerUpgradeStats;
+          expect(preview, isNotNull, reason: tower.character.name);
+          expect(
+            preview!.specialization,
+            tower.character.signature,
+            reason: tower.character.name,
+          );
 
-            expect(session.specializeTower(id, spec), isTrue);
-            final actual = session.resolveTowerStats(session.towerAt(cell)!);
-            expect(
-              _statsSignature(preview!),
-              _statsSignature(actual),
-              reason: spec.name,
-            );
-          }
+          expect(session.upgradeTower(id), isTrue);
+          final actual = session.resolveTowerStats(session.towerAt(cell)!);
+          expect(
+            _statsSignature(preview),
+            _statsSignature(actual),
+            reason: tower.character.name,
+          );
         }
       },
     );
@@ -1884,40 +1989,39 @@ void main() {
       final session = _modifiedSession();
       final none = session.snapshot();
       expect(none.selectedTowerUpgradeStats, isNull);
-      expect(none.selectedTowerSpecializationStats, isEmpty);
 
       final level1 = session.snapshot(
         selectedTower: session.towerAt(_cryoCell),
       );
       expect(level1.selectedTowerUpgradeStats, isNotNull);
-      expect(level1.selectedTowerSpecializationStats, isEmpty);
+      expect(level1.selectedTowerUpgradeStats!.level, 2);
 
       final id = session.towerAt(_cryoCell)!.id;
       expect(session.upgradeTower(id), isTrue);
       final level2 = session.snapshot(
         selectedTower: session.towerAt(_cryoCell),
       );
-      expect(level2.selectedTowerUpgradeStats, isNull);
+      // Tier 2 -> 3 is the same next-tier projection, now carrying the
+      // member's fixed signature.
+      expect(level2.selectedTowerUpgradeStats, isNotNull);
+      expect(level2.selectedTowerUpgradeStats!.level, 3);
       expect(
-        level2.selectedTowerSpecializationStats.keys,
-        GameBalance.specializationsFor(TowerType.cryo),
+        level2.selectedTowerUpgradeStats!.specialization,
+        session.towerAt(_cryoCell)!.character.signature,
       );
 
-      expect(
-        session.specializeTower(id, TowerSpecialization.frostbite),
-        isTrue,
-      );
+      expect(session.upgradeTower(id), isTrue);
       final level3 = session.snapshot(
         selectedTower: session.towerAt(_cryoCell),
       );
       expect(level3.selectedTowerUpgradeStats, isNull);
-      expect(level3.selectedTowerSpecializationStats, isEmpty);
     });
   });
 
   group('GameSession module beneficiaries', () {
     test('counts placed beneficiaries for each offered module only', () {
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         gold: 100000,
         offerPicker: _FixedModuleOfferPicker([
@@ -1930,15 +2034,21 @@ void main() {
       );
       expect(session.snapshot().pendingRunModuleBeneficiaries, isEmpty);
       expect(
-        session.placeTower(const GridPosition(0, 2), TowerType.cryo).isAllowed,
+        session.placeTower(const GridPosition(0, 2), Character.jin).isAllowed,
+        isTrue,
+      );
+      // Rin shares Jin's cryo style but deploys as her own member.
+      expect(
+        session.placeTower(const GridPosition(1, 2), Character.rin).isAllowed,
         isTrue,
       );
       expect(
-        session.placeTower(const GridPosition(1, 2), TowerType.cryo).isAllowed,
-        isTrue,
-      );
-      expect(
-        session.placeTower(const GridPosition(2, 2), TowerType.laser).isAllowed,
+        session
+            .placeTower(
+              const GridPosition(2, 2),
+              testCharacterFor(TowerType.laser),
+            )
+            .isAllowed,
         isTrue,
       );
       completeWave(session);
@@ -1969,16 +2079,21 @@ void main() {
 
   group('GameSession snapshot placed towers', () {
     test('starts empty before any tower is placed', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(session.snapshot().placedTowers, isEmpty);
     });
 
     test('projects a newly placed tower as a Level-1 entry', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(
-        session.placeTower(const GridPosition(2, 2), TowerType.laser).isAllowed,
+        session
+            .placeTower(
+              const GridPosition(2, 2),
+              testCharacterFor(TowerType.laser),
+            )
+            .isAllowed,
         isTrue,
       );
 
@@ -1990,9 +2105,14 @@ void main() {
     });
 
     test('does not live-update an earlier snapshot after an upgrade', () {
-      final session = GameSession.initial(gold: 200);
+      final session = GameSession.initial(squad: testFullSquad, gold: 200);
       expect(
-        session.placeTower(const GridPosition(2, 2), TowerType.laser).isAllowed,
+        session
+            .placeTower(
+              const GridPosition(2, 2),
+              testCharacterFor(TowerType.laser),
+            )
+            .isAllowed,
         isTrue,
       );
       final before = session.snapshot();
@@ -2008,7 +2128,7 @@ void main() {
 
   group('GameSession endless mode', () {
     test('defaults to the mission run mode', () {
-      final session = GameSession.initial();
+      final session = GameSession.initial(squad: testFullSquad);
 
       expect(session.mode, RunMode.mission);
       expect(session.enemyHealthMultiplier, 1);
@@ -2044,7 +2164,11 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(stage: stage, mode: RunMode.endless);
+      final session = GameSession.initial(
+        squad: testFullSquad,
+        stage: stage,
+        mode: RunMode.endless,
+      );
 
       expect(session.mode, RunMode.endless);
       for (var index = 0; index < waves.length * 2; index += 1) {
@@ -2112,7 +2236,11 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(stage: stage, mode: RunMode.endless);
+      final session = GameSession.initial(
+        squad: testFullSquad,
+        stage: stage,
+        mode: RunMode.endless,
+      );
       final startingGold = session.gold;
 
       completeWave(session);
@@ -2148,6 +2276,7 @@ void main() {
         ],
       ]);
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         mode: RunMode.endless,
         offerPicker: picker,
@@ -2180,6 +2309,7 @@ void main() {
 
     test('enemyHealthMultiplier grows by loop', () {
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         mode: RunMode.endless,
       );
@@ -2198,6 +2328,7 @@ void main() {
 
     test('snapshot keeps counting waves past the script', () {
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         mode: RunMode.endless,
       );
@@ -2225,6 +2356,7 @@ void main() {
 
     test('wavesCleared counts only finished waves on defeat', () {
       final firstWaveLoss = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         mode: RunMode.endless,
       );
@@ -2235,6 +2367,7 @@ void main() {
       expect(firstWaveLoss.snapshot().wavesCleared, 0);
 
       final ninthWaveLoss = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         mode: RunMode.endless,
       );
@@ -2251,6 +2384,7 @@ void main() {
 
     test('restart keeps the endless run mode', () {
       final session = GameSession.initial(
+        squad: testFullSquad,
         stage: stageWithWaveCount(8),
         mode: RunMode.endless,
       );

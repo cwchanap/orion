@@ -19,10 +19,26 @@ import '../support/command_deck_fixtures.dart';
 import '../support/real_fonts.dart';
 import '../widget_test.dart' as fixtures;
 
+const _testSquad = [
+  Character.haruto,
+  Character.mio,
+  Character.jin,
+  Character.ren,
+  Character.elena,
+  Character.shiori,
+  Character.kaito,
+  Character.tetsuo,
+  Character.hikari,
+  Character.akane,
+  Character.rin,
+  Character.sayo,
+];
+
 Widget railHost({
   int gold = 9999,
-  List<TowerType>? unlockedTowerTypes,
-  ValueChanged<TowerType>? onPlaceTower,
+  List<Character>? squad,
+  Set<Character> deployedMembers = const {},
+  ValueChanged<Character>? onPlaceTower,
   ValueChanged<TowerPlacementPreviewEvent>? onPlacementPreviewEvent,
 }) {
   return MaterialApp(
@@ -34,7 +50,11 @@ Widget railHost({
         child: TowerBuildRail(
           phase: GamePhase.build,
           gold: gold,
-          unlockedTowerTypes: unlockedTowerTypes ?? TowerType.values,
+          // One member per legacy style first (the old rail order) so the
+          // cards tests reach for by key stay onscreen at 375dp.
+          squad: squad ?? _testSquad,
+          squadLevels: const {},
+          deployedCharacters: deployedMembers,
           onPlaceTower: onPlaceTower ?? (_) {},
           onPlacementPreviewEvent: onPlacementPreviewEvent,
         ),
@@ -48,22 +68,22 @@ void main() {
     testWidgets('normal physical tap places exactly once, never previews', (
       tester,
     ) async {
-      final placed = <TowerType>[];
+      final placed = <Character>[];
       final events = <TowerPlacementPreviewEvent>[];
       await tester.pumpWidget(
         railHost(onPlaceTower: placed.add, onPlacementPreviewEvent: events.add),
       );
 
-      await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+      await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
 
-      expect(placed, [TowerType.laser]);
+      expect(placed, [Character.haruto]);
       expect(events, isEmpty);
     });
 
     testWidgets('semantics tap places exactly once, never previews', (
       tester,
     ) async {
-      final placed = <TowerType>[];
+      final placed = <Character>[];
       final events = <TowerPlacementPreviewEvent>[];
       await tester.pumpWidget(
         railHost(onPlaceTower: placed.add, onPlacementPreviewEvent: events.add),
@@ -73,7 +93,7 @@ void main() {
         await tester.pump();
         final data = tester.getSemantics(
           find.bySemanticsLabel(
-            RegExp(r'Laser, unlocked, cost \d+, affordable'),
+            RegExp(r'Haruto level 1 \(Laser\), ready, cost \d+, affordable'),
           ),
         );
         // ignore: deprecated_member_use
@@ -83,7 +103,7 @@ void main() {
         );
         await tester.pump();
 
-        expect(placed, [TowerType.laser]);
+        expect(placed, [Character.haruto]);
         expect(events, isEmpty);
       } finally {
         handle.dispose();
@@ -97,7 +117,7 @@ void main() {
       await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
 
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+        tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
       );
       await tester.pump(kLongPressTimeout - const Duration(milliseconds: 100));
       await gesture.up();
@@ -113,7 +133,7 @@ void main() {
       await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
 
       await tester.drag(
-        find.byKey(const ValueKey('tower-card-laser')),
+        find.byKey(const ValueKey('tower-card-haruto')),
         const Offset(-300, 0),
       );
       await tester.pumpAndSettle();
@@ -130,15 +150,15 @@ void main() {
       await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
 
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+        tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
 
       expect(events, hasLength(1));
       expect(events.single, isA<TowerPlacementPreviewBegin>());
       expect(
-        (events.single as TowerPlacementPreviewBegin).type,
-        TowerType.laser,
+        (events.single as TowerPlacementPreviewBegin).character,
+        Character.haruto,
       );
 
       // Releasing with no pointer position ever recorded cancels — never a
@@ -157,7 +177,7 @@ void main() {
         await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
 
         final start = tester.getCenter(
-          find.byKey(const ValueKey('tower-card-laser')),
+          find.byKey(const ValueKey('tower-card-haruto')),
         );
         final gesture = await tester.startGesture(start);
         await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
@@ -191,7 +211,7 @@ void main() {
       await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
 
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+        tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
       // Stream an update so a later drag end would commit at the last
@@ -222,7 +242,7 @@ void main() {
         await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
 
         final start = tester.getCenter(
-          find.byKey(const ValueKey('tower-card-laser')),
+          find.byKey(const ValueKey('tower-card-haruto')),
         );
         final gesture = await tester.startGesture(start, pointer: 7);
         await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
@@ -251,7 +271,7 @@ void main() {
         await tester.pumpWidget(railHost(onPlacementPreviewEvent: events.add));
 
         final startA = tester.getCenter(
-          find.byKey(const ValueKey('tower-card-laser')),
+          find.byKey(const ValueKey('tower-card-haruto')),
         );
         final gestureA = await tester.startGesture(startA);
         await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
@@ -262,7 +282,7 @@ void main() {
         // maxSimultaneousDrags is per-card: a second finger on another card
         // still starts a drag. Its events must never reach the preview.
         final gestureB = await tester.startGesture(
-          tester.getCenter(find.byKey(const ValueKey('tower-card-railgun'))),
+          tester.getCenter(find.byKey(const ValueKey('tower-card-elena'))),
           pointer: 2,
         );
         await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
@@ -291,17 +311,18 @@ void main() {
       },
     );
 
-    testWidgets('locked card cannot begin a preview', (tester) async {
+    testWidgets('deployed member card cannot begin a preview', (tester) async {
       final events = <TowerPlacementPreviewEvent>[];
       await tester.pumpWidget(
         railHost(
-          unlockedTowerTypes: const [TowerType.laser],
+          squad: const [Character.haruto],
+          deployedMembers: const {Character.haruto},
           onPlacementPreviewEvent: events.add,
         ),
       );
 
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(const ValueKey('tower-card-railgun'))),
+        tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
       await gesture.up();
@@ -322,7 +343,9 @@ void main() {
               child: TowerBuildRail(
                 phase: GamePhase.wave,
                 gold: 9999,
-                unlockedTowerTypes: TowerType.values,
+                squad: Character.values,
+                squadLevels: const {},
+                deployedCharacters: const {},
                 onPlaceTower: (_) {},
                 onPlacementPreviewEvent: events.add,
               ),
@@ -332,7 +355,7 @@ void main() {
       );
 
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+        tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
       await gesture.up();
@@ -354,7 +377,7 @@ void main() {
         );
 
         final gesture = await tester.startGesture(
-          tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+          tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
         );
         await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
 
@@ -379,7 +402,7 @@ void main() {
       expect(find.text('DROP TO BUILD'), findsNothing);
 
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+        tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
       await tester.pump();
@@ -400,7 +423,7 @@ void main() {
       await tester.pumpWidget(railHost(gold: 150));
 
       final gesture = await tester.startGesture(
-        tester.getCenter(find.byKey(const ValueKey('tower-card-laser'))),
+        tester.getCenter(find.byKey(const ValueKey('tower-card-haruto'))),
       );
       await tester.pump(kLongPressTimeout + const Duration(milliseconds: 50));
       await tester.pump();
@@ -418,32 +441,38 @@ void main() {
     (tester) async {
       final handle = tester.ensureSemantics();
       try {
-        final placed = <TowerType>[];
+        final placed = <Character>[];
         await tester.pumpWidget(
           MaterialApp(
             home: TowerBuildRail(
               phase: GamePhase.build,
               gold: 0,
-              unlockedTowerTypes: const [TowerType.laser],
+              squad: _testSquad,
+              squadLevels: const {},
+              deployedCharacters: const {},
               onPlaceTower: placed.add,
             ),
           ),
         );
 
-        for (final type in TowerType.values) {
+        for (final member in _testSquad) {
           expect(
-            find.byKey(ValueKey('tower-card-${type.name}')),
+            find.byKey(ValueKey('tower-card-${member.name}')),
             findsOneWidget,
           );
         }
 
-        await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
-        expect(placed, [TowerType.laser]);
+        await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
+        expect(placed, [Character.haruto]);
 
-        await tester.tap(find.byKey(const ValueKey('tower-card-railgun')));
-        expect(placed, [TowerType.laser]);
+        await tester.tap(find.byKey(const ValueKey('tower-card-elena')));
+        // Elena is in the squad, so her card also reports back — only the
+        // game-side validator would reject an unaffordable attempt.
+        expect(placed, [Character.haruto, Character.elena]);
         expect(
-          find.bySemanticsLabel(RegExp(r'Railgun, locked until wave')),
+          find.bySemanticsLabel(
+            RegExp(r'Elena level 1 \(Railgun\), ready, cost \d+, unaffordable'),
+          ),
           findsOneWidget,
         );
       } finally {
@@ -457,7 +486,7 @@ void main() {
 
     expect(find.byType(BackdropFilter), findsNothing);
     final tile = find.descendant(
-      of: find.byKey(const ValueKey('tower-card-laser')),
+      of: find.byKey(const ValueKey('tower-card-haruto')),
       matching: find.byType(OrionSurface),
     );
     expect(tile, findsOneWidget);
@@ -475,7 +504,6 @@ void main() {
           onStartWave: () {},
           onPlaceTower: (_) {},
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
         ),
@@ -529,7 +557,7 @@ void main() {
     // bolt-prefixed cost.
     await tester.pumpWidget(railHost());
 
-    final card = find.byKey(const ValueKey('tower-card-laser'));
+    final card = find.byKey(const ValueKey('tower-card-haruto'));
     final cost = find.descendant(
       of: card,
       matching: find.text(
@@ -538,7 +566,7 @@ void main() {
     );
     final name = find.descendant(
       of: card,
-      matching: find.text(TowerType.laser.label.toUpperCase()),
+      matching: find.text(Character.haruto.displayName.toUpperCase()),
     );
 
     expect(
@@ -556,10 +584,10 @@ void main() {
     await tester.pumpWidget(railHost());
 
     final first = tester.getRect(
-      find.byKey(const ValueKey('tower-card-laser')),
+      find.byKey(const ValueKey('tower-card-haruto')),
     );
     final fifth = tester.getRect(
-      find.byKey(ValueKey('tower-card-${TowerType.values[4].name}')),
+      find.byKey(const ValueKey('tower-card-elena')),
     );
     expect(first.width, 70); // artboard 1a's rail card
     expect(fifth.left, lessThan(375));
@@ -583,7 +611,7 @@ void main() {
 
     // The standard vertical card grows with text up to 1.3x.
     final first = tester.getRect(
-      find.byKey(const ValueKey('tower-card-laser')),
+      find.byKey(const ValueKey('tower-card-haruto')),
     );
     expect(first.width, closeTo(70 * 1.3, 0.01));
     expect(find.byType(TowerBuildRail), findsOneWidget);
@@ -613,7 +641,9 @@ void main() {
               child: TowerBuildRail(
                 phase: GamePhase.build,
                 gold: 999,
-                unlockedTowerTypes: TowerType.values,
+                squad: _testSquad,
+                squadLevels: const {},
+                deployedCharacters: const {},
                 onPlaceTower: (_) {},
               ),
             ),
@@ -622,12 +652,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final card = tester.getRect(find.byKey(const ValueKey('tower-card-laser')));
+    final card = tester.getRect(
+      find.byKey(const ValueKey('tower-card-haruto')),
+    );
     for (final text in [
-      'LASER',
+      'HARUTO',
       '${GameBalance.towerStats(TowerType.laser, level: 1).cost}',
     ]) {
-      final bounds = tester.getRect(find.text(text));
+      final bounds = tester.getRect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-card-haruto')),
+          matching: find.text(text),
+        ),
+      );
       expect(bounds.top, greaterThanOrEqualTo(card.top), reason: text);
       expect(bounds.bottom, lessThanOrEqualTo(card.bottom), reason: text);
     }
@@ -659,7 +696,9 @@ void main() {
                 child: TowerBuildRail(
                   phase: GamePhase.build,
                   gold: 999,
-                  unlockedTowerTypes: TowerType.values,
+                  squad: Character.values,
+                  squadLevels: const {},
+                  deployedCharacters: const {},
                   onPlaceTower: (_) {},
                 ),
               ),
@@ -669,7 +708,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       final price = find.descendant(
-        of: find.byKey(const ValueKey('tower-card-laser')),
+        of: find.byKey(const ValueKey('tower-card-haruto')),
         matching: find.text('50'),
       );
       final height = tester.getRect(price).height;
@@ -689,7 +728,9 @@ void main() {
           home: TowerBuildRail(
             phase: GamePhase.build,
             gold: 50,
-            unlockedTowerTypes: const [TowerType.laser, TowerType.rocket],
+            squad: const [Character.haruto, Character.mio],
+            squadLevels: const {},
+            deployedCharacters: const {},
             onPlaceTower: (_) {},
           ),
         ),
@@ -698,7 +739,8 @@ void main() {
       expect(
         find.bySemanticsLabel(
           RegExp(
-            r'Laser, unlocked, cost 50, affordable, place on selected cell',
+            r'Haruto level 1 \(Laser\), ready, cost 50, affordable, '
+            r'place on selected cell',
           ),
         ),
         findsOneWidget,
@@ -706,7 +748,8 @@ void main() {
       expect(
         find.bySemanticsLabel(
           RegExp(
-            r'Rocket, unlocked, cost 80, unaffordable, place on selected cell',
+            r'Mio level 1 \(Rocket\), ready, cost 80, unaffordable, '
+            r'place on selected cell',
           ),
         ),
         findsOneWidget,
@@ -716,42 +759,47 @@ void main() {
     }
   });
 
-  testWidgets('locked cards never call placement even with enough gold', (
-    tester,
-  ) async {
-    final placed = <TowerType>[];
-    await tester.pumpWidget(
-      MaterialApp(
-        home: TowerBuildRail(
-          phase: GamePhase.build,
-          gold: 9999,
-          unlockedTowerTypes: const [TowerType.laser],
-          onPlaceTower: placed.add,
+  testWidgets(
+    'deployed member cards never call placement even with enough gold',
+    (tester) async {
+      final placed = <Character>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          home: TowerBuildRail(
+            phase: GamePhase.build,
+            gold: 9999,
+            squad: const [Character.haruto],
+            squadLevels: const {},
+            deployedCharacters: const {Character.haruto},
+            onPlaceTower: placed.add,
+          ),
         ),
-      ),
-    );
+      );
 
-    await tester.tap(find.byKey(const ValueKey('tower-card-railgun')));
-    expect(placed, isEmpty);
-  });
+      await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
+      expect(placed, isEmpty);
+    },
+  );
 
   testWidgets('active-wave phase prevents every build callback', (
     tester,
   ) async {
-    final placed = <TowerType>[];
+    final placed = <Character>[];
     await tester.pumpWidget(
       MaterialApp(
         home: TowerBuildRail(
           phase: GamePhase.wave,
           gold: 9999,
-          unlockedTowerTypes: TowerType.values,
+          squad: Character.values,
+          squadLevels: const {},
+          deployedCharacters: const {},
           onPlaceTower: placed.add,
         ),
       ),
     );
 
-    await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
-    await tester.tap(find.byKey(const ValueKey('tower-card-droneBay')));
+    await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
+    await tester.tap(find.byKey(const ValueKey('tower-card-tetsuo')));
     expect(placed, isEmpty);
   });
 
@@ -772,7 +820,6 @@ void main() {
           onStartWave: () => startWaveTaps += 1,
           onPlaceTower: (_) {},
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
         ),
@@ -812,7 +859,6 @@ void main() {
           onStartWave: () => startWaveTaps += 1,
           onPlaceTower: (_) {},
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
         ),
@@ -1187,7 +1233,7 @@ void main() {
   ) async {
     const tower = PlacedTower(
       id: 7,
-      type: TowerType.laser,
+      character: Character.haruto,
       position: GridPosition(2, 3),
     );
     final callbacks = <String, VoidCallback>{
@@ -1209,7 +1255,6 @@ void main() {
           onStartWave: callbacks['startWave']!,
           onPlaceTower: (_) => callbacks['placeTower']!(),
           onUpgrade: callbacks['upgrade']!,
-          onSpecialize: (_) => callbacks['specialize']!(),
           onTargetingChanged: (_) => callbacks['targeting']!(),
           onSell: callbacks['sell']!,
         ),
@@ -1252,7 +1297,6 @@ void main() {
             onStartWave: () {},
             onPlaceTower: (_) {},
             onUpgrade: () {},
-            onSpecialize: (_) {},
             onTargetingChanged: (_) {},
             onSell: () {},
           ),
@@ -1344,7 +1388,7 @@ void main() {
       tester,
     ) async {
       final anchorKey = GlobalKey();
-      final placed = <TowerType>[];
+      final placed = <Character>[];
       await tester.pumpWidget(
         MaterialApp(
           home: Align(
@@ -1355,10 +1399,12 @@ void main() {
               child: TowerBuildRail(
                 phase: GamePhase.build,
                 gold: 9999,
-                unlockedTowerTypes: TowerType.values,
+                squad: _testSquad,
+                squadLevels: const {},
+                deployedCharacters: const {},
                 onPlaceTower: placed.add,
                 towerCardGuideAnchor: (
-                  type: TowerType.railgun,
+                  character: Character.haruto,
                   anchorKey: anchorKey,
                 ),
               ),
@@ -1367,24 +1413,24 @@ void main() {
         ),
       );
 
-      // The anchor is an ancestor of the Railgun card — and of no other.
+      // The anchor is an ancestor of the Haruto card — and of no other.
       expect(
         find.ancestor(
-          of: find.byKey(const ValueKey('tower-card-railgun')),
+          of: find.byKey(const ValueKey('tower-card-haruto')),
           matching: find.byKey(anchorKey),
         ),
         findsOneWidget,
       );
       expect(
         find.ancestor(
-          of: find.byKey(const ValueKey('tower-card-laser')),
+          of: find.byKey(const ValueKey('tower-card-mio')),
           matching: find.byKey(anchorKey),
         ),
         findsNothing,
       );
       // The wrapper never swallows the card's own tap.
-      await tester.tap(find.byKey(const ValueKey('tower-card-railgun')));
-      expect(placed, [TowerType.railgun]);
+      await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
+      expect(placed, [Character.haruto]);
     });
 
     testWidgets('persistent idle rail never carries the anchor key', (
@@ -1400,10 +1446,12 @@ void main() {
           onStartWave: () {},
           onPlaceTower: (_) {},
           onUpgrade: () {},
-          onSpecialize: (_) {},
           onTargetingChanged: (_) {},
           onSell: () {},
-          towerCardGuideAnchor: (type: TowerType.railgun, anchorKey: anchorKey),
+          towerCardGuideAnchor: (
+            character: Character.elena,
+            anchorKey: anchorKey,
+          ),
         ),
       );
 
@@ -1418,7 +1466,12 @@ void main() {
 
       // Selected-cell branch mounts with the anchor...
       await tester.pumpWidget(
-        dock(commandDeckSnapshot(selectedCell: const GridPosition(1, 1))),
+        dock(
+          commandDeckSnapshot(
+            selectedCell: const GridPosition(1, 1),
+            squad: const [Character.haruto, Character.mio, Character.elena],
+          ),
+        ),
       );
       await tester.pumpAndSettle();
       expect(find.byKey(anchorKey), findsOneWidget);
@@ -1443,17 +1496,17 @@ void main() {
       final scroll = tester.widget<CustomScrollView>(
         find.byType(CustomScrollView),
       );
-      expect(scroll.semanticChildCount, TowerType.values.length);
+      expect(scroll.semanticChildCount, _testSquad.length);
       expect(find.byType(SingleChildScrollView), findsNothing);
       expect(find.byType(ListView), findsNothing);
       // At 375 logical pixels the last card is offscreen — yet every one
       // of the eight cards is already built, so the guide can anchor and
       // reveal any of them.
-      for (final type in TowerType.values) {
+      for (final member in _testSquad) {
         expect(
-          find.byKey(ValueKey('tower-card-${type.name}')),
+          find.byKey(ValueKey('tower-card-${member.name}')),
           findsOneWidget,
-          reason: type.name,
+          reason: member.name,
         );
       }
     });
@@ -1465,24 +1518,24 @@ void main() {
       // The eager Row replaced ListView for guide anchoring; these
       // wrappers restore the per-card behavior it provided for free —
       // "item N of 8" announcements and repaint isolation.
-      for (final (index, type) in TowerType.values.indexed) {
+      for (final (index, member) in _testSquad.indexed) {
         final indexed = find.byWidgetPredicate(
           (widget) => widget is IndexedSemantics && widget.index == index,
         );
         expect(
           find.ancestor(
-            of: find.byKey(ValueKey('tower-card-${type.name}')),
+            of: find.byKey(ValueKey('tower-card-${member.name}')),
             matching: indexed,
           ),
           findsOneWidget,
-          reason: type.name,
+          reason: member.name,
         );
         expect(
           find
               .ancestor(of: indexed, matching: find.byType(RepaintBoundary))
               .first,
           findsOneWidget,
-          reason: type.name,
+          reason: member.name,
         );
       }
     });
@@ -1512,24 +1565,27 @@ void main() {
       'reveals the anchored offscreen card once and never fights the user',
       (tester) async {
         final anchorKey = GlobalKey();
-        Widget host(({TowerType type, Key anchorKey})? anchor) => MaterialApp(
-          home: Align(
-            alignment: Alignment.bottomCenter,
-            child: SizedBox(
-              width: 375,
-              height: 104,
-              child: TowerBuildRail(
-                phase: GamePhase.build,
-                gold: 9999,
-                unlockedTowerTypes: TowerType.values,
-                onPlaceTower: (_) {},
-                towerCardGuideAnchor: anchor == null
-                    ? null
-                    : (type: anchor.type, anchorKey: anchorKey),
+        Widget host(({Character character, Key anchorKey})? anchor) =>
+            MaterialApp(
+              home: Align(
+                alignment: Alignment.bottomCenter,
+                child: SizedBox(
+                  width: 375,
+                  height: 104,
+                  child: TowerBuildRail(
+                    phase: GamePhase.build,
+                    gold: 9999,
+                    squad: Character.values,
+                    squadLevels: const {},
+                    deployedCharacters: const {},
+                    onPlaceTower: (_) {},
+                    towerCardGuideAnchor: anchor == null
+                        ? null
+                        : (character: anchor.character, anchorKey: anchorKey),
+                  ),
+                ),
               ),
-            ),
-          ),
-        );
+            );
 
         double pixels() => tester
             .state<ScrollableState>(find.byType(Scrollable).first)
@@ -1538,26 +1594,27 @@ void main() {
 
         // Mounting with an offscreen Drone Bay anchor scrolls it into view.
         await tester.pumpWidget(
-          host((type: TowerType.droneBay, anchorKey: anchorKey)),
+          host((character: Character.tetsuo, anchorKey: anchorKey)),
         );
         await tester.pumpAndSettle();
-        expect(pixels(), greaterThan(0));
+        final revealedPixels = pixels();
+        expect(revealedPixels, greaterThan(0));
         final railTop = tester
-            .getTopLeft(find.byKey(const ValueKey('tower-card-droneBay')))
+            .getTopLeft(find.byKey(const ValueKey('tower-card-tetsuo')))
             .dy;
         expect(railTop, greaterThanOrEqualTo(0));
 
         // The user scrolls back: a parent rebuild with the SAME activation
         // must never re-scroll (no fighting the player).
         await tester.drag(
-          find.byKey(const ValueKey('tower-card-droneBay')),
+          find.byKey(const ValueKey('tower-card-tetsuo')),
           const Offset(400, 0),
         );
         await tester.pumpAndSettle();
         final afterUserScroll = pixels();
-        expect(afterUserScroll, lessThan(100));
+        expect(afterUserScroll, lessThan(revealedPixels));
         await tester.pumpWidget(
-          host((type: TowerType.droneBay, anchorKey: anchorKey)),
+          host((character: Character.tetsuo, anchorKey: anchorKey)),
         );
         await tester.pump();
         await tester.pump(const Duration(milliseconds: 300));
@@ -1576,7 +1633,6 @@ void main() {
         onStartWave: () {},
         onPlaceTower: (_) {},
         onUpgrade: () {},
-        onSpecialize: (_) {},
         onTargetingChanged: (_) {},
         onSell: () {},
       ),

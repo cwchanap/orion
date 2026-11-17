@@ -684,8 +684,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
     switch (event) {
-      case TowerPlacementPreviewBegin(:final type):
-        game.beginTowerPlacementPreview(type);
+      case TowerPlacementPreviewBegin(:final character):
+        game.beginTowerPlacementPreview(character);
       case TowerPlacementPreviewUpdate(:final globalPosition):
         final box = _gameRenderBox;
         if (box != null && box.attached) {
@@ -797,17 +797,31 @@ class _OrionGamePageState extends State<OrionGamePage> {
               });
             }
 
-            // Exactly one active card anchor: HPA-412's Laser card, or —
-            // only when the old guide is silent — the contextual unlock
-            // tip's card. The two never compete (guideEligible forces the
-            // contextual tip null), and bossWave maps to the scanner, not
-            // a card.
-            final TowerType? anchoredCardType =
-                guideStep == FirstMissionGuideStep.towerCard
-                ? TowerType.laser
-                : contextualTip == null
+            // Exactly one active card anchor: HPA-412's Laser-member card,
+            // or — only when the old guide is silent — the contextual unlock
+            // tip's member card. The two never compete (guideEligible forces
+            // the contextual tip null), and bossWave maps to the scanner,
+            // not a card. Cards are squad members now, so a style resolves
+            // to the first member carrying it.
+            Character? squadMemberFor(TowerType style) {
+              for (final member in snapshot.squad) {
+                if (member.style == style) return member;
+              }
+              return null;
+            }
+
+            // Only style tips anchor on a card; signature, targeting, boss
+            // and stage-modifier tips target elsewhere.
+            final tipStyle = contextualTip == null
                 ? null
                 : contextualTipTowerTypes[contextualTip];
+            final Character? anchoredCardCharacter =
+                guideStep == FirstMissionGuideStep.towerCard
+                ? (squadMemberFor(TowerType.laser) ??
+                      (snapshot.squad.isEmpty ? null : snapshot.squad.first))
+                : tipStyle == null
+                ? null
+                : squadMemberFor(tipStyle);
 
             GlobalKey? guideAnchorKey;
             Offset? guideTargetPoint;
@@ -840,10 +854,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
             // Contextual anchor targets: boss owns the collapsed scanner,
             // unlock tips their rail card, targeting the radial targeting
-            // button, and specialization either the selected tower's radial
+            // button, and signature either the selected tower's radial
             // progression surface or — while idle — the qualifying tower's
             // board cell. The resolver guarantees a qualifying tower exists
-            // whenever it resolves specialization.
+            // whenever it resolves signature.
             GlobalKey? contextualAnchorKey;
             Offset? contextualTargetPoint;
             switch (contextualTip) {
@@ -857,12 +871,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   ContextualTip.gravityWell ||
                   ContextualTip.droneBay:
                 contextualAnchorKey = _towerCardGuideAnchorKey;
-              case ContextualTip.specialization:
+              case ContextualTip.signature:
                 if (snapshot.selectedTower != null) {
                   contextualAnchorKey = _upgradeGuideAnchorKey;
                 } else {
                   contextualTargetPoint = game.boardCellCenter(
-                    specializationCandidateIn(snapshot)!.position,
+                    signatureCandidateIn(snapshot)!.position,
                   );
                 }
               case ContextualTip.targeting:
@@ -922,10 +936,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           ),
                     // Guide anchor keys are only attached for the active
                     // step, so gameplay surfaces stay untouched otherwise.
-                    towerCardGuideAnchor: anchoredCardType == null
+                    towerCardGuideAnchor: anchoredCardCharacter == null
                         ? null
                         : (
-                            type: anchoredCardType,
+                            character: anchoredCardCharacter,
                             anchorKey: _towerCardGuideAnchorKey,
                           ),
                     waveGuideAnchorKey:
@@ -935,7 +949,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     upgradeGuideAnchorKey:
                         snapshot.selectedTower != null &&
                             (guideStep == FirstMissionGuideStep.upgrade ||
-                                contextualTip == ContextualTip.specialization)
+                                contextualTip == ContextualTip.signature)
                         ? _upgradeGuideAnchorKey
                         : null,
                     targetingGuideAnchorKey:
@@ -982,7 +996,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
                     onToggleAutoStart: game.toggleAutoStart,
                     onPlaceTower: game.placeTower,
                     onUpgrade: game.upgradeSelectedTower,
-                    onSpecialize: game.specializeSelectedTower,
                     onTargetingChanged: game.setTargetingMode,
                     onSell: game.sellSelectedTower,
                     onPlacementPreviewEvent: _handlePlacementPreviewEvent,
@@ -1008,7 +1021,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
                           TowerInspector(
                             snapshot: snapshot,
                             onUpgrade: game.upgradeSelectedTower,
-                            onSpecialize: game.specializeSelectedTower,
                             onTargetingChanged: game.setTargetingMode,
                             onSell: game.sellSelectedTower,
                             sellRefund: GameBalance.refundValue(
@@ -1339,6 +1351,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
       campaignModifiers: campaignModifiers,
       availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
       moduleOfferPicker: widget.moduleOfferPicker,
+      // The committed squad goes to battle in selection order, each member
+      // carrying their persistent profile level (HPA-922).
+      squad: {
+        for (final member in _committedSquad)
+          member: _committedOwnedLevels[member] ?? 1,
+      },
       onStageWon: _handleStageWon,
       onEndlessWaveCleared: _saveEndlessBest,
       onReturnToMap: _returnFromMissionReport,

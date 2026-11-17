@@ -30,7 +30,7 @@ void main() {
         final tower = TowerComponent(
           tower: const PlacedTower(
             id: 1,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: GridPosition(1, 1),
           ),
           center: Vector2(radius, radius),

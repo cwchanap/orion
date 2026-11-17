@@ -382,7 +382,6 @@ GameSnapshot _snapshotLike(
   placedTowers: source.placedTowers,
   selectedTowerStats: source.selectedTowerStats,
   selectedTowerUpgradeStats: source.selectedTowerUpgradeStats,
-  selectedTowerSpecializationStats: source.selectedTowerSpecializationStats,
   pendingRunModuleBeneficiaries: source.pendingRunModuleBeneficiaries,
 );
 

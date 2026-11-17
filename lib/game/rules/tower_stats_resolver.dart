@@ -7,43 +7,31 @@ import 'stage_modifier_rules.dart';
 /// the stage environmental modifiers via [StageModifierRules.effectiveTowerStats],
 /// then applies run modules. Pure: identical inputs yield identical outputs.
 ///
-/// Pipeline order for new character-aware calls: base style/tier → character
-/// rank+level damage-channel scaling → stage → run modules. The optional
-/// [character]/[characterLevel] pair is the temporary Task-1 bridge: Task 3
-/// moves both onto [PlacedTower] and makes this path the only one.
+/// Pipeline order (HPA-922): base style/tier stats derived from
+/// [PlacedTower.type], [PlacedTower.level] and [PlacedTower.specialization] →
+/// character rank + persistent level damage-channel scaling → stage → run
+/// modules. Identity always comes from [PlacedTower.character] — there is no
+/// external character bridge.
 class TowerStatsResolver {
   static TowerStats resolve(
     PlacedTower tower, {
-    Character? character,
-    int characterLevel = 1,
     CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     Iterable<StageModifier> stageModifiers = const [],
     Iterable<RunModuleId> runModules = const [],
   }) {
-    assert(
-      character == null || character.style == tower.type,
-      'character combat style must match tower type',
-    );
-    assert(
-      character == null ||
-          tower.specialization == null ||
-          tower.specialization == character.signature,
-      'character signature must match tower specialization',
-    );
-
     final base = GameBalance.towerStats(
       tower.type,
       level: tower.level,
       specialization: tower.specialization,
     );
-    var adjusted = base;
-    if (character != null) {
-      adjusted = base.scaleDamageChannels(
-        GameBalance.characterScalingFactor(character.rank, characterLevel),
-      );
-    }
+    final characterScaled = base.scaleDamageChannels(
+      GameBalance.characterScalingFactor(
+        tower.character.rank,
+        tower.characterLevel,
+      ),
+    );
     final stageAdjusted = StageModifierRules.effectiveTowerStats(
-      resolvedStats: adjusted,
+      resolvedStats: characterScaled,
       stageModifiers: stageModifiers,
     );
     return RunModuleRules.applyTowerStats(stageAdjusted, runModules);

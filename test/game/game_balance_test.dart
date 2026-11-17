@@ -199,14 +199,15 @@ void main() {
           specialization: specialization,
         );
 
+        // Merged progression: one next-tier step until tier 3.
         expect(levelOneStats.canUpgrade, isTrue);
-        expect(levelOneStats.canSpecialize, isFalse);
+        expect(levelOneStats.nextUpgradeCost, levelOneStats.upgradeCost);
         expect(levelOneStats.isMaxLevel, isFalse);
-        expect(levelTwoStats.canUpgrade, isFalse);
-        expect(levelTwoStats.canSpecialize, isTrue);
+        expect(levelTwoStats.canUpgrade, isTrue);
+        expect(levelTwoStats.nextUpgradeCost, levelTwoStats.specializationCost);
         expect(levelTwoStats.isMaxLevel, isFalse);
         expect(specializedStats.canUpgrade, isFalse);
-        expect(specializedStats.canSpecialize, isFalse);
+        expect(specializedStats.nextUpgradeCost, isNull);
         expect(specializedStats.isMaxLevel, isTrue);
         expect(specializedStats.specialization, specialization);
       }
@@ -1022,7 +1023,7 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: GridPosition(0, 0),
           ),
         ),
@@ -1032,7 +1033,7 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.rocket,
+            character: Character.mio,
             position: GridPosition(0, 0),
           ),
         ),
@@ -1043,7 +1044,7 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.nanite,
+            character: Character.shiori,
             position: GridPosition(0, 0),
           ),
         ),
@@ -1055,7 +1056,7 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: GridPosition(0, 0),
             level: 2,
           ),
@@ -1068,10 +1069,9 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.laser,
+            character: Character.haruto,
             position: GridPosition(0, 0),
             level: 3,
-            specialization: TowerSpecialization.pulseLaser,
           ),
         ),
         168,
@@ -1081,10 +1081,9 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.rocket,
+            character: Character.akane,
             position: GridPosition(0, 0),
             level: 3,
-            specialization: TowerSpecialization.siegeRocket,
           ),
         ),
         231,
@@ -1094,10 +1093,9 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.ionChain,
+            character: Character.kaito,
             position: GridPosition(0, 0),
             level: 3,
-            specialization: TowerSpecialization.stormRelay,
           ),
         ),
         290,
@@ -1107,10 +1105,9 @@ void main() {
         GameBalance.refundValue(
           const PlacedTower(
             id: 1,
-            type: TowerType.droneBay,
+            character: Character.tetsuo,
             position: GridPosition(0, 0),
             level: 3,
-            specialization: TowerSpecialization.hunterBay,
           ),
         ),
         378,
@@ -1120,10 +1117,9 @@ void main() {
     test('cluster rocket burst radius stays within its splash radius', () {
       const tower = PlacedTower(
         id: 1,
-        type: TowerType.rocket,
+        character: Character.mio,
         position: GridPosition(0, 0),
         level: 3,
-        specialization: TowerSpecialization.clusterRocket,
       );
 
       // Guards the assumption that the normal splash visual covers the full
