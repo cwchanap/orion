@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/campaign_progress_store.dart';
+import 'package:orion/game/ui/camp_view.dart';
 import 'package:orion/game/ui/orion_menu_shell.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
@@ -246,6 +248,65 @@ void main() {
 
     await tester.tap(find.byTooltip('Codex'));
     expect(selected, [OrionMenuDestination.codex]);
+  });
+
+  testWidgets('embedded Camp renders the starter profile through the lazy '
+      'grid', (tester) async {
+    tester.view.physicalSize = const Size(360, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    // The page always embeds Camp in the shell, so the standalone header —
+    // including the recruited-count chip — never renders in the app; the
+    // roster state is carried by each card's semantics instead.
+    await tester.pumpWidget(
+      buildShell(
+        destination: OrionMenuDestination.camp,
+        child: const CampView(
+          ownedLevels: CampaignSave.starterOwnedLevels,
+          squad: CampaignSave.starterSquad,
+          embeddedInMenuShell: true,
+        ),
+      ),
+    );
+
+    expect(find.text('CAMP'), findsOneWidget);
+    expect(find.bySemanticsLabel('2 of 12 characters recruited'), findsNothing);
+    // Card labels merge with their inner text in the semantics tree, so
+    // match the authored label as the leading run of the node's label.
+    expect(
+      find.bySemanticsLabel(RegExp('^Hikari, rank S, locked')),
+      findsOneWidget,
+    );
+
+    // Haruto and Mio close the roster order; on a compact screen their
+    // cards only exist once the grid builds them lazily. The shell's tab
+    // bar is itself a Scrollable, so scroll the grid's own Scrollable.
+    final scrollable = find.descendant(
+      of: find.byType(GridView),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('camp-card-haruto')),
+      250,
+      scrollable: scrollable,
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('camp-card-mio')),
+      250,
+      scrollable: scrollable,
+    );
+
+    expect(
+      find.bySemanticsLabel(RegExp('^Haruto, rank E, level 1, squad member')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(RegExp('^Mio, rank E, level 1, squad member')),
+      findsOneWidget,
+    );
+    expect(find.text('SQUAD'), findsNWidgets(2));
+    expect(find.text('Lv 1'), findsNWidgets(2));
   });
 
   testWidgets('landscape side insets reach the embedded destination view', (
