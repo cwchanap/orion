@@ -11,136 +11,140 @@ Target branch: main; **this same PR** moves from documentation draft to implemen
 - Replace old R&D, wave-unlock and selectable-specialization code, tests and UI directly. No deprecation wrappers, old-save migration or compatibility adapters.
 - Preserve existing pure GameSession/rules versus Flame/rendering boundary. Character IDs are the placement identity; underlying TowerType and TowerSpecialization may remain private implementation vocabulary for existing combat mechanics.
 - All new art in this task is **extraction/copy of already approved placeholders**. Production illustration and sound creation stay in HPA-924/925/927. Do not expand the code ticket to include those tasks.
-- Test after each bounded slice, but commit and finish everything in **one PR**. Avoid extracting generic registries, providers or a new architecture.
+- Keep the **entire repo green after every implementation slice** with `flutter analyze && flutter test`. Each slice owns any caller/fixture changes needed to compile. Commit and finish everything in **one PR**; avoid generic registries, providers or new architecture.
 
-## Task 0 — Pin baseline and mockup references
+## Task 0 — Verify source files and approved assets
 
-1. Confirm current main: GameSession, OrionDefenseGame, TowerComponent, TowerStatsResolver, CampaignProgressStore, OrionGamePage, OrionMenuShell, StageBriefingSheet, MissionCommandDock, TowerInspector, Codex and guide/tips.
-2. Capture current working web flows and save behavior, then compare the four approved HPA-922 attachments **10-camp-roster, 11-character-sheet, 14-briefing-squad, 15-battle** and their HTML source ZIP. Log intended unchanged temporary space art.
-3. Identify the approved images/chibi sprites in the Linear attachments; crop/export into independent asset paths by character ID, with no asset generation. Check Flutter pubspec asset inclusion and Flame loading in the target platform.
-4. Write down the starter baseline and testing command/runner availability; inspect the existing integration_test/app_smoke_test.dart so its automation is adapted rather than replaced.
+1. Verify main's authoritative seams: `GameSession`, `OrionDefenseGame`, `PlacedTower`, `TowerStatsResolver`, `CampaignSave`, `OrionGamePage`'s committed save queue, and the existing widget/Flame tests.
+2. Read HPA-922 mockups **10 Camp, 11 Character sheet, 14 Briefing squad, 15 Battle** (and HTML sources) as UI references; **no need to capture baseline web screenshots**.
+3. Obtain the **full-size approved art ZIP attached to HPA-924**, not composites/crops from HPA-922 mockups. Inspect its per-ID folders and use those approved files as placeholders only; final art/SFX creation remains in separate tickets.
+4. Confirm `test/game/orion_defense_game_test.dart` headless game-loop harness, deterministic `ModuleOfferPicker`, and `.github/workflows/ci.yml` coverage job before changing the API.
 
-Evidence: a short PR description note with baseline screenshots/mockup source references; no extra planning PR or new reusable screenshot framework.
+Done: references and available assets identified; no new screenshot framework or separate PR.
 
-## Task 1 — Catalog and deterministic scaling (tests first)
+## Task 1 — Closed Character enum and pure scaling
 
-Expected production: lib/game/models/, lib/game/models/game_models.dart, lib/game/rules/tower_stats_resolver.dart, GameBalance in game_models.dart.  
-Tests: new focused character catalog/rules tests, test/game/game_balance_test.dart, test/game/tower_stats_resolver_test.dart.
+Production: `lib/game/models/game_models.dart` (or one closely related model file), `lib/game/rules/tower_stats_resolver.dart`, `lib/game/rules/run_module_rules.dart`.  
+Tests: focused character catalog, game-balance, run-module and stat-resolver tests.
 
-1. Write failing tests for 12 unique IDs, exact name/rank/style/fixed-signature mapping, matching signature style and two E starters. Include all S/A/B/C/D/E ranks and level bounds 1–40.
-2. Implement the immutable character catalog (no database): ID, rank, label/role/bio, combat style, signature, base stat multiplier and growth-per-level scalars. Centralize numeric tuning in GameBalance/catalog instead of duplicating 12 TowerStats blocks.
-3. Extend the pure resolver to take a CharacterDefinition, persistent level and battle tier. Resolve existing base combat style; activate only the fixed signature at tier 3; apply rank and level scalars; then stage and run-module modifiers. Delete tech-tree laser/cryo bonus application.
-4. Verify deterministic stat previews and no regression in chain, freeze, splash, pierce, gravity, corrosion or drone stats. Record concrete starter tuning knobs and tests for E vs S, level 1 vs 40 and battle tier 1/2/3.
+1. Define enhanced `enum Character` with 12 exact roster entries (stable lowercase `.name`), rank, full/display name, role, bio, fixed signature and label. Derive `style` from `signature.type`; **do not store separate style or string IDs**. `Character.values` defines Camp order.
+2. Define one rank multiplier per E/D/C/B/A/S and one level-growth constant (1–40) in `GameBalance`. Retain existing `TowerType`, `TowerSpecialization` and `GameBalance.towerStats` internally.
+3. Add a minimal `TowerStats.scaleDamageChannels(factor)` covering `damage`, `corrosionDamagePerSecond` and `droneDamage`; use it both for character scaling and `RunModuleRules`. Tests explicitly include Shiori/Nanite and Tetsuo/Drone Bay.
+4. Resolve base style/tier → rank+level channels → stage modifiers → run modules. Remove the tech-tree damage/slow bonus step at the appropriate compile-green slice; keep the existing style-specific movement/freeze/pierce/field mechanics.
+5. Decide once: **deploy, upgrade, signature and Recall costs remain style-based** through `GameBalance._towerCosts` and `refundValue`, never rank/level-based. Tests assert no extra gold can be minted.
 
-Stop condition: no view has been modified, yet all character combat computations are pure, testable and exhaustively cataloged.
+**Gate:** `flutter analyze && flutter test`; catalog/stats test assertions pass.
 
-## Task 2 — Fresh one-profile persistence and atomic save transactions
+## Task 2 — Extend atomic CampaignSave in place (v4), remove R&D in the same slice
 
-Expected production: replace lib/game/campaign/campaign_progress_store.dart aggregate/codec and lib/game/campaign/tech_tree.dart usages with a small lib/game/campaign/player_profile.dart and player_profile_store.dart (or equivalent nearby files); OrionGamePage page state/queue.  
-Tests: update test/game/campaign_progress_store_test.dart to profile store/codec tests, test/game/campaign_progress_test.dart and page persistence/widget tests.
+Production: `lib/game/campaign/campaign_progress_store.dart`, `campaign_progress.dart`, `lib/game/ui/orion_game_page.dart`, `orion_menu_shell.dart`; delete tech-tree-only files in this slice.  
+Tests: `test/game/campaign_progress_store_test.dart`, page save/relaunch/reset cases, menu-shell and legacy-tech-tree test cleanup.
 
-1. Test fresh default, known stage IDs, medal/endless records, unique owned IDs with 1–40 levels, valid ordered squad (0–6 distinct owned IDs), invalid/corrupt JSON and the old SharedPreferences key being ignored.
-2. Implement one immutable PlayerProfile with CampaignProgress, owned-level map and squad list. New key/version only; SharedPreferences store, in-memory store and reset. No migration for v1/v2/v3 campaign saves.
-3. Refactor OrionGamePage to retain its existing serial save queue, generation reset guard, last-committed payload composition and targeted optimistic rollback. Both squad edits and stage progress write one full profile. Do not let a failed squad save contaminate the next stage launch; keep feedback and retry affordances.
-4. Remove R&D tech points and purchases from page state and CampaignModifiers, preserving side-stage rewards, campaign completion badges and run-module unlock rules. Delete tech-tree-only models/tests instead of leaving no-op code.
+1. Extend existing `CampaignSave` with `Map<Character, int> ownedLevels` and ordered `List<Character> squad`, replacing `techTree`. Keep existing `CampaignProgressStore`, SharedPreferences, in-memory store and **same key `orion.campaign.progress`**. No extra profile store files.
+2. Codec writes **v4**; anything not v4 (including v1–3 old saves) starts a fresh two-E-character profile. For v4, parse the existing stage/endless results independently from character fields, skip bad/unknown character IDs/levels/duplicated squad IDs and restore starters if the owned map is empty. Decode strings only here via `Character.values.asNameMap()`. No migration, alternate keys or backward compatibility.
+3. Preserve the page's `_persistSave` generation guard and last-committed-state serialized queue, plus rollback/retry behavior. Supply fresh/default profile for reset. Squad writes are deferred to **Task 6 Launch**; stage and Endless records use the same aggregate.
+4. **In this same task**, remove `CampaignTechTree` purchases, its fields in `CampaignModifiers` and `OrionGamePage`, `TechTreeView`, the R&D tab/research chip and their tests/fixtures. Replace nav with Map/Camp/Codex; a lightweight compile-safe Camp placeholder can render the two owned starters until Task 6's full view. Preserve side-stage reward bonuses and Challenge Badge from progress.
+5. Test startup, relaunch, partial invalid v4 data, old v3 disregard, reset, failed save and two queued save operations.
 
-Stop condition: clean/reload/reset/save-failure tests pass; the page boots to a profile with exactly Haruto and Mio and no research UI.
+**Gate:** `flutter analyze && flutter test`; no live or test-only TechTreeView import survives. The whole app still launches.
 
-## Task 3 — Session rule: one of each, tier progression, recall
+## Task 3 — Extend PlacedTower, session one-of-each and minimal presentation wiring
 
-Expected production: lib/game/rules/game_session.dart, lib/game/models/game_models.dart, lib/game/rules/tower_stats_resolver.dart.  
-Tests: test/game/game_session_test.dart, test/game/placed_tower_test.dart (rename for the new model), test/game/tower_stats_resolver_test.dart.
+Production: `lib/game/models/game_models.dart`, `lib/game/rules/game_session.dart`, `lib/game/orion_defense_game.dart`, minimal `mission_command_dock.dart` and other callers/fixtures.  
+Tests: `test/game/game_session_test.dart`, placed-tower, resolver, placement tap/drag tests.
 
-1. Test the authoritative character ID placement API with session squad: reject unknown, unowned, off-squad, occupied, unaffordable, duplicate, wrong phase and pending-module placement. Two different characters sharing an underlying style **must** both deploy.
-2. Replace the generic placed-tower identity with a placed character holding ID, persistent level, battle tier, grid cell and targeting mode. Keep a convenient style stat object for the existing projectile/effect code. Expose squad/deployed/available state via immutable GameSnapshot rather than exposing the session's mutable collections.
-3. Convert placement, validation, upgrade and selected-cell previews to character IDs. Tier 1 → 2 uses the existing upgrade-cost seam; tier 2 → 3 automatically activates that character's fixed signature and specialization cost. Remove player-selected specialization branches/actions.
-4. Convert Sell to Recall; validate build phase, refund using the existing 70% invested-gold calculation, remove the actor, free the unique deployment ID, and allow a new tier-1 placement. Explicitly test that upgrade + recall + redeploy cannot create extra gold.
-5. Update session restart and Endless/new-run behavior so battle tier and deployed statuses reset; immutable profile level and chosen squad do not.
+1. **Keep `PlacedTower`** rather than add `PlacedCharacter` or an adapter: replace stored `type`/`specialization` with `Character character` and `int characterLevel`; retain battle `level` as tier, position, targeting and ID. Derived getters `type => character.style`, `specialization => level == 3 ? character.signature : null` preserve effect/render readers.
+2. `GameSession.initial(squad: Map<Character, int>)` takes the selected squad with persistent levels; the page supplies its committed profile. `placeTower(position, Character)` and preview validation reject off-squad/already deployed, phase, path/occupied cell, pending module and low gold. One character per field, but different characters sharing a style can both be placed.
+3. Merge tier progression into **one** `upgradeTower`: tier1→2 charges `upgradeCost`; tier2→3 charges `specializationCost` and automatically activates the fixed signature. `PlacedTower.upgraded()` supports both. Remove `specializeTower`, `canSpecialize` and user-selected branch; reuse `selectedTowerUpgradeStats` for the next-tier preview.
+4. **Recall** reuses `sellTower` logic and existing `GameBalance.refundValue`; keep build-only gating, 70%-of-invested-gold accounting, component-owned field/drone cleanup, availability reset and re-deploy as tier 1. No gold exploits.
+5. Keep `unlockedTowerTypes` as an **internal list of distinct squad styles**, replacing wave-based unlocks for the scanner and module draft pool. Preserve ordered candidate priority (placed → squad → existing any-module fallback after exhaustion) and three-card drafts; test no premature off-squad offering on starter wave 2 and correct late fallback.
+6. Update **all compiling callers in this same slice**: minimal dock maps characters to existing cards, Flame tap/drag/preview methods forward typed Character, and test fixtures use selected squads. Board can still render old tower sprites until Task 5.
 
-Stop condition: game-session tests cover both placement paths' common mutation entrypoint, all twelve character identities, full tier cycle and Recall.
+**Gate:** `flutter analyze && flutter test`; all 12 Character styles deploy in pure tests, direct duplicate prevention, fixed 3-tier upgrade and Recall/refund/redeploy work.
 
-## Task 4 — Flame integration and character images
+## Task 4 — Headless real-game starter victory and main-path E–C tuning (**before UI/art**)
 
-Expected production: lib/game/orion_defense_game.dart, lib/game/components/tower_component.dart (retained combat implementation), new small character-art mapping under lib/game/assets/ if useful, pubspec.yaml and approved placeholder image files.  
-Tests: test/game/orion_defense_game_test.dart, test/game/tower_component_test.dart and a character image asset contract test.
+Tests: add `test/game/stage_one_starters_win_test.dart` under ordinary `flutter test --coverage` (not emulator-only).
 
-1. Route tap placement and drag begin/update/commit/cancel by character ID. Recompute preview range from character-resolved stats; ensure drag cancellation cannot accidentally deploy.
-2. Pass the placed character into the existing combat component; keep target acquisition, cooldown, projectiles, field/drone ownership and radius/board hit testing unchanged.
-3. Render **full-body chibi** from its own character asset path on a **rank-colored ring**, not a generic tower icon. Reuse cached images/Sprite instances; avoid loading assets per frame. Keep sprite art overhang visual-only; gameplay collision/targeting stays on existing geometry.
-4. On Recall, tear down the component and associated drones/fields; retain existing feedback sound. On tier change, refresh component stats and signature visuals without changing effect implementations.
-5. Test every ID has a usable portrait/chibi resource and at least one Flame-rendered actor uses the approved sprite; do not call the HPA-924 art generator in this task.
+1. Instantiate actual `OrionCampaign.stageOne`, `OrionDefenseGame` with squad `{Character.haruto: 1, Character.mio: 1}`, a deterministic module picker, `onGameResize` and scripted placement/tier upgrades.
+2. Start each wave, tick real gameplay via `game.update(1/30)`, pick offered Salvage Modules, and continue to the **wave-8 boss death and GamePhase.won callback**. Guard the loop against indefinite hangs and verify spawns/combat actually occur. Do not call `finishActiveWave` or fabricate completion.
+3. If the two starters cannot win, change **only** the minimal shared rank/tier/cost tuning in `GameBalance`; no Stage 1 scripted overrides, cheat auto-kills or extra starter character.
+4. Extend the same headless fixture pattern to the five-stage **main path with an E–C owned/squad profile**; demonstrate eventual viability when HPA-923 provides more recruits. Only Haruto/Mio are playable by default until HPA-923; Stage 2+ may remain impossible for that two-character profile in this intermediate version.
+5. Assert victory result/medal, boss encounter, module draft compatibility, no duplicate placement and a restart. Test that the scenario catches regressions to starter costs and stats.
 
-Stop condition: board placement and combat on the actual game component still work; the character is visually present and unique per ID.
+**Gate:** `flutter analyze && flutter test`, including a repeatable real Stage 1 win and the representative E–C main-path fixture. **Do not start full Camp/chibi UI before this passes.**
 
-## Task 5 — Camp/menu and squad briefing
+## Task 5 — Flame chibi sprites from approved pack
 
-Expected production: lib/game/ui/orion_menu_shell.dart, lib/game/ui/orion_game_page.dart, new lib/game/ui/camp_view.dart (and focused sheet widgets only if needed), lib/game/ui/stage_briefing_sheet.dart.  
-Tests: new Camp widget tests, test/widget/orion_menu_shell_test.dart, test/widget/stage_briefing_sheet_test.dart, page profile-save/widget tests.
+Production: `lib/game/orion_defense_game.dart`, existing `lib/game/components/tower_component.dart`, optional tiny asset map and `pubspec.yaml`; approved per-ID assets.  
+Tests: Flame component tests and per-ID portrait/chibi asset-contract tests.
 
-1. Replace Map/R&D/Codex with Map/Camp/Codex, replace the R&D page and resource chip, retain the existing theme/top bar/scroll behavior. Delete tech_tree_view.dart and dead test fixtures.
-2. Camp uses catalog + owned IDs from profile to display the 12-card roster in mockup 10 order. Owned/unowned and rank are visible. Selecting any entry opens a read-only sheet with name, bio, role, stats, fixed signature and approved portrait as in mockup 11. HPA-923's Level up control is not rendered.
-3. Briefing receives committed squad/roster data and displays squad slots and a picker as in mockup 14. Permit reordering/deselecting/selecting only owned IDs, max six, no duplicate IDs. Zero selection prevents launch with clear feedback.
-4. Persist squad selection using the page's transactional profile save, and ensure sheet state reflects successful/failed saves without stale route-held data. A stage is launched only with the committed squad. Keep existing mission/replay/Endless choices and stage modifier tip.
-5. Test 320×568, tall and high-text-scale layouts, keyboard view in any searchable subview, navigation semantics and no overflow.
+1. Copy full-size approved portraits/chibi from HPA-924's ZIP to `assets/images/characters/{character.name}/{portrait,chibi}.png`; no mockup screenshot crops, new illustrations or audio generation.
+2. Keep original combat implementation, targeting geometry, projectile, field and drone lifecycle; render **full-body chibi over a rank-colored ring** from cached per-ID assets. Use the same chibi in dock later.
+3. On Recall remove component plus owned drone/field effects; on tier change refresh existing component's resolved stats and effect. Tap, drag preview/update/commit/cancel continue using character identity and the same session placement rule.
+4. Confirm rendering and loading for every ID and at least one live on-board chibi; old space boards/enemies intentionally remain until HPA-926.
 
-Stop condition: starting a new run from briefing always has the persisted selected squad, not a transient UI-only list.
+**Gate:** `flutter analyze && flutter test`, including render and asset checks. No final asset task scope added.
 
-## Task 6 — Battle dock, inspector, onboarding and Codex
+## Task 6 — Camp and squad picker; save **once on Launch**
 
-Expected production: lib/game/ui/mission_command_dock.dart, lib/game/ui/tower_inspector.dart, lib/game/ui/mission_chrome.dart, lib/game/ui/orion_game_page.dart, lib/game/onboarding/, lib/game/codex/codex_data.dart, lib/game/ui/codex_view.dart.  
-Tests: focused dock, inspector, onboarding and Codex widget/unit suites; adjust scene-parity fixtures.
+Production: `lib/game/ui/orion_game_page.dart`, `orion_menu_shell.dart`, small `camp_view.dart`, `stage_briefing_sheet.dart`.  
+Tests: Camp, sheet, shell and page persistence/widget tests.
 
-1. Reuse the existing eager horizontal build rail and drag interactions but populate only the current squad, in squad order. Cards show chibi, name/rank, deploy cost and status. Deployed cards cannot place again; insufficient gold is explained.
-2. Replace inspector specialization cards with one fixed tier-3 signature action and preview, then a max-tier state. Rename Sell to Recall and preserve existing targeting/pause/wave widgets and semantics.
-3. Update new-player guide anchors/copy: first build cell → Haruto/Mio card → wave → tier-2 upgrade → Salvage Module → scanner. Revise obsolete wave-unlock and two-choice specialization tips; keep boss, targeting and stage-modifier tips. Rewrite, don't skip, corresponding tests.
-4. Convert the searchable Codex's Towers presentation to character identity/fixed-signature prose; retain its search, section scroll, enemy/trait/effect/stage pages and existing stage progression.
-5. Remove dead wave-unlock checks, R&D points, specialization-choice actions, tech-tree test files and UI assets no longer referenced. Do not alter unrelated art themes or asset/audio generation code.
+1. Finish Camp roster as in mockup 10: 12 Character entries in enum order, owned/locked and rank state, read-only sheet with portrait/name/bio/signature/stats as in 11. Keep current theme and temporary R&D bay backdrop, but **no R&D tab/research points** and no Level up UI.
+2. Stage briefing shows a local **draft** squad (up to six unique owned characters; ordering explicit). No per-tap disk write. Cancel discards the draft; a zero-member draft disables Launch with clear feedback. Keep mission/replay/Endless controls and modifier tip.
+3. On Launch, call the existing serialized `_persistSave` once with a committed-base `CampaignSave.withSquad(draft)` update. **Important queue ordering:** `_persistSave` currently returns before its queued `saveTask` finishes, and invokes `onCommitted` before `_decrementPendingSaves`. Simply `await _persistSave` or `onCommitted: _startStage` is therefore incorrect: explicitly await a completion handshake/queued transaction (minimal local adjustment), then start **after** `_isSavingProgress` clears. Launch with the *committed* squad only; failure stays on briefing for retry and never launches.
+4. Test Cancel/no write, save-once on Launch, failed save and retry, simultaneous Launch taps (single start), squad order persisted across reload, stage launch from committed state and fresh two-starter state.
+5. Widget-test 320×568 and 2× text, touch targets and semantics, missing portrait fallback and accessibility.
 
-Stop condition: no reachable screen advertises generic wave-unlocked towers, selectable specializations or R&D, while existing gameplay affordances remain active.
+**Gate:** `flutter analyze && flutter test`; screenshot candidates render, squad persistence is deterministic and no launch-on-save-error is possible.
 
-## Task 7 — Balance and real gameplay proof
+## Task 7 — Full dock/inspector, guide/tips, Codex cleanup
 
-Tests: adapt integration_test/app_smoke_test.dart or a focused Flutter integration test; add a deterministic full-wave scenario in the game integration harness.
+Production: `mission_command_dock.dart`, `tower_inspector.dart`, `mission_chrome.dart`, `orion_game_page.dart`, onboarding/ and Codex files.  
+Tests: dock, inspector, guide/tips, Codex, scene parity and integration fixture rewrites.
 
-1. Run the actual Stage 1 (Outpost Alpha) **eight-wave** scenario with only Haruto and Mio. Deploy, upgrade and activate signatures, start/tick through real spawns and attacks, accept module draft offers, defeat the wave-8 boss and commit a win. Do not call finishActiveWave or fabricate StageCompletion to claim success.
-2. Adjust only starter rank/battle-tier combat or deployment costs in GameBalance until the scenario is repeatably feasible, plus a small early E–C fixture along the main route. Do not add a special-case stage-1 bypass.
-3. Assert saved medal, unlocked replay/Endless, unchanged stage reward/blueprint/campaign modifiers and no duplicate character placement in the tested run. Cover loss/restart and one recall/redeploy branch.
-4. Validate all twelve characters against their fixed styles/signatures in unit/session tests; do not require recruiting them in this ticket (that is HPA-923).
+1. Use existing horizontal dock drag mechanics, but show **current squad only**, in order. Each card uses chibi/name/rank, existing style-based price and ready/deployed/unaffordable state; it cannot deploy a second copy.
+2. Inspector shows one next tier action. At tier 2, the action/preview displays the character's fixed signature (no picker); Recall shows its refund and respects build-only gating. Preserve targeting, pause/speed and stage overlays.
+3. Update guide anchors to available starter cards, first upgrade, module draft and scanner. Remove obsolete wave-unlock and selectable-specialization tip triggers; keep boss, targeting and stage modifier tips. Rewrite tests for intended behavior rather than keep dead enums.
+4. Codex playable section uses character identity and fixed signature, while search and Enemies/Effects/Stages continue to work. Delete old tech-tree, wave unlock and choose-specialization references/tests, but leave internal combat enum names in place.
 
-Stop condition: a machine-run complete stage proves the starter loop is actually winnable at the current balance settings.
+**Gate:** `flutter analyze && flutter test`; every reachable screen uses character vocabulary and all existing gameplay controls work.
 
-## Task 8 — MCP end-to-end and screenshot-based visual acceptance
 
-Use the supported **browser/Playwright MCP** on one representative web Chrome build; record tool-run evidence, screenshots and exact build/commit SHA in the same PR's description or docs/superpowers/validation/ record. If Chrome MCP cannot drive the Flame canvas reliably, pair it with the Flutter integration-test runner for gameplay actions; still use MCP for navigation and screenshot verification. Do **not** replace MCP execution with manual signoff.
+## Task 8 — MCP web E2E and targeted visual evidence (required)
 
-End-to-end acceptance sequence:
+The project requires acceptance via **MCP**, plus visual checking against Linear mockups. Use a browser/Playwright MCP connected to one web Chrome build. This is **one focused flow**, not a cross-platform matrix or a new screenshot framework. Record the tested commit SHA, run evidence and screenshot paths in PR comments or a validation note. If browser canvas simulation cannot deterministically advance wave combat, reuse Task 4's headless proof for the eight-wave victory, while MCP still exercises all UI paths, state updates and reload checks.
 
-1. Start fresh, dismiss/complete initial guide as appropriate, open Camp; assert 12 visible catalog entries and only Haruto/Mio owned. Screenshot Camp vs Linear mockup **10**.
-2. Open Haruto sheet; assert character bio, rank, stats, signature and absence of Level up. Screenshot vs **11**.
-3. Open stage-1 briefing; deselect/reselect starters, check zero-squad gating and persisted order after a browser reload. Screenshot selected squad vs **14**.
-4. Launch, deploy Haruto + Mio via UI, reject a second Haruto, upgrade to tier 2 and trigger fixed tier 3, Recall/redeploy in build phase, then reach a real stage-1 victory via the integration scenario. Screenshot live board and dock vs **15**.
-5. Reload; verify medal and squad persist, level is still 1, and Endless appears after clear. Use Codex search and at least one first-mission guide/contextual-tip path.
-6. Capture additional 320×568 and 2×-text screenshots with no clipping, unreadable overlay, missing chibi or overlap. Compare the four primary shots to approved mockups for hierarchy, spacing, visual states, sprite shape, label legibility and button usability; document justified differences caused by the intentionally unchanged space board/background.
-7. Assert there is no R&D tab, research points, wave-unlocked tower rail or two-option specialization UI. Check reduced-motion and accessibility semantics by widget/integration test.
+1. Fresh profile → Camp: assert 12 entries, only Haruto/Mio owned and absence of R&D. Capture **mockup 10** view.
+2. Open starter character sheet: assert portrait, rank, bio, stats, signature and no Level up action. Capture **mockup 11** view.
+3. Stage-1 briefing: draft deselect/reselect, test zero-squad Launch disabled, cancel behavior, then reorder/Launch; assert saved order after reload and that a failed save never begins a stage. Capture **mockup 14** view.
+4. Battle: deploy Haruto/Mio (tap or drag), reject duplicate, tier 2 and fixed tier-3 signature, Recall and redeploy; inspect board chibi and dock statuses. Capture **mockup 15** view. Full eight-wave victory proof remains Task 4's automated fixture; use UI wave progression where MCP supports it.
+5. Reload saved profile: check medals/Endless availability, squad persistence, Codex search, guide/tips and run-module presentation. Assert no research chip, wave-locked build cards or selectable-specialization controls.
+6. Compare the **four screenshots** with approved Linear mockups for required visible elements, sprite type, selected/deployed states, layout hierarchy, overlapping/clipped text and tappable controls. Log concrete pass/fail evidence and any intentional deviations (temporary old board/backdrop). Run widget layout assertions at 320×568 and 2× text; capture one additional compact screenshot when a discrepancy needs illustration.
+7. No human approval as acceptance and no second platform required unless there is a platform-specific code change.
 
-One platform is sufficient because HPA-922 is shared Flutter/Flame code with no platform-specific behavior change. No human acceptance step.
+**Gate:** MCP-run evidence exists, all mandatory visual/state checks passed, and gaps are recorded as issues/fixed in this **same PR**.
 
-## Task 9 — Cleanup, repository gates and handoff (same PR)
+## Task 9 — Final CI, PR cleanup and handoff (same PR)
 
-- Run Dart formatting, flutter analyze, full flutter test (plus coverage), flutter build web --release, and existing GitHub CI/integration gates. Preserve the project's configured coverage thresholds.
-- Fix obsolete test constructors/fixtures rather than maintaining fake legacy tower/tech-tree APIs. Remove dead files and unused images only if this ticket actually makes them unreferenced; avoid wholesale repo art cleanup.
-- Review final diff for old strings (R&D, research points, tower unlock, Choose specialization) reachable through UI, imports of tech_tree.dart and obsolete profiles. Internal combat labels may remain by explicit design.
-- Attach MCP screenshot comparison results and full-wave test evidence on the PR. Update this draft PR with implementation in place; do not create a separate PR.
-- Update HPA-922 only when its tests, gameplay and screenshots satisfy the checklist. Leave HPA-923/HPA-924/HPA-925/HPA-927/HPA-926 separate.
+- Run Dart formatting, `flutter analyze`, `flutter test --coverage` (including **headless Stage 1 full game loop**), `flutter build web --release` and required GitHub CI/integration checks on final head.
+- Rewrite/remove obsolete fixtures instead of adding backwards-compatible scaffolding. Review for dead `CampaignTechTree`, research points, wave unlock and selectable-specialization UI, while retaining valid combat `TowerType` internal uses.
+- Attach screenshot checks and headless/CI evidence. All feature code, tests, docs and review fixes go into **PR #50**, never a separate implementation PR.
+- Mark HPA-922 done only after the acceptance contract has passed. HPA-923/924/925/927/926 remain separate.
+
+## Risk note
+
+Until HPA-923, only Haruto and Mio can be obtained by ordinary play. Their loss of existing R&D campaign bonuses makes Stage 1 a tuning gate; the E–C main-path fixture checks the intended progression after recruitment exists. Stage 2+ need **not** be winnable with two E starters during this intermediate state.
 
 ## End-to-end definition of done
 
-- [ ] New profile has two E starters, one immutable saved aggregate, a persisted squad and saved stage/Endless results; old saves are ignored.
-- [ ] All 12 catalog mappings and rank/level/tier stats pass deterministic tests.
-- [ ] One-of-each placement, same-style distinct characters, recall/refund/redeploy, fixed signature and tap/drag paths pass rules and integration tests.
-- [ ] Real 8-wave Stage 1 with two starter characters reaches a committed win automatically.
-- [ ] Camp, sheet, briefing and chibi battle screenshots have been inspected against approved mockups 10/11/14/15 by an MCP-driven run; compact/high-text cases are checked.
-- [ ] Full MCP E2E covers fresh profile → squad edit/save/reload → battle → victory → restart/reload → persisted result/Endless; Codex, guide/tips and module draft still work.
-- [ ] No live R&D, medal-point spending, wave-unlock cards or choose-a-specialization control; legacy code and tests removed.
-- [ ] Format, analyze, unit/widget/integration suites, web build and required CI/coverage checks pass on final PR head.
-- [ ] The implementation, design docs, validation notes and any scoped review fixes live in this **one PR**. No manual/human signoff acceptance condition.
+- [ ] Enhanced `Character` enum has 12 fixed styles/signatures, rank+level scaling includes all three damage channels, and costs remain style-based.
+- [ ] Existing atomic `CampaignSave` v4 key stores two initial E starters, owned levels, squad and stage/Endless results; pre-v4 saves are discarded; save failures and reset are tested.
+- [ ] `PlacedTower` is extended (not duplicated), one-of-each, tier 1→2→fixed tier 3, Recall and tap/drag session-authoritative validation pass.
+- [ ] **Before UI/art** a headless real `OrionCampaign.stageOne` eight-wave Haruto/Mio victory, module drafts and boss are proven in `flutter test`; main path has an E–C fixture validation.
+- [ ] Camp, character sheet, briefing squad and live chibi dock/board pass widget layout tests and **MCP screenshot checks vs Linear mockups 10/11/14/15**.
+- [ ] **MCP E2E** covers fresh profile → squad draft/Launch/save → battle interactions → reload/persisted progress/Endless/Codex. Browser combat stepping may reuse deterministic headless victory proof.
+- [ ] No live R&D, medal-point spending, wave-unlock cards or choose-a-specialization UI; all tests updated, no old save compatibility code.
+- [ ] Each slice is green (`flutter analyze && flutter test`), and final format/CI/coverage/web build checks pass.
+- [ ] One PR (#50) contains design, implementation, screenshot evidence and any review fixes; no human acceptance criterion.
