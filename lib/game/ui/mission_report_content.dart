@@ -20,7 +20,6 @@ final class MissionRewardFact {
 final class MissionReportContent {
   MissionReportContent({
     required this.snapshot,
-    this.medalPoints = 0,
     required this.stageId,
     required this.stageName,
     required this.didWin,
@@ -37,7 +36,6 @@ final class MissionReportContent {
   }) : moduleIds = List.unmodifiable(moduleIds);
 
   final GameSnapshot snapshot;
-  final int medalPoints;
   final String stageId;
   final String stageName;
   final bool didWin;
@@ -95,8 +93,6 @@ MissionReportContent projectVictoryReport({
     outcomeText:
         '${result.medal.label} medal • Base ${result.bestBaseHealth}/${snapshot.startingBaseHealth}',
     result: result,
-    medalPoints: (result.medal.rank - (priorSavedResult?.medal.rank ?? 0))
-        .clamp(0, 3),
     comparison: comparison,
     comparisonText: comparisonText,
     moduleIds: snapshot.acquiredRunModules,

@@ -1149,35 +1149,6 @@ void main() {
     });
   });
 
-  group('Campaign tech-tree constants', () {
-    test('upgrade costs total 20 (intentional 1-pt slack vs 21 max)', () {
-      const costs = [
-        GameBalance.solarCapacitorsCost,
-        GameBalance.hardenedCoreCost,
-        GameBalance.salvageCrewCost,
-        GameBalance.laserTuningCost,
-        GameBalance.cryoCoolantCost,
-      ];
-      expect(costs.fold(0, (sum, c) => sum + c), 20);
-    });
-
-    test('individual upgrade costs match design', () {
-      expect(GameBalance.solarCapacitorsCost, 3);
-      expect(GameBalance.hardenedCoreCost, 4);
-      expect(GameBalance.salvageCrewCost, 4);
-      expect(GameBalance.laserTuningCost, 4);
-      expect(GameBalance.cryoCoolantCost, 5);
-    });
-
-    test('magnitudes match design', () {
-      expect(GameBalance.solarCapacitorsGoldBonus, 15);
-      expect(GameBalance.hardenedCoreHealthBonus, 3);
-      expect(GameBalance.salvageCrewClearBonusFraction, 0.25);
-      expect(GameBalance.laserTuningDamageFraction, 0.10);
-      expect(GameBalance.cryoCoolantSlowDurationBonus, 0.30);
-    });
-  });
-
   group('TowerStats.copyWith', () {
     test('overrides damage and slowDuration only', () {
       final base = GameBalance.towerStats(TowerType.laser, level: 1);

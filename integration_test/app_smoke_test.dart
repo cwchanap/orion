@@ -385,24 +385,20 @@ void main() {
     );
     expect(find.text('Alpha'), findsOneWidget);
 
-    // 13. Tech Tree: open from the world map rail, verify the real
-    //     medal-point bank gates purchases on a fresh campaign (zero points
-    //     earned, so every purchase is refused), then go back.
-    await tester.tap(find.byTooltip('R&D'));
+    // 13. Camp: open from the bottom nav, verify the fresh profile owns the
+    //     two starters (Haruto and Mio) marked as squad members, then go
+    //     back.
+    await tester.tap(find.byTooltip('Camp'));
     await _pumpUntil(
       tester,
-      () => tester.any(find.byKey(const ValueKey('tech-bank-bar'))),
+      () => tester.any(find.byKey(const ValueKey('camp-card-haruto'))),
     );
-    // The bank chip shows only the numeral; the "Unspent: N" copy is its
-    // Semantics label.
-    expect(find.bySemanticsLabel('Unspent: 0'), findsOneWidget);
-    await tester.ensureVisible(
-      find.byKey(const ValueKey('tech-node-solar-capacitors')),
+    expect(find.byKey(const ValueKey('camp-card-haruto')), findsOneWidget);
+    expect(find.byKey(const ValueKey('camp-card-mio')), findsOneWidget);
+    expect(
+      find.bySemanticsLabel('2 of 12 characters recruited'),
+      findsOneWidget,
     );
-    await tester.pump();
-    await tester.tap(find.byKey(const ValueKey('tech-node-solar-capacitors')));
-    await _pumpUntil(tester, () => tester.any(find.text('Need 3 more points')));
-    expect(find.text('Need 3 more points'), findsOneWidget);
     await tester.tap(find.byTooltip('Map'));
     await _pumpUntil(tester, () => tester.any(find.text('SECTOR MAP')));
 

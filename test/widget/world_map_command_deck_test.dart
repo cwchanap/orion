@@ -6,7 +6,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
-import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/campaign_presentation.dart';
@@ -39,7 +38,7 @@ CampaignProgress mainCompleteProgress({
   },
 );
 
-const shellControlTooltips = ['Map', 'R&D', 'Codex', 'Settings'];
+const shellControlTooltips = ['Map', 'Camp', 'Codex', 'Settings'];
 
 // The shell's own scrollable chrome (tab bar, codex chrome) matches a bare
 // "vertical Scrollable" predicate; scope lookups to the map subtree.
@@ -76,11 +75,7 @@ Widget buildMap({
     // what players see. Explicit modifiers still override this default.
     campaignModifiers:
         campaignModifiers ??
-        CampaignModifiers.fromProgress(
-          progress,
-          resolvedStages,
-          CampaignTechTree(),
-        ),
+        CampaignModifiers.fromProgress(progress, resolvedStages),
     feedback: feedback,
     isSavingProgress: isSavingProgress,
     isResetting: isResetting,
@@ -101,9 +96,8 @@ Widget buildMap({
     home: inShell
         ? OrionMenuShell(
             destination: OrionMenuDestination.sectors,
-            medalEarned: CampaignTechTree.totalMedalRank(progress),
+            medalEarned: progress.totalMedalRank,
             medalTotal: resolvedStages.length * 3,
-            researchPoints: CampaignTechTree().unspentPoints(progress),
             navigationEnabled: !(isSavingProgress || isResetting),
             settingsEnabled: !isSavingFeedback,
             onDestinationSelected: onDestinationSelected ?? (_) {},
@@ -1778,12 +1772,12 @@ void main() {
     );
 
     await tester.tap(find.byTooltip('Codex'));
-    await tester.tap(find.byTooltip('R&D'));
+    await tester.tap(find.byTooltip('Camp'));
     await tester.tap(find.byTooltip('Settings'));
 
     expect(destinations, [
       OrionMenuDestination.codex,
-      OrionMenuDestination.research,
+      OrionMenuDestination.camp,
     ]);
     expect(settings, 1);
     expect(find.byTooltip('Reset Campaign'), findsNothing);
@@ -1817,7 +1811,7 @@ void main() {
         find.byKey(const ValueKey('sector-stage-outpost-alpha')),
       );
       await tester.tap(find.byTooltip('Codex'));
-      await tester.tap(find.byTooltip('R&D'));
+      await tester.tap(find.byTooltip('Camp'));
       await tester.tap(find.byTooltip('Map'));
       expect(actions, 0);
     }
@@ -1844,7 +1838,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const ValueKey('sector-stage-outpost-alpha')));
     await tester.tap(find.byTooltip('Codex'));
-    await tester.tap(find.byTooltip('R&D'));
+    await tester.tap(find.byTooltip('Camp'));
     await tester.tap(find.byTooltip('Settings'));
 
     expect((stage, destinations, settings), (1, 2, 0));

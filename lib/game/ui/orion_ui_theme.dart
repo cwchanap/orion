@@ -338,7 +338,7 @@ const orionCodexScrim = LinearGradient(
   stops: [0, 0.6, 0.72, 1],
 );
 
-const orionTechTreeScrim = LinearGradient(
+const orionCampScrim = LinearGradient(
   begin: Alignment.topCenter,
   end: Alignment.bottomCenter,
   colors: [

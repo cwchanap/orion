@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-enum OrionMenuDestination { sectors, research, codex }
+enum OrionMenuDestination { sectors, camp, codex }
 
 class OrionMenuShell extends StatelessWidget {
   const OrionMenuShell({
@@ -11,7 +11,6 @@ class OrionMenuShell extends StatelessWidget {
     required this.destination,
     required this.medalEarned,
     required this.medalTotal,
-    required this.researchPoints,
     required this.onDestinationSelected,
     required this.onOpenSettings,
     required this.child,
@@ -25,8 +24,6 @@ class OrionMenuShell extends StatelessWidget {
   final int medalEarned;
 
   final int medalTotal;
-
-  final int researchPoints;
 
   final ValueChanged<OrionMenuDestination> onDestinationSelected;
 
@@ -57,7 +54,6 @@ class OrionMenuShell extends StatelessWidget {
                   destination: destination,
                   medalEarned: medalEarned,
                   medalTotal: medalTotal,
-                  researchPoints: researchPoints,
                   onOpenSettings: settingsEnabled ? onOpenSettings : null,
                 )
               else
@@ -103,14 +99,12 @@ class _TopBar extends StatelessWidget {
     required this.destination,
     required this.medalEarned,
     required this.medalTotal,
-    required this.researchPoints,
     required this.onOpenSettings,
   });
 
   final OrionMenuDestination destination;
   final int medalEarned;
   final int medalTotal;
-  final int researchPoints;
   final VoidCallback? onOpenSettings;
 
   @override
@@ -118,10 +112,10 @@ class _TopBar extends StatelessWidget {
     final uiTheme = OrionUiTheme.of(context);
     final (kicker, title) = switch (destination) {
       OrionMenuDestination.sectors => ('ORION CAMPAIGN', 'Sector Map'),
-      OrionMenuDestination.research => ('CAMPAIGN UPGRADES', 'R&D Lab'),
+      OrionMenuDestination.camp => ('CHARACTER ROSTER', 'Camp'),
       OrionMenuDestination.codex => ('FIELD MANUAL', 'Codex'),
     };
-    final accent = destination == OrionMenuDestination.research
+    final accent = destination == OrionMenuDestination.camp
         ? uiTheme.systemViolet
         : uiTheme.textMuted;
     final textScaler = MediaQuery.textScalerOf(
@@ -169,15 +163,6 @@ class _TopBar extends StatelessWidget {
               iconColor: uiTheme.creditGold,
               count: '$medalEarned/$medalTotal',
               semanticsLabel: '$medalEarned of $medalTotal campaign medals',
-            ),
-            const SizedBox(width: 8),
-            OrionResourceChip(
-              icon: Icons.diamond_rounded,
-              iconColor: uiTheme.systemViolet,
-              count: '$researchPoints',
-              semanticsLabel: destination == OrionMenuDestination.research
-                  ? 'Unspent: $researchPoints'
-                  : '$researchPoints research points',
             ),
             const SizedBox(width: 8),
             _GhostIconButton(
@@ -320,10 +305,10 @@ class _TabBar extends StatelessWidget {
               onTap: onDestinationSelected,
             ),
             _Tab(
-              destination: OrionMenuDestination.research,
-              icon: Icons.biotech_rounded,
-              label: 'R&D',
-              selected: destination == OrionMenuDestination.research,
+              destination: OrionMenuDestination.camp,
+              icon: Icons.groups_rounded,
+              label: 'Camp',
+              selected: destination == OrionMenuDestination.camp,
               enabled: enabled,
               onTap: onDestinationSelected,
             ),
@@ -363,7 +348,7 @@ class _Tab extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final active = enabled;
-    final accent = destination == OrionMenuDestination.research
+    final accent = destination == OrionMenuDestination.camp
         ? uiTheme.systemViolet
         : uiTheme.systemCyan;
     return Expanded(

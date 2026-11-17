@@ -19,7 +19,7 @@ typedef OrionSourceRectResolver =
 
 enum OrionStageArtCrop { briefingWide, mapSquare }
 
-enum OrionSceneArt { worldMap, techTree, missionReport, commandCenter }
+enum OrionSceneArt { worldMap, camp, missionReport, commandCenter }
 
 @immutable
 final class OrionArtDescriptor {
@@ -219,11 +219,13 @@ abstract final class OrionArt {
           semanticLabel: 'Star chart backdrop',
           fallbackIcon: Icons.public,
         ),
-        OrionSceneArt.techTree: OrionArtDescriptor(
+        OrionSceneArt.camp: OrionArtDescriptor(
+          // The former R&D bay backdrop is intentionally reused as the Camp
+          // backdrop until HPA-926 ships final Last Hearth art.
           fileName: 'reactor_rim_ui/backdrops/tech-tree-rnd-bay.png',
           sourceRectFor: _fullRectFor,
-          semanticLabel: 'R&D bay backdrop',
-          fallbackIcon: Icons.science,
+          semanticLabel: 'Camp backdrop',
+          fallbackIcon: Icons.groups_rounded,
         ),
         OrionSceneArt.missionReport: OrionArtDescriptor(
           fileName: 'reactor_rim_ui/backdrops/mission-report-debrief.png',

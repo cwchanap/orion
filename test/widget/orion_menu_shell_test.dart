@@ -8,7 +8,6 @@ Widget buildShell({
   OrionMenuDestination destination = OrionMenuDestination.sectors,
   int medalEarned = 4,
   int medalTotal = 15,
-  int researchPoints = 7,
   ValueChanged<OrionMenuDestination>? onDestinationSelected,
   VoidCallback? onOpenSettings,
   bool navigationEnabled = true,
@@ -23,7 +22,6 @@ Widget buildShell({
       destination: destination,
       medalEarned: medalEarned,
       medalTotal: medalTotal,
-      researchPoints: researchPoints,
       onDestinationSelected: onDestinationSelected ?? (_) {},
       onOpenSettings: onOpenSettings ?? () {},
       navigationEnabled: navigationEnabled,
@@ -43,7 +41,7 @@ void main() {
     addTearDown(tester.view.reset);
     for (final (destination, kicker, title) in [
       (OrionMenuDestination.sectors, 'ORION CAMPAIGN', 'SECTOR MAP'),
-      (OrionMenuDestination.research, 'CAMPAIGN UPGRADES', 'R&D LAB'),
+      (OrionMenuDestination.camp, 'CHARACTER ROSTER', 'CAMP'),
       (OrionMenuDestination.codex, 'FIELD MANUAL', 'CODEX'),
     ]) {
       await tester.pumpWidget(buildShell(destination: destination));
@@ -56,27 +54,18 @@ void main() {
     }
   });
 
-  testWidgets('active research tab uses the research accent', (tester) async {
-    await tester.pumpWidget(
-      buildShell(destination: OrionMenuDestination.research),
-    );
+  testWidgets('active camp tab uses the camp accent', (tester) async {
+    await tester.pumpWidget(buildShell(destination: OrionMenuDestination.camp));
     final icon = tester.widget<Icon>(
       find.descendant(
-        of: find.byTooltip('R&D'),
-        matching: find.byIcon(Icons.biotech_rounded),
+        of: find.byTooltip('Camp'),
+        matching: find.byIcon(Icons.groups_rounded),
       ),
     );
     expect(icon.color, OrionUiTheme.dark.systemViolet);
   });
 
-  testWidgets('research header announces the unspent balance', (tester) async {
-    await tester.pumpWidget(
-      buildShell(destination: OrionMenuDestination.research),
-    );
-    expect(find.bySemanticsLabel('Unspent: 7'), findsOneWidget);
-  });
-
-  testWidgets('top bar carries the resource chips and the Settings gear', (
+  testWidgets('top bar carries the medal chip and the Settings gear', (
     tester,
   ) async {
     var settingsTaps = 0;
@@ -84,15 +73,13 @@ void main() {
       buildShell(
         medalEarned: 4,
         medalTotal: 15,
-        researchPoints: 7,
         onOpenSettings: () => settingsTaps += 1,
       ),
     );
 
     expect(find.text('4/15'), findsOneWidget);
-    expect(find.text('7'), findsOneWidget);
     expect(find.bySemanticsLabel('4 of 15 campaign medals'), findsOneWidget);
-    expect(find.bySemanticsLabel('7 research points'), findsOneWidget);
+    expect(find.bySemanticsLabel('7 research points'), findsNothing);
 
     await tester.tap(find.byTooltip('Settings'));
     expect(settingsTaps, 1);
@@ -162,13 +149,13 @@ void main() {
       find.byWidgetPredicate(
         (widget) =>
             widget is Semantics &&
-            widget.properties.label == '7 research points',
+            widget.properties.label == '4 of 15 campaign medals',
       ),
     );
     expect(
       rect.left,
       greaterThanOrEqualTo(chip.right),
-      reason: 'the 48dp region overlaps the research chip at $rect vs $chip',
+      reason: 'the 48dp region overlaps the medal chip at $rect vs $chip',
     );
   });
 
@@ -183,16 +170,16 @@ void main() {
       ),
     );
 
-    for (final tab in const ['Map', 'R&D', 'Codex']) {
+    for (final tab in const ['Map', 'Camp', 'Codex']) {
       expect(find.byTooltip(tab), findsOneWidget);
     }
 
     await tester.tap(find.byTooltip('Codex'));
-    await tester.tap(find.byTooltip('R&D'));
+    await tester.tap(find.byTooltip('Camp'));
     await tester.tap(find.byTooltip('Map'));
     expect(selected, [
       OrionMenuDestination.codex,
-      OrionMenuDestination.research,
+      OrionMenuDestination.camp,
       OrionMenuDestination.sectors,
     ]);
 
@@ -224,7 +211,7 @@ void main() {
       ),
     );
 
-    for (final tab in const ['Map', 'R&D', 'Codex']) {
+    for (final tab in const ['Map', 'Camp', 'Codex']) {
       await tester.tap(find.byTooltip(tab));
       final semantics = tester.widget<Semantics>(
         find.ancestor(

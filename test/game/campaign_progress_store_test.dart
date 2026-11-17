@@ -4,29 +4,54 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
-import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  CampaignSave save({
+    CampaignProgress? progress,
+    Map<Character, int>? ownedLevels,
+    List<Character>? squad,
+  }) {
+    return CampaignSave(
+      progress: progress ?? CampaignProgress(),
+      ownedLevels: ownedLevels ?? CampaignSave.starterOwnedLevels,
+      squad: squad ?? CampaignSave.starterSquad,
+    );
+  }
+
+  void expectFreshProfile(CampaignSave decoded) {
+    expect(decoded.progress.bestResultsByStageId, isEmpty);
+    expect(decoded.progress.endlessBestByStageId, isEmpty);
+    expect(decoded.ownedLevels, CampaignSave.starterOwnedLevels);
+    expect(decoded.squad, CampaignSave.starterSquad);
+  }
+
   group('CampaignProgressCodec', () {
-    test('encodes and decodes versioned stage results', () {
-      final progress = CampaignProgress(
-        bestResultsByStageId: {
-          'outpost-alpha': const StageResult(
-            medal: StageMedal.gold,
-            bestBaseHealth: 20,
-          ),
-          'nebula-relay': const StageResult(
-            medal: StageMedal.silver,
-            bestBaseHealth: 14,
-          ),
+    test('encodes and decodes stage results with the character profile', () {
+      final source = save(
+        progress: CampaignProgress(
+          bestResultsByStageId: {
+            'outpost-alpha': const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            'nebula-relay': const StageResult(
+              medal: StageMedal.silver,
+              bestBaseHealth: 14,
+            ),
+          },
+          endlessBestByStageId: const {'outpost-alpha': 11},
+        ),
+        ownedLevels: const {
+          Character.haruto: 3,
+          Character.mio: 2,
+          Character.akane: 1,
         },
+        squad: const [Character.akane, Character.haruto, Character.mio],
       );
 
-      final encoded = CampaignProgressCodec.encode(
-        CampaignSave(progress: progress, techTree: CampaignTechTree()),
-      );
+      final encoded = CampaignProgressCodec.encode(source);
       final decoded = CampaignProgressCodec.decode(
         encoded,
         knownStages: OrionCampaign.stages,
@@ -34,17 +59,20 @@ void main() {
 
       expect(
         decoded.progress.resultFor('outpost-alpha'),
-        progress.resultFor('outpost-alpha'),
+        source.progress.resultFor('outpost-alpha'),
       );
       expect(
         decoded.progress.resultFor('nebula-relay'),
-        progress.resultFor('nebula-relay'),
+        source.progress.resultFor('nebula-relay'),
       );
+      expect(decoded.progress.endlessBestByStageId, {'outpost-alpha': 11});
+      expect(decoded.ownedLevels, source.ownedLevels);
+      expect(decoded.squad, source.squad);
     });
 
-    test('encodes sorted stage result JSON at codec version three', () {
+    test('encodes sorted, character-named JSON at codec version four', () {
       final encoded = CampaignProgressCodec.encode(
-        CampaignSave(
+        save(
           progress: CampaignProgress(
             bestResultsByStageId: {
               'nebula-relay': const StageResult(
@@ -56,30 +84,41 @@ void main() {
                 bestBaseHealth: 20,
               ),
             },
+            endlessBestByStageId: const {
+              'outpost-alpha': 11,
+              'nebula-relay': 4,
+            },
           ),
-          techTree: CampaignTechTree(),
+          ownedLevels: const {
+            Character.mio: 2,
+            Character.akane: 1,
+            Character.haruto: 3,
+          },
+          squad: const [Character.akane, Character.mio],
         ),
       );
 
       final decoded = jsonDecode(encoded) as Map<String, Object?>;
       final stageResults = decoded['stageResults'] as Map<String, Object?>;
+      final endlessBest = decoded['endlessBest'] as Map<String, Object?>;
+      final ownedCharacters =
+          decoded['ownedCharacters'] as Map<String, Object?>;
 
-      expect(decoded['version'], 3);
+      expect(decoded['version'], 4);
+      expect(decoded.containsKey('techPurchases'), isFalse);
       expect(stageResults.keys, ['nebula-relay', 'outpost-alpha']);
-      expect(stageResults['outpost-alpha'], {
-        'medal': 'gold',
-        'bestBaseHealth': 20,
-      });
-      expect(stageResults['nebula-relay'], {
-        'medal': 'silver',
-        'bestBaseHealth': 14,
-      });
+      expect(endlessBest.keys, ['nebula-relay', 'outpost-alpha']);
+      // `Character.name` is the save key; owned entries encode sorted so the
+      // payload is deterministic.
+      expect(ownedCharacters.keys, ['akane', 'haruto', 'mio']);
+      expect(ownedCharacters['haruto'], 3);
+      expect(decoded['squad'], ['akane', 'mio']);
     });
 
     test('ignores unknown stage ids and invalid result entries', () {
       final decoded = CampaignProgressCodec.decode('''
 {
-  "version": 2,
+  "version": 4,
   "stageResults": {
     "outpost-alpha": {"medal": "gold", "bestBaseHealth": 20},
     "missing": {"medal": "gold", "bestBaseHealth": 20},
@@ -116,35 +155,228 @@ void main() {
       );
     });
 
-    test('migrates version one cleared ids to clear medal results', () {
+    test('drops invalid endlessBest entries on decode', () {
+      const raw =
+          '{"version":4,"stageResults":{},'
+          '"endlessBest":{"outpost-alpha":9,"missing-stage":12,'
+          '"nebula-relay":"high","salvage-rift":0,"void-bastion":-2,'
+          '"aurora-gate":3.5}}';
+
       final decoded = CampaignProgressCodec.decode(
-        '{"version":1,"clearedStageIds":["outpost-alpha","unknown-stage"]}',
+        raw,
         knownStages: OrionCampaign.stages,
       );
 
-      expect(decoded.progress.bestResultsByStageId.keys, {'outpost-alpha'});
-      expect(
-        decoded.progress.resultFor('outpost-alpha'),
-        const StageResult(medal: StageMedal.clear, bestBaseHealth: 0),
-      );
+      expect(decoded.progress.endlessBestByStageId, {'outpost-alpha': 9});
     });
 
-    test('falls back to empty progress for corrupt data', () {
+    test('non-map endlessBest decodes to an empty map', () {
+      const raw = '{"version":4,"stageResults":{},"endlessBest":[1,2,3]}';
+
       final decoded = CampaignProgressCodec.decode(
-        'not-json',
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.progress.endlessBestByStageId, isEmpty);
+    });
+
+    test('malformed stageResults still decodes endlessBest', () {
+      // A torn or hand-edited save must not lose committed endless records:
+      // the next save writes the whole aggregate, so dropping them here would
+      // permanently overwrite them.
+      const raw =
+          '{"version":4,"stageResults":[1,2,3],'
+          '"endlessBest":{"outpost-alpha":9,"nebula-relay":4}}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
         knownStages: OrionCampaign.stages,
       );
 
       expect(decoded.progress.bestResultsByStageId, isEmpty);
+      expect(decoded.progress.endlessBestByStageId, {
+        'outpost-alpha': 9,
+        'nebula-relay': 4,
+      });
     });
 
-    test('in-memory store saves, loads, and resets progress', () async {
+    test('encode writes only positive endless bests', () {
+      final encoded = CampaignProgressCodec.encode(
+        save(
+          progress: CampaignProgress(
+            endlessBestByStageId: const {
+              'outpost-alpha': 5,
+              'nebula-relay': 0,
+              'salvage-rift': -3,
+            },
+          ),
+        ),
+      );
+
+      final raw = jsonDecode(encoded) as Map<String, Object?>;
+
+      expect(raw['endlessBest'], {'outpost-alpha': 5});
+    });
+
+    test('malformed character fields never destroy valid stage and endless '
+        'progress', () {
+      const raw =
+          '{"version":4,'
+          '"stageResults":{"outpost-alpha":'
+          '{"medal":"gold","bestBaseHealth":20}},'
+          '"endlessBest":{"outpost-alpha":9},'
+          '"ownedCharacters":[1,2,3],'
+          '"squad":"haruto"}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(
+        decoded.progress.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      expect(decoded.progress.endlessBestByStageId, {'outpost-alpha': 9});
+      // The owned map decoded nothing valid, so the two starters return;
+      // the squad field was malformed and decodes empty.
+      expect(decoded.ownedLevels, CampaignSave.starterOwnedLevels);
+      expect(decoded.squad, isEmpty);
+    });
+
+    test('skips unknown character ids and invalid levels per entry', () {
+      const raw =
+          '{"version":4,"stageResults":{},'
+          '"ownedCharacters":{"haruto":4,"mio":"high","akane":0,'
+          '"ren":-2,"jin":99,"not-a-character":5,"kaito":2.5},'
+          '"squad":["haruto"]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      // Only `haruto` survives: `mio` is not an int, `akane`/`ren` fall below
+      // 1, `jin` exceeds `GameBalance.characterMaxLevel`, `kaito` is not an
+      // int and `not-a-character` is an unknown id.
+      expect(decoded.ownedLevels, {Character.haruto: 4});
+      expect(decoded.squad, [Character.haruto]);
+    });
+
+    test('restores both starters when the owned map decodes empty', () {
+      const raw =
+          '{"version":4,"stageResults":{},'
+          '"ownedCharacters":{"not-a-character":5},'
+          '"squad":["mio","not-a-character"]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.ownedLevels, CampaignSave.starterOwnedLevels);
+      // `mio` is valid and owned once the starters are restored.
+      expect(decoded.squad, [Character.mio]);
+    });
+
+    test('missing ownedCharacters restores the starters', () {
+      const raw = '{"version":4,"stageResults":{}}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.ownedLevels, CampaignSave.starterOwnedLevels);
+      expect(decoded.squad, isEmpty);
+    });
+
+    test('skips duplicated, unknown, and unowned squad members', () {
+      const raw =
+          '{"version":4,"stageResults":{},'
+          '"ownedCharacters":{"haruto":1,"mio":1,"akane":3},'
+          '"squad":["haruto","mio","haruto","not-a-character","elena",'
+          '"akane",7]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      // Order is preserved; the second `haruto`, the unknown id, the unowned
+      // `elena`, and the non-string `7` are each skipped individually.
+      expect(decoded.squad, [Character.haruto, Character.mio, Character.akane]);
+    });
+
+    test('caps the squad at six members', () {
+      const raw =
+          '{"version":4,"stageResults":{},'
+          '"ownedCharacters":{"hikari":1,"jin":1,"akane":1,"ren":1,'
+          '"elena":1,"shiori":1,"rin":1,"kaito":1},'
+          '"squad":["hikari","jin","akane","ren","elena","shiori",'
+          '"rin","kaito"]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.squad, [
+        Character.hikari,
+        Character.jin,
+        Character.akane,
+        Character.ren,
+        Character.elena,
+        Character.shiori,
+      ]);
+    });
+
+    test('non-v4 payloads are discarded as a fresh starter profile', () {
+      // Versions 1–3 carried cleared-stage ids or tech purchases that predate
+      // the character profile. They are never migrated: the whole payload —
+      // progress included — resets to a fresh two-starter profile.
+      const payloads = [
+        '{"version":1,"clearedStageIds":["outpost-alpha"]}',
+        '{"version":2,"stageResults":{"outpost-alpha":'
+            '{"medal":"gold","bestBaseHealth":20}}}',
+        '{"version":3,"stageResults":{"outpost-alpha":'
+            '{"medal":"gold","bestBaseHealth":20}},'
+            '"endlessBest":{"outpost-alpha":9},'
+            '"techPurchases":["solar-capacitors"]}',
+        '{"version":99,"stageResults":{"outpost-alpha":'
+            '{"medal":"gold","bestBaseHealth":20}}}',
+        '{"version":"4","stageResults":{}}',
+        '{"stageResults":{"outpost-alpha":'
+            '{"medal":"gold","bestBaseHealth":20}}}',
+      ];
+
+      for (final raw in payloads) {
+        final decoded = CampaignProgressCodec.decode(
+          raw,
+          knownStages: OrionCampaign.stages,
+        );
+        expectFreshProfile(decoded);
+      }
+    });
+
+    test('falls back to a fresh starter profile for corrupt data', () {
+      for (final raw in [null, '', 'not-json', '[]', '42', '"a string"']) {
+        final decoded = CampaignProgressCodec.decode(
+          raw,
+          knownStages: OrionCampaign.stages,
+        );
+        expectFreshProfile(decoded);
+      }
+    });
+
+    test('in-memory store saves, loads, and resets the whole save', () async {
       final store = InMemoryCampaignProgressStore(
         knownStages: OrionCampaign.stages,
       );
 
       await store.save(
-        CampaignSave(
+        save(
           progress: CampaignProgress(
             bestResultsByStageId: {
               'outpost-alpha': const StageResult(
@@ -153,16 +385,20 @@ void main() {
               ),
             },
           ),
-          techTree: CampaignTechTree(),
+          ownedLevels: const {Character.haruto: 5, Character.mio: 1},
+          squad: const [Character.mio],
         ),
       );
+      final loaded = await store.load();
       expect(
-        (await store.load()).progress.resultFor('outpost-alpha'),
+        loaded.progress.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 4),
       );
+      expect(loaded.ownedLevels, {Character.haruto: 5, Character.mio: 1});
+      expect(loaded.squad, [Character.mio]);
 
       await store.reset();
-      expect((await store.load()).progress.bestResultsByStageId, isEmpty);
+      expectFreshProfile(await store.load());
     });
   });
 
@@ -173,7 +409,7 @@ void main() {
       SharedPreferences.setMockInitialValues(<String, Object>{});
     });
 
-    test('saves and loads progress through the configured key', () async {
+    test('saves and loads the whole save through the configured key', () async {
       final preferences = await SharedPreferences.getInstance();
       final store = SharedPreferencesCampaignProgressStore(
         preferences: preferences,
@@ -182,7 +418,7 @@ void main() {
       );
 
       await store.save(
-        CampaignSave(
+        save(
           progress: CampaignProgress(
             bestResultsByStageId: {
               'outpost-alpha': const StageResult(
@@ -191,21 +427,25 @@ void main() {
               ),
             },
           ),
-          techTree: CampaignTechTree(),
+          ownedLevels: const {Character.haruto: 2, Character.mio: 1},
+          squad: const [Character.haruto, Character.mio],
         ),
       );
 
       expect(preferences.getString(key), isNotNull);
+      final loaded = await store.load();
       expect(
-        (await store.load()).progress.resultFor('outpost-alpha'),
+        loaded.progress.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 4),
       );
+      expect(loaded.ownedLevels, {Character.haruto: 2, Character.mio: 1});
+      expect(loaded.squad, [Character.haruto, Character.mio]);
     });
 
     test('reset clears progress', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{
         key: CampaignProgressCodec.encode(
-          CampaignSave(
+          save(
             progress: CampaignProgress(
               bestResultsByStageId: {
                 'outpost-alpha': const StageResult(
@@ -214,7 +454,6 @@ void main() {
                 ),
               },
             ),
-            techTree: CampaignTechTree(),
           ),
         ),
       });
@@ -228,10 +467,10 @@ void main() {
       await store.reset();
 
       expect(preferences.getString(key), isNull);
-      expect((await store.load()).progress.bestResultsByStageId, isEmpty);
+      expectFreshProfile(await store.load());
     });
 
-    test('malformed stored state falls back to empty progress', () async {
+    test('malformed stored state falls back to a fresh profile', () async {
       SharedPreferences.setMockInitialValues(<String, Object>{key: 42});
       final preferences = await SharedPreferences.getInstance();
       final store = SharedPreferencesCampaignProgressStore(
@@ -240,7 +479,7 @@ void main() {
         key: key,
       );
 
-      expect((await store.load()).progress.bestResultsByStageId, isEmpty);
+      expectFreshProfile(await store.load());
     });
   });
 
@@ -273,15 +512,12 @@ void main() {
           },
         );
 
-        await store.save(
-          CampaignSave(progress: progress, techTree: CampaignTechTree()),
-        );
+        await store.save(save(progress: progress));
 
         final loaded = await store.load();
         final modifiers = CampaignModifiers.fromProgress(
           loaded.progress,
           OrionCampaign.stages,
-          CampaignTechTree(),
         );
 
         expect(modifiers.bonusGold, GameBalance.salvageRiftGoldBonus);
@@ -289,249 +525,5 @@ void main() {
         expect(modifiers.hasChallengeBadge, isTrue);
       },
     );
-  });
-
-  group('CampaignSave codec v3', () {
-    test('round-trips progress + techTree', () {
-      final progress = CampaignProgress(
-        bestResultsByStageId: {
-          'outpost-alpha': const StageResult(
-            medal: StageMedal.gold,
-            bestBaseHealth: 20,
-          ),
-        },
-      );
-      final techTree = CampaignTechTree(
-        purchased: {
-          CampaignTechUpgrade.solarCapacitors,
-          CampaignTechUpgrade.cryoCoolant,
-        },
-      );
-      final save = CampaignSave(progress: progress, techTree: techTree);
-
-      final encoded = CampaignProgressCodec.encode(save);
-      final decoded = CampaignProgressCodec.decode(
-        encoded,
-        knownStages: OrionCampaign.stages,
-      );
-
-      expect(decoded.progress.bestResultsByStageId.keys, ['outpost-alpha']);
-      expect(decoded.techTree.purchased, techTree.purchased);
-    });
-
-    test('techPurchases sorted deterministically', () {
-      final techTree = CampaignTechTree(
-        purchased: {
-          CampaignTechUpgrade.cryoCoolant,
-          CampaignTechUpgrade.solarCapacitors,
-        },
-      );
-      final encoded = CampaignProgressCodec.encode(
-        CampaignSave(progress: CampaignProgress(), techTree: techTree),
-      );
-      // Expect the JSON to contain the sorted id list.
-      expect(
-        encoded,
-        contains('"techPurchases":["cryo-coolant","solar-capacitors"]'),
-      );
-    });
-
-    test('unknown techPurchases ids are dropped on decode', () {
-      // Encode cannot produce an unknown id (the enum is closed), so decode
-      // raw JSON directly. See HPA-100 spec round-2 review issue #6.
-      const raw =
-          '{"version":3,"stageResults":{},'
-          '"techPurchases":["solar-capacitors","unknown-future-id"]}';
-      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
-      expect(decoded.techTree.purchased, {CampaignTechUpgrade.solarCapacitors});
-    });
-
-    test('missing techPurchases field on v3 returns empty tree', () {
-      const raw = '{"version":3,"stageResults":{}}';
-      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
-      expect(decoded.techTree.purchased, isEmpty);
-    });
-
-    test('v2 save decodes with empty tech tree', () {
-      const raw = '{"version":2,"stageResults":{}}';
-      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
-      expect(decoded.techTree.purchased, isEmpty);
-    });
-
-    test('v1 save decodes with empty tech tree', () {
-      const raw = '{"version":1,"clearedStageIds":["outpost-alpha"]}';
-      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
-      expect(decoded.techTree.purchased, isEmpty);
-    });
-
-    test('unknown codec version returns empty save', () {
-      const raw = '{"version":99,"stageResults":{}}';
-      final decoded = CampaignProgressCodec.decode(raw, knownStages: const []);
-      expect(decoded.progress.bestResultsByStageId, isEmpty);
-      expect(decoded.techTree.purchased, isEmpty);
-    });
-
-    test('round-trips endless bests with sorted keys at version three', () {
-      final save = CampaignSave(
-        progress: CampaignProgress(
-          bestResultsByStageId: {
-            'outpost-alpha': const StageResult(
-              medal: StageMedal.gold,
-              bestBaseHealth: 20,
-            ),
-          },
-          endlessBestByStageId: const {'outpost-alpha': 11, 'nebula-relay': 4},
-        ),
-        techTree: CampaignTechTree(),
-      );
-
-      final encoded = CampaignProgressCodec.encode(save);
-      final raw = jsonDecode(encoded) as Map<String, Object?>;
-      final endlessBest = raw['endlessBest'] as Map<String, Object?>;
-
-      expect(raw['version'], 3);
-      expect(endlessBest.keys, ['nebula-relay', 'outpost-alpha']);
-      expect(endlessBest['outpost-alpha'], 11);
-      expect(endlessBest['nebula-relay'], 4);
-
-      final decoded = CampaignProgressCodec.decode(
-        encoded,
-        knownStages: OrionCampaign.stages,
-      );
-
-      expect(decoded.progress.endlessBestByStageId, {
-        'outpost-alpha': 11,
-        'nebula-relay': 4,
-      });
-      expect(
-        decoded.progress.resultFor('outpost-alpha'),
-        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-      );
-    });
-
-    test('v3 payload without endlessBest decodes to an empty map', () {
-      const raw =
-          '{"version":3,'
-          '"stageResults":{"outpost-alpha":'
-          '{"medal":"gold","bestBaseHealth":20}},'
-          '"techPurchases":["solar-capacitors"]}';
-
-      final decoded = CampaignProgressCodec.decode(
-        raw,
-        knownStages: OrionCampaign.stages,
-      );
-
-      expect(decoded.progress.endlessBestByStageId, isEmpty);
-      expect(decoded.progress.endlessBestFor('outpost-alpha'), isNull);
-      expect(
-        decoded.progress.resultFor('outpost-alpha'),
-        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-      );
-      expect(decoded.techTree.purchased, {CampaignTechUpgrade.solarCapacitors});
-    });
-
-    test('v4 payload is an unknown version and decodes empty', () {
-      const raw =
-          '{"version":4,'
-          '"stageResults":{"outpost-alpha":'
-          '{"medal":"gold","bestBaseHealth":20}},'
-          '"endlessBest":{"outpost-alpha":9},'
-          '"techPurchases":["solar-capacitors"]}';
-
-      final decoded = CampaignProgressCodec.decode(
-        raw,
-        knownStages: OrionCampaign.stages,
-      );
-
-      expect(decoded.progress.bestResultsByStageId, isEmpty);
-      expect(decoded.progress.endlessBestByStageId, isEmpty);
-      expect(decoded.techTree.purchased, isEmpty);
-    });
-
-    test('drops invalid endlessBest entries on decode', () {
-      const raw =
-          '{"version":3,"stageResults":{},'
-          '"endlessBest":{"outpost-alpha":9,"missing-stage":12,'
-          '"nebula-relay":"high","salvage-rift":0,"void-bastion":-2,'
-          '"aurora-gate":3.5}}';
-
-      final decoded = CampaignProgressCodec.decode(
-        raw,
-        knownStages: OrionCampaign.stages,
-      );
-
-      expect(decoded.progress.endlessBestByStageId, {'outpost-alpha': 9});
-    });
-
-    test('non-map endlessBest decodes to an empty map', () {
-      const raw = '{"version":3,"stageResults":{},"endlessBest":[1,2,3]}';
-
-      final decoded = CampaignProgressCodec.decode(
-        raw,
-        knownStages: OrionCampaign.stages,
-      );
-
-      expect(decoded.progress.endlessBestByStageId, isEmpty);
-    });
-
-    test('malformed stageResults still decodes endlessBest', () {
-      // A torn or hand-edited v3 save must not lose committed endless records:
-      // the next save writes the whole aggregate, so dropping them here would
-      // permanently overwrite them.
-      const raw =
-          '{"version":3,"stageResults":[1,2,3],'
-          '"endlessBest":{"outpost-alpha":9,"nebula-relay":4}}';
-
-      final decoded = CampaignProgressCodec.decode(
-        raw,
-        knownStages: OrionCampaign.stages,
-      );
-
-      expect(decoded.progress.bestResultsByStageId, isEmpty);
-      expect(decoded.progress.endlessBestByStageId, {
-        'outpost-alpha': 9,
-        'nebula-relay': 4,
-      });
-    });
-
-    test('encode writes only positive endless bests', () {
-      final encoded = CampaignProgressCodec.encode(
-        CampaignSave(
-          progress: CampaignProgress(
-            endlessBestByStageId: const {
-              'outpost-alpha': 5,
-              'nebula-relay': 0,
-              'salvage-rift': -3,
-            },
-          ),
-          techTree: CampaignTechTree(),
-        ),
-      );
-
-      final raw = jsonDecode(encoded) as Map<String, Object?>;
-
-      expect(raw['endlessBest'], {'outpost-alpha': 5});
-    });
-
-    test('reset clears endless bests', () async {
-      final store = InMemoryCampaignProgressStore(
-        knownStages: OrionCampaign.stages,
-      );
-
-      await store.save(
-        CampaignSave(
-          progress: CampaignProgress(
-            endlessBestByStageId: const {'outpost-alpha': 9},
-          ),
-          techTree: CampaignTechTree(),
-        ),
-      );
-      expect((await store.load()).progress.endlessBestByStageId, {
-        'outpost-alpha': 9,
-      });
-
-      await store.reset();
-      expect((await store.load()).progress.endlessBestByStageId, isEmpty);
-    });
   });
 }

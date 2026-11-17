@@ -2,30 +2,50 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../models/game_models.dart';
 import 'campaign_progress.dart';
 import 'stage_definition.dart';
-import 'tech_tree.dart';
 
 /// Aggregate of everything persisted under one SharedPreferences key.
 ///
-/// `CampaignProgress` (stage results) and `CampaignTechTree` (purchased
-/// upgrades) are saved atomically — splitting them across two keys would
-/// invite save-tearing bugs and complicate the v2 → v3 migration. See HPA-100
-/// spec "Persistence" section.
+/// `CampaignProgress` (stage results, Endless bests) and the character
+/// profile — `ownedLevels` plus the ordered `squad` — are saved atomically:
+/// splitting them across two keys would invite save-tearing bugs. See the
+/// HPA-922 spec "Profile and persistence" section.
 class CampaignSave {
-  const CampaignSave({required this.progress, required this.techTree});
+  CampaignSave({
+    required this.progress,
+    required Map<Character, int> ownedLevels,
+    required List<Character> squad,
+  }) : ownedLevels = Map.unmodifiable(ownedLevels),
+       squad = List.unmodifiable(squad);
 
   final CampaignProgress progress;
-  final CampaignTechTree techTree;
 
-  // `static const` is impossible here because `CampaignProgress` and
-  // `CampaignTechTree` default constructors are non-`const` (they wrap their
-  // inputs in `Map.unmodifiable` / `Set.unmodifiable`, which are not const).
-  // `static final` preserves the "one shared empty instance" intent — both
-  // wrapped objects are deeply immutable.
+  /// Owned characters mapped to their persistent level
+  /// (1–[GameBalance.characterMaxLevel]).
+  final Map<Character, int> ownedLevels;
+
+  /// Ordered squad roster — distinct members of [ownedLevels], at most
+  /// [GameBalance.squadMaxSize] entries.
+  final List<Character> squad;
+
+  /// Fresh-profile starters (HPA-922): every new or discarded save owns
+  /// Haruto and Mio at level 1, with both selected for the squad.
+  static const Map<Character, int> starterOwnedLevels = {
+    Character.haruto: 1,
+    Character.mio: 1,
+  };
+  static const List<Character> starterSquad = [Character.haruto, Character.mio];
+
+  // `static const` is impossible here because `CampaignProgress` wraps its
+  // inputs in `Map.unmodifiable` (not const). `static final` preserves the
+  // "one shared empty instance" intent — the wrapped objects are deeply
+  // immutable.
   static final CampaignSave empty = CampaignSave(
     progress: CampaignProgress(),
-    techTree: CampaignTechTree(),
+    ownedLevels: starterOwnedLevels,
+    squad: starterSquad,
   );
 }
 
@@ -37,6 +57,8 @@ abstract class CampaignProgressStore {
 
 class CampaignProgressCodec {
   const CampaignProgressCodec._();
+
+  static const int _version = 4;
 
   static String encode(CampaignSave save) {
     final stageIds = save.progress.bestResultsByStageId.keys.toList()..sort();
@@ -52,11 +74,20 @@ class CampaignProgressCodec {
       endlessBest[stageId] = save.progress.endlessBestByStageId[stageId]!;
     }
 
+    // `Character.name` is the stable save key; sorting keeps the payload
+    // deterministic regardless of map insertion order.
+    final ownedEntries = save.ownedLevels.entries.toList()
+      ..sort((a, b) => a.key.name.compareTo(b.key.name));
+    final ownedCharacters = <String, Object>{
+      for (final entry in ownedEntries) entry.key.name: entry.value,
+    };
+
     return jsonEncode({
-      'version': 3,
+      'version': _version,
       'stageResults': stageResults,
       'endlessBest': endlessBest,
-      'techPurchases': save.techTree.toIdList(),
+      'ownedCharacters': ownedCharacters,
+      'squad': [for (final member in save.squad) member.name],
     });
   }
 
@@ -74,27 +105,19 @@ class CampaignProgressCodec {
         return CampaignSave.empty;
       }
 
-      final version = decoded['version'];
-      if (version == 1) {
-        return CampaignSave(
-          progress: _decodeVersionOne(decoded, knownStages: knownStages),
-          techTree: CampaignTechTree(),
-        );
-      }
-      if (version == 2) {
-        return CampaignSave(
-          progress: _decodeStageResults(decoded, knownStages: knownStages),
-          techTree: CampaignTechTree(),
-        );
-      }
-      if (version != 3) {
-        // Unknown version: return empty save (existing policy).
+      // Only v4 is readable. Versions 1–3 carried cleared-stage ids or tech
+      // purchases that predate the character profile; they — and any unknown
+      // or absent version — start a fresh two-starter profile rather than
+      // migrate (HPA-922).
+      if (decoded['version'] != _version) {
         return CampaignSave.empty;
       }
 
+      final ownedLevels = _decodeOwnedCharacters(decoded['ownedCharacters']);
       return CampaignSave(
-        progress: _decodeVersionThree(decoded, knownStages: knownStages),
-        techTree: _decodeTechPurchases(decoded['techPurchases']),
+        progress: _decodeProgress(decoded, knownStages: knownStages),
+        ownedLevels: ownedLevels,
+        squad: _decodeSquad(decoded['squad'], ownedLevels),
       );
     } on FormatException {
       return CampaignSave.empty;
@@ -103,44 +126,31 @@ class CampaignProgressCodec {
     }
   }
 
-  static CampaignProgress _decodeStageResults(
+  static CampaignProgress _decodeProgress(
     Map<String, Object?> decoded, {
     required Iterable<StageDefinition> knownStages,
   }) {
     final knownIds = knownStages.map((stage) => stage.id).toSet();
     final rawResults = decoded['stageResults'];
-    if (rawResults is! Map<String, Object?>) {
-      return CampaignProgress();
-    }
     final results = <String, StageResult>{};
-    for (final entry in rawResults.entries) {
-      if (!knownIds.contains(entry.key)) {
-        continue;
+    if (rawResults is Map<String, Object?>) {
+      for (final entry in rawResults.entries) {
+        if (!knownIds.contains(entry.key)) {
+          continue;
+        }
+        final result = StageResult.fromJson(entry.value);
+        if (result == null) {
+          continue;
+        }
+        results[entry.key] = result;
       }
-      final result = StageResult.fromJson(entry.value);
-      if (result == null) {
-        continue;
-      }
-      results[entry.key] = result;
     }
-    return CampaignProgress(bestResultsByStageId: results);
-  }
-
-  static CampaignProgress _decodeVersionThree(
-    Map<String, Object?> decoded, {
-    required Iterable<StageDefinition> knownStages,
-  }) {
-    final stageProgress = _decodeStageResults(
-      decoded,
-      knownStages: knownStages,
-    );
-    final knownIds = knownStages.map((stage) => stage.id).toSet();
     // Endless records decode independently of mission results: a malformed
-    // `stageResults` must not discard valid `endlessBest` entries, or the next
-    // save would permanently overwrite them.
+    // `stageResults` must not discard valid `endlessBest` entries, or the
+    // next save would permanently overwrite them.
     final endlessBest = _decodeEndlessBest(decoded['endlessBest'], knownIds);
     return CampaignProgress(
-      bestResultsByStageId: stageProgress.bestResultsByStageId,
+      bestResultsByStageId: results,
       endlessBestByStageId: endlessBest,
     );
   }
@@ -163,34 +173,57 @@ class CampaignProgressCodec {
     return bests;
   }
 
-  static CampaignTechTree _decodeTechPurchases(Object? raw) {
-    if (raw is! List) {
-      return CampaignTechTree();
+  // Character ids are decoded only here, via `Character.values.asNameMap()` —
+  // nowhere else may turn save strings back into enum values.
+  static Map<Character, int> _decodeOwnedCharacters(Object? raw) {
+    if (raw is Map<String, Object?>) {
+      final characters = Character.values.asNameMap();
+      final owned = <Character, int>{};
+      for (final entry in raw.entries) {
+        final character = characters[entry.key];
+        final level = entry.value;
+        if (character == null ||
+            level is! int ||
+            level < 1 ||
+            level > GameBalance.characterMaxLevel) {
+          continue;
+        }
+        owned[character] = level;
+      }
+      if (owned.isNotEmpty) {
+        return owned;
+      }
     }
-    final ids = raw.whereType<String>().toList();
-    return CampaignTechTree.fromIdList(ids);
+    // A missing, malformed, or fully invalid roster restores the two
+    // starters so the profile is never left owning nothing.
+    return CampaignSave.starterOwnedLevels;
   }
 
-  static CampaignProgress _decodeVersionOne(
-    Map<String, Object?> decoded, {
-    required Iterable<StageDefinition> knownStages,
-  }) {
-    final rawIds = decoded['clearedStageIds'];
-    if (rawIds is! List) {
-      return CampaignProgress();
+  static List<Character> _decodeSquad(
+    Object? raw,
+    Map<Character, int> ownedLevels,
+  ) {
+    if (raw is! List) {
+      return const <Character>[];
     }
-    final knownIds = knownStages.map((stage) => stage.id).toSet();
-    final results = <String, StageResult>{};
-    for (final id in rawIds.whereType<String>()) {
-      if (!knownIds.contains(id) || results.containsKey(id)) {
+    final characters = Character.values.asNameMap();
+    final squad = <Character>[];
+    for (final entry in raw) {
+      if (squad.length >= GameBalance.squadMaxSize) {
+        break;
+      }
+      if (entry is! String) {
         continue;
       }
-      results[id] = const StageResult(
-        medal: StageMedal.clear,
-        bestBaseHealth: 0,
-      );
+      final character = characters[entry];
+      if (character == null ||
+          !ownedLevels.containsKey(character) ||
+          squad.contains(character)) {
+        continue;
+      }
+      squad.add(character);
     }
-    return CampaignProgress(bestResultsByStageId: results);
+    return squad;
   }
 }
 

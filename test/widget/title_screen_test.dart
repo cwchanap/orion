@@ -9,7 +9,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
-import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/feedback/feedback_preferences.dart';
 import 'package:orion/game/feedback/game_feedback.dart';
 import 'package:orion/game/onboarding/first_mission_guide_store.dart';
@@ -59,7 +58,8 @@ Future<InMemoryCampaignProgressStore> _storeWithResults(
   await store.save(
     CampaignSave(
       progress: CampaignProgress(bestResultsByStageId: results),
-      techTree: CampaignTechTree(),
+      ownedLevels: CampaignSave.starterOwnedLevels,
+      squad: CampaignSave.starterSquad,
     ),
   );
   return store;
@@ -243,7 +243,7 @@ void main() {
       await tester.pumpAndSettle();
 
       final shortcutRects = [
-        for (final tooltip in ['Sectors', 'R&D', 'Codex', 'Settings'])
+        for (final tooltip in ['Sectors', 'Camp', 'Codex', 'Settings'])
           tester.getRect(
             find.descendant(
               of: find.byTooltip(tooltip),
@@ -369,12 +369,12 @@ void main() {
       expect(find.text('SECTOR MAP'), findsOneWidget);
     });
 
-    testWidgets('the R&D shortcut opens the tech tree', (tester) async {
+    testWidgets('the Camp shortcut opens the camp roster', (tester) async {
       await tester.pumpWidget(titleGamePage());
       await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('R&D'));
+      await tester.tap(find.byTooltip('Camp'));
       await tester.pumpAndSettle();
-      expect(findOrionTitle('R&D Lab'), findsOneWidget);
+      expect(findOrionTitle('Camp'), findsOneWidget);
     });
 
     testWidgets('the Codex shortcut opens the codex', (tester) async {
@@ -571,9 +571,9 @@ void main() {
         expect(find.text('SECTOR MAP'), findsOneWidget);
         expectMedals();
 
-        await tester.tap(find.byTooltip('R&D'));
+        await tester.tap(find.byTooltip('Camp'));
         await tester.pumpAndSettle();
-        expect(findOrionTitle('R&D Lab'), findsOneWidget);
+        expect(findOrionTitle('Camp'), findsOneWidget);
         expectMedals();
 
         await tester.tap(find.byTooltip('Codex'));
@@ -628,7 +628,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      for (final tooltip in const ['Sectors', 'R&D', 'Codex', 'Settings']) {
+      for (final tooltip in const ['Sectors', 'Camp', 'Codex', 'Settings']) {
         final rect = tester.getRect(
           find.descendant(
             of: find.byTooltip(tooltip),

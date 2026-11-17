@@ -10,10 +10,7 @@ import 'stage_modifier_rules.dart';
 /// Pipeline order for new character-aware calls: base style/tier → character
 /// rank+level damage-channel scaling → stage → run modules. The optional
 /// [character]/[characterLevel] pair is the temporary Task-1 bridge: Task 3
-/// moves both onto [PlacedTower] and makes this path the only one. The legacy
-/// laser/cryo tech-tree combat upgrades still apply to pre-character calls
-/// (filtered by tower type) until Task 2 removes them; character-aware calls
-/// already follow the final pipeline and skip that step entirely.
+/// moves both onto [PlacedTower] and makes this path the only one.
 class TowerStatsResolver {
   static TowerStats resolve(
     PlacedTower tower, {
@@ -43,17 +40,6 @@ class TowerStatsResolver {
     if (character != null) {
       adjusted = base.scaleDamageChannels(
         GameBalance.characterScalingFactor(character.rank, characterLevel),
-      );
-    } else if (tower.type == TowerType.laser &&
-        campaignModifiers.laserDamageFraction > 0) {
-      adjusted = base.copyWith(
-        damage: base.damage * (1 + campaignModifiers.laserDamageFraction),
-      );
-    } else if (tower.type == TowerType.cryo &&
-        campaignModifiers.cryoSlowDurationBonus > 0) {
-      adjusted = base.copyWith(
-        slowDuration:
-            base.slowDuration + campaignModifiers.cryoSlowDurationBonus,
       );
     }
     final stageAdjusted = StageModifierRules.effectiveTowerStats(

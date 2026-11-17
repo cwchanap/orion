@@ -474,12 +474,13 @@ class TowerStats {
   }
 
   /// Returns a copy with overridden fields. Exposes the fields runtime stat
-  /// resolvers need to mutate: `damage` and `slowDuration` for campaign tech
-  /// upgrades, `fieldRadius` and `fieldDuration` for stage environmental
-  /// modifiers (e.g. amplified gravity wells), and `range`, `fireInterval`,
-  /// `splashRadius`, `corrosionDamagePerSecond`, `droneDamage`, `chainCount`,
-  /// and `pierceCount` for run modules. Everything else copies from `this`.
-  /// Kept narrow on purpose — extend only if another feature needs it.
+  /// resolvers need to mutate: `fieldRadius` and `fieldDuration` for stage
+  /// environmental modifiers (e.g. amplified gravity wells), and `damage`,
+  /// `slowDuration`, `range`, `fireInterval`, `splashRadius`,
+  /// `corrosionDamagePerSecond`, `droneDamage`, `chainCount`, and
+  /// `pierceCount` for run modules and character scaling. Everything else
+  /// copies from `this`. Kept narrow on purpose — extend only if another
+  /// feature needs it.
   TowerStats copyWith({
     double? damage,
     double? slowDuration,
@@ -1076,6 +1077,10 @@ class GameBalance {
   static const double characterLevelGrowthPerLevel = 0.025;
   static const int characterMaxLevel = 40;
 
+  // Maximum squad size (HPA-922): the saved roster validates against this
+  // cap, and Task 6's squad picker enforces it in the UI.
+  static const int squadMaxSize = 6;
+
   /// Combined rank+level multiplier applied to a character's damage channels
   /// (via [TowerStats.scaleDamageChannels]) before stage modifiers and run
   /// modules: `rank * (1 + (level - 1) * growth)`. [level] is clamped to the
@@ -1085,24 +1090,6 @@ class GameBalance {
     return characterRankMultipliers[rank]! *
         (1 + (clampedLevel - 1) * characterLevelGrowthPerLevel);
   }
-
-  // Campaign tech-tree upgrade costs. Total is 20 (intentional 1-pt slack
-  // below the 21-pt max medal rank: 7 stages × 3 rank). Tests assert this.
-  static const int solarCapacitorsCost = 3;
-  static const int hardenedCoreCost = 4;
-  static const int salvageCrewCost = 4;
-  static const int laserTuningCost = 4;
-  static const int cryoCoolantCost = 5;
-
-  // Campaign tech-tree upgrade magnitudes. The two "*Fraction" constants are
-  // additive fractions (applied as `(1 + fraction)`), NOT multipliers —
-  // storing 0.25 and applying as `* clearBonusFraction` would silently grant
-  // 25% of the bonus instead of 125%. See HPA-100 spec.
-  static const int solarCapacitorsGoldBonus = 15;
-  static const int hardenedCoreHealthBonus = 3;
-  static const double salvageCrewClearBonusFraction = 0.25;
-  static const double laserTuningDamageFraction = 0.10;
-  static const double cryoCoolantSlowDurationBonus = 0.30;
 
   static const EnemyStats _basicDrone = EnemyStats(
     health: 36,

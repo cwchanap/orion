@@ -197,8 +197,8 @@ void main() {
       _expectNoOverflow(collect.errors);
       _expectWholeStageName(tester);
       _expectWholeMedalCriteria(tester);
-      _expectWholeStats(tester, ['HULL', 'WAVES', 'CREDITS', 'PENDING']);
-      _expectWholeStats(tester, ['20/20', '8/8', '120', '+3']);
+      _expectWholeStats(tester, ['HULL', 'WAVES', 'CREDITS']);
+      _expectWholeStats(tester, ['20/20', '8/8', '120']);
       expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
       await _expectAction(tester, const Size(360, 640), 'Retry Save', true);
       await _expectAction(
@@ -235,13 +235,8 @@ void main() {
         _expectNoOverflow(collect.errors);
         _expectWholeStageName(tester);
         _expectWholeMedalCriteria(tester);
-        _expectWholeStats(tester, const [
-          'HULL',
-          'WAVES',
-          'CREDITS',
-          'PENDING',
-        ]);
-        _expectWholeStats(tester, const ['20/20', '8/8', '120', '+3']);
+        _expectWholeStats(tester, const ['HULL', 'WAVES', 'CREDITS']);
+        _expectWholeStats(tester, const ['20/20', '8/8', '120']);
         expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
         await _expectAction(tester, size, 'Retry Save', true);
         await _expectAction(tester, size, 'World Map (Unsaved)', true);
@@ -269,8 +264,8 @@ void main() {
         _expectWholeWords(tester, 'SECTOR SECURED');
         _expectWholeWords(tester, 'VICTORY');
         _expectWholeMedalCriteria(tester);
-        _expectWholeStats(tester, const ['HULL', 'WAVES', 'CREDITS', 'R&D']);
-        _expectWholeStats(tester, const ['20/20', '8/8', '120', '+3']);
+        _expectWholeStats(tester, const ['HULL', 'WAVES', 'CREDITS']);
+        _expectWholeStats(tester, const ['20/20', '8/8', '120']);
         expect(find.text('Saved.'), findsOneWidget);
         expect(find.text('New first-clear result'), findsOneWidget);
         await _expectAction(tester, size, 'Replay Mission', true);
@@ -298,13 +293,8 @@ void main() {
         _expectNoOverflow(collect.errors);
         _expectWholeStageName(tester);
         _expectWholeWords(tester, 'MISSION FAILED');
-        _expectWholeStats(tester, const [
-          'HULL',
-          'WAVES',
-          'CREDITS',
-          'PENDING',
-        ]);
-        _expectWholeStats(tester, const ['0/20', '5/8', '120', '+0']);
+        _expectWholeStats(tester, const ['HULL', 'WAVES', 'CREDITS']);
+        _expectWholeStats(tester, const ['0/20', '5/8', '120']);
         _expectWholeWords(tester, 'MISSION DETAILS');
         await _expectAction(tester, size, 'Retry', true);
         await _expectAction(tester, size, 'World Map', true);
@@ -721,7 +711,7 @@ void main() {
     // backdrop, with exactly ONE result banner selected through
     // OrionArt.result(content.result), medal treatment derived from the real
     // StageResult.medal (vector glyphs, no per-medal bitmaps), and the real
-    // stage facts. No score/time/kills/damage/R&D analytics exist here.
+    // stage facts. No score/time/kills/damage analytics exist here.
     await _pumpPanel(
       tester,
       _victoryContent(
@@ -874,18 +864,22 @@ void main() {
       expect(find.text('0/20'), findsOneWidget);
     });
 
-    testWidgets('omits the R&D tile and any medal reward', (tester) async {
+    testWidgets('omits any medal reward and keeps the three stat tiles', (
+      tester,
+    ) async {
       await _pumpPanel(tester, _endlessContent(MissionSaveState.saved));
 
-      expect(find.text('R&D'), findsNothing);
-      expect(find.text('PENDING'), findsNothing);
+      expect(find.text('HULL'), findsOneWidget);
+      expect(find.text('WAVES'), findsOneWidget);
+      expect(find.text('CREDITS'), findsOneWidget);
+      // Medal points were the removed R&D economy: no fourth reward tile or
+      // medal-point copy may surface on an endless debrief.
       expect(find.textContaining('R&D'), findsNothing);
+      expect(find.textContaining(RegExp(r'\+\d+')), findsNothing);
       expect(find.byIcon(Icons.pentagon), findsNothing);
 
-      // The suppression is endless-scoped: an ordinary mission loss keeps
-      // its PENDING tile.
+      // A mission loss likewise carries no save-state row.
       await _pumpPanel(tester, _lossContent());
-      expect(find.text('PENDING'), findsOneWidget);
       expect(find.bySemanticsLabel('Save status'), findsNothing);
     });
 
@@ -1478,11 +1472,17 @@ void main() {
       }
 
       testWidgets(
-        'saving victory qualifies projected R&D as pending, not spendable',
+        'saving victory disables both exits while the result commits',
         (tester) async {
           await _pumpPanel(
             tester,
-            _victoryContent(MissionSaveState.saving),
+            _victoryContent(
+              MissionSaveState.saving,
+              reward: const MissionRewardFact(
+                title: 'Blueprint fragment',
+                detail: 'Unlocks a new blueprint after saving.',
+              ),
+            ),
             onReplay: () {},
             onReturnToMap: () {},
           );
@@ -1490,27 +1490,12 @@ void main() {
 
           final panel = rewardsCard(tester);
           expect(
-            find.descendant(of: panel, matching: find.text('+3 R&D')),
+            find.descendant(
+              of: panel,
+              matching: find.text('Blueprint fragment'),
+            ),
             findsOneWidget,
-            reason: 'projected medal points still render while pending',
-          );
-          expect(
-            find.descendant(
-              of: panel,
-              matching: find.text('Spend it in the R&D lab'),
-            ),
-            findsNothing,
-            reason: 'uncommitted points must not read as spendable',
-          );
-          expect(
-            find.descendant(
-              of: panel,
-              matching: find.textContaining(
-                RegExp('pending', caseSensitive: false),
-              ),
-            ),
-            findsWidgets,
-            reason: 'the rewards panel must qualify the points as pending',
+            reason: 'the blueprint reward still renders while the save runs',
           );
 
           for (final label in ['Replay Mission', 'World Map']) {
@@ -1527,12 +1512,18 @@ void main() {
         },
       );
 
-      testWidgets('failed victory qualifies projected R&D as not awarded', (
+      testWidgets('failed victory keeps retry and unsaved-map exits', (
         tester,
       ) async {
         await _pumpPanel(
           tester,
-          _victoryContent(MissionSaveState.failed),
+          _victoryContent(
+            MissionSaveState.failed,
+            reward: const MissionRewardFact(
+              title: 'Blueprint fragment',
+              detail: 'Unlocks a new blueprint after saving.',
+            ),
+          ),
           onRetrySave: () {},
           onReturnToMap: () {},
         );
@@ -1543,106 +1534,53 @@ void main() {
 
         final panel = rewardsCard(tester);
         expect(
-          find.descendant(of: panel, matching: find.text('+3 R&D')),
+          find.descendant(of: panel, matching: find.text('Blueprint fragment')),
           findsOneWidget,
-          reason: 'projected medal points still render when unawarded',
-        );
-        expect(
-          find.descendant(
-            of: panel,
-            matching: find.text('Spend it in the R&D lab'),
-          ),
-          findsNothing,
-          reason: 'points are not awarded when the save failed',
-        );
-        expect(
-          find.descendant(
-            of: panel,
-            matching: find.textContaining(
-              RegExp(
-                'unawarded|not awarded|not committed',
-                caseSensitive: false,
-              ),
-            ),
-          ),
-          findsWidgets,
-          reason:
-              'the rewards panel must qualify the points as not '
-              'awarded',
+          reason: 'the projected reward stays visible after a failed save',
         );
       });
 
-      testWidgets('saved victory keeps spendable R&D wording', (tester) async {
-        await _pumpPanel(tester, _victoryContent(MissionSaveState.saved));
-        expect(find.text('Saved.'), findsOneWidget);
+      testWidgets('retained best keeps the saved copy and reward text', (
+        tester,
+      ) async {
+        await _pumpPanel(
+          tester,
+          projectVictoryReport(
+            snapshot: _syntheticSnapshot(),
+            result: const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            priorSavedResult: const StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+            saveState: MissionSaveState.saved,
+            reward: const MissionRewardFact(
+              title: 'Blueprint fragment',
+              detail: 'Unlocks a new blueprint after saving.',
+            ),
+          ),
+        );
+        expect(
+          find.text('Saved best retained: Gold • 20 base health'),
+          findsOneWidget,
+        );
+        expect(find.text('Best result already saved.'), findsOneWidget);
 
         final panel = rewardsCard(tester);
         expect(
-          find.descendant(of: panel, matching: find.text('+3 R&D')),
+          find.descendant(of: panel, matching: find.text('Blueprint fragment')),
           findsOneWidget,
         );
         expect(
           find.descendant(
             of: panel,
-            matching: find.text('Spend it in the R&D lab'),
+            matching: find.text('Unlocks a new blueprint after saving.'),
           ),
           findsOneWidget,
         );
       });
-
-      testWidgets(
-        'retained best awards no additional R&D but keeps reward copy',
-        (tester) async {
-          await _pumpPanel(
-            tester,
-            projectVictoryReport(
-              snapshot: _syntheticSnapshot(),
-              result: const StageResult(
-                medal: StageMedal.gold,
-                bestBaseHealth: 20,
-              ),
-              priorSavedResult: const StageResult(
-                medal: StageMedal.gold,
-                bestBaseHealth: 20,
-              ),
-              saveState: MissionSaveState.saved,
-              reward: const MissionRewardFact(
-                title: 'Blueprint fragment',
-                detail: 'Unlocks a new blueprint after saving.',
-              ),
-            ),
-          );
-          expect(
-            find.text('Saved best retained: Gold • 20 base health'),
-            findsOneWidget,
-          );
-          expect(find.text('Best result already saved.'), findsOneWidget);
-
-          final panel = rewardsCard(tester);
-          expect(
-            find.descendant(
-              of: panel,
-              matching: find.textContaining(RegExp(r'\+\d+ R&D')),
-            ),
-            findsNothing,
-            reason: 'a retained result awards zero additional points',
-          );
-          expect(
-            find.descendant(
-              of: panel,
-              matching: find.text('Blueprint fragment'),
-            ),
-            findsOneWidget,
-          );
-          expect(
-            find.descendant(
-              of: panel,
-              matching: find.text('Unlocks a new blueprint after saving.'),
-            ),
-            findsOneWidget,
-          );
-        },
-      );
 
       testWidgets('reward copy stays identical across save states', (
         tester,

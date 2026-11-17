@@ -17,10 +17,9 @@ class OrionTitleView extends StatelessWidget {
     required this.campaignComplete,
     required this.medalEarned,
     required this.medalTotal,
-    required this.researchPoints,
     required this.onContinue,
     required this.onOpenSectors,
-    required this.onOpenResearch,
+    required this.onOpenCamp,
     required this.onOpenCodex,
     required this.onOpenSettings,
     this.busy = false,
@@ -35,11 +34,10 @@ class OrionTitleView extends StatelessWidget {
 
   final int medalEarned;
   final int medalTotal;
-  final int researchPoints;
 
   final VoidCallback? onContinue;
   final VoidCallback? onOpenSectors;
-  final VoidCallback? onOpenResearch;
+  final VoidCallback? onOpenCamp;
   final VoidCallback? onOpenCodex;
   final VoidCallback? onOpenSettings;
 
@@ -90,7 +88,6 @@ class OrionTitleView extends StatelessWidget {
                                 continueAvailable: isContinueAvailable,
                                 medalEarned: medalEarned,
                                 medalTotal: medalTotal,
-                                researchPoints: researchPoints,
                               ),
                               const SizedBox(height: 14),
                               OrionPrimaryButton(
@@ -116,7 +113,7 @@ class OrionTitleView extends StatelessWidget {
                         _ShortcutRow(
                           busy: busy,
                           onOpenSectors: onOpenSectors,
-                          onOpenResearch: onOpenResearch,
+                          onOpenCamp: onOpenCamp,
                           onOpenCodex: onOpenCodex,
                           onOpenSettings: onOpenSettings,
                         ),
@@ -294,7 +291,6 @@ class _CampaignCard extends StatelessWidget {
     required this.continueAvailable,
     required this.medalEarned,
     required this.medalTotal,
-    required this.researchPoints,
   });
 
   final StageDefinition? stage;
@@ -302,7 +298,6 @@ class _CampaignCard extends StatelessWidget {
   final bool continueAvailable;
   final int medalEarned;
   final int medalTotal;
-  final int researchPoints;
 
   @override
   Widget build(BuildContext context) {
@@ -367,12 +362,6 @@ class _CampaignCard extends StatelessWidget {
                       semanticsLabel:
                           '$medalEarned of $medalTotal campaign medals',
                     ),
-                    OrionResourceChip(
-                      icon: Icons.diamond_rounded,
-                      iconColor: uiTheme.systemViolet,
-                      count: '$researchPoints',
-                      semanticsLabel: '$researchPoints research points',
-                    ),
                   ],
                 ),
               ],
@@ -388,14 +377,14 @@ class _ShortcutRow extends StatelessWidget {
   const _ShortcutRow({
     required this.busy,
     required this.onOpenSectors,
-    required this.onOpenResearch,
+    required this.onOpenCamp,
     required this.onOpenCodex,
     required this.onOpenSettings,
   });
 
   final bool busy;
   final VoidCallback? onOpenSectors;
-  final VoidCallback? onOpenResearch;
+  final VoidCallback? onOpenCamp;
   final VoidCallback? onOpenCodex;
   final VoidCallback? onOpenSettings;
 
@@ -416,11 +405,11 @@ class _ShortcutRow extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: _GhostAction(
-            icon: Icons.biotech_rounded,
+            icon: Icons.groups_rounded,
             iconColor: uiTheme.systemViolet,
-            label: 'R&D',
-            tooltip: 'R&D',
-            onPressed: busy ? null : onOpenResearch,
+            label: 'Camp',
+            tooltip: 'Camp',
+            onPressed: busy ? null : onOpenCamp,
           ),
         ),
         const SizedBox(width: 8),
