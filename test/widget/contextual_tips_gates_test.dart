@@ -24,7 +24,6 @@ const _tipSquad = [
   Character.mio,
   Character.elena,
   Character.kaito,
-  Character.shiori,
   Character.ren,
   Character.tetsuo,
 ];

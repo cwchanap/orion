@@ -25,13 +25,7 @@ const _testSquad = [
   Character.jin,
   Character.ren,
   Character.elena,
-  Character.shiori,
-  Character.kaito,
   Character.tetsuo,
-  Character.hikari,
-  Character.akane,
-  Character.rin,
-  Character.sayo,
 ];
 
 Widget railHost({
@@ -343,7 +337,7 @@ void main() {
               child: TowerBuildRail(
                 phase: GamePhase.wave,
                 gold: 9999,
-                squad: Character.values,
+                squad: _testSquad,
                 squadLevels: const {},
                 deployedCharacters: const {},
                 onPlaceTower: (_) {},
@@ -696,7 +690,7 @@ void main() {
                 child: TowerBuildRail(
                   phase: GamePhase.build,
                   gold: 999,
-                  squad: Character.values,
+                  squad: _testSquad,
                   squadLevels: const {},
                   deployedCharacters: const {},
                   onPlaceTower: (_) {},
@@ -790,7 +784,7 @@ void main() {
         home: TowerBuildRail(
           phase: GamePhase.wave,
           gold: 9999,
-          squad: Character.values,
+          squad: _testSquad,
           squadLevels: const {},
           deployedCharacters: const {},
           onPlaceTower: placed.add,
@@ -1575,7 +1569,7 @@ void main() {
                   child: TowerBuildRail(
                     phase: GamePhase.build,
                     gold: 9999,
-                    squad: Character.values,
+                    squad: _testSquad,
                     squadLevels: const {},
                     deployedCharacters: const {},
                     onPlaceTower: (_) {},

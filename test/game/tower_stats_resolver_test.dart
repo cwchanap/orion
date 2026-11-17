@@ -456,13 +456,23 @@ void main() {
     });
 
     test('level input clamps to the 1-40 band', () {
-      final at40 = TowerStatsResolver.resolve(characterTower(Character.hikari));
-      final at99 = TowerStatsResolver.resolve(characterTower(Character.hikari));
-      final at0 = TowerStatsResolver.resolve(characterTower(Character.hikari));
-      final at1 = TowerStatsResolver.resolve(characterTower(Character.hikari));
+      final at40 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari, level: 40),
+      );
+      final at99 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari, level: 99),
+      );
+      final at0 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari, level: 0),
+      );
+      final at1 = TowerStatsResolver.resolve(
+        characterTower(Character.hikari, level: 1),
+      );
 
       expect(at99.damage, at40.damage);
       expect(at0.damage, at1.damage);
+      // The clamps really bound the scaling — level 40 hits harder than 1.
+      expect(at40.damage, greaterThan(at1.damage));
     });
   });
 }

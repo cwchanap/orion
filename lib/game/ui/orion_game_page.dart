@@ -739,7 +739,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 resolvedGuideStep == FirstMissionGuideStep.upgrade &&
                 snapshot.selectedTower != null &&
                 (snapshot.selectedTowerStats == null ||
-                    snapshot.gold < snapshot.selectedTowerStats!.upgradeCost);
+                    snapshot.selectedTowerStats!.nextUpgradeCost == null ||
+                    snapshot.gold <
+                        snapshot.selectedTowerStats!.nextUpgradeCost!);
             final guideStep = upgradeAnchorDead ? null : resolvedGuideStep;
 
             // The old HPA-412 guide always wins: while it is eligible (a
