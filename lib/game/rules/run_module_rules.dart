@@ -14,19 +14,19 @@ abstract final class RunModuleRules {
         continue;
       }
 
-      stats = stats.copyWith(
-        damage: stats.damage * definition.damageMultiplier,
-        corrosionDamagePerSecond:
-            stats.corrosionDamagePerSecond * definition.damageMultiplier,
-        droneDamage: stats.droneDamage * definition.damageMultiplier,
-        fireInterval: stats.fireInterval * definition.fireIntervalMultiplier,
-        range: stats.range * definition.rangeMultiplier,
-        splashRadius: stats.splashRadius * definition.splashRadiusMultiplier,
-        slowDuration: stats.slowDuration + definition.slowDurationBonus,
-        chainCount: stats.chainCount + definition.chainCountBonus,
-        pierceCount: stats.pierceCount + definition.pierceCountBonus,
-        fieldRadius: stats.fieldRadius * definition.fieldRadiusMultiplier,
-      );
+      stats = stats
+          .scaleDamageChannels(definition.damageMultiplier)
+          .copyWith(
+            fireInterval:
+                stats.fireInterval * definition.fireIntervalMultiplier,
+            range: stats.range * definition.rangeMultiplier,
+            splashRadius:
+                stats.splashRadius * definition.splashRadiusMultiplier,
+            slowDuration: stats.slowDuration + definition.slowDurationBonus,
+            chainCount: stats.chainCount + definition.chainCountBonus,
+            pierceCount: stats.pierceCount + definition.pierceCountBonus,
+            fieldRadius: stats.fieldRadius * definition.fieldRadiusMultiplier,
+          );
     }
 
     return stats;

@@ -1336,6 +1336,143 @@ void main() {
       expect(preview.groups.last.label, 'Relay Breaker');
     });
   });
+
+  group('Character scaling constants', () {
+    test('rank multipliers match the approved initial values', () {
+      expect(GameBalance.characterRankMultipliers, {
+        CharacterRank.e: 1.0,
+        CharacterRank.d: 1.2,
+        CharacterRank.c: 1.4,
+        CharacterRank.b: 1.6,
+        CharacterRank.a: 1.8,
+        CharacterRank.s: 2.0,
+      });
+    });
+
+    test('level growth is 2.5 percent per level above 1, capped at 40', () {
+      expect(GameBalance.characterLevelGrowthPerLevel, 0.025);
+      expect(GameBalance.characterMaxLevel, 40);
+    });
+
+    test('characterScalingFactor combines rank and level multiplicatively', () {
+      expect(GameBalance.characterScalingFactor(CharacterRank.e, 1), 1.0);
+      expect(GameBalance.characterScalingFactor(CharacterRank.s, 1), 2.0);
+      expect(
+        GameBalance.characterScalingFactor(CharacterRank.e, 40),
+        closeTo(1.975, 1e-9),
+      );
+      expect(
+        GameBalance.characterScalingFactor(CharacterRank.s, 40),
+        closeTo(3.95, 1e-9),
+      );
+      expect(
+        GameBalance.characterScalingFactor(CharacterRank.b, 20),
+        closeTo(1.6 * (1 + 19 * 0.025), 1e-9),
+      );
+    });
+
+    test('characterScalingFactor clamps level to 1-40', () {
+      expect(
+        GameBalance.characterScalingFactor(CharacterRank.b, 0),
+        GameBalance.characterScalingFactor(CharacterRank.b, 1),
+      );
+      expect(
+        GameBalance.characterScalingFactor(CharacterRank.b, 41),
+        GameBalance.characterScalingFactor(CharacterRank.b, 40),
+      );
+    });
+  });
+
+  group('TowerStats.scaleDamageChannels', () {
+    test('scales damage, corrosion and drone channels together', () {
+      final base = GameBalance.towerStats(TowerType.nanite, level: 2);
+      final scaled = base.scaleDamageChannels(1.5);
+
+      expect(scaled.damage, closeTo(base.damage * 1.5, 1e-9));
+      expect(
+        scaled.corrosionDamagePerSecond,
+        closeTo(base.corrosionDamagePerSecond * 1.5, 1e-9),
+      );
+      expect(scaled.droneDamage, closeTo(base.droneDamage * 1.5, 1e-9));
+    });
+
+    test('leaves every non-damage channel and all costs untouched', () {
+      final base = GameBalance.towerStats(
+        TowerType.droneBay,
+        level: 3,
+        specialization: TowerSpecialization.interceptorBay,
+      );
+      final scaled = base.scaleDamageChannels(2.0);
+
+      expect(scaled.range, base.range);
+      expect(scaled.fireInterval, base.fireInterval);
+      expect(scaled.projectileSpeed, base.projectileSpeed);
+      expect(scaled.splashRadius, base.splashRadius);
+      expect(scaled.slowMultiplier, base.slowMultiplier);
+      expect(scaled.slowDuration, base.slowDuration);
+      expect(scaled.pierceCount, base.pierceCount);
+      expect(scaled.chainCount, base.chainCount);
+      expect(scaled.corrosionDuration, base.corrosionDuration);
+      expect(scaled.armorShred, base.armorShred);
+      expect(scaled.fieldRadius, base.fieldRadius);
+      expect(scaled.fieldDuration, base.fieldDuration);
+      expect(scaled.droneCount, base.droneCount);
+      expect(scaled.droneLifetime, base.droneLifetime);
+      expect(scaled.droneAttackInterval, base.droneAttackInterval);
+      expect(scaled.maxActiveDrones, base.maxActiveDrones);
+      expect(scaled.cost, base.cost);
+      expect(scaled.upgradeCost, base.upgradeCost);
+      expect(scaled.specializationCost, base.specializationCost);
+      expect(scaled.level, base.level);
+      expect(scaled.type, base.type);
+      expect(scaled.specialization, base.specialization);
+    });
+  });
+
+  group('TowerStats.nextUpgradeCost', () {
+    test('tier 1 returns the upgrade price', () {
+      final stats = GameBalance.towerStats(TowerType.laser, level: 1);
+      expect(stats.nextUpgradeCost, stats.upgradeCost);
+    });
+
+    test('tier 2 returns the signature price', () {
+      final stats = GameBalance.towerStats(TowerType.laser, level: 2);
+      expect(stats.nextUpgradeCost, stats.specializationCost);
+    });
+
+    test('tier 3 returns null', () {
+      for (final specialization in GameBalance.specializationsFor(
+        TowerType.laser,
+      )) {
+        final stats = GameBalance.towerStats(
+          TowerType.laser,
+          level: 3,
+          specialization: specialization,
+        );
+        expect(stats.nextUpgradeCost, isNull);
+      }
+    });
+
+    test('one getter prices both transitions for every style', () {
+      for (final type in TowerType.values) {
+        final tier1 = GameBalance.towerStats(type, level: 1);
+        final tier2 = GameBalance.towerStats(type, level: 2);
+        final tier3 = GameBalance.towerStats(
+          type,
+          level: 3,
+          specialization: GameBalance.specializationsFor(type).first,
+        );
+
+        expect(tier1.nextUpgradeCost, tier1.upgradeCost, reason: type.name);
+        expect(
+          tier2.nextUpgradeCost,
+          tier2.specializationCost,
+          reason: type.name,
+        );
+        expect(tier3.nextUpgradeCost, isNull, reason: type.name);
+      }
+    });
+  });
 }
 
 class _ExpectedTowerCosts {
