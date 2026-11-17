@@ -1,8 +1,6 @@
-import 'dart:ui' show Rect;
-
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -385,18 +383,40 @@ void main() {
     );
     expect(find.text('Alpha'), findsOneWidget);
 
-    // 13. Camp: open from the bottom nav, verify the fresh profile owns the
-    //     two starters (Haruto and Mio) marked as squad members, then go
-    //     back.
+    // 13. Camp: open from the bottom nav and verify the fresh profile owns
+    //     the two starters. The app always embeds Camp in the menu shell,
+    //     so the standalone header's recruited-count chip never renders —
+    //     the roster state is asserted on the cards' semantics. Haruto and
+    //     Mio close the roster order and the grid builds lazily, so scroll
+    //     their cards into view before asserting.
     await tester.tap(find.byTooltip('Camp'));
     await _pumpUntil(
       tester,
-      () => tester.any(find.byKey(const ValueKey('camp-card-haruto'))),
+      () => tester.any(find.byKey(const ValueKey('camp-card-hikari'))),
     );
-    expect(find.byKey(const ValueKey('camp-card-haruto')), findsOneWidget);
-    expect(find.byKey(const ValueKey('camp-card-mio')), findsOneWidget);
+    // The grid is the only Camp scrollable; the shell's tab bar scrollview
+    // must not receive the drag. Card labels merge with their inner text in
+    // the semantics tree, so match the authored label as the leading run.
+    final rosterScrollable = find.descendant(
+      of: find.byType(GridView),
+      matching: find.byType(Scrollable),
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('camp-card-haruto')),
+      250,
+      scrollable: rosterScrollable,
+    );
+    await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('camp-card-mio')),
+      250,
+      scrollable: rosterScrollable,
+    );
     expect(
-      find.bySemanticsLabel('2 of 12 characters recruited'),
+      find.bySemanticsLabel(RegExp('^Haruto, rank E, level 1, squad member')),
+      findsOneWidget,
+    );
+    expect(
+      find.bySemanticsLabel(RegExp('^Mio, rank E, level 1, squad member')),
       findsOneWidget,
     );
     await tester.tap(find.byTooltip('Map'));
