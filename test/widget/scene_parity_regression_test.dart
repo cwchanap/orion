@@ -9,9 +9,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
-import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
+import 'package:orion/game/ui/camp_view.dart';
 import 'package:orion/game/ui/codex_view.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
@@ -19,7 +19,6 @@ import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
-import 'package:orion/game/ui/tech_tree_view.dart';
 import 'package:orion/game/ui/tower_inspector.dart';
 import 'package:orion/game/ui/world_map_view.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -199,7 +198,7 @@ void main() {
     );
   });
 
-  for (final scene in ['scanner', 'map', 'codex', 'rnd']) {
+  for (final scene in ['scanner', 'map', 'codex', 'camp']) {
     for (final scale in [1.0, 3.0]) {
       testWidgets('$scene at 360x640 and text $scale', (tester) async {
         tester.view.physicalSize = const Size(360, 640);
@@ -246,13 +245,10 @@ void main() {
             );
           case 'codex':
             content = CodexView(progress: CampaignProgress(), onBack: () {});
-          case 'rnd':
-            content = TechTreeView(
-              progress: CampaignProgress(),
-              techTree: CampaignTechTree(
-                purchased: {CampaignTechUpgrade.solarCapacitors},
-              ),
-              onPurchase: (_) {},
+          case 'camp':
+            content = CampView(
+              ownedLevels: const {Character.haruto: 1, Character.mio: 1},
+              squad: const [Character.haruto, Character.mio],
               onBack: () {},
             );
           default:
@@ -281,7 +277,7 @@ void main() {
               'reactor_rim_ui/backdrops/command-center.png',
             if (scene == 'map' || scene == 'codex')
               'reactor_rim_ui/backdrops/map-room.png',
-            if (scene == 'rnd')
+            if (scene == 'camp')
               'reactor_rim_ui/backdrops/tech-tree-rnd-bay.png',
           ]);
           await Future<void>.delayed(const Duration(milliseconds: 100));

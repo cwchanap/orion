@@ -98,13 +98,13 @@ void main() {
     expect(identical(OrionArt.result(gold), OrionArt.result(clear)), isTrue);
   });
 
-  test('all three scene backdrops resolve through OrionArt', () {
+  test('scene backdrops resolve through OrionArt', () {
     expect(
       OrionArt.scene(OrionSceneArt.worldMap).fileName,
       'reactor_rim_ui/backdrops/world-map.png',
     );
     expect(
-      OrionArt.scene(OrionSceneArt.techTree).fileName,
+      OrionArt.scene(OrionSceneArt.camp).fileName,
       'reactor_rim_ui/backdrops/tech-tree-rnd-bay.png',
     );
     expect(

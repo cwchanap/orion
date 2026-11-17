@@ -10,97 +10,48 @@ void main() {
       PlacedTower(id: 1, type: type, position: const GridPosition(0, 0));
 
   group('TowerStatsResolver.resolve', () {
-    test('laser damage multiplied by (1 + laserDamageFraction)', () {
-      const mods = CampaignModifiers(laserDamageFraction: 0.10);
+    test('base stats are unchanged by campaign progress modifiers', () {
+      // Campaign modifiers now carry only side-stage rewards (starting
+      // gold/health, Challenge Badge) — nothing that touches tower stats.
+      const mods = CampaignModifiers(bonusGold: 15, bonusHealth: 3);
       final stats = TowerStatsResolver.resolve(
         tower(TowerType.laser),
         campaignModifiers: mods,
       );
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
-      expect(stats.damage, closeTo(base.damage * 1.10, 1e-9));
+      expect(stats.damage, base.damage);
+      expect(stats.slowDuration, base.slowDuration);
     });
 
-    test('applies run modules after campaign modifiers', () {
+    test('applies run modules after character scaling', () {
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      final factor = GameBalance.characterScalingFactor(
+        Character.hikari.rank,
+        1,
+      );
       final resolved = TowerStatsResolver.resolve(
         tower(TowerType.laser),
-        campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+        character: Character.hikari,
         runModules: const [RunModuleId.heavyCaliber],
       );
       expect(
         resolved.damage,
         closeTo(
           base.damage *
-              1.10 *
+              factor *
               runModuleDefinition(RunModuleId.heavyCaliber).damageMultiplier,
           1e-9,
         ),
       );
     });
 
-    test('laser damage unchanged when laserDamageFraction is 0', () {
+    test('laser damage unchanged when no character is supplied', () {
       final stats = TowerStatsResolver.resolve(
         tower(TowerType.laser),
         campaignModifiers: CampaignModifiers.empty,
       );
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
       expect(stats.damage, base.damage);
-    });
-
-    test('cryo slowDuration extended by cryoSlowDurationBonus', () {
-      const mods = CampaignModifiers(cryoSlowDurationBonus: 0.30);
-      final stats = TowerStatsResolver.resolve(
-        tower(TowerType.cryo),
-        campaignModifiers: mods,
-      );
-      final base = GameBalance.towerStats(TowerType.cryo, level: 1);
-      expect(stats.slowDuration, closeTo(base.slowDuration + 0.30, 1e-9));
-    });
-
-    test('non-laser, non-cryo tower is unaffected by both combat upgrades', () {
-      const mods = CampaignModifiers(
-        laserDamageFraction: 0.10,
-        cryoSlowDurationBonus: 0.30,
-      );
-      final stats = TowerStatsResolver.resolve(
-        tower(TowerType.rocket),
-        campaignModifiers: mods,
-      );
-      final base = GameBalance.towerStats(TowerType.rocket, level: 1);
-      expect(stats.damage, base.damage);
-      expect(stats.slowDuration, base.slowDuration);
-    });
-
-    test('re-applies multiplier on upgraded laser', () {
-      const mods = CampaignModifiers(laserDamageFraction: 0.10);
-      final upgraded = tower(TowerType.laser).upgraded();
-      final stats = TowerStatsResolver.resolve(
-        upgraded,
-        campaignModifiers: mods,
-      );
-      final baseL2 = GameBalance.towerStats(TowerType.laser, level: 2);
-      expect(stats.damage, closeTo(baseL2.damage * 1.10, 1e-9));
-    });
-
-    test('re-applies multiplier on specialized cryo', () {
-      const mods = CampaignModifiers(cryoSlowDurationBonus: 0.30);
-      // Upgrade to L2, then specialize.
-      final specialized = tower(
-        TowerType.cryo,
-      ).upgraded().specialized(TowerSpecialization.deepFreeze);
-      final stats = TowerStatsResolver.resolve(
-        specialized,
-        campaignModifiers: mods,
-      );
-      final baseL3DeepFreeze = GameBalance.towerStats(
-        TowerType.cryo,
-        level: 3,
-        specialization: TowerSpecialization.deepFreeze,
-      );
-      expect(
-        stats.slowDuration,
-        closeTo(baseL3DeepFreeze.slowDuration + 0.30, 1e-9),
-      );
     });
 
     test(
@@ -158,14 +109,18 @@ void main() {
       },
     );
 
-    test('campaign laser damage then Aurora Focus compose in order', () {
+    test('character scaling then Aurora Focus compose in order', () {
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
+      final factor = GameBalance.characterScalingFactor(
+        Character.hikari.rank,
+        1,
+      );
       final resolved = TowerStatsResolver.resolve(
         tower(TowerType.laser),
-        campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+        character: Character.hikari,
         runModules: const [RunModuleId.auroraFocus],
       );
-      expect(resolved.damage, closeTo(base.damage * 1.10, 1e-9));
+      expect(resolved.damage, closeTo(base.damage * factor, 1e-9));
       expect(resolved.fireInterval, closeTo(base.fireInterval * 0.88, 1e-9));
       expect(resolved.range, base.range);
     });
@@ -174,7 +129,6 @@ void main() {
       final base = GameBalance.towerStats(TowerType.railgun, level: 1);
       final resolved = TowerStatsResolver.resolve(
         tower(TowerType.railgun),
-        campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
         stageModifiers: StageModifier.values,
         runModules: const [RunModuleId.siegeRounds, RunModuleId.heavyCaliber],
       );
@@ -205,30 +159,26 @@ void main() {
     });
 
     test(
-      'explicit empty run modules preserve campaign and stage modifiers',
+      'explicit empty run modules preserve character and stage modifiers',
       () {
         final laserDefault = TowerStatsResolver.resolve(
           tower(TowerType.laser),
-          campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+          character: Character.hikari,
         );
         final laserExplicitEmpty = TowerStatsResolver.resolve(
           tower(TowerType.laser),
-          campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
+          character: Character.hikari,
           runModules: const [],
         );
         expect(laserExplicitEmpty.damage, laserDefault.damage);
 
         final cryoDefault = TowerStatsResolver.resolve(
           tower(TowerType.cryo),
-          campaignModifiers: const CampaignModifiers(
-            cryoSlowDurationBonus: 0.30,
-          ),
+          character: Character.jin,
         );
         final cryoExplicitEmpty = TowerStatsResolver.resolve(
           tower(TowerType.cryo),
-          campaignModifiers: const CampaignModifiers(
-            cryoSlowDurationBonus: 0.30,
-          ),
+          character: Character.jin,
           runModules: const [],
         );
         expect(cryoExplicitEmpty.slowDuration, cryoDefault.slowDuration);
@@ -252,8 +202,8 @@ void main() {
 
     test('all modifiers preserve base progression costs', () {
       const campaignModifiers = CampaignModifiers(
-        laserDamageFraction: 0.1,
-        cryoSlowDurationBonus: 0.3,
+        bonusGold: 15,
+        bonusHealth: 3,
       );
 
       for (final type in TowerType.values) {
@@ -482,13 +432,12 @@ void main() {
     });
 
     test(
-      'character calls skip the legacy tech-tree damage/slow bonus step',
+      'character calls scale damage and leave non-damage channels at base',
       () {
         final hikariBase = baseStats(Character.hikari);
         final hikari = TowerStatsResolver.resolve(
           characterTower(Character.hikari),
           character: Character.hikari,
-          campaignModifiers: const CampaignModifiers(laserDamageFraction: 0.10),
         );
         expect(hikari.damage, closeTo(hikariBase.damage * 2.0, 1e-9));
 
@@ -496,9 +445,6 @@ void main() {
         final jin = TowerStatsResolver.resolve(
           characterTower(Character.jin),
           character: Character.jin,
-          campaignModifiers: const CampaignModifiers(
-            cryoSlowDurationBonus: 0.30,
-          ),
         );
         expect(jin.slowDuration, jinBase.slowDuration);
       },

@@ -46,7 +46,6 @@ void main() {
           destination: OrionMenuDestination.codex,
           medalEarned: 0,
           medalTotal: 21,
-          researchPoints: 0,
           onDestinationSelected: (_) {},
           onOpenSettings: () {},
           child: CodexView(
@@ -272,7 +271,6 @@ void main() {
           destination: OrionMenuDestination.sectors,
           medalEarned: 0,
           medalTotal: 15,
-          researchPoints: 0,
           onDestinationSelected: selected.add,
           onOpenSettings: () {},
           child: const SizedBox.expand(),
@@ -922,7 +920,6 @@ void main() {
           destination: OrionMenuDestination.codex,
           medalEarned: 0,
           medalTotal: 21,
-          researchPoints: 0,
           onDestinationSelected: selected.add,
           onOpenSettings: () {},
           child: CodexView(
@@ -2306,7 +2303,6 @@ void main() {
               destination: OrionMenuDestination.codex,
               medalEarned: 0,
               medalTotal: 21,
-              researchPoints: 0,
               onDestinationSelected: (_) {},
               onOpenSettings: () {},
               child: CodexView(

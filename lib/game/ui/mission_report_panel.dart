@@ -347,16 +347,6 @@ class _ReportBody extends StatelessWidget {
                     icon: Icons.hexagon,
                     art: null,
                   ),
-                  if (!isEndless)
-                    (
-                      label: content.saveState == MissionSaveState.saved
-                          ? 'R&D'
-                          : 'PENDING',
-                      value: '+${content.medalPoints}',
-                      color: uiTheme.systemViolet,
-                      icon: Icons.pentagon,
-                      art: null,
-                    ),
                 ];
             final share =
                 (constraints.maxWidth - 8.0 * (stats.length - 1)) /
@@ -413,15 +403,9 @@ class _ReportBody extends StatelessWidget {
               ),
             ),
           ),
-        if (content.didWin &&
-            !isEndless &&
-            (content.medalPoints > 0 || reward != null)) ...[
+        if (content.didWin && !isEndless && reward != null) ...[
           const SizedBox(height: 14),
-          _RewardsPanel(
-            medalPoints: content.medalPoints,
-            reward: reward,
-            saveState: content.saveState,
-          ),
+          _RewardsPanel(reward: reward),
         ],
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
@@ -675,25 +659,14 @@ class _MedalCriterion extends StatelessWidget {
 }
 
 class _RewardsPanel extends StatelessWidget {
-  const _RewardsPanel({
-    required this.medalPoints,
-    required this.reward,
-    required this.saveState,
-  });
+  const _RewardsPanel({required this.reward});
 
-  final int medalPoints;
   final MissionRewardFact? reward;
-  final MissionSaveState? saveState;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final reward = this.reward;
-    final pointsDetail = switch (saveState) {
-      MissionSaveState.saved => 'Spend it in the R&D lab',
-      MissionSaveState.failed => 'Not awarded — save failed',
-      _ => 'Pending save',
-    };
     return OrionSurface(
       role: OrionSurfaceRole.card,
       padding: const EdgeInsets.all(12),
@@ -703,43 +676,7 @@ class _RewardsPanel extends StatelessWidget {
         children: [
           OrionText.micro('REWARDS', color: uiTheme.creditGold, size: 10),
           const SizedBox(height: 8),
-          if (medalPoints > 0) ...[
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(
-                  Icons.hexagon_outlined,
-                  color: uiTheme.systemViolet,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        '+$medalPoints R&D',
-                        style: OrionTypography.readout(
-                          size: 15,
-                          color: uiTheme.systemViolet,
-                        ),
-                      ),
-                      Text(
-                        pointsDetail,
-                        style: OrionTypography.microLabel(
-                          size: 10,
-                          color: uiTheme.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (reward != null) ...[
-            if (medalPoints > 0) const SizedBox(height: 8),
+          if (reward != null)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -773,7 +710,6 @@ class _RewardsPanel extends StatelessWidget {
                 ),
               ],
             ),
-          ],
         ],
       ),
     );

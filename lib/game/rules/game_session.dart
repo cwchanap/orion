@@ -445,10 +445,8 @@ class GameSession {
     if (mode == RunMode.mission && _waveIndex >= stage.waves.length - 1) {
       return 0;
     }
-    final campaignAdjusted =
-        (baseClearBonus * (1 + _campaignModifiers.clearBonusFraction)).round();
     return StageModifierRules.effectiveClearBonus(
-      campaignAdjustedClearBonus: campaignAdjusted,
+      campaignAdjustedClearBonus: baseClearBonus,
       stageModifiers: stage.modifiers,
     );
   }

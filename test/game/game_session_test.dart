@@ -115,10 +115,7 @@ GameSession _modifiedSession() {
       8,
       modifiers: const [StageModifier.amplifiedGravityWells],
     ),
-    campaignModifiers: const CampaignModifiers(
-      laserDamageFraction: 0.25,
-      cryoSlowDurationBonus: 0.4,
-    ),
+    campaignModifiers: const CampaignModifiers(bonusGold: 30, bonusHealth: 5),
     gold: 100000,
     offerPicker: _RecordingOfferPicker(),
   );
@@ -316,10 +313,7 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(
-        stage: stage,
-        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.25),
-      );
+      final session = GameSession.initial(stage: stage);
       final startingGold = session.gold;
 
       expect(session.snapshot().nextWavePreview?.clearBonus, 0);
@@ -1118,7 +1112,7 @@ void main() {
       },
     );
 
-    test('snapshot and payout share tech then stage clear bonus', () {
+    test('snapshot and payout share the stage clear bonus', () {
       final stage = StageDefinition(
         id: 'clear-bonus-stage',
         name: 'Clear Bonus Stage',
@@ -1133,16 +1127,15 @@ void main() {
         mapColumn: 0,
         mapRow: 0,
       );
-      final session = GameSession.initial(
-        stage: stage,
-        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.25),
-      );
+      final session = GameSession.initial(stage: stage);
 
-      expect(session.snapshot().nextWavePreview?.clearBonus, 57);
+      // enhancedClearBonus applies the 1.5× stage multiplier to the authored
+      // 30-point bonus: 45 in both the preview and the payout.
+      expect(session.snapshot().nextWavePreview?.clearBonus, 45);
       final before = session.gold;
       session.startWave();
       session.finishActiveWave();
-      expect(session.gold - before, 57);
+      expect(session.gold - before, 45);
     });
 
     test('opens scheduled module drafts only after waves 2, 4, and 6', () {
@@ -1750,11 +1743,7 @@ void main() {
     });
 
     test('are stored on the session', () {
-      const mods = CampaignModifiers(
-        bonusGold: 30,
-        bonusHealth: 5,
-        clearBonusFraction: 0.25,
-      );
+      const mods = CampaignModifiers(bonusGold: 30, bonusHealth: 5);
       final session = GameSession.initial(campaignModifiers: mods);
       expect(session.campaignModifiers, mods);
     });
@@ -1777,41 +1766,23 @@ void main() {
       expect(session.startingBaseHealth, 999);
     });
 
-    test('wave-clear bonus scales by (1 + clearBonusFraction)', () {
-      const mods = CampaignModifiers(clearBonusFraction: 0.25);
-      final session = GameSession.initial(campaignModifiers: mods);
-
-      expect(session.startWave(), isTrue);
-      session.finishActiveWave();
-
-      // First wave clearBonus is 30; 30 * 1.25 = 37.5 -> 38 when rounded.
-      expect(session.phase, GamePhase.build);
-      expect(session.gold, GameBalance.startingGold + 38);
-    });
-
-    test('wave-clear without salvageCrew is unchanged', () {
+    test('wave-clear bonus pays the authored wave value', () {
       final session = GameSession.initial();
 
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
 
-      // Default campaign modifiers have clearBonusFraction 0, so clearBonus stays 30.
+      // Campaign progress no longer scales wave-clear bonuses: the first
+      // wave's authored 30-point bonus pays through unchanged.
       expect(session.phase, GamePhase.build);
       expect(session.gold, GameBalance.startingGold + 30);
-      expect(session.campaignModifiers.clearBonusFraction, 0);
     });
 
-    test('Salvage Crew preview is corrected on unmodified Outpost Alpha', () {
-      final session = GameSession.initial(
-        stage: OrionCampaign.stageOne,
-        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.25),
-      );
+    test('clear bonus preview matches the authored Outpost Alpha value', () {
+      final session = GameSession.initial(stage: OrionCampaign.stageOne);
       final base = OrionCampaign.stageOne.waves.first.clearBonus;
 
-      expect(
-        session.snapshot().nextWavePreview?.clearBonus,
-        (base * 1.25).round(),
-      );
+      expect(session.snapshot().nextWavePreview?.clearBonus, base);
     });
 
     test(

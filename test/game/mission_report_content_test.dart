@@ -194,7 +194,6 @@ void main() {
       expect(content.outcomeText, 'Survived 5 waves');
       expect(content.comparisonText, 'New best!');
       expect(content.result, isNull);
-      expect(content.medalPoints, 0);
       expect(content.reward, isNull);
       expect(content.saveState, MissionSaveState.saved);
       expect(content.saveText, 'Saved.');
@@ -361,12 +360,11 @@ void main() {
         );
 
         expect(content.result, isNull, reason: saveState.name);
-        expect(content.medalPoints, 0, reason: saveState.name);
         expect(content.reward, isNull, reason: saveState.name);
       }
     });
 
-    test('victory projections keep result, medal points and reward in any '
+    test('victory projections keep result and reward in any '
         'save state', () {
       const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
       const reward = MissionRewardFact(
@@ -383,7 +381,6 @@ void main() {
         );
 
         expect(content.result, result, reason: saveState.name);
-        expect(content.medalPoints, 3, reason: saveState.name);
         expect(content.reward, same(reward), reason: saveState.name);
       }
     });

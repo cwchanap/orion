@@ -10,7 +10,6 @@ import '../campaign/campaign_progress.dart';
 import '../campaign/campaign_progress_store.dart';
 import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
-import '../campaign/tech_tree.dart';
 import '../feedback/feedback_preferences.dart';
 import '../feedback/game_feedback.dart';
 import '../feedback/game_music.dart';
@@ -22,6 +21,7 @@ import '../orion_defense_game.dart';
 import '../rules/module_offer_picker.dart';
 import '../rules/run_module_unlocks.dart';
 import '../rules/stage_modifier_rules.dart';
+import 'camp_view.dart';
 import 'codex_view.dart';
 import 'feedback_settings_sheet.dart';
 import 'first_mission_guide_callout.dart';
@@ -36,11 +36,10 @@ import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'run_module_draft_panel.dart';
 import 'stage_briefing_sheet.dart';
-import 'tech_tree_view.dart';
 import 'tower_inspector.dart';
 import 'world_map_view.dart';
 
-enum _ShellView { title, worldMap, codex, techTree, stage }
+enum _ShellView { title, worldMap, codex, camp, stage }
 
 /// Persistence-failure breadcrumb surfaced on both the active view and the
 /// world map. Hoisted to a top-level constant so retry paths can match and
@@ -99,17 +98,19 @@ class _OrionGamePageState extends State<OrionGamePage> {
   int? _inspectedTowerId;
   final GlobalKey _gameWidgetKey = GlobalKey();
   CampaignProgress _progress = CampaignProgress();
-  CampaignTechTree _techTree = CampaignTechTree();
+  Map<Character, int> _ownedLevels = CampaignSave.starterOwnedLevels;
+  List<Character> _squad = CampaignSave.starterSquad;
   // Last-known committed disk state. Queued saves compose their payload from
-  // this rather than the shared optimistic `_progress`/`_techTree` aggregate,
-  // so a later transaction's mutation cannot be persisted under an earlier
-  // save that subsequently fails (round-4 review P1). Advanced inside the
-  // save queue on each successful write; reset to empty on a successful reset.
+  // this rather than the shared optimistic `_progress`/profile aggregate, so
+  // a later transaction's mutation cannot be persisted under an earlier save
+  // that subsequently fails (round-4 review P1). Advanced inside the save
+  // queue on each successful write; reset to the fresh profile on a
+  // successful reset.
   CampaignProgress _committedProgress = CampaignProgress();
-  CampaignTechTree _committedTechTree = CampaignTechTree();
+  Map<Character, int> _committedOwnedLevels = CampaignSave.starterOwnedLevels;
+  List<Character> _committedSquad = CampaignSave.starterSquad;
   CampaignProgressStore? _store;
   String? _mapFeedback;
-  String? _techTreeFeedback;
   String? _shellFeedback;
   FeedbackPreferences _feedbackPreferences = const FeedbackPreferences();
   FeedbackPreferencesStore? _feedbackPreferencesStore;
@@ -321,9 +322,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
       setState(() {
         _store = store;
         _progress = save.progress;
-        _techTree = save.techTree;
+        _ownedLevels = save.ownedLevels;
+        _squad = save.squad;
         _committedProgress = save.progress;
-        _committedTechTree = save.techTree;
+        _committedOwnedLevels = save.ownedLevels;
+        _committedSquad = save.squad;
         _firstMissionGuideStore = guideStore;
         // A missing guide record resolves through campaign progress: a
         // committed Alpha result means this player cleared the tutorial's
@@ -369,9 +372,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
       setState(() {
         _store = store;
         _progress = CampaignProgress();
-        _techTree = CampaignTechTree();
+        _ownedLevels = CampaignSave.starterOwnedLevels;
+        _squad = CampaignSave.starterSquad;
         _committedProgress = CampaignProgress();
-        _committedTechTree = CampaignTechTree();
+        _committedOwnedLevels = CampaignSave.starterOwnedLevels;
+        _committedSquad = CampaignSave.starterSquad;
         _firstMissionGuideStore = guideStore;
         _firstMissionGuideCompleted = guideCompleted ?? false;
         _seenTips = seenTips;
@@ -547,7 +552,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       case _ShellView.title:
         return _buildTitleView();
       case _ShellView.worldMap:
-      case _ShellView.techTree:
+      case _ShellView.camp:
       case _ShellView.codex:
         return _buildMenuShell();
       case _ShellView.stage:
@@ -564,16 +569,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
       recommendedStage: recommended,
       isContinueAvailable: continueAvailable,
       campaignComplete: _progress.isCampaignComplete(OrionCampaign.stages),
-      medalEarned: CampaignTechTree.totalMedalRank(_progress),
+      medalEarned: _progress.totalMedalRank,
       medalTotal: _campaignMedalTotal,
-      researchPoints: _techTree.unspentPoints(_progress),
       busy: _isBusy,
       feedback: _mapFeedback,
       onContinue: continueAvailable
           ? () => _showStageBriefing(recommended)
           : null,
       onOpenSectors: () => _openMenuDestination(OrionMenuDestination.sectors),
-      onOpenResearch: () => _openMenuDestination(OrionMenuDestination.research),
+      onOpenCamp: () => _openMenuDestination(OrionMenuDestination.camp),
       onOpenCodex: () => _openMenuDestination(OrionMenuDestination.codex),
       onOpenSettings:
           _feedbackPreferencesLoaded && !_isSavingFeedback && !_isBusy
@@ -584,17 +588,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   Widget _buildMenuShell() {
     final destination = switch (_activeView) {
-      _ShellView.techTree => OrionMenuDestination.research,
+      _ShellView.camp => OrionMenuDestination.camp,
       _ShellView.codex => OrionMenuDestination.codex,
       _ => OrionMenuDestination.sectors,
     };
     final body = switch (_activeView) {
-      _ShellView.techTree => TechTreeView(
-        progress: _progress,
-        techTree: _techTree,
-        feedback: _techTreeFeedback,
-        isSavingProgress: _isBusy,
-        onPurchase: _purchaseTech,
+      _ShellView.camp => CampView(
+        ownedLevels: _ownedLevels,
+        squad: _squad,
         onBack: null,
         embeddedInMenuShell: true,
       ),
@@ -610,7 +611,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
         campaignModifiers: CampaignModifiers.fromProgress(
           _progress,
           OrionCampaign.stages,
-          _techTree,
         ),
         feedback: _mapFeedback,
         isSavingProgress: _isSavingProgress,
@@ -621,9 +621,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
     };
     return OrionMenuShell(
       destination: destination,
-      medalEarned: CampaignTechTree.totalMedalRank(_progress),
+      medalEarned: _progress.totalMedalRank,
       medalTotal: _campaignMedalTotal,
-      researchPoints: _techTree.unspentPoints(_progress),
       navigationEnabled: !_isBusy,
       settingsEnabled:
           _feedbackPreferencesLoaded && !_isSavingFeedback && !_isBusy,
@@ -644,14 +643,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
     final target = switch (destination) {
       OrionMenuDestination.sectors => _ShellView.worldMap,
-      OrionMenuDestination.research => _ShellView.techTree,
+      OrionMenuDestination.camp => _ShellView.camp,
       OrionMenuDestination.codex => _ShellView.codex,
     };
     if (target == _activeView) {
       return;
     }
     setState(() {
-      _techTreeFeedback = null;
       _shellFeedback = null;
       _activeView = target;
     });
@@ -1305,11 +1303,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // aggregate. One attempt freezes committed run inputs; a same-object
   // Replay refreshes ALL committed run inputs together (HPA-528).
   CampaignModifiers _committedCampaignModifiers() =>
-      CampaignModifiers.fromProgress(
-        _committedProgress,
-        OrionCampaign.stages,
-        _committedTechTree,
-      );
+      CampaignModifiers.fromProgress(_committedProgress, OrionCampaign.stages);
 
   void _startStage(StageDefinition stage, RunMode mode) {
     if (_isSavingProgress || _isResetting) {
@@ -1368,43 +1362,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
-  // Wired up by TechTreeView's back button.
-
-  // Invoked by TechTreeView purchase buttons.
-  Future<void> _purchaseTech(CampaignTechUpgrade upgrade) async {
-    if (_isSavingProgress || _isResetting) {
-      return; // matches stage-launch guard; UI also disables the button
-    }
-    // Clear any prior failure feedback so a stale error doesn't persist
-    // after the next successful purchase (tech-tree-design.md:395).
-    if (_techTreeFeedback != null) {
-      setState(() {
-        _techTreeFeedback = null;
-      });
-    }
-    // P2 (round-4 review): also clear the matching map breadcrumb. A failed
-    // purchase writes the persistence-failure message into _mapFeedback; the
-    // retry previously cleared only _techTreeFeedback, so returning to the
-    // world map after a successful retry still showed the stale error.
-    if (_mapFeedback == _persistenceFailureMessage) {
-      setState(() {
-        _mapFeedback = null;
-      });
-    }
-    final newTechTree = _techTree.purchase(upgrade, _progress);
-    await _persistSave(
-      nextTechTree: newTechTree,
-      buildSave: (committed) => CampaignSave(
-        progress: committed.progress,
-        techTree: committed.techTree.purchase(upgrade, committed.progress),
-      ),
-      rollback: () => _techTree = _techTree.withoutUpgrade(upgrade),
-    );
-  }
-
   Future<void> _persistSave({
     CampaignProgress? nextProgress,
-    CampaignTechTree? nextTechTree,
     required CampaignSave Function(CampaignSave committed) buildSave,
     VoidCallback? rollback,
     ValueChanged<CampaignSave>? onCommitted,
@@ -1425,7 +1384,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // Optimistic update: scoped to provided fields. Applied immediately so
     // the UI reflects the change without waiting for the queued save to run.
     if (nextProgress != null) _progress = nextProgress;
-    if (nextTechTree != null) _techTree = nextTechTree;
     _pendingSaves++;
     _setSavingProgress(true);
 
@@ -1434,7 +1392,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // this one has committed or rolled back.
     //
     // The persisted payload is built from the last-known committed disk state
-    // (_committed*), NOT from the shared optimistic _progress/_techTree
+    // (_committed*), NOT from the shared optimistic _progress/profile
     // aggregate. Reading the aggregate let an earlier successful save persist
     // a later transaction's mutation: if saves A and B were queued
     // synchronously, save A wrote A+B (the aggregate already held both
@@ -1454,13 +1412,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
         final payload = buildSave(
           CampaignSave(
             progress: _committedProgress,
-            techTree: _committedTechTree,
+            ownedLevels: _committedOwnedLevels,
+            squad: _committedSquad,
           ),
         );
         await store.save(payload);
         if (saveGeneration == _progressGeneration) {
           _committedProgress = payload.progress;
-          _committedTechTree = payload.techTree;
+          _committedOwnedLevels = payload.ownedLevels;
+          _committedSquad = payload.squad;
           onCommitted?.call(payload);
         } else if (onFailed != null) {
           onFailed();
@@ -1519,7 +1479,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
     await _persistSave(
       buildSave: (committed) => CampaignSave(
         progress: committed.progress.recordResult(stageId, result),
-        techTree: committed.techTree,
+        ownedLevels: committed.ownedLevels,
+        squad: committed.squad,
       ),
       onCommitted: (payload) {
         _progress = payload.progress;
@@ -1540,7 +1501,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _persistSave(
       buildSave: (committed) => CampaignSave(
         progress: committed.progress.recordEndlessBest(stageId, wavesCleared),
-        techTree: committed.techTree,
+        ownedLevels: committed.ownedLevels,
+        squad: committed.squad,
       ),
       onCommitted: (payload) {
         _progress = payload.progress;
@@ -1779,8 +1741,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     // Serialize the reset with the save queue: wait for all pending saves to
     // drain, then perform exactly one reset as the next queued operation.
-    // No save can interleave because stage launches and tech purchases are
-    // disabled while _isResetting is true. Generation bumps monotonically
+    // No save can interleave because stage launches are disabled while
+    // _isResetting is true. Generation bumps monotonically
     // inside the queue (never rolled back) so any save that somehow queues
     // during the drain sees the mismatch and skips its write — and a failed
     // reset leaves the bumped generation in place harmlessly, since all
@@ -1799,14 +1761,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
       setState(() {
         _progress = CampaignProgress();
-        _techTree = CampaignTechTree();
+        _ownedLevels = CampaignSave.starterOwnedLevels;
+        _squad = CampaignSave.starterSquad;
         _committedProgress = CampaignProgress();
-        _committedTechTree = CampaignTechTree();
+        _committedOwnedLevels = CampaignSave.starterOwnedLevels;
+        _committedSquad = CampaignSave.starterSquad;
         _listenToGame(null);
         if (_activeView == _ShellView.stage) {
           _activeView = _ShellView.worldMap;
         }
-        _techTreeFeedback = null;
         _mapFeedback = null;
         _shellFeedback = null;
         _setActiveDestinationFeedback('Campaign reset.');
@@ -1851,7 +1814,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   void _setActiveDestinationFeedback(String message) {
-    if (_activeView == _ShellView.techTree || _activeView == _ShellView.codex) {
+    if (_activeView == _ShellView.camp || _activeView == _ShellView.codex) {
       _shellFeedback = message;
     } else {
       _mapFeedback = message;
@@ -1863,9 +1826,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final game = _game;
     setState(() {
       _mapFeedback = message; // always; preserves HPA-94 breadcrumb behavior
-      if (_activeView == _ShellView.techTree) {
-        _techTreeFeedback = message;
-      }
     });
     if (_activeView == _ShellView.stage && game != null) {
       game.overrideFeedback(message);

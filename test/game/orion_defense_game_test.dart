@@ -2257,15 +2257,17 @@ void main() {
       expect(game.snapshot.baseHealth, GameBalance.initialBaseHealth);
     });
 
-    test('clearBonusFraction amplifies the wave-clear gold bonus when set', () {
-      // Wave-clear bonus resolution lives in GameSession.finishActiveWave,
-      // which reads session.campaignModifiers.clearBonusFraction. If
-      // OrionDefenseGame fails to forward its campaignModifiers to
-      // GameSession.initial, the fraction
-      // stays 0 and the bonus is unscaled.
+    test('campaign modifiers never amplify the wave-clear gold bonus', () {
+      // The removed Salvage Crew clear-bonus fraction scaled this payout;
+      // campaign modifiers now carry only side-stage rewards (starting
+      // gold/health, Challenge Badge), so the authored bonus pays through
+      // unchanged regardless of modifiers.
       final game = OrionDefenseGame(
         stage: _clearBonusStage(clearBonus: 100),
-        campaignModifiers: const CampaignModifiers(clearBonusFraction: 0.5),
+        campaignModifiers: const CampaignModifiers(
+          bonusGold: 30,
+          bonusHealth: 5,
+        ),
       );
       game.onGameResize(Vector2(800, 1200));
 
@@ -2274,8 +2276,7 @@ void main() {
       game.update(0);
 
       expect(game.snapshot.phase, GamePhase.build);
-      // 100 * (1 + 0.5) = 150 added on top of the starting gold.
-      expect(game.snapshot.gold, goldBefore + 150);
+      expect(game.snapshot.gold, goldBefore + 100);
     });
 
     test(
@@ -2294,13 +2295,13 @@ void main() {
     );
 
     test(
-      'laser tower stats reflect laserDamageFraction from campaign modifiers',
+      'laser tower stats resolve from base values under campaign modifiers',
       () {
-        // TowerComponent resolves its stats through TowerStatsResolver.resolve,
-        // which reads its campaignModifiers field. If OrionDefenseGame fails to
-        // forward campaignModifiers to _addTowerComponent, the placed tower uses
-        // CampaignModifiers.empty and the damage is unscaled.
-        const mods = CampaignModifiers(laserDamageFraction: 0.10);
+        // TowerComponent resolves its stats through TowerStatsResolver.resolve.
+        // Campaign modifiers no longer touch tower stats — the removed
+        // laser/cryo tech bonuses were the only channels — so a placed tower
+        // uses unmodified base values even with non-empty modifiers.
+        const mods = CampaignModifiers(bonusGold: 100);
         final game = OrionDefenseGame(
           stage: _singleEnemyStage(),
           campaignModifiers: mods,
@@ -2312,81 +2313,72 @@ void main() {
 
         final component = game.children.whereType<TowerComponent>().single;
         final base = GameBalance.towerStats(TowerType.laser, level: 1);
-        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
+        expect(component.stats.damage, base.damage);
       },
     );
 
-    test(
-      'upgrading a laser tower re-applies laserDamageFraction via updateTower',
-      () {
-        // Exercises the updateTower call site in upgradeSelectedTower.
-        // If updateTower fails to re-resolve stats through
-        // TowerStatsResolver.resolve, the upgraded tower uses the unmodified
-        // level-2 base damage (18) instead of the scaled value (19.8).
-        const mods = CampaignModifiers(laserDamageFraction: 0.10);
-        final game = OrionDefenseGame(
-          stage: _singleEnemyStage(),
-          campaignModifiers: mods,
-        );
-        game.onGameResize(Vector2(800, 1200));
-        _tapCell(game, const GridPosition(0, 1));
-        game.placeTower(TowerType.laser);
-        game.processLifecycleEvents();
-        _tapCell(game, const GridPosition(0, 1)); // select the placed tower
-        game.processLifecycleEvents();
+    test('upgrading a laser tower re-resolves stats via updateTower', () {
+      // Exercises the updateTower call site in upgradeSelectedTower.
+      // If updateTower fails to re-resolve stats through
+      // TowerStatsResolver.resolve, the upgraded tower keeps stale level-1
+      // stats instead of the level-2 base damage.
+      const mods = CampaignModifiers(bonusGold: 100);
+      final game = OrionDefenseGame(
+        stage: _singleEnemyStage(),
+        campaignModifiers: mods,
+      );
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+      _tapCell(game, const GridPosition(0, 1)); // select the placed tower
+      game.processLifecycleEvents();
 
-        game.upgradeSelectedTower();
-        game.processLifecycleEvents();
+      game.upgradeSelectedTower();
+      game.processLifecycleEvents();
 
-        final component = game.children.whereType<TowerComponent>().single;
-        final base = GameBalance.towerStats(TowerType.laser, level: 2);
-        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
-      },
-    );
+      final component = game.children.whereType<TowerComponent>().single;
+      final base = GameBalance.towerStats(TowerType.laser, level: 2);
+      expect(component.stats.damage, base.damage);
+    });
 
-    test(
-      'specializing a laser tower re-applies laserDamageFraction via updateTower',
-      () {
-        // Exercises the updateTower call site in specializeSelectedTower.
-        // bonusGold covers place(50) + upgrade(70) + specialize(120) = 240.
-        const mods = CampaignModifiers(
-          laserDamageFraction: 0.10,
-          bonusGold: 100,
-        );
-        final game = OrionDefenseGame(
-          stage: _singleEnemyStage(),
-          campaignModifiers: mods,
-        );
-        game.onGameResize(Vector2(800, 1200));
-        _tapCell(game, const GridPosition(0, 1));
-        game.placeTower(TowerType.laser);
-        game.processLifecycleEvents();
-        _tapCell(game, const GridPosition(0, 1)); // select the placed tower
-        game.processLifecycleEvents();
+    test('specializing a laser tower re-resolves stats via updateTower', () {
+      // Exercises the updateTower call site in specializeSelectedTower.
+      // bonusGold covers place(50) + upgrade(70) + specialize(120) = 240.
+      const mods = CampaignModifiers(bonusGold: 100);
+      final game = OrionDefenseGame(
+        stage: _singleEnemyStage(),
+        campaignModifiers: mods,
+      );
+      game.onGameResize(Vector2(800, 1200));
+      _tapCell(game, const GridPosition(0, 1));
+      game.placeTower(TowerType.laser);
+      game.processLifecycleEvents();
+      _tapCell(game, const GridPosition(0, 1)); // select the placed tower
+      game.processLifecycleEvents();
 
-        game.upgradeSelectedTower();
-        game.processLifecycleEvents();
+      game.upgradeSelectedTower();
+      game.processLifecycleEvents();
 
-        game.specializeSelectedTower(TowerSpecialization.pulseLaser);
-        game.processLifecycleEvents();
+      game.specializeSelectedTower(TowerSpecialization.pulseLaser);
+      game.processLifecycleEvents();
 
-        final component = game.children.whereType<TowerComponent>().single;
-        final base = GameBalance.towerStats(
-          TowerType.laser,
-          level: 3,
-          specialization: TowerSpecialization.pulseLaser,
-        );
-        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
-      },
-    );
+      final component = game.children.whereType<TowerComponent>().single;
+      final base = GameBalance.towerStats(
+        TowerType.laser,
+        level: 3,
+        specialization: TowerSpecialization.pulseLaser,
+      );
+      expect(component.stats.damage, base.damage);
+    });
 
     test(
-      'retargeting a laser tower preserves laserDamageFraction via updateTower',
+      'retargeting a laser tower preserves resolved stats via updateTower',
       () {
-        // Exercises the updateTower call site in setTargetingMode
-        // (orion_defense_game.dart:282). If updateTower fails to re-resolve
-        // stats, the targeting-mode change drops the damage multiplier.
-        const mods = CampaignModifiers(laserDamageFraction: 0.10);
+        // Exercises the updateTower call site in setTargetingMode. If
+        // updateTower fails to re-resolve stats, the targeting-mode change
+        // could drop resolved values.
+        const mods = CampaignModifiers(bonusGold: 100);
         final game = OrionDefenseGame(
           stage: _singleEnemyStage(),
           campaignModifiers: mods,
@@ -2403,7 +2395,7 @@ void main() {
 
         final component = game.children.whereType<TowerComponent>().single;
         final base = GameBalance.towerStats(TowerType.laser, level: 1);
-        expect(component.stats.damage, closeTo(base.damage * 1.10, 1e-9));
+        expect(component.stats.damage, base.damage);
         expect(
           component.placedTower.targetingMode,
           TowerTargetingMode.strongest,

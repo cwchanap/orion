@@ -16,7 +16,6 @@ import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
-import 'package:orion/game/campaign/tech_tree.dart';
 import 'package:orion/game/components/enemy_component.dart';
 import 'package:orion/game/components/enemy_overlay.dart';
 import 'package:orion/game/components/tower_component.dart';
@@ -38,7 +37,6 @@ import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
-import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
@@ -135,7 +133,8 @@ Future<InMemoryCampaignProgressStore> storeWithResults(
   await store.save(
     CampaignSave(
       progress: CampaignProgress(bestResultsByStageId: results),
-      techTree: CampaignTechTree(),
+      ownedLevels: CampaignSave.starterOwnedLevels,
+      squad: CampaignSave.starterSquad,
     ),
   );
   return store;
@@ -1359,7 +1358,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Singularity Core is locked.'), findsNothing);
 
-    await tester.tap(find.byTooltip('R&D'));
+    await tester.tap(find.byTooltip('Camp'));
     await tester.pumpAndSettle();
     expect(find.text('Singularity Core is locked.'), findsNothing);
 
@@ -1378,7 +1377,8 @@ void main() {
             'asteroid-foundry',
             'aurora-gate',
           }),
-          techTree: CampaignTechTree(),
+          ownedLevels: CampaignSave.starterOwnedLevels,
+          squad: CampaignSave.starterSquad,
         ),
       ),
     });
@@ -2051,12 +2051,16 @@ void main() {
     },
   );
 
-  testWidgets('mission save composes with a subsequent tech-tree purchase', (
+  testWidgets('mission save composes with a subsequent mission save', (
     tester,
   ) async {
     const expectedResult = StageResult(
       medal: StageMedal.gold,
       bestBaseHealth: 20,
+    );
+    const relayResult = StageResult(
+      medal: StageMedal.silver,
+      bestBaseHealth: 14,
     );
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
@@ -2082,24 +2086,21 @@ void main() {
     await tester.tap(find.byTooltip('World Map').last);
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('R&D'));
-    await tester.pumpAndSettle();
-    if (find.text('Research').evaluate().isEmpty) {
-      await tester.tap(
-        find.byKey(const ValueKey('tech-node-solar-capacitors')),
-      );
-      await tester.pump();
-    }
-    await tester.tap(find.text('Research'));
+    await startStageFromBriefing(
+      tester,
+      mapLabel: 'Relay',
+      actionLabel: 'Start Mission',
+    );
+    await publishVictory(tester, game!, result: relayResult);
     await _pumpUntil(tester, () => store.saveCompletions.length > 1);
     store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(store.progress.resultFor('outpost-alpha'), expectedResult);
-    expect(
-      store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
-      isTrue,
-    );
+    expect(store.progress.resultFor('nebula-relay'), relayResult);
+    // Ownership and squad carry through every composed save untouched.
+    expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    expect(store.squad, CampaignSave.starterSquad);
   });
 
   testWidgets('Mission save failure reports unchanged progress', (
@@ -3367,57 +3368,57 @@ void main() {
     expect(find.text('Best result already saved.'), findsNothing);
   });
 
-  testWidgets('blocks stage launch while a tech-tree save is in flight', (
-    tester,
-  ) async {
+  testWidgets('queued endless saves drain in order while the map exit stays '
+      'gated', (tester) async {
+    // The serialized save queue composes each payload on the last committed
+    // state: a second endless best queued behind the first still writes
+    // after it drains, and the mission exit stays gated until the queue
+    // empties.
     final store = _TestCampaignProgressStore(
-      progress: _progressWithResults({
-        'outpost-alpha',
-        'nebula-relay',
-        'asteroid-foundry',
-      }),
+      progress: _progressWithResults({'outpost-alpha'}),
       delaySaves: true,
-      saveError: StateError('save failed'),
     );
+    OrionDefenseGame? game;
 
-    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
     await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
 
-    await tester.tap(find.byTooltip('R&D'));
-    await tester.pumpAndSettle();
-    if (find.text('Research').evaluate().isEmpty) {
-      await tester.tap(
-        find.byKey(const ValueKey('tech-node-solar-capacitors')),
-      );
-      await tester.pump();
-    }
-    await tester.tap(find.text('Research'));
+    await publishEndlessWaveClear(tester, game!, 4);
+    await publishEndlessWaveClear(tester, game!, 7);
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    await tester.tap(find.byTooltip('Map'));
-    await tester.pumpAndSettle();
-
+    // Save A is in flight, save B is queued behind it — the exit is gated.
+    game!.returnToMap();
+    await tester.pump();
     expect(find.text('SECTOR MAP'), findsNothing);
-    expect(find.byTooltip('Start Wave'), findsNothing);
-    expect(find.byTooltip('Start Mission'), findsNothing);
-    expect(find.byTooltip('Replay Mission'), findsNothing);
 
-    store.saveCompletions.single.complete();
+    // Save A drains but B is still pending, so the exit stays gated.
+    store.saveCompletions[0].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    game!.returnToMap();
+    await tester.pump();
+    expect(find.text('SECTOR MAP'), findsNothing);
+
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('Map'));
+    game!.returnToMap();
     await tester.pumpAndSettle();
-
-    await startStageFromBriefing(
-      tester,
-      mapLabel: 'Relay',
-      actionLabel: 'Replay Mission',
-    );
-
-    expect(find.byTooltip('Start Wave'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
+    expect(store.saveCalls, 2);
+    // The queued saves committed in order: the later best (7) survives.
+    expect(store.progress.endlessBestFor('outpost-alpha'), 7);
+    expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    expect(store.squad, CampaignSave.starterSquad);
   });
 
-  testWidgets('R&D purchase and Settings stay disabled while a campaign '
+  testWidgets('navigation and Settings stay disabled while a campaign '
       'reset is in flight', (tester) async {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({
@@ -3431,33 +3432,18 @@ void main() {
     await tester.pumpWidget(testGamePage(progressStore: store));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byTooltip('R&D'));
-    await tester.pumpAndSettle();
-    if (find.text('Research').evaluate().isEmpty) {
-      await tester.tap(
-        find.byKey(const ValueKey('tech-node-solar-capacitors')),
-      );
-      await tester.pump();
-    }
-    expect(
-      tester
-          .widget<OrionPrimaryButton>(
-            find.widgetWithText(OrionPrimaryButton, 'Research'),
-          )
-          .onPressed,
-      isNotNull,
-    );
-
     await openResetCampaignDialog(tester);
     await tester.tap(find.widgetWithText(TextButton, 'Reset'));
     await _pumpUntil(tester, () => store.resetCompletions.isNotEmpty);
     await tester.pump();
 
-    for (final button in tester.widgetList<OrionPrimaryButton>(
-      find.widgetWithText(OrionPrimaryButton, 'Research'),
-    )) {
-      expect(button.onPressed, isNull);
-    }
+    // The bottom tabs are inert while the reset is in flight — Camp cannot
+    // be reached.
+    await tester.tap(find.byTooltip('Camp'));
+    await tester.pumpAndSettle();
+    expect(findOrionTitle('Camp'), findsNothing);
+    expect(find.text('SECTOR MAP'), findsOneWidget);
+
     final settingsGear = tester.widget<InkWell>(
       find.descendant(
         of: find.byTooltip('Settings'),
@@ -3470,47 +3456,10 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('the Settings gear stays disabled while a campaign save is '
-      'in flight', (tester) async {
-    final store = _TestCampaignProgressStore(
-      progress: _progressWithResults({
-        'outpost-alpha',
-        'nebula-relay',
-        'asteroid-foundry',
-      }),
-      delaySaves: true,
-    );
-
-    await tester.pumpWidget(testGamePage(progressStore: store));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.byTooltip('R&D'));
-    await tester.pumpAndSettle();
-    if (find.text('Research').evaluate().isEmpty) {
-      await tester.tap(
-        find.byKey(const ValueKey('tech-node-solar-capacitors')),
-      );
-      await tester.pump();
-    }
-    await tester.tap(find.text('Research'));
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    await tester.pump();
-
-    final settingsGear = tester.widget<InkWell>(
-      find.descendant(
-        of: find.byTooltip('Settings'),
-        matching: find.byType(InkWell),
-      ),
-    );
-    expect(settingsGear.onTap, isNull);
-
-    store.saveCompletions.single.complete();
-    await tester.pumpAndSettle();
-  });
-
   testWidgets(
-    'persists queued tech save even if page is disposed before it runs',
+    'persists queued mission save even if page is disposed before it runs',
     (tester) async {
+      const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
       final store = _TestCampaignProgressStore(
         progress: _progressWithResults({
           'outpost-alpha',
@@ -3519,19 +3468,18 @@ void main() {
         }),
         delaySaves: true,
       );
+      OrionDefenseGame? game;
 
-      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
       await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-      await tester.tap(find.byTooltip('R&D'));
-      await tester.pumpAndSettle();
-      if (find.text('Research').evaluate().isEmpty) {
-        await tester.tap(
-          find.byKey(const ValueKey('tech-node-solar-capacitors')),
-        );
-        await tester.pump();
-      }
-      await tester.tap(find.text('Research'));
+      await publishVictory(tester, game!, result: result);
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
@@ -3541,15 +3489,14 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(store.saveCalls, 1);
-      expect(
-        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
-        isTrue,
-      );
+      expect(store.progress.resultFor('outpost-alpha'), result);
+      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+      expect(store.squad, CampaignSave.starterSquad);
     },
   );
 
   testWidgets(
-    'failed tech save after disposal does not call setState on a defunct '
+    'failed mission save after disposal does not call setState on a defunct '
     'State',
     (tester) async {
       final store = _TestCampaignProgressStore(
@@ -3561,19 +3508,22 @@ void main() {
         delaySaves: true,
         failOnSaveIndices: {0},
       );
+      OrionDefenseGame? game;
 
-      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
       await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-      await tester.tap(find.byTooltip('R&D'));
-      await tester.pumpAndSettle();
-      if (find.text('Research').evaluate().isEmpty) {
-        await tester.tap(
-          find.byKey(const ValueKey('tech-node-solar-capacitors')),
-        );
-        await tester.pump();
-      }
-      await tester.tap(find.text('Research'));
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
@@ -3633,6 +3583,7 @@ void main() {
       // The pending save completes first (persisting its result), then the
       // reset runs and fails. Progress — including the just-saved result —
       // is retained. The generation bump is monotonic and never rolled back.
+      const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
       final store = _TestCampaignProgressStore(
         progress: _progressWithResults({
           'outpost-alpha',
@@ -3642,27 +3593,25 @@ void main() {
         delaySaves: true,
         resetResults: [StateError('reset failed')],
       );
+      OrionDefenseGame? game;
 
-      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
       await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-      await tester.tap(find.byTooltip('R&D'));
-      await tester.pumpAndSettle();
-      if (find.text('Research').evaluate().isEmpty) {
-        await tester.tap(
-          find.byKey(const ValueKey('tech-node-solar-capacitors')),
-        );
-        await tester.pump();
-      }
-      await tester.tap(find.text('Research'));
+      await publishVictory(tester, game!, result: result);
       await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-      await tester.tap(find.byTooltip('Map'));
-      await tester.pumpAndSettle();
-
       // The Reset button is disabled while the save is in flight. Drain the
-      // pending save first, then trigger the reset.
+      // pending save first, then return to the map and trigger the reset.
       store.saveCompletions.single.complete();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('World Map').last);
       await tester.pumpAndSettle();
 
       await openResetCampaignDialog(tester);
@@ -3676,10 +3625,10 @@ void main() {
         'nebula-relay',
         'asteroid-foundry',
       });
-      expect(
-        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
-        isTrue,
-      );
+      // The saved result and the profile survive the failed reset.
+      expect(store.progress.resultFor('outpost-alpha'), result);
+      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+      expect(store.squad, CampaignSave.starterSquad);
     },
   );
 
@@ -3775,27 +3724,29 @@ void main() {
       }),
       delaySaves: true,
     );
+    OrionDefenseGame? game;
 
-    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
     await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-    await tester.tap(find.byTooltip('R&D'));
-    await tester.pumpAndSettle();
-    if (find.text('Research').evaluate().isEmpty) {
-      await tester.tap(
-        find.byKey(const ValueKey('tech-node-solar-capacitors')),
-      );
-      await tester.pump();
-    }
-    await tester.tap(find.text('Research'));
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-
-    await tester.tap(find.byTooltip('Map'));
-    await tester.pumpAndSettle();
 
     // Drain the pending save first; the Reset button is disabled while
     // the save is in flight.
     store.saveCompletions.single.complete();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('World Map').last);
     await tester.pumpAndSettle();
 
     await openResetCampaignDialog(tester);
@@ -3805,7 +3756,9 @@ void main() {
     expect(find.text('Campaign reset.'), findsOneWidget);
     expect(store.resetCalls, 1);
     expect(store.progress.bestResultsByStageId, isEmpty);
-    expect(store.techTree.purchased, isEmpty);
+    // The fresh profile restores the two starters and an empty progress.
+    expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    expect(store.squad, CampaignSave.starterSquad);
   });
 
   testWidgets('reset reports failure when no progress store is available', (
@@ -3886,11 +3839,11 @@ void main() {
   });
 
   testWidgets(
-    'failed purchase save sets feedback on both tech tree and map views',
+    'failed mission save reports failure on the report and a breadcrumb on '
+    'the map',
     (tester) async {
-      // Dual-targeting feedback routing (HPA-100): a purchase save that fails
-      // while on the tech tree view must set _techTreeFeedback (visible now)
-      // AND _mapFeedback (breadcrumb for when the player returns to the map).
+      // A mission save that fails marks the report's save state and leaves
+      // an unsaved breadcrumb once the player returns to the map.
       final store = _TestCampaignProgressStore(
         progress: _progressWithResults({
           'outpost-alpha',
@@ -3899,100 +3852,86 @@ void main() {
         }),
         saveError: StateError('save failed'),
       );
+      OrionDefenseGame? game;
 
-      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byTooltip('R&D'));
+      // The report shows the failure inline.
+      expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+      expect(find.text('Retry Save'), findsOneWidget);
+
+      // Returning to the map leaves the unsaved breadcrumb.
+      await tester.tap(find.byTooltip('World Map (Unsaved)'));
       await tester.pumpAndSettle();
 
-      if (find.text('Research').evaluate().isEmpty) {
-        await tester.tap(
-          find.byKey(const ValueKey('tech-node-solar-capacitors')),
-        );
-        await tester.pump();
-      }
-      await tester.tap(find.text('Research'));
-      await tester.pumpAndSettle();
-
-      // _techTreeFeedback: the tech tree view shows the failure inline.
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
-      // Rollback: Solar Capacitors is still purchasable (not "Purchased").
-      expect(find.text('Research'), findsOneWidget);
-
-      // _mapFeedback: return to the map and confirm the breadcrumb survives.
-      await tester.tap(find.byTooltip('Map'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+      expect(find.text('Mission result was not saved.'), findsOneWidget);
       expect(find.text('SECTOR MAP'), findsOneWidget);
     },
   );
 
-  testWidgets(
-    'successful purchase clears stale tech tree feedback from prior failure',
-    (tester) async {
-      // tech-tree-design.md:395 — _techTreeFeedback clears on the next
-      // successful purchase. A prior failure's error must not persist on
-      // screen after the retry succeeds.
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({
-          'outpost-alpha',
-          'nebula-relay',
-          'asteroid-foundry',
-        }),
-        failOnSaveIndices: {0},
-      );
+  testWidgets('successful save retry clears the failed save state', (
+    tester,
+  ) async {
+    // A failed mission save offers Retry Save; after the retry succeeds the
+    // report reads saved and the map shows no stale failure breadcrumb.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({
+        'outpost-alpha',
+        'nebula-relay',
+        'asteroid-foundry',
+      }),
+      failOnSaveIndices: {0},
+    );
+    OrionDefenseGame? game;
 
-      await tester.pumpWidget(testGamePage(progressStore: store));
-      await tester.pumpAndSettle();
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-      await tester.tap(find.byTooltip('R&D'));
-      await tester.pumpAndSettle();
+    // First save attempt fails (save index 0).
+    await publishVictory(
+      tester,
+      game!,
+      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
 
-      // First purchase attempt fails (save index 0).
-      if (find.text('Research').evaluate().isEmpty) {
-        await tester.tap(
-          find.byKey(const ValueKey('tech-node-solar-capacitors')),
-        );
-        await tester.pump();
-      }
-      await tester.tap(find.text('Research'));
-      await tester.pumpAndSettle();
+    // The retry (save index 1) succeeds.
+    await tester.tap(find.byTooltip('Retry Save'));
+    await tester.pumpAndSettle();
+    expect(find.text('Saved.'), findsOneWidget);
 
-      expect(find.text('Could not save campaign progress.'), findsOneWidget);
-      // Rollback: still purchasable.
-      expect(find.text('Research'), findsOneWidget);
+    // Returning to the map shows no stale failure breadcrumb.
+    await tester.tap(find.byTooltip('World Map').last);
+    await tester.pumpAndSettle();
 
-      // Second purchase attempt succeeds (save index 1).
-      if (find.text('Research').evaluate().isEmpty) {
-        await tester.tap(
-          find.byKey(const ValueKey('tech-node-solar-capacitors')),
-        );
-        await tester.pump();
-      }
-      await tester.tap(find.text('Research'));
-      await tester.pumpAndSettle();
-
-      // Stale feedback must be cleared.
-      expect(find.text('Could not save campaign progress.'), findsNothing);
-      // The upgrade is now purchased.
-      expect(find.text('Research'), findsNothing);
-      expect(
-        store.techTree.isPurchased(CampaignTechUpgrade.solarCapacitors),
-        isTrue,
-      );
-
-      // Round-4 review P2: the failed purchase also wrote the breadcrumb into
-      // _mapFeedback. Returning to the world map after the successful retry
-      // must NOT still show the stale failure.
-      await tester.tap(find.byTooltip('Map'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('SECTOR MAP'), findsOneWidget);
-      expect(find.text('Could not save campaign progress.'), findsNothing);
-    },
-  );
+    expect(find.text('SECTOR MAP'), findsOneWidget);
+    expect(find.text('Mission result was not saved.'), findsNothing);
+    expect(
+      store.progress.resultFor('outpost-alpha'),
+      const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    );
+  });
 
   testWidgets('null store marks Mission report failed without throwing', (
     tester,
@@ -4065,33 +4004,35 @@ void main() {
     ]);
   });
 
-  testWidgets(
-    'tapping the R&D tab opens TechTreeView and the Map tab returns',
-    (tester) async {
-      await tester.pumpWidget(testGamePage());
-      await tester.pumpAndSettle();
+  testWidgets('tapping the Camp tab opens the roster and the Map tab returns', (
+    tester,
+  ) async {
+    await tester.pumpWidget(testGamePage());
+    await tester.pumpAndSettle();
 
-      // Wired callback → button is visible and tappable.
-      // Sanity: button is present on the world map header.
-      expect(find.byTooltip('R&D'), findsOneWidget);
+    // Wired callback → button is visible and tappable.
+    expect(find.byTooltip('Camp'), findsOneWidget);
 
-      await tester.tap(find.byTooltip('R&D'));
-      await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Camp'));
+    await tester.pumpAndSettle();
 
-      // TechTreeView is now rendered (T12): its header appears and the
-      // world-map header is replaced.
-      expect(findOrionTitle('R&D Lab'), findsOneWidget);
-      expect(find.text('SECTOR MAP'), findsNothing);
-      expect(find.byTooltip('Map'), findsOneWidget);
+    // CampView is now rendered: its header appears and the world-map
+    // header is replaced.
+    expect(findOrionTitle('Camp'), findsOneWidget);
+    expect(find.text('SECTOR MAP'), findsNothing);
+    expect(find.byTooltip('Map'), findsOneWidget);
 
-      // The back arrow returns the player to the world map.
-      await tester.tap(find.byTooltip('Map'));
-      await tester.pumpAndSettle();
+    // The two starters render as owned squad members.
+    expect(find.byKey(const ValueKey('camp-card-haruto')), findsOneWidget);
+    expect(find.byKey(const ValueKey('camp-card-mio')), findsOneWidget);
 
-      expect(find.text('SECTOR MAP'), findsOneWidget);
-      expect(findOrionTitle('R&D Lab'), findsNothing);
-    },
-  );
+    // The Map tab returns the player to the world map.
+    await tester.tap(find.byTooltip('Map'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('SECTOR MAP'), findsOneWidget);
+    expect(findOrionTitle('Camp'), findsNothing);
+  });
 
   testWidgets('world map shows locked, unlocked, and cleared stages', (
     tester,
@@ -4471,7 +4412,8 @@ void main() {
               ),
             },
           ),
-          techTree: CampaignTechTree(),
+          ownedLevels: CampaignSave.starterOwnedLevels,
+          squad: CampaignSave.starterSquad,
         ),
       );
 
@@ -4545,7 +4487,8 @@ void main() {
             ),
           },
         ),
-        techTree: CampaignTechTree(),
+        ownedLevels: CampaignSave.starterOwnedLevels,
+        squad: CampaignSave.starterSquad,
       ),
     );
 
@@ -4595,7 +4538,8 @@ void main() {
               ),
             },
           ),
-          techTree: CampaignTechTree(),
+          ownedLevels: CampaignSave.starterOwnedLevels,
+          squad: CampaignSave.starterSquad,
         ),
       );
 
@@ -7045,9 +6989,11 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     this.failOnSaveIndices = const {},
     this.resetResults = const [],
     CampaignProgress? progress,
-    CampaignTechTree? techTree,
+    Map<Character, int>? ownedLevels,
+    List<Character>? squad,
   }) : progress = progress ?? CampaignProgress(),
-       techTree = techTree ?? CampaignTechTree();
+       ownedLevels = ownedLevels ?? CampaignSave.starterOwnedLevels,
+       squad = squad ?? CampaignSave.starterSquad;
 
   final Object? loadError;
   final Object? saveError;
@@ -7058,7 +7004,8 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
   final List<Completer<void>> saveCompletions = [];
   final List<Completer<void>> resetCompletions = [];
   CampaignProgress progress;
-  CampaignTechTree techTree;
+  Map<Character, int> ownedLevels;
+  List<Character> squad;
   int saveCalls = 0;
   int resetCalls = 0;
 
@@ -7068,7 +7015,11 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     if (error != null) {
       throw error;
     }
-    return CampaignSave(progress: progress, techTree: techTree);
+    return CampaignSave(
+      progress: progress,
+      ownedLevels: ownedLevels,
+      squad: squad,
+    );
   }
 
   @override
@@ -7090,7 +7041,8 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     }
 
     progress = save.progress;
-    techTree = save.techTree;
+    ownedLevels = save.ownedLevels;
+    squad = save.squad;
   }
 
   @override
@@ -7111,7 +7063,8 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     }
 
     progress = CampaignProgress();
-    techTree = CampaignTechTree();
+    ownedLevels = CampaignSave.starterOwnedLevels;
+    squad = CampaignSave.starterSquad;
   }
 }
 
