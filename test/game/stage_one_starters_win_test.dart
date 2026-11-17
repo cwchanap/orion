@@ -1,5 +1,6 @@
 import 'package:flame/components.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/components/enemy_component.dart';
@@ -87,7 +88,17 @@ void _expectStageVictory(_RunResult run) {
   expect(run.feedback.bossDefeatedCalls, greaterThan(0));
   expect(run.completions, hasLength(1));
   expect(run.completions.single.stage.id, run.script.stage.id);
-  expect(run.completions.single.result.medal, isNotNull);
+  // Medal rule restated from the spec rather than reusing the production
+  // factory: full health is gold, at least the silver threshold is
+  // silver, anything less is a plain clear — so a miscalculated medal
+  // fails even when a future strategy wins at reduced health.
+  final expectedMedal =
+      run.game.snapshot.baseHealth >= run.game.snapshot.startingBaseHealth
+      ? StageMedal.gold
+      : run.game.snapshot.baseHealth >= GameBalance.silverMedalThreshold
+      ? StageMedal.silver
+      : StageMedal.clear;
+  expect(run.completions.single.result.medal, expectedMedal);
   expect(
     run.completions.single.result.bestBaseHealth,
     run.game.snapshot.baseHealth,
