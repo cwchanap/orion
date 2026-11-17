@@ -42,7 +42,14 @@ GameSnapshot _snapshot({
   ],
   bool selectedCellBuildable = true,
   List<PlacedTower> placedTowers = const [],
-  List<Character> squad = Character.values,
+  List<Character> squad = const [
+    Character.haruto,
+    Character.elena,
+    Character.kaito,
+    Character.shiori,
+    Character.ren,
+    Character.tetsuo,
+  ],
 }) {
   return GameSnapshot(
     phase: phase,

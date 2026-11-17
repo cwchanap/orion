@@ -79,6 +79,13 @@ class GameSession {
         'Stage must define at least one wave',
       );
     }
+    if (squad.length > GameBalance.squadMaxSize) {
+      throw ArgumentError.value(
+        squad.length,
+        'squad',
+        'Squad cannot exceed ${GameBalance.squadMaxSize} members',
+      );
+    }
   }
 
   final StageDefinition stage;

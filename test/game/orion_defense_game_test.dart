@@ -24,6 +24,18 @@ import 'package:orion/game/rules/run_module_unlocks.dart';
 
 import 'game_test_fixtures.dart';
 
+/// Six-member deploy squad for game-level tests — first stand-in per used
+/// style (laser/cryo/railgun/gravityWell/droneBay) plus Haruto so named
+/// laser placements can co-deploy with Hikari.
+final testGameSquad = testSquadOf([
+  Character.hikari,
+  Character.haruto,
+  Character.jin,
+  Character.elena,
+  Character.ren,
+  Character.tetsuo,
+]);
+
 enum _RecordedFeedbackCall {
   towerConfirmed,
   waveCleared,
@@ -106,7 +118,7 @@ void main() {
     test(
       'board viewport transforms input without changing combat geometry',
       () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(360, 640));
         const towerCell = GridPosition(4, 5);
         game.handleBoardTap(game.boardCellCenter(towerCell));
@@ -156,14 +168,14 @@ void main() {
     );
 
     test('defaults to campaign stage one', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
 
       expect(game.stage, OrionCampaign.stageOne);
       expect(game.snapshot.stageName, 'Outpost Alpha');
     });
 
     test('onLoad loads all sprite sheets including the boss sheet', () async {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
       game.onGameResize(Vector2(800, 1200));
       await game.onLoad();
 
@@ -173,7 +185,7 @@ void main() {
 
     test('can be constructed for another stage', () {
       final stage = OrionCampaign.stageById('nebula-relay');
-      final game = OrionDefenseGame(squad: testFullSquad, stage: stage);
+      final game = OrionDefenseGame(squad: testGameSquad, stage: stage);
 
       expect(game.stage, stage);
       expect(game.snapshot.stageName, 'Nebula Relay');
@@ -182,7 +194,7 @@ void main() {
 
     test('overrideFeedback republishes the active stage modifiers', () {
       final stage = OrionCampaign.stageById('singularity-core');
-      final game = OrionDefenseGame(squad: testFullSquad, stage: stage);
+      final game = OrionDefenseGame(squad: testGameSquad, stage: stage);
 
       game.overrideFeedback('Modifier check');
 
@@ -191,7 +203,7 @@ void main() {
     });
 
     test('defaults to unpaused 1x pacing with auto-start disabled', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
 
       expect(game.snapshot.isPaused, isFalse);
       expect(game.snapshot.speedMultiplier, 1);
@@ -201,7 +213,7 @@ void main() {
     });
 
     test('sets supported speed multipliers and ignores unsupported values', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
 
       game.setSpeedMultiplier(2);
       expect(game.snapshot.speedMultiplier, 2);
@@ -217,7 +229,7 @@ void main() {
     });
 
     test('pause freezes time scale and resume restores selected speed', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
 
       game.setSpeedMultiplier(3);
       game.startWave();
@@ -235,7 +247,7 @@ void main() {
     test(
       'toggleAutoStart updates snapshot and clears countdown when disabled',
       () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
 
         game.toggleAutoStart();
         expect(game.snapshot.autoStartEnabled, isTrue);
@@ -247,7 +259,7 @@ void main() {
     );
 
     test('auto-start enabled before first wave does not start countdown', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
 
       game.toggleAutoStart();
       game.update(OrionDefenseGame.autoStartCountdownSeconds + 1);
@@ -261,7 +273,7 @@ void main() {
     test('returnToMap fires callback during build phase', () {
       var callCount = 0;
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         onReturnToMap: () => callCount += 1,
       );
 
@@ -273,7 +285,7 @@ void main() {
     test('returnToMap is blocked during an active wave', () {
       var callCount = 0;
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         onReturnToMap: () => callCount += 1,
       );
 
@@ -303,7 +315,7 @@ void main() {
       );
       final completions = <StageCompletion>[];
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stage,
         onStageWon: completions.add,
       );
@@ -326,7 +338,7 @@ void main() {
         final clearedCounts = <int>[];
         var stageWonCalls = 0;
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(2),
           mode: RunMode.endless,
           onEndlessWaveCleared: clearedCounts.add,
@@ -349,7 +361,7 @@ void main() {
 
       test('spawns loop-1 enemies at the loop health multiplier', () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(waveCount: 1),
           mode: RunMode.endless,
         );
@@ -378,7 +390,7 @@ void main() {
       test('past the scripted count the snapshot still previews real scaled '
           'waves', () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(8),
           mode: RunMode.endless,
         );
@@ -415,7 +427,7 @@ void main() {
         final clearedCounts = <int>[];
         var stageWonCalls = 0;
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(1),
           onEndlessWaveCleared: clearedCounts.add,
           onStageWon: (_) => stageWonCalls += 1,
@@ -435,7 +447,7 @@ void main() {
       'wave clear starts auto-start countdown when another wave remains',
       () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(2),
         );
 
@@ -453,7 +465,7 @@ void main() {
 
     test('auto-start toggled on after a cleared wave starts countdown', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
       );
 
@@ -475,7 +487,7 @@ void main() {
 
     test('auto-start countdown can be canceled by turning auto-start off', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
       );
 
@@ -494,7 +506,7 @@ void main() {
       'auto-start countdown starts next wave after scaled unpaused time',
       () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(2),
         );
 
@@ -514,7 +526,7 @@ void main() {
 
     test('paused auto-start countdown does not advance', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
       );
 
@@ -540,7 +552,7 @@ void main() {
         ],
       ]);
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(8),
         moduleOfferPicker: picker,
       );
@@ -570,7 +582,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(8),
           moduleOfferPicker: picker,
         );
@@ -603,7 +615,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(8),
           moduleOfferPicker: picker,
         );
@@ -650,7 +662,7 @@ void main() {
     );
 
     test('placeTower without a selected cell reports feedback', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
 
       game.placeTower(testCharacterFor(TowerType.laser));
 
@@ -658,7 +670,7 @@ void main() {
     });
 
     test('upgradeSelectedTower without a selected tower reports feedback', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
 
       game.upgradeSelectedTower();
 
@@ -667,7 +679,7 @@ void main() {
 
     test('upgradeSelectedTower reports feedback when tower is maxed', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         campaignModifiers: const CampaignModifiers(bonusGold: 200),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -689,7 +701,7 @@ void main() {
     test('successful place, upgrade, and specialize each confirm once', () {
       final feedback = _RecordingGameFeedback();
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
         // bonusGold covers place(50) + upgrade(70) + specialize(120) = 240.
         campaignModifiers: const CampaignModifiers(bonusGold: 100),
@@ -724,7 +736,7 @@ void main() {
     test('rejected or unselected tower actions stay silent', () {
       final feedback = _RecordingGameFeedback();
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
         campaignModifiers: const CampaignModifiers(bonusGold: 200),
         gameFeedback: feedback,
@@ -766,7 +778,7 @@ void main() {
       ]);
       final feedback = _RecordingGameFeedback();
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(8),
         moduleOfferPicker: picker,
         gameFeedback: feedback,
@@ -806,7 +818,7 @@ void main() {
       () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(2),
           gameFeedback: feedback,
         );
@@ -846,7 +858,7 @@ void main() {
     test('resize and lifecycle processing cannot replay feedback cues', () {
       final feedback = _RecordingGameFeedback();
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
         gameFeedback: feedback,
       );
@@ -870,7 +882,7 @@ void main() {
 
     test('active-wave resize still covers the viewport with the backdrop', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -898,7 +910,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(8),
           moduleOfferPicker: picker,
         );
@@ -926,7 +938,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(8),
           moduleOfferPicker: picker,
         );
@@ -994,7 +1006,7 @@ void main() {
         ],
       ]);
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(8),
         moduleOfferPicker: picker,
       );
@@ -1067,7 +1079,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _droneBayModuleRefreshStage(),
           moduleOfferPicker: picker,
         );
@@ -1182,7 +1194,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _gravityWellModuleRefreshStage(),
           moduleOfferPicker: picker,
         );
@@ -1315,7 +1327,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _gravityWellModuleRefreshStage(),
           moduleOfferPicker: picker,
           // Gravity Echo is a stage blueprint; mark it committed so it is
@@ -1431,7 +1443,7 @@ void main() {
 
     test('paused active-wave update does not run combat components', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
 
@@ -1460,7 +1472,7 @@ void main() {
 
     test('paused wave freezes enemy movement and spawn timer', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _twoEnemyDelayedSpawnStage(),
       );
 
@@ -1486,7 +1498,7 @@ void main() {
 
     test('tapping an active enemy marks it inspected', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _twoEnemyImmediateSpawnStage(),
       );
 
@@ -1510,7 +1522,7 @@ void main() {
 
     test('tapping another active enemy switches inspection', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _twoEnemyImmediateSpawnStage(),
       );
 
@@ -1533,7 +1545,7 @@ void main() {
 
     test('tapping away from enemies clears inspection', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
 
@@ -1554,7 +1566,7 @@ void main() {
 
     test('resolving the inspected enemy clears inspection', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
 
@@ -1576,7 +1588,7 @@ void main() {
 
     test('inspected enemy reaching the base clears inspection', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
 
@@ -1599,11 +1611,11 @@ void main() {
 
     test('3x speed accelerates real enemy progress compared with 1x', () {
       final oneXGame = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
       final threeXGame = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
 
@@ -1636,7 +1648,7 @@ void main() {
 
     test('normal enemy receives selected stage profile', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _modifierStage(
           modifiers: const [StageModifier.enemySpeedSurge],
           enemyStats: const EnemyStats(
@@ -1657,7 +1669,7 @@ void main() {
 
     test('enemy speed surge composes with the player 3x time scale', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _modifierStage(
           modifiers: const [StageModifier.enemySpeedSurge],
           enemyStats: const EnemyStats(
@@ -1680,7 +1692,7 @@ void main() {
 
     test('onGameResize with unchanged cellSize reuses BoardComponent', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
       game.onGameResize(Vector2(400, 800));
@@ -1706,7 +1718,7 @@ void main() {
 
     test('swarm kill callback awards rounded stage bounty', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _modifierStage(
           modifiers: const [StageModifier.swarmBounty],
           enemyStats: const EnemyStats(
@@ -1736,7 +1748,7 @@ void main() {
         traits: {EnemyTrait.regen},
       );
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _modifierStage(
           modifiers: const [StageModifier.regenPressurePulses],
           enemyStats: regen,
@@ -1771,7 +1783,7 @@ void main() {
         traits: {EnemyTrait.regen},
       );
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _modifierStage(
           modifiers: const [StageModifier.regenPressurePulses],
           enemyStats: regen,
@@ -1794,7 +1806,7 @@ void main() {
         goldReward: 1,
       );
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _modifierStage(
           modifiers: const [StageModifier.regenPressurePulses],
           enemyStats: normal,
@@ -1834,7 +1846,7 @@ void main() {
         ),
       );
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _modifierStage(
           modifiers: const [StageModifier.enemySpeedSurge],
           enemyStats: boss,
@@ -1854,7 +1866,7 @@ void main() {
 
     test('Outpost Alpha keeps identity enemy profile', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: OrionCampaign.stageOne,
       );
       game.onGameResize(Vector2(800, 1200));
@@ -1883,7 +1895,7 @@ void main() {
           traits: {EnemyTrait.shielded},
         );
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _modifierStage(
             modifiers: const [StageModifier.shieldRecharge],
             enemyStats: enemyStats,
@@ -1961,7 +1973,7 @@ void main() {
             mapColumn: 0,
             mapRow: 0,
           );
-          final game = OrionDefenseGame(squad: testFullSquad, stage: stage);
+          final game = OrionDefenseGame(squad: testGameSquad, stage: stage);
           game.onGameResize(Vector2(800, 1200));
           game.startWave();
           game.update(double.minPositive);
@@ -1990,7 +2002,7 @@ void main() {
 
     test('restart resets pacing state', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
       );
 
@@ -2011,7 +2023,7 @@ void main() {
 
     test('won state resets pacing state', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(1),
       );
 
@@ -2031,7 +2043,7 @@ void main() {
 
     test('lost state resets pacing state', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _lethalSingleEnemyStage(),
       );
 
@@ -2054,7 +2066,7 @@ void main() {
 
     test('setTargetingMode without a selected tower reports feedback', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -2067,7 +2079,7 @@ void main() {
 
     test('setTargetingMode updates the selected tower during build phase', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -2094,7 +2106,7 @@ void main() {
 
     test('setTargetingMode is denied during an active wave', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -2126,7 +2138,7 @@ void main() {
       'sellSelectedTower removes the component, clears selection, refunds',
       () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _singleEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -2150,7 +2162,7 @@ void main() {
 
     test('sellSelectedTower with no selection reports feedback', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -2162,7 +2174,7 @@ void main() {
 
     test('sellSelectedTower is denied during an active wave', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -2183,7 +2195,7 @@ void main() {
 
     test('sellSelectedTower despawns a sold drone bay live drones', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _droneBayUnlockStage(),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -2248,7 +2260,7 @@ void main() {
 
     test('sellSelectedTower despawns a sold gravity well lingering fields', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _gravityWellUnlockStage(),
       );
       game.onGameResize(Vector2(800, 1200));
@@ -2323,7 +2335,7 @@ void main() {
       'gravity field safely resolves multiple enemies in one tick',
       () async {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _lethalGravityFieldStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -2365,7 +2377,7 @@ void main() {
 
     test('applies campaign modifiers to session starting values', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
         campaignModifiers: const CampaignModifiers(
           bonusGold: 30,
@@ -2383,7 +2395,7 @@ void main() {
 
     test('defaults to no campaign modifiers and baseline economy', () {
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: stageWithWaveCount(2),
       );
 
@@ -2397,7 +2409,7 @@ void main() {
       // gold/health, Challenge Badge), so the authored bonus pays through
       // unchanged regardless of modifiers.
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _clearBonusStage(clearBonus: 100),
         campaignModifiers: const CampaignModifiers(
           bonusGold: 30,
@@ -2418,7 +2430,7 @@ void main() {
       'wave-clear gold bonus is unscaled when campaign modifiers are absent',
       () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _clearBonusStage(clearBonus: 100),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -2441,7 +2453,7 @@ void main() {
         // uses unmodified base values even with non-empty modifiers.
         const mods = CampaignModifiers(bonusGold: 100);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _singleEnemyStage(),
           campaignModifiers: mods,
         );
@@ -2465,7 +2477,7 @@ void main() {
       // stats instead of the level-2 base damage.
       const mods = CampaignModifiers(bonusGold: 100);
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
         campaignModifiers: mods,
       );
@@ -2489,7 +2501,7 @@ void main() {
       // bonusGold covers place(50) + upgrade(70) + specialize(120) = 240.
       const mods = CampaignModifiers(bonusGold: 100);
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _singleEnemyStage(),
         campaignModifiers: mods,
       );
@@ -2526,7 +2538,7 @@ void main() {
         // could drop resolved values.
         const mods = CampaignModifiers(bonusGold: 100);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _singleEnemyStage(),
           campaignModifiers: mods,
         );
@@ -2556,7 +2568,7 @@ void main() {
         'tower component retains amplified stats through ${specialization.label}',
         () {
           final game = OrionDefenseGame(
-            squad: testFullSquad,
+            squad: testGameSquad,
             stage: _gravityWellUnlockStage(
               modifiers: const [StageModifier.amplifiedGravityWells],
             ),
@@ -2619,7 +2631,7 @@ void main() {
             GameBalance.initialBaseHealth + bonusHealth;
         const adjustedStartingGold = GameBalance.startingGold + bonusGold;
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _lethalSingleEnemyStage(),
           campaignModifiers: const CampaignModifiers(
             bonusGold: bonusGold,
@@ -2657,7 +2669,7 @@ void main() {
     );
 
     test('restart forwards refreshed run inputs to the same game session', () {
-      final game = OrionDefenseGame(squad: testFullSquad);
+      final game = OrionDefenseGame(squad: testGameSquad);
       const refreshed = CampaignModifiers(bonusGold: 25);
 
       game.restart(
@@ -2680,7 +2692,7 @@ void main() {
       'boss summons minions that path from its position and block completion',
       () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _bossSummonStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -2741,7 +2753,7 @@ void main() {
       'corrosion applied by a projectile during super.update ticks lethal same frame',
       () async {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -2818,7 +2830,7 @@ void main() {
     test('killing a boss fires bossDefeated exactly once', () async {
       final feedback = _RecordingGameFeedback();
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _bossSummonStage(),
         gameFeedback: feedback,
       );
@@ -2912,7 +2924,7 @@ void main() {
       () async {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _singleBossVictoryStage(),
           gameFeedback: feedback,
         );
@@ -2993,7 +3005,7 @@ void main() {
     test('defeat mid-tick stops ticking remaining enemies', () {
       final feedback = _RecordingGameFeedback();
       final game = OrionDefenseGame(
-        squad: testFullSquad,
+        squad: testGameSquad,
         stage: _twoEnemyDefeatStage(),
         gameFeedback: feedback,
       );
@@ -3039,7 +3051,7 @@ void main() {
       'onKilled fires exactly once when lethal damage lands on a would-overrun frame',
       () async {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3119,7 +3131,7 @@ void main() {
       'overlay drops slow/corrosion on tick expiry without an external apply',
       () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3153,7 +3165,7 @@ void main() {
           game.children.whereType<BoardComponent>().single;
 
       test('begin preview stores tower type but mutates nothing', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
 
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
@@ -3166,7 +3178,7 @@ void main() {
       });
 
       test('update maps GameWidget-local pointer through boardCellAt', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
 
@@ -3176,7 +3188,7 @@ void main() {
       });
 
       test('valid empty cell previews allowed with a resolved range', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
 
@@ -3190,7 +3202,7 @@ void main() {
       });
 
       test('path cell previews denied', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
 
@@ -3202,12 +3214,12 @@ void main() {
       });
 
       test('occupied cell previews denied', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         _tapCell(game, const GridPosition(2, 0));
         game.placeTower(testCharacterFor(TowerType.laser));
         game.processLifecycleEvents();
-        game.beginTowerPlacementPreview(testCharacterFor(TowerType.rocket));
+        game.beginTowerPlacementPreview(testCharacterFor(TowerType.cryo));
 
         game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
 
@@ -3236,7 +3248,7 @@ void main() {
           level: 1,
         ).cost;
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           campaignModifiers: const CampaignModifiers(bonusGold: -149),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3250,7 +3262,7 @@ void main() {
       });
 
       test('preview spends no gold and creates no tower', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
 
@@ -3263,7 +3275,7 @@ void main() {
       });
 
       test('preview fields replace normal selected-cell render state', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         final board = boardOf(game);
         _tapCell(game, const GridPosition(2, 0));
@@ -3294,7 +3306,7 @@ void main() {
       test(
         'null/off-board update clears candidate and range but keeps preview',
         () {
-          final game = OrionDefenseGame(squad: testFullSquad);
+          final game = OrionDefenseGame(squad: testGameSquad);
           game.onGameResize(Vector2(800, 1200));
           game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
           game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
@@ -3310,7 +3322,7 @@ void main() {
       );
 
       test('off-board final commit cancels and never uses _selectedCell', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         _tapCell(game, const GridPosition(2, 0)); // selection must not be used
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
@@ -3326,7 +3338,7 @@ void main() {
       test(
         'valid final commit places exactly one tower and spends one cost',
         () {
-          final game = OrionDefenseGame(squad: testFullSquad);
+          final game = OrionDefenseGame(squad: testGameSquad);
           game.onGameResize(Vector2(800, 1200));
           final laserCost = GameBalance.towerStats(
             TowerType.laser,
@@ -3345,7 +3357,7 @@ void main() {
       );
 
       test('invalid commit places nothing and clears preview', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
         game.updateTowerPlacementPreview(cellPoint(const GridPosition(0, 1)));
@@ -3359,7 +3371,7 @@ void main() {
       });
 
       test('cancel clears preview', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
         game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
@@ -3373,7 +3385,7 @@ void main() {
       });
 
       test('miss-tap selection cleanup clears preview', () {
-        final game = OrionDefenseGame(squad: testFullSquad);
+        final game = OrionDefenseGame(squad: testGameSquad);
         game.onGameResize(Vector2(800, 1200));
         game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
         game.updateTowerPlacementPreview(cellPoint(const GridPosition(2, 0)));
@@ -3388,7 +3400,7 @@ void main() {
       test(
         'startWave, restart, sell, and place cleanup cannot leave preview',
         () {
-          final game = OrionDefenseGame(squad: testFullSquad);
+          final game = OrionDefenseGame(squad: testGameSquad);
           game.onGameResize(Vector2(800, 1200));
 
           game.beginTowerPlacementPreview(testCharacterFor(TowerType.laser));
@@ -3417,7 +3429,7 @@ void main() {
         Character? previewTypeAtCallback;
         OrionDefenseGame? gameRef;
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           onReturnToMap: () {
             previewTypeAtCallback = gameRef?.placementPreview.character;
           },
@@ -3440,7 +3452,7 @@ void main() {
           ],
         ]);
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(8),
           moduleOfferPicker: picker,
         );
@@ -3469,7 +3481,7 @@ void main() {
     group('combat feedback cues', () {
       test('kill emits one enemyDestroyed cue and preserves the reward', () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3500,7 +3512,7 @@ void main() {
 
       test('non-losing leak emits one coreImpact cue and damages the base', () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3533,7 +3545,7 @@ void main() {
 
       test('losing leak does not leave a queued coreImpact cue behind', () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _lethalSingleEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3563,7 +3575,7 @@ void main() {
 
       test('new cues prune expired entries from feedback tracking', () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _twoEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3594,7 +3606,7 @@ void main() {
 
       test('restart removes outstanding combat feedback cues', () {
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(),
         );
         game.onGameResize(Vector2(800, 1200));
@@ -3658,7 +3670,7 @@ void main() {
       test('projectile tower emits one typed towerFired per shot', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(),
           gameFeedback: feedback,
         );
@@ -3695,7 +3707,7 @@ void main() {
       test('gravity well emits towerFired when its field is tracked', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _gravityWellUnlockStage(),
           gameFeedback: feedback,
         );
@@ -3726,7 +3738,7 @@ void main() {
         () {
           final feedback = _RecordingGameFeedback();
           final game = OrionDefenseGame(
-            squad: testFullSquad,
+            squad: testGameSquad,
             stage: _droneBayUnlockStage(),
             gameFeedback: feedback,
           );
@@ -3782,7 +3794,7 @@ void main() {
         () {
           final feedback = _RecordingGameFeedback();
           final game = OrionDefenseGame(
-            squad: testFullSquad,
+            squad: testSquadOf([Character.mio]),
             stage: _impactColocatedStage(),
             gameFeedback: feedback,
           );
@@ -3805,7 +3817,7 @@ void main() {
       test('one chain sound per resolved chain component with two targets', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testSquadOf([Character.kaito]),
           stage: _impactColocatedStage(),
           gameFeedback: feedback,
         );
@@ -3827,7 +3839,7 @@ void main() {
         () {
           final feedback = _RecordingGameFeedback();
           final game = OrionDefenseGame(
-            squad: testFullSquad,
+            squad: testGameSquad,
             stage: _impactColocatedStage(),
             gameFeedback: feedback,
           );
@@ -3853,7 +3865,7 @@ void main() {
         () {
           final feedback = _RecordingGameFeedback();
           final game = OrionDefenseGame(
-            squad: testFullSquad,
+            squad: testGameSquad,
             stage: _oneEnemyStage(),
             gameFeedback: feedback,
           );
@@ -3878,7 +3890,7 @@ void main() {
       test('kill after loss emits no kill audio and keeps reward', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _twoEnemyDefeatStage(),
           gameFeedback: feedback,
         );
@@ -3916,7 +3928,7 @@ void main() {
       test('nonlethal leak in wave phase emits coreHit before waveCleared', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _oneEnemyStage(waveCount: 2),
           gameFeedback: feedback,
         );
@@ -3939,7 +3951,7 @@ void main() {
       test('fatal leak emits baseDefeated instead of coreHit', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _lethalSingleEnemyStage(),
           gameFeedback: feedback,
         );
@@ -3963,7 +3975,7 @@ void main() {
       test('second same-tick leak after fatal damage emits nothing', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _twoEnemyDefeatStage(),
           gameFeedback: feedback,
         );
@@ -4001,7 +4013,7 @@ void main() {
       test('startWave emits waveStarted on success only, manual and auto', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(2),
           gameFeedback: feedback,
         );
@@ -4029,7 +4041,7 @@ void main() {
       test('boss spawn emits bossArrived once; minions never do', () async {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _bossSummonStage(),
           gameFeedback: feedback,
         );
@@ -4069,7 +4081,7 @@ void main() {
       test('boss snapshot clears on kill and preserves existing SFX', () async {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _bossSummonStage(),
           gameFeedback: feedback,
         );
@@ -4098,7 +4110,7 @@ void main() {
       test('boss snapshot clears on a nonlethal base leak', () async {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: _bossSummonStage(),
           gameFeedback: feedback,
         );
@@ -4131,7 +4143,7 @@ void main() {
         () async {
           final feedback = _RecordingGameFeedback();
           final game = OrionDefenseGame(
-            squad: testFullSquad,
+            squad: testGameSquad,
             stage: _multipleBossStage(),
             gameFeedback: feedback,
           );
@@ -4168,7 +4180,7 @@ void main() {
         () async {
           final feedback = _RecordingGameFeedback();
           final game = OrionDefenseGame(
-            squad: testFullSquad,
+            squad: testGameSquad,
             stage: _bossSummonStage(),
             gameFeedback: feedback,
           );
@@ -4195,7 +4207,7 @@ void main() {
       test('towerSold fires on refund only; denied sale stays silent', () {
         final feedback = _RecordingGameFeedback();
         final game = OrionDefenseGame(
-          squad: testFullSquad,
+          squad: testGameSquad,
           stage: stageWithWaveCount(2),
           gameFeedback: feedback,
         );

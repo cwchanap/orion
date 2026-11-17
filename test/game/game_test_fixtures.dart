@@ -33,11 +33,12 @@ const Map<Character, int> testStarterSquad = {
   Character.mio: 1,
 };
 
-/// Every roster member at level 1, for tests that deploy freely and do not
-/// exercise squad-membership rules.
-final Map<Character, int> testFullSquad = {
-  for (final character in Character.values) character: 1,
-};
+/// Builds a valid squad map from explicit [members] — never more than
+/// `GameBalance.squadMaxSize`, which `GameSession` now enforces. Tests that
+/// "deploy freely" list the members they actually use; tests needing every
+/// roster member run separate valid squads per scenario.
+Map<Character, int> testSquadOf(Iterable<Character> members, {int level = 1}) =>
+    {for (final member in members) member: level};
 
 /// The first roster member whose combat [style] matches [type] — the
 /// canonical character stand-in when a test only cares about the style.

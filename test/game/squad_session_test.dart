@@ -29,6 +29,31 @@ void main() {
       expect(session.snapshot().squad, [Character.haruto, Character.mio]);
     });
 
+    test('accepts a squad at the six-member cap', () {
+      final session = GameSession.initial(
+        squad: {
+          for (final member in Character.values.take(GameBalance.squadMaxSize))
+            member: 1,
+        },
+      );
+
+      expect(session.squad, hasLength(GameBalance.squadMaxSize));
+    });
+
+    test('rejects a squad larger than the six-member cap', () {
+      expect(
+        () => GameSession.initial(
+          squad: {
+            for (final member in Character.values.take(
+              GameBalance.squadMaxSize + 1,
+            ))
+              member: 1,
+          },
+        ),
+        throwsArgumentError,
+      );
+    });
+
     test(
       'snapshot exposes the ordered squad separately from deduped styles',
       () {
@@ -384,7 +409,7 @@ void main() {
       final session = GameSession.initial(
         stage: stageWithWaveCount(8),
         gold: 9999,
-        squad: testFullSquad,
+        squad: const {Character.jin: 1},
         offerPicker: picker,
       );
       session.placeTower(const GridPosition(2, 0), Character.jin);
@@ -457,7 +482,7 @@ void main() {
       final picker = _RecordingOfferPicker();
       final session = GameSession.initial(
         stage: stageWithWaveCount(8),
-        squad: testFullSquad,
+        squad: testStarterSquad,
         offerPicker: picker,
       );
 
