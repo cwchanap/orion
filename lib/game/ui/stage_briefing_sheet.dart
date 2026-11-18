@@ -97,8 +97,20 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
   /// Popping immediately would dismiss the covering route, and unwinding
   /// [_launching] would wedge "Saving squad…" behind it — so the mode waits
   /// here until the route regains `isCurrent`, when [didChangeDependencies]
-  /// hands it to [_finishDeferredLaunch].
+  /// or [_onDeferredWake] hands it to [_finishDeferredLaunch].
   RunMode? _deferredLaunchMode;
+
+  /// Event wakes for the deferred finish. A cover pushed and removed inside
+  /// a single frame produces no `isCurrent` rebuild for the inherited
+  /// notification to fire — and, verified empirically, no
+  /// [ModalRoute.secondaryAnimation] status edge either — so the defer arms
+  /// both the animation listener and a bounded post-frame recheck chain.
+  /// Two consecutive rechecks are enough: a cover still present after a
+  /// second full frame has had its `isCurrent:false` status built, which
+  /// makes the inherited notification reliable for its removal again.
+  Animation<double>? _deferredWakeAnimation;
+  var _deferredRecheckScheduled = false;
+  var _deferredRecheckBudget = 0;
 
   var _pickerOpen = false;
   var _launching = false;
@@ -137,6 +149,7 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
 
   @override
   void dispose() {
+    _disarmDeferredWake();
     _route?.unregisterPopEntry(this);
     _canPop.dispose();
     super.dispose();
@@ -221,6 +234,7 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
         // _launching would strand "Saving squad…" behind it. Keep the
         // in-flight state and defer the finish until the cover lifts.
         _deferredLaunchMode = mode;
+        _armDeferredWake(route);
         return;
       }
       Navigator.of(context).pop(mode);
@@ -245,9 +259,10 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
 
   /// Finishes a launch whose save committed while a pushed route covered
   /// the sheet. Called from [didChangeDependencies] — which refires on the
-  /// `isCurrent` flip — but the pop itself waits one frame: the status
-  /// change lands mid route-update, and a synchronous Navigator pop there
-  /// would re-enter the transition machinery before the history settles.
+  /// `isCurrent` flip — and from [_onDeferredWake], which catches the cover
+  /// lifecycles that flip coalesces away. The pop itself waits one frame:
+  /// route status changes land mid-update, and a synchronous Navigator pop
+  /// there would re-enter the transition machinery before history settles.
   void _finishDeferredLaunch() {
     if (_deferredLaunchMode == null || _route?.isCurrent != true) {
       return;
@@ -259,11 +274,77 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
       }
       final route = ModalRoute.of(context);
       if (route == null || !route.isCurrent) {
+        // Another cover interposed before this callback. If its whole
+        // lifecycle also fits inside the frame window it leaves no signal
+        // behind, so spend one bounded recheck rather than trusting a
+        // notification that may never come.
+        if (route != null) {
+          _queueDeferredRecheck(1);
+        }
         return;
       }
       _deferredLaunchMode = null;
+      _disarmDeferredWake();
       Navigator.of(context).pop(mode);
     });
+  }
+
+  /// Arms the wakes for a deferred finish. The
+  /// [ModalRoute.secondaryAnimation] listener costs one callback per cover
+  /// transition — never per frame — and [_queueDeferredRecheck] covers the
+  /// transitions that announce nothing at all.
+  void _armDeferredWake(ModalRoute<Object?> route) {
+    _queueDeferredRecheck(2);
+    final animation = route.secondaryAnimation;
+    if (animation == null || identical(animation, _deferredWakeAnimation)) {
+      return;
+    }
+    _deferredWakeAnimation?.removeStatusListener(_onDeferredWake);
+    _deferredWakeAnimation = animation;
+    animation.addStatusListener(_onDeferredWake);
+  }
+
+  void _onDeferredWake(AnimationStatus status) {
+    if (_deferredLaunchMode == null || !mounted) {
+      _disarmDeferredWake();
+      return;
+    }
+    // Edges fire mid history-update, before the covering entry has fully
+    // left `isPresent`, so `isCurrent` cannot be trusted at this tick —
+    // hand off to a post-frame recheck with a fresh bounded budget.
+    _queueDeferredRecheck(2);
+  }
+
+  /// Schedules one post-frame recheck of the deferred finish. Each wake may
+  /// chain at most [budget] further rechecks while the route stays covered;
+  /// once a cover has survived a full frame its `isCurrent:false` status
+  /// has been built, so the inherited notification and animation edges can
+  /// be trusted to announce its removal and the chain stops.
+  void _queueDeferredRecheck([int budget = 1]) {
+    if (_deferredRecheckBudget < budget) {
+      _deferredRecheckBudget = budget;
+    }
+    if (_deferredRecheckScheduled) {
+      return;
+    }
+    _deferredRecheckScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _deferredRecheckScheduled = false;
+      if (!mounted || _deferredLaunchMode == null) {
+        return;
+      }
+      _finishDeferredLaunch();
+      if (_deferredLaunchMode != null && _deferredRecheckBudget > 0) {
+        _deferredRecheckBudget -= 1;
+        _queueDeferredRecheck(0);
+      }
+    });
+  }
+
+  void _disarmDeferredWake() {
+    _deferredRecheckBudget = 0;
+    _deferredWakeAnimation?.removeStatusListener(_onDeferredWake);
+    _deferredWakeAnimation = null;
   }
 
   @override
