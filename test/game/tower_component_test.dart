@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/components/tower_component.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 
 Future<ui.Image> _solidImage(
   int width,
@@ -147,46 +148,30 @@ void main() {
     );
 
     test(
-      'the ring color follows the character rank, not the combat style',
+      'rank rings match the roster palette, including same-style members',
       () async {
         const radius = 15.0;
-        // Hikari and Haruto share the laser style; their ring colors must
-        // differ because their ranks differ (S gold vs E bronze).
-        final hikari = _deployedChibi(
+        final transparentChibi = Sprite(await _solidImage(1, 1, 0x00000000));
+        for (final character in [
           Character.hikari,
-          Sprite(await _solidImage(512, 512, 0x00000000)),
-          radius: radius,
-        );
-        final haruto = _deployedChibi(
-          Character.haruto,
-          Sprite(await _solidImage(512, 512, 0x00000000)),
-          radius: radius,
-        );
-
-        final gold = _ringEdgePixel(await _renderPixels(hikari), radius);
-        final bronze = _ringEdgePixel(await _renderPixels(haruto), radius);
-
-        expect(
-          gold.g - bronze.g,
-          greaterThan(30),
-          reason:
-              'S-rank gold must read brighter/greener than E-rank bronze '
-              'for same-style members (gold=$gold, bronze=$bronze)',
-        );
-
-        // And a green rank (C) must actually paint green, proving the ring
-        // is rank-colored rather than a single fixed accent.
-        final rin = _deployedChibi(
+          Character.akane,
+          Character.elena,
           Character.rin,
-          Sprite(await _solidImage(512, 512, 0x00000000)),
-          radius: radius,
-        );
-        final green = _ringEdgePixel(await _renderPixels(rin), radius);
-        expect(
-          green.g,
-          greaterThan(green.r),
-          reason: 'C-rank ring must be green',
-        );
+          Character.sayo,
+          Character.haruto,
+        ]) {
+          final tower = _deployedChibi(
+            character,
+            transparentChibi,
+            radius: radius,
+          );
+          final pixel = _ringEdgePixel(await _renderPixels(tower), radius);
+          final expected = character.rank.orionColor(OrionUiTheme.dark);
+          final reason = '${character.rank.label}-rank ring must match Camp';
+          expect(pixel.r, closeTo(expected.r * 255, 3), reason: reason);
+          expect(pixel.g, closeTo(expected.g * 255, 3), reason: reason);
+          expect(pixel.b, closeTo(expected.b * 255, 3), reason: reason);
+        }
       },
     );
 
