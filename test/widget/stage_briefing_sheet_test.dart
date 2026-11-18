@@ -1511,6 +1511,170 @@ void main() {
     );
 
     testWidgets(
+      'a coalesced cover completes a deferred launch after tap animations '
+      'have settled',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        expect(tester.binding.hasScheduledFrame, isFalse);
+        expect(find.text('Saving squad…'), findsOneWidget);
+
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        final navigator = Navigator.of(sheetContext);
+        final route = ModalRoute.of(sheetContext)!;
+        unawaited(navigator.push(_instantCover()));
+        expect(route.isCurrent, isFalse);
+        gate.complete(true);
+        await tester.idle();
+        expect(route.isCurrent, isFalse);
+        expect(recorder.popped, isNull);
+        expect(recorder.launches, hasLength(1));
+
+        navigator.pop();
+        expect(route.isCurrent, isTrue);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+        expect(recorder.popped, RunMode.mission);
+        expect(recorder.launches, hasLength(1));
+      },
+    );
+
+    testWidgets(
+      'a covered committed launch requests bounded frames and stays covered',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        unawaited(
+          showDialog<void>(
+            context: sheetContext,
+            builder: (_) => const AlertDialog(content: Text('covering')),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(tester.binding.hasScheduledFrame, isFalse);
+
+        gate.complete(true);
+        await tester.idle();
+        // The initial recheck and its two successors each need a frame.
+        for (var frame = 0; frame < 3; frame++) {
+          expect(tester.binding.hasScheduledFrame, isTrue);
+          await tester.pump();
+        }
+        expect(tester.binding.hasScheduledFrame, isFalse);
+        await tester.pump(const Duration(seconds: 5));
+        expect(tester.binding.hasScheduledFrame, isFalse);
+        expect(find.text('covering'), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(recorder.popped, isNull);
+        expect(recorder.launches, hasLength(1));
+
+        Navigator.of(sheetContext).pop();
+        await tester.pumpAndSettle();
+        expect(find.text('covering'), findsNothing);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+        expect(recorder.popped, RunMode.mission);
+        expect(recorder.launches, hasLength(1));
+      },
+    );
+
+    testWidgets('the last deferred wake requests a frame for its queued pop', (
+      tester,
+    ) async {
+      final gate = Completer<bool>();
+      final recorder = await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        ownedLevels: owned,
+        onLaunch: (mode, draft) => gate.future,
+      );
+
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pumpAndSettle();
+      final sheetContext = tester.element(find.byType(StageBriefingSheet));
+      final navigator = Navigator.of(sheetContext);
+      final route = ModalRoute.of(sheetContext)!;
+
+      unawaited(navigator.push(_instantCover()));
+      expect(route.isCurrent, isFalse);
+      // Re-cover before each wake, then lift before the next build.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        unawaited(navigator.push(_instantCover()));
+        expect(route.isCurrent, isFalse);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(navigator.push(_instantCover()));
+          expect(route.isCurrent, isFalse);
+          scheduleMicrotask(() => navigator.pop());
+        });
+        scheduleMicrotask(() => navigator.pop());
+      });
+      gate.complete(true);
+      await tester.idle();
+      navigator.pop();
+
+      await tester.pump();
+      expect(route.isCurrent, isTrue);
+      await tester.pump();
+      expect(route.isCurrent, isTrue);
+      await tester.pump();
+      expect(recorder.popped, isNull);
+      expect(tester.binding.hasScheduledFrame, isTrue);
+
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+      expect(recorder.popped, RunMode.mission);
+      expect(recorder.launches, hasLength(1));
+    });
+
+    testWidgets(
+      'disposing a sheet with a deferred wake and pop queued is safe',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        final navigator = Navigator.of(sheetContext);
+        unawaited(navigator.push(_instantCover()));
+        gate.complete(true);
+        await tester.idle();
+        navigator.pop();
+        await tester.pump();
+        expect(tester.binding.hasScheduledFrame, isTrue);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+
+        await tester.pumpWidget(const SizedBox.shrink());
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(tester.binding.hasScheduledFrame, isFalse);
+        expect(recorder.popped, isNull);
+        expect(recorder.launches, hasLength(1));
+      },
+    );
+
+    testWidgets(
       'a deferred launch survives a re-cover that lands before the deferred '
       'post-frame callback and lifts before the next build',
       (tester) async {

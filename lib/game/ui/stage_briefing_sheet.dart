@@ -287,6 +287,8 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
       _disarmDeferredWake();
       Navigator.of(context).pop(mode);
     });
+    // A post-frame wake needs a new frame for the queued pop to run.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// Arms the wakes for a deferred finish. The
@@ -339,6 +341,8 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
         _queueDeferredRecheck(0);
       }
     });
+    // Post-frame callbacks do not schedule their own successor frames.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   void _disarmDeferredWake() {
