@@ -736,6 +736,7 @@ class _SheetStatBar extends StatelessWidget {
         child: Align(
           alignment: Alignment.centerLeft,
           child: FractionallySizedBox(
+            key: ValueKey('sheet-stat-fill-$label'),
             widthFactor: fill,
             heightFactor: 1,
             child: DecoratedBox(

@@ -1164,6 +1164,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
+      // The bottom-sheet drag path calls Navigator.pop imperatively — it
+      // cannot consult the sheet's in-flight-save veto, so a downward fling
+      // could strand the commit or the retry surface. Dismissal stays on
+      // the sheet's own Dismiss/back affordances.
+      enableDrag: false,
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: orionSheetAnimationStyle(context),
       builder: (context) => StatefulBuilder(

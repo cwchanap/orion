@@ -69,6 +69,9 @@ Future<_PopRecorder> _pumpBriefing(
                   context: context,
                   isScrollControlled: true,
                   useSafeArea: true,
+                  // Same policy as the page: sheet drags pop imperatively
+                  // and cannot consult the launch-save veto.
+                  enableDrag: false,
                   backgroundColor: Colors.transparent,
                   sheetAnimationStyle: orionSheetAnimationStyle(context),
                   builder: (_) => StageBriefingSheet(
@@ -1323,6 +1326,233 @@ void main() {
     );
 
     testWidgets(
+      'a launch in flight vetoes a same-frame dismiss, back and barrier pop',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        // No pump: the save is already in flight but the sheet has not
+        // rebuilt once, so every dismissal surface still holds its pre-launch
+        // wiring — the IconButton's stale callback, the system back path and
+        // the barrier's maybePop must all be vetoed synchronously.
+        await tester.tap(find.byTooltip('Dismiss'));
+        await tester.binding.handlePopRoute();
+        // The modal barrier's onDismiss is exactly Navigator.maybePop on the
+        // sheet's context — issue the same call.
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        await Navigator.maybePop(sheetContext);
+        await tester.pump();
+
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(recorder.launches, hasLength(1));
+        expect(recorder.popped, isNull);
+
+        gate.complete(true);
+        await tester.pumpAndSettle();
+        expect(recorder.popped, RunMode.mission);
+      },
+    );
+
+    testWidgets(
+      'a downward swipe during a pending save cannot dismiss the sheet '
+      'before a commit',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pump();
+        expect(find.text('Saving squad…'), findsOneWidget);
+
+        // The bottom-sheet drag path pops the route directly — a fling on
+        // the launch chrome must not strand the save or the retry surface.
+        await tester.fling(
+          find.byTooltip('Start Mission'),
+          const Offset(0, 300),
+          1200,
+        );
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(recorder.popped, isNull);
+
+        gate.complete(true);
+        await tester.pumpAndSettle();
+        expect(recorder.popped, RunMode.mission);
+      },
+    );
+
+    testWidgets(
+      'a downward swipe during a pending save keeps the failure retry '
+      'surface',
+      (tester) async {
+        var attempts = 0;
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) {
+            attempts++;
+            return attempts == 1 ? gate.future : Future<bool>.value(true);
+          },
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pump();
+        await tester.fling(
+          find.byTooltip('Start Mission'),
+          const Offset(0, 300),
+          1200,
+        );
+        await tester.pump();
+
+        gate.complete(false);
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(
+          find.text(
+            'Could not save squad changes — tap a launch action to retry.',
+          ),
+          findsOneWidget,
+        );
+        expect(recorder.popped, isNull);
+
+        // The surviving retry surface launches on the second attempt.
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        expect(attempts, 2);
+        expect(recorder.popped, RunMode.mission);
+      },
+    );
+
+    testWidgets('a synchronously throwing launch callback keeps the draft and '
+        'restores the retry surface', (tester) async {
+      var attempts = 0;
+      final recorder = await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        ownedLevels: owned,
+        squad: const [Character.haruto, Character.mio],
+        onLaunch: (mode, draft) {
+          attempts++;
+          if (attempts == 1) {
+            throw StateError('synchronous launch failure');
+          }
+          return Future<bool>.value(true);
+        },
+      );
+
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pumpAndSettle();
+
+      // The throw lands on the same failure path as a clean `false`: the
+      // sheet stays up, the draft survives and controls unlock.
+      expect(attempts, 1);
+      expect(recorder.popped, isNull);
+      expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+      expect(
+        find.text(
+          'Could not save squad changes — tap a launch action to retry.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Saving squad…'), findsNothing);
+      expect(_launchInkWell(tester, 'Start Mission').onTap, isNotNull);
+      expect(
+        tester
+            .widget<IconButton>(
+              find.widgetWithIcon(IconButton, Icons.chevron_left_rounded),
+            )
+            .onPressed,
+        isNotNull,
+      );
+
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pumpAndSettle();
+      expect(attempts, 2);
+      expect(recorder.popped, RunMode.mission);
+    });
+
+    testWidgets(
+      'a rejected launch future keeps the draft and restores the retry '
+      'surface',
+      (tester) async {
+        var attempts = 0;
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          squad: const [Character.haruto, Character.mio],
+          onLaunch: (mode, draft) {
+            attempts++;
+            return attempts == 1
+                ? Future<bool>.error(StateError('rejected save'))
+                : Future<bool>.value(true);
+          },
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+
+        expect(attempts, 1);
+        expect(recorder.popped, isNull);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(
+          find.text(
+            'Could not save squad changes — tap a launch action to retry.',
+          ),
+          findsOneWidget,
+        );
+        expect(_launchInkWell(tester, 'Start Mission').onTap, isNotNull);
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        expect(attempts, 2);
+        expect(recorder.popped, RunMode.mission);
+      },
+    );
+
+    testWidgets('squad controls meet the 48px touch-target floor', (
+      tester,
+    ) async {
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        ownedLevels: owned,
+        squad: const [Character.haruto, Character.mio],
+      );
+
+      final edit = find.byKey(const ValueKey('briefing-squad-edit'));
+      await tester.ensureVisible(edit);
+      await tester.pumpAndSettle();
+      expect(tester.getRect(edit).height, greaterThanOrEqualTo(48));
+      expect(
+        tester
+            .getRect(find.byKey(const ValueKey('briefing-squad-token-haruto')))
+            .height,
+        greaterThanOrEqualTo(48),
+      );
+
+      await _openSquadPicker(tester);
+      final pick = find.byKey(const ValueKey('briefing-squad-pick-sayo'));
+      await tester.ensureVisible(pick);
+      await tester.pumpAndSettle();
+      expect(tester.getRect(pick).height, greaterThanOrEqualTo(48));
+    });
+
+    testWidgets(
       'a failed launch keeps the sheet open with retryable feedback and the '
       'draft intact',
       (tester) async {
@@ -1409,12 +1639,26 @@ void main() {
         tester,
         stage: OrionCampaign.stageOne,
         ownedLevels: owned,
-        squad: const [Character.mio, Character.haruto],
+        squad: const [Character.haruto],
         viewport: const Size(320, 568),
         textScaler: const TextScaler.linear(2),
       );
       await _openSquadPicker(tester);
       expect(find.text('YOUR SQUAD'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+
+      // The last owned member in picker order must still be reachable on the
+      // smallest viewport: scroll it in and confirm the tap edits the draft.
+      final lastPick = find.byKey(const ValueKey('briefing-squad-pick-mio'));
+      await tester.ensureVisible(lastPick);
+      await tester.pumpAndSettle();
+      await tester.tap(lastPick);
+      await tester.pumpAndSettle();
+      expect(
+        find.byKey(const ValueKey('briefing-squad-token-mio')),
+        findsOneWidget,
+      );
+      expect(find.textContaining('2 / 6'), findsWidgets);
       expect(tester.takeException(), isNull);
     });
   });
