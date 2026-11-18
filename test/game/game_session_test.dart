@@ -178,9 +178,8 @@ void main() {
       // deduplicated in squad order. Membership, not a wave clock, decides
       // what may deploy.
       expect(session.unlockedTowerTypes, [TowerType.laser, TowerType.rocket]);
-      expect(session.isTowerUnlocked(TowerType.laser), isTrue);
-      expect(session.isTowerUnlocked(TowerType.railgun), isFalse);
-      expect(session.isTowerUnlocked(TowerType.droneBay), isFalse);
+      expect(session.unlockedTowerTypes, isNot(contains(TowerType.railgun)));
+      expect(session.unlockedTowerTypes, isNot(contains(TowerType.droneBay)));
     });
 
     test('snapshot exposes default mission pacing state', () {
@@ -517,7 +516,7 @@ void main() {
       // Clearing a wave grants the clear bonus; the squad's style set is
       // fixed at launch and does not grow with waves.
       expect(session.unlockedTowerTypes, [TowerType.laser, TowerType.rocket]);
-      expect(session.isTowerUnlocked(TowerType.railgun), isFalse);
+      expect(session.unlockedTowerTypes, isNot(contains(TowerType.railgun)));
     });
 
     test('upgrades a tower once and spends gold', () {
@@ -949,11 +948,11 @@ void main() {
       expect(session.towers, isEmpty);
     });
 
-    test('restart resets unlock progress and specialized towers', () {
+    test('restart clears waves and specialized members', () {
       final session = GameSession.initial(squad: testDeploySquad, gold: 500);
       expect(session.startWave(), isTrue);
       session.finishActiveWave();
-      expect(session.isTowerUnlocked(TowerType.railgun), isTrue);
+      expect(session.unlockedTowerTypes, contains(TowerType.railgun));
       session.placeTower(const GridPosition(0, 0), Character.elena);
       final tower = session.towers.single;
       expect(session.upgradeTower(tower.id), isTrue);
@@ -1479,38 +1478,13 @@ void main() {
         );
         const cell = GridPosition(2, 1);
 
-        if (session.isTowerUnlocked(family.key)) {
-          expect(
-            session.placeTower(cell, testCharacterFor(family.key)).isAllowed,
-            isTrue,
-            reason: '${family.key} must be placeable from wave 1',
-          );
-        }
-
-        // Build the family at its first legal wave, resolving any scheduled
-        // drafts that open before the tower type unlocks.
-        while (session.towers.isEmpty) {
-          completeWave(session);
-          final pending = session.pendingRunModuleOffer;
-          if (pending != null) {
-            expect(
-              session.selectRunModule(
-                offerId: pending.offerId,
-                moduleId: pending.moduleIds.first,
-              ),
-              isTrue,
-            );
-          }
-          if (session.isTowerUnlocked(family.key)) {
-            expect(
-              session.placeTower(cell, testCharacterFor(family.key)).isAllowed,
-              isTrue,
-              reason:
-                  '${family.key} should be placeable at unlock wave '
-                  '${GameBalance.towerUnlockWave(family.key)}',
-            );
-          }
-        }
+        // Squad membership makes the style deployable from wave 1 — no wave
+        // clock gates it — so the member goes down before the first draft.
+        expect(
+          session.placeTower(cell, testCharacterFor(family.key)).isAllowed,
+          isTrue,
+          reason: '${family.key} must be placeable from wave 1',
+        );
 
         // The next scheduled draft must surface the placed family's module.
         while (session.pendingRunModuleOffer == null) {
@@ -1521,8 +1495,7 @@ void main() {
           picker.candidateHistory[draftIndex],
           contains(family.value),
           reason:
-              '${family.key} built at unlock wave '
-              '${GameBalance.towerUnlockWave(family.key)} puts ${family.value} '
+              'a placed ${family.key} member puts ${family.value} '
               'among draft ${draftIndex + 1} candidates',
         );
         expect(session.pendingRunModuleOffer!.moduleIds.toSet(), hasLength(3));
@@ -1614,27 +1587,12 @@ void main() {
       );
       const cell = GridPosition(2, 1);
 
-      while (session.towers.isEmpty) {
-        completeWave(session);
-        final pending = session.pendingRunModuleOffer;
-        if (pending != null) {
-          expect(
-            session.selectRunModule(
-              offerId: pending.offerId,
-              moduleId: pending.moduleIds.first,
-            ),
-            isTrue,
-          );
-        }
-        if (session.isTowerUnlocked(TowerType.gravityWell)) {
-          expect(
-            session
-                .placeTower(cell, testCharacterFor(TowerType.gravityWell))
-                .isAllowed,
-            isTrue,
-          );
-        }
-      }
+      expect(
+        session
+            .placeTower(cell, testCharacterFor(TowerType.gravityWell))
+            .isAllowed,
+        isTrue,
+      );
       while (session.pendingRunModuleOffer == null) {
         completeWave(session);
       }

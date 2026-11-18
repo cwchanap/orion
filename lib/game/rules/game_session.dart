@@ -158,8 +158,6 @@ class GameSession {
       ? EndlessRules.healthMultiplier(_waveIndex, stage.waves.length)
       : 1;
 
-  bool isTowerUnlocked(TowerType type) => unlockedTowerTypes.contains(type);
-
   /// Whether [character] is currently deployed on the field.
   bool isCharacterDeployed(Character character) =>
       _towersByPosition.values.any((tower) => tower.character == character);

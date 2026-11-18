@@ -613,6 +613,7 @@ void main() {
                       const SizedBox(width: 6),
                       NextWaveScanner(
                         preview: commandDeckPreview(),
+                        squad: const [Character.haruto, Character.mio],
                         modifierTitles: const ['Standard Conditions'],
                         collapseRequested: false,
                       ),

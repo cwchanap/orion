@@ -172,11 +172,11 @@ void main() {
     }
     expect(
       runModuleDefinition(RunModuleId.overclockRelay).effectText,
-      'Attack interval drops 15%; all tower damage drops 8%.',
+      'Attack interval drops 15%; all member damage drops 8%.',
     );
     expect(
       runModuleDefinition(RunModuleId.longSight).effectText,
-      'All towers gain 15% range.',
+      'All members gain 15% range.',
     );
     expect(
       runModuleDefinition(RunModuleId.rocketFusing).effectText,

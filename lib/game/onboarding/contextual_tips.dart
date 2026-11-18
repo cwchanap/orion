@@ -1,50 +1,22 @@
 import '../models/game_models.dart';
 
-/// The nine first-time contextual tips, in resolver priority order.
-enum ContextualTip {
-  bossWave,
-  railgun,
-  ionChain,
-  nanite,
-  gravityWell,
-  droneBay,
-  signature,
-  targeting,
-  stageModifier,
-}
+/// The first-time contextual tips, in resolver priority order. Wave-unlock
+/// tips went away with the HPA-922 roster pivot: squad membership already
+/// tells the player what they field, so the remaining lessons are the boss
+/// warning, the fixed-signature step, targeting modes and stage modifiers.
+enum ContextualTip { bossWave, signature, targeting, stageModifier }
 
 /// Exact design copy per tip; exhaustive over the enum so adding a tip
 /// without copy is a compile error.
 String contextualTipCopy(ContextualTip tip) => switch (tip) {
   ContextualTip.bossWave =>
     'Boss ahead. Check the scanner and prepare your defense.',
-  ContextualTip.railgun =>
-    'Railgun member in your squad. Pierces enemies in a line.',
-  ContextualTip.ionChain =>
-    'Ion Chain member in your squad. Lightning jumps between targets.',
-  ContextualTip.nanite =>
-    'Nanite member in your squad. Corrodes armor to help other towers.',
-  ContextualTip.gravityWell =>
-    'Gravity Well member in your squad. Damages enemies within its field.',
-  ContextualTip.droneBay =>
-    'Drone Bay member in your squad. Launches autonomous interceptors.',
   ContextualTip.signature =>
     'Signature ready. Upgrade this member to tier 3 to apply it.',
   ContextualTip.targeting =>
-    'Targeting modes. Choose which enemies this tower attacks first.',
+    'Targeting modes. Choose which enemies this member attacks first.',
   ContextualTip.stageModifier =>
     'Stage modifier. These conditions change how this mission plays.',
-};
-
-/// The tower-unlock tips, each mapped to the build-rail card it anchors on.
-/// Insertion order is the unlock order and doubles as resolver priority;
-/// wave-1 families (Laser/Rocket/Cryo) are covered by HPA-412 and absent.
-const Map<ContextualTip, TowerType> contextualTipTowerTypes = {
-  ContextualTip.railgun: TowerType.railgun,
-  ContextualTip.ionChain: TowerType.ionChain,
-  ContextualTip.nanite: TowerType.nanite,
-  ContextualTip.gravityWell: TowerType.gravityWell,
-  ContextualTip.droneBay: TowerType.droneBay,
 };
 
 /// The placed tower the signature tip points at while nothing is
@@ -60,13 +32,16 @@ PlacedTower? signatureCandidateIn(GameSnapshot snapshot) {
   return null;
 }
 
-/// The tier-2→3 signature price is a per-style constant — modifiers never
-/// adjust it, so the base level-2 lookup is authoritative. Guides only
-/// toward an affordable action, mirroring the HPA-412 upgrade tip's gold
-/// check.
-bool _canAffordSignature(GameSnapshot snapshot, PlacedTower tower) =>
-    snapshot.gold >=
-    GameBalance.towerStats(tower.type, level: 2).specializationCost;
+/// The tier-2→3 signature price comes from [TowerStats.nextUpgradeCost] —
+/// the same value the inspector charges — so the tip never guides toward an
+/// action the Upgrade button would show at a different price or disabled.
+bool _canAffordSignature(GameSnapshot snapshot, PlacedTower tower) {
+  final nextCost = GameBalance.towerStats(
+    tower.type,
+    level: tower.level,
+  ).nextUpgradeCost;
+  return nextCost != null && snapshot.gold >= nextCost;
+}
 
 /// Resolves the single current contextual tip from a snapshot alone.
 ///
@@ -84,26 +59,15 @@ ContextualTip? contextualTipFor(
     return null;
   }
 
-  // A buildable selected cell swaps the idle bar for the selected-cell
-  // build rail, so the unlock cards are the candidates there — in unlock
-  // (enum) order, first unseen-and-unlocked wins. Locked cards wait for
-  // their unlock wave.
-  if (snapshot.selectedCell != null &&
-      snapshot.selectedCellBuildable &&
-      snapshot.selectedTower == null) {
-    for (final entry in contextualTipTowerTypes.entries) {
-      if (!seen.contains(entry.key) &&
-          snapshot.unlockedTowerTypes.contains(entry.value) &&
-          snapshot.squad.any((member) => member.style == entry.value)) {
-        return entry.key;
-      }
-    }
+  // A selected cell — buildable or not — swaps the idle bar for the
+  // build rail or silences the collapsed scanner; no tip anchors there.
+  if (snapshot.selectedCell != null && snapshot.selectedTower == null) {
     return null;
   }
 
-  // Tower selected: the signature tip may point ONLY at this very
-  // tower's radial progression surface — a different selected tower must
-  // never inherit another tower's Upgrade-button lesson — so otherwise the
+  // Member selected: the signature tip may point ONLY at this very
+  // member's radial progression surface — a different selected member must
+  // never inherit another member's Upgrade-button lesson — so otherwise the
   // radial targeting action is the candidate. Both actions live on the
   // mounted radial, which the build-phase gate above keeps enabled. An
   // unaffordable signature step would dead-end on the same surface —
@@ -121,15 +85,8 @@ ContextualTip? contextualTipFor(
     return null;
   }
 
-  // Any remaining selected cell is a nonbuildable path cell: the collapsed
-  // scanner ignores taps while selected, so it is no more a target than a
-  // tower selection — silence.
-  if (snapshot.selectedCell != null) {
-    return null;
-  }
-
   // Nothing selected. Boss first (the collapsed scanner is usable only
-  // now), then signature pointing at a qualifying placed tower's
+  // now), then signature pointing at a qualifying placed member's
   // board cell. The modifier tip belongs to the separate stage-briefing
   // route and is never resolved here.
   if (!seen.contains(ContextualTip.bossWave)) {
@@ -145,16 +102,12 @@ ContextualTip? contextualTipFor(
   return null;
 }
 
-/// Tips already taught by the snapshot itself: placing a tower of a tip's
-/// family demonstrates the lesson, so the page unions these into the seen
+/// Tips already taught by the snapshot itself: reaching tier 3 on any
+/// member or moving any member off the default targeting mode demonstrates
+/// those lessons for the whole run, so the page unions these into the seen
 /// set post-frame even if the bubble never showed.
 Set<ContextualTip> learnedTipsIn(GameSnapshot snapshot) {
   return {
-    for (final entry in contextualTipTowerTypes.entries)
-      if (snapshot.placedTowers.any((tower) => tower.type == entry.value))
-        entry.key,
-    // Reaching tier 3 on any member or changing any tower off the default
-    // targeting mode demonstrates those lessons for the whole run.
     if (snapshot.placedTowers.any((tower) => tower.specialization != null))
       ContextualTip.signature,
     if (snapshot.placedTowers.any(

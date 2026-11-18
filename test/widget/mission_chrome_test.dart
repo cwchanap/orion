@@ -282,6 +282,12 @@ void main() {
         commandDeckSnapshot(
           waveNumber: 8,
           wavesCleared: 7,
+          squad: const [
+            Character.haruto,
+            Character.elena,
+            Character.kaito,
+            Character.ren,
+          ],
           stageModifiers: const [StageModifier.reinforcedArmor],
           nextWavePreview: commandDeckPreview(
             waveNumber: 8,
@@ -333,7 +339,9 @@ void main() {
     await tester.pump();
     final cta = tester.getRect(find.text('START WAVE'));
     final lastChip = tester.getRect(find.text('Reinforced Armor'));
-    final lastCounter = tester.getRect(find.text('Gravity Well'));
+    // Recommended counters render as squad members: Ren carries the
+    // gravity-well style and sits last in squad order.
+    final lastCounter = tester.getRect(find.text('Ren'));
     expect(
       lastChip.bottom,
       lessThanOrEqualTo(cta.top),
@@ -782,7 +790,10 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(board, isNotNull);
-    expect(board!.height, greaterThan(250));
+    // The compact squad rail is text-measured: at 3x each card must fit a
+    // 43px name line plus a 43px "ON FIELD" line, so the rail is ~96px and
+    // the board keeps ~248px of the 640px viewport.
+    expect(board!.height, greaterThan(240));
   });
 
   testWidgets('narrow large-text board stays stable when the wave starts', (
@@ -1215,7 +1226,8 @@ void main() {
         const Size(360, 640),
       );
       expect(board, isNotNull);
-      expect(board!.height, greaterThan(250));
+      // Same 3x squad-rail floor as 'short boss wave': ~248px of 640.
+      expect(board!.height, greaterThan(240));
       expect(tester.takeException(), isNull);
     },
   );
@@ -1246,7 +1258,8 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(board, isNotNull);
-    expect(board!.height, greaterThan(250));
+    // Same 3x squad-rail floor as 'short boss wave': ~248px of 640.
+    expect(board!.height, greaterThan(240));
     final intel = find.byKey(
       ValueKey('incoming-composition-${preview.waveNumber}'),
     );
@@ -2800,7 +2813,7 @@ void main() {
         level: 1,
       ).upgradeCost;
       await tester.tap(find.byTooltip('Upgrade $upgradeCost'));
-      await tester.tap(find.byTooltip('Inspect tower'));
+      await tester.tap(find.byTooltip('Inspect member'));
       await tester.tap(find.byTooltip('Targeting: First. Change targeting'));
       expect(upgrades, 1);
       expect(inspects, 1);
@@ -2848,7 +2861,7 @@ void main() {
       ).upgradeCost;
       expect(buttonFor('Upgrade $upgradeCost').onPressed, isNull);
       expect(buttonFor('Targeting: First. Change targeting').onPressed, isNull);
-      expect(buttonFor('Inspect tower').onPressed, isNotNull);
+      expect(buttonFor('Inspect member').onPressed, isNotNull);
 
       final salvage = tester.widget<Semantics>(
         find.byKey(const ValueKey('tower-sell-semantics')),

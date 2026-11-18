@@ -799,31 +799,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
               });
             }
 
-            // Exactly one active card anchor: HPA-412's Laser-member card,
-            // or — only when the old guide is silent — the contextual unlock
-            // tip's member card. The two never compete (guideEligible forces
-            // the contextual tip null), and bossWave maps to the scanner,
-            // not a card. Cards are squad members now, so a style resolves
-            // to the first member carrying it.
-            Character? squadMemberFor(TowerType style) {
-              for (final member in snapshot.squad) {
-                if (member.style == style) return member;
-              }
-              return null;
-            }
-
-            // Only style tips anchor on a card; signature, targeting, boss
-            // and stage-modifier tips target elsewhere.
-            final tipStyle = contextualTip == null
-                ? null
-                : contextualTipTowerTypes[contextualTip];
+            // Exactly one active card anchor: the guide's member card step.
+            // Prefer the first member still deployable (the callout teaches
+            // placement), falling back to the first squad member.
+            final undeployed = snapshot.squad
+                .where((m) => !snapshot.deployedCharacters.contains(m))
+                .toList();
             final Character? anchoredCardCharacter =
                 guideStep == FirstMissionGuideStep.towerCard
-                ? (squadMemberFor(TowerType.laser) ??
-                      (snapshot.squad.isEmpty ? null : snapshot.squad.first))
-                : tipStyle == null
-                ? null
-                : squadMemberFor(tipStyle);
+                ? undeployed.firstOrNull ?? snapshot.squad.firstOrNull
+                : null;
 
             GlobalKey? guideAnchorKey;
             Offset? guideTargetPoint;
@@ -855,11 +840,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
             }
 
             // Contextual anchor targets: boss owns the collapsed scanner,
-            // unlock tips their rail card, targeting the radial targeting
-            // button, and signature either the selected tower's radial
-            // progression surface or — while idle — the qualifying tower's
-            // board cell. The resolver guarantees a qualifying tower exists
-            // whenever it resolves signature.
+            // targeting the radial targeting button, and signature either
+            // the selected member's radial progression surface or — while
+            // idle — the qualifying member's board cell. The resolver
+            // guarantees a qualifying member exists whenever it resolves
+            // signature.
             GlobalKey? contextualAnchorKey;
             Offset? contextualTargetPoint;
             switch (contextualTip) {
@@ -867,12 +852,6 @@ class _OrionGamePageState extends State<OrionGamePage> {
                 break;
               case ContextualTip.bossWave:
                 contextualAnchorKey = _scannerGuideAnchorKey;
-              case ContextualTip.railgun ||
-                  ContextualTip.ionChain ||
-                  ContextualTip.nanite ||
-                  ContextualTip.gravityWell ||
-                  ContextualTip.droneBay:
-                contextualAnchorKey = _towerCardGuideAnchorKey;
               case ContextualTip.signature:
                 if (snapshot.selectedTower != null) {
                   contextualAnchorKey = _upgradeGuideAnchorKey;

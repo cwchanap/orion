@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../models/game_models.dart';
+
 @immutable
 final class OrionUiTheme extends ThemeExtension<OrionUiTheme> {
   const OrionUiTheme({
@@ -413,3 +415,15 @@ const orionBarRange = LinearGradient(
 const orionBarSecondary = LinearGradient(
   colors: [Color(0xFF7A5CE6), Color(0xFFD5C7FF)],
 );
+
+/// Shared rank → theme accent used by Camp, the battle dock and the Codex.
+extension CharacterRankOrionColor on CharacterRank {
+  Color orionColor(OrionUiTheme theme) => switch (this) {
+    CharacterRank.s => theme.creditGold,
+    CharacterRank.a => theme.warningOrange,
+    CharacterRank.b => theme.systemViolet,
+    CharacterRank.c => theme.systemCyan,
+    CharacterRank.d => theme.naniteGreen,
+    CharacterRank.e => theme.medalSilver,
+  };
+}

@@ -470,7 +470,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(game!.stateNotifier.value.selectedTower, isNotNull);
-      expect(find.byTooltip('Inspect tower'), findsOneWidget);
+      expect(find.byTooltip('Inspect member'), findsOneWidget);
       expect(
         game!.children.whereType<BoardComponent>().single.selectedRange,
         game!.stateNotifier.value.selectedTowerStats!.range,
@@ -497,7 +497,7 @@ void main() {
           ),
         );
       }
-      await tester.tap(find.byTooltip('Inspect tower'));
+      await tester.tap(find.byTooltip('Inspect member'));
       await tester.pump();
       expect(find.byType(TowerInspector), findsOneWidget);
       await tester.runAsync(
@@ -1104,8 +1104,8 @@ void main() {
 
     expect(find.byTooltip('Pause'), findsOneWidget);
     expect(find.text('1x'), findsOneWidget);
-    expect(find.byTooltip('Inspect tower'), findsOneWidget);
-    await tester.tap(find.byTooltip('Inspect tower'));
+    expect(find.byTooltip('Inspect member'), findsOneWidget);
+    await tester.tap(find.byTooltip('Inspect member'));
     await tester.pump();
     expect(find.byKey(const ValueKey('tower-inspector')), findsOneWidget);
   });
@@ -4462,7 +4462,7 @@ void main() {
         autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
       );
       await tester.pump();
-      await tester.tap(find.byTooltip('Inspect tower'));
+      await tester.tap(find.byTooltip('Inspect member'));
       await tester.pump();
 
       for (final mode in TowerTargetingMode.values) {
@@ -4516,7 +4516,7 @@ void main() {
       autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
     );
     await tester.pump();
-    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.tap(find.byTooltip('Inspect member'));
     await tester.pump();
 
     final firstCell = tester.widget<InkWell>(
@@ -4569,17 +4569,18 @@ void main() {
       autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
     );
     await tester.pump();
-    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.tap(find.byTooltip('Inspect member'));
     await tester.pump();
 
-    // The game session has no real selected tower, so retargeting reports the
-    // "select a tower first" feedback — proving the chip callback ran. The
-    // command-deck status HUD intentionally no longer renders legacy feedback
-    // copy, so assert the snapshot seam instead of a removed text label.
+    // The game session has no real selected member, so retargeting reports
+    // the "select a member first" feedback — proving the chip callback ran.
+    // The command-deck status HUD intentionally no longer renders legacy
+    // feedback copy, so assert the snapshot seam instead of a removed text
+    // label.
     await tester.tap(find.text('Weakest'));
     await tester.pump();
 
-    expect(game!.snapshot.feedback, 'Select a tower first.');
+    expect(game!.snapshot.feedback, 'Select a member first.');
   });
 
   testWidgets('selected tower panel stacks summary and actions when narrow', (
@@ -4626,7 +4627,7 @@ void main() {
       autoStartCountdownRemaining: snapshot.autoStartCountdownRemaining,
     );
     await tester.pump();
-    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.tap(find.byTooltip('Inspect member'));
     await tester.pump();
 
     // The narrow-width branch renders the targeting picker; the "Targeting"
@@ -5606,7 +5607,7 @@ void main() {
 
     // Tapping the guided cell flips the callout to the tower lesson.
     await tapBoardCell(tester, game, const GridPosition(2, 2));
-    expect(find.text('Pick a tower.'), findsOneWidget);
+    expect(find.text('Pick a squad member.'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // Picking the laser mounts the tower and moves on to the wave copy.
@@ -5614,7 +5615,9 @@ void main() {
     await tester.pump();
     await tester.pump();
     expect(
-      find.text("Start the wave when you're ready. Towers fire on their own."),
+      find.text(
+        "Start the wave when you're ready. Your squad fires on their own.",
+      ),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
@@ -5634,7 +5637,7 @@ void main() {
           snapshot.phase == GamePhase.build && snapshot.waveNumber == 2,
     );
     expect(
-      find.text('Tap a tower, then Upgrade between waves.'),
+      find.text('Tap a deployed member, then Upgrade between waves.'),
       findsOneWidget,
     );
     expect(tester.takeException(), isNull);
@@ -5643,7 +5646,7 @@ void main() {
     // Upgrade control; upgrading past the lesson silences the guide.
     await tapBoardCell(tester, game, const GridPosition(2, 2));
     expect(
-      find.text('Tap a tower, then Upgrade between waves.'),
+      find.text('Tap a deployed member, then Upgrade between waves.'),
       findsOneWidget,
     );
     await tester.tap(find.byTooltip('Upgrade 70'));
@@ -5723,7 +5726,7 @@ void main() {
       expect(game.stateNotifier.value.gold, GameBalance.startingGold - 50);
       expect(
         find.text(
-          "Start the wave when you're ready. Towers fire on their own.",
+          "Start the wave when you're ready. Your squad fires on their own.",
         ),
         findsOneWidget,
       );
@@ -5762,7 +5765,7 @@ void main() {
       // The upgrade milestone is already behind the player: no guide at all.
       expect(find.byType(FirstMissionGuideCallout), findsNothing);
       expect(
-        find.text('Tap a tower, then Upgrade between waves.'),
+        find.text('Tap a deployed member, then Upgrade between waves.'),
         findsNothing,
       );
     },
@@ -5818,7 +5821,7 @@ void main() {
             snapshot.phase == GamePhase.build && snapshot.waveNumber == 2,
       );
       expect(
-        find.text('Tap a tower, then Upgrade between waves.'),
+        find.text('Tap a deployed member, then Upgrade between waves.'),
         findsOneWidget,
       );
 
@@ -5865,7 +5868,7 @@ void main() {
       await tester.pump();
       await tester.pump();
       expect(
-        find.text('Tap a tower, then Upgrade between waves.'),
+        find.text('Tap a deployed member, then Upgrade between waves.'),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
@@ -5888,11 +5891,11 @@ void main() {
       await tapBoardCell(tester, game, const GridPosition(3, 2));
       expect(game.snapshot.selectedCell, const GridPosition(3, 2));
       expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
-      expect(find.text('Pick a tower.'), findsNothing);
+      expect(find.text('Pick a squad member.'), findsNothing);
 
       // A buildable selection still advances the lesson as before.
       await tapBoardCell(tester, game, const GridPosition(2, 2));
-      expect(find.text('Pick a tower.'), findsOneWidget);
+      expect(find.text('Pick a squad member.'), findsOneWidget);
       expect(tester.takeException(), isNull);
     },
   );
@@ -5946,7 +5949,7 @@ void main() {
         findsNothing,
       );
       expect(
-        find.text('Tap a tower, then Upgrade between waves.'),
+        find.text('Tap a deployed member, then Upgrade between waves.'),
         findsOneWidget,
       );
 
@@ -5959,7 +5962,7 @@ void main() {
         findsNothing,
       );
       expect(
-        find.text('Tap a tower, then Upgrade between waves.'),
+        find.text('Tap a deployed member, then Upgrade between waves.'),
         findsOneWidget,
       );
 
@@ -5991,7 +5994,7 @@ void main() {
     // advances the (still visible) callout to the tower lesson.
     await tapBoardCell(tester, game, const GridPosition(6, 0));
     expect(game.stateNotifier.value.selectedCell, const GridPosition(6, 0));
-    expect(find.text('Pick a tower.'), findsOneWidget);
+    expect(find.text('Pick a squad member.'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

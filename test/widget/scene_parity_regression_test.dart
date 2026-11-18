@@ -178,7 +178,7 @@ void main() {
     placeAndSelect();
     await tester.pump();
     await tester.pump();
-    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.tap(find.byTooltip('Inspect member'));
     await tester.pump();
     expect(find.byType(TowerInspector), findsOneWidget);
     game!.stateNotifier.value = commandDeckSnapshot(
@@ -240,6 +240,7 @@ void main() {
           case 'scanner':
             content = WaveScannerScene(
               preview: commandDeckPreview(),
+              squad: const [Character.haruto, Character.mio],
               modifierTitles: const ['Standard Conditions'],
               onClose: () {},
               onStartWave: () {},
@@ -747,7 +748,7 @@ void main() {
         reason: 'Traversal must stay inside the inspector.',
       );
     }
-    await tester.tap(find.byTooltip('Close tower inspector'));
+    await tester.tap(find.byTooltip('Close inspector'));
     await tester.pump();
     expect(find.byType(TowerInspector), findsNothing);
     expect(FocusManager.instance.primaryFocus, same(previousFocus));

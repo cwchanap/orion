@@ -58,11 +58,11 @@ class FirstMissionGuideCallout extends StatelessWidget {
     return _GuideCallout(
       copy: switch (step) {
         FirstMissionGuideStep.buildCell => 'Tap an empty cell to build here.',
-        FirstMissionGuideStep.towerCard => 'Pick a tower.',
+        FirstMissionGuideStep.towerCard => 'Pick a squad member.',
         FirstMissionGuideStep.startWave =>
-          "Start the wave when you're ready. Towers fire on their own.",
+          "Start the wave when you're ready. Your squad fires on their own.",
         FirstMissionGuideStep.upgrade =>
-          'Tap a tower, then Upgrade between waves.',
+          'Tap a deployed member, then Upgrade between waves.',
         FirstMissionGuideStep.salvageModule =>
           'Salvage Modules last only for this mission.',
         FirstMissionGuideStep.scanner =>

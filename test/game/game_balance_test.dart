@@ -30,7 +30,7 @@ void main() {
       expect(GameBalance.endlessLoopHealthGrowth, 1.6);
     });
 
-    test('defines tower order and unlock waves', () {
+    test('defines the combat-style order', () {
       expect(TowerType.values, [
         TowerType.laser,
         TowerType.rocket,
@@ -41,21 +41,6 @@ void main() {
         TowerType.gravityWell,
         TowerType.droneBay,
       ]);
-
-      const expectedUnlockWaves = {
-        TowerType.laser: 1,
-        TowerType.rocket: 1,
-        TowerType.cryo: 1,
-        TowerType.railgun: 2,
-        TowerType.ionChain: 3,
-        TowerType.nanite: 4,
-        TowerType.gravityWell: 5,
-        TowerType.droneBay: 6,
-      };
-
-      for (final entry in expectedUnlockWaves.entries) {
-        expect(GameBalance.towerUnlockWave(entry.key), entry.value);
-      }
     });
 
     test('defines two labeled specializations for each tower', () {

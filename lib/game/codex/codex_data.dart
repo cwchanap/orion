@@ -5,35 +5,43 @@ import '../campaign/stage_modifier_metadata.dart';
 import '../campaign/stage_reward_label.dart';
 import '../models/game_models.dart';
 
-class CodexTowerEntry {
-  const CodexTowerEntry({
-    required this.type,
+/// One playable roster member in the Codex. Identity comes from
+/// [Character]; combat numbers come from the member's internal style.
+class CodexCharacterEntry {
+  const CodexCharacterEntry({
+    required this.character,
     required this.label,
-    required this.unlockWave,
     required this.baseStats,
+    required this.deployCost,
     required this.upgradeCost,
-    required this.specializationCost,
-    required this.specializations,
+    required this.signatureCost,
+    required this.signature,
   });
 
-  final TowerType type;
+  final Character character;
   final String label;
-  final int unlockWave;
   final TowerStats baseStats;
+  final int deployCost;
   final int upgradeCost;
-  final int specializationCost;
-  final List<CodexSpecializationEntry> specializations;
+  final int signatureCost;
+  final CodexSignatureEntry signature;
 
-  /// Authored text a search can hit: the tower label plus each
-  /// specialization's name and role sentence.
+  /// Authored text a search can hit: the member's names and role plus the
+  /// fixed signature's names and role sentence.
   Iterable<String> get searchTerms => [
     label,
-    for (final s in specializations) ...[s.label, s.description],
+    character.fullName,
+    character.role,
+    character.signatureName,
+    signature.label,
+    signature.description,
   ];
 }
 
-class CodexSpecializationEntry {
-  const CodexSpecializationEntry({
+/// A member's one fixed tier-3 signature — there is no specialization
+/// picker, so the Codex exposes exactly this entry per member.
+class CodexSignatureEntry {
+  const CodexSignatureEntry({
     required this.specialization,
     required this.label,
     required this.specializedStats,
@@ -89,19 +97,28 @@ class CodexEffectEntry {
     required this.id,
     required this.title,
     required this.description,
-    required this.relatedSpecializations,
+    required this.relatedCharacters,
   });
 
   final String id;
   final String title;
   final String description;
-  final List<TowerSpecialization> relatedSpecializations;
 
-  /// Authored text a search can hit: title, description, related labels.
+  /// The playable members whose fixed signature produces this effect,
+  /// deduplicated in [Character.values] order. Derived from the roster —
+  /// never from `TowerSpecialization.values`, which holds combat variants
+  /// with no playable member.
+  final List<Character> relatedCharacters;
+
+  /// Authored text a search can hit: title, description, related member
+  /// names and signature names.
   Iterable<String> get searchTerms => [
     title,
     description,
-    ...relatedSpecializations.map((s) => s.label),
+    for (final member in relatedCharacters) ...[
+      member.displayName,
+      member.signatureName,
+    ],
   ];
 }
 
@@ -133,32 +150,29 @@ class CodexStageEntry {
 class CodexData {
   const CodexData._();
 
-  static List<CodexTowerEntry> get towers => [
-    for (final type in TowerType.values) towerFor(type),
+  static List<CodexCharacterEntry> get characters => [
+    for (final member in Character.values) characterFor(member),
   ];
 
-  static CodexTowerEntry towerFor(TowerType type) {
-    final baseStats = GameBalance.towerStats(type, level: 1);
-    return CodexTowerEntry(
-      type: type,
-      label: type.label,
-      unlockWave: GameBalance.towerUnlockWave(type),
+  static CodexCharacterEntry characterFor(Character character) {
+    final baseStats = GameBalance.towerStats(character.style, level: 1);
+    return CodexCharacterEntry(
+      character: character,
+      label: character.displayName,
       baseStats: baseStats,
+      deployCost: baseStats.cost,
       upgradeCost: baseStats.upgradeCost,
-      specializationCost: baseStats.specializationCost,
-      specializations: [
-        for (final spec in GameBalance.specializationsFor(type))
-          CodexSpecializationEntry(
-            specialization: spec,
-            label: spec.label,
-            specializedStats: GameBalance.towerStats(
-              type,
-              level: 3,
-              specialization: spec,
-            ),
-            description: spec.role,
-          ),
-      ],
+      signatureCost: baseStats.specializationCost,
+      signature: CodexSignatureEntry(
+        specialization: character.signature,
+        label: character.signatureName,
+        specializedStats: GameBalance.towerStats(
+          character.style,
+          level: 3,
+          specialization: character.signature,
+        ),
+        description: character.signature.role,
+      ),
     );
   }
 
@@ -212,36 +226,34 @@ class CodexData {
       description:
           'Reduces enemy move speed. The strongest slow in play takes '
           'effect — slows do not stack additively.',
-      relatedSpecializations: _specsWhere((s) => s.slowMultiplier < 1),
+      relatedCharacters: _membersWhere((s) => s.slowMultiplier < 1),
     ),
     CodexEffectEntry(
       id: 'corrosion',
       title: 'Corrosion',
       description:
           'Applies damage over time on hit and shreds armor for the duration.',
-      relatedSpecializations: _specsWhere(
-        (s) => s.corrosionDamagePerSecond > 0,
-      ),
+      relatedCharacters: _membersWhere((s) => s.corrosionDamagePerSecond > 0),
     ),
     CodexEffectEntry(
       id: 'armorShred',
       title: 'Armor Shred',
       description:
           'Temporarily reduces an armored enemy\'s damage reduction while corrosion is active. A stronger application overrides a weaker one rather than stacking, and the reduction resets when corrosion expires.',
-      relatedSpecializations: _specsWhere((s) => s.armorShred > 0),
+      relatedCharacters: _membersWhere((s) => s.armorShred > 0),
     ),
     CodexEffectEntry(
       id: 'shieldDamage',
       title: 'Shield Damage',
       description:
           'A damage multiplier applied only against shielded enemies\' shields.',
-      relatedSpecializations: _specsWhere((s) => s.shieldDamageMultiplier != 1),
+      relatedCharacters: _membersWhere((s) => s.shieldDamageMultiplier != 1),
     ),
     CodexEffectEntry(
       id: 'pierce',
       title: 'Pierce',
       description: 'A projectile passes through multiple enemies in a line.',
-      relatedSpecializations: _specsWhere((s) => s.pierceCount > 0),
+      relatedCharacters: _membersWhere((s) => s.pierceCount > 0),
     ),
     CodexEffectEntry(
       id: 'chain',
@@ -249,22 +261,22 @@ class CodexData {
       description:
           'Lightning jumps from the primary target to nearby enemies, '
           'with falloff on each jump.',
-      relatedSpecializations: _specsWhere((s) => s.chainCount > 0),
+      relatedCharacters: _membersWhere((s) => s.chainCount > 0),
     ),
     CodexEffectEntry(
       id: 'splash',
       title: 'Splash',
       description:
           'Area damage around the impact point hits every enemy in radius.',
-      relatedSpecializations: _specsWhere((s) => s.splashRadius > 0),
+      relatedCharacters: _membersWhere((s) => s.splashRadius > 0),
     ),
     CodexEffectEntry(
       id: 'drones',
       title: 'Drones',
       description:
-          'The tower launches autonomous drones that engage targets until they expire '
+          'The member launches autonomous drones that engage targets until they expire '
           '(up to a per-bay active cap).',
-      relatedSpecializations: _specsWhere((s) => s.droneCount > 0),
+      relatedCharacters: _membersWhere((s) => s.droneCount > 0),
     ),
     CodexEffectEntry(
       id: 'gravityField',
@@ -272,7 +284,7 @@ class CodexData {
       description:
           'A persistent field ticks damage on enemies inside for its duration '
           'and may also slow them.',
-      relatedSpecializations: _specsWhere((s) => s.fieldRadius > 0),
+      relatedCharacters: _membersWhere((s) => s.fieldRadius > 0),
     ),
   ];
 
@@ -299,15 +311,22 @@ class CodexData {
 
   // --- authored prose (grounded in specializedStats; no tuning literals) ---
 
-  static List<TowerSpecialization> _specsWhere(
-    bool Function(TowerStats) predicate,
-  ) {
+  /// The roster members whose fixed signature's specialized stats satisfy
+  /// [predicate], in [Character.values] order. Scanning
+  /// `TowerSpecialization.values` here advertised combat variants with no
+  /// playable member (Hunter Bay, Overload Relay, Replicator Nanites,
+  /// Crush Well) in the Effects view.
+  static List<Character> _membersWhere(bool Function(TowerStats) predicate) {
     return [
-      for (final spec in TowerSpecialization.values)
+      for (final member in Character.values)
         if (predicate(
-          GameBalance.towerStats(spec.type, level: 3, specialization: spec),
+          GameBalance.towerStats(
+            member.style,
+            level: 3,
+            specialization: member.signature,
+          ),
         ))
-          spec,
+          member,
     ];
   }
 
@@ -318,7 +337,7 @@ class CodexData {
       EnemyArchetype.basicEliteDrone =>
         'A tougher baseline drone with notably more health.',
       EnemyArchetype.armoredDrone =>
-        'Reduces incoming damage by a flat percentage. Counter with armor shred or towers that deal bonus damage versus armored enemies.',
+        'Reduces incoming damage by a flat percentage. Counter with armor shred or members that deal bonus damage versus armored enemies.',
       EnemyArchetype.shieldedDrone =>
         'Absorbs hits with a shield before health. Recharge only happens on stages that grant it.',
       EnemyArchetype.swarmDrone => 'Fast, fragile, and numerous.',

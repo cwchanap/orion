@@ -82,7 +82,7 @@ class _HoldToSalvageState extends State<HoldToSalvage>
     final accepted = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Salvage tower?'),
+        title: const Text('Recall member?'),
         content: Text('Recover ${widget.refund} credits.'),
         actions: [
           TextButton(
@@ -91,7 +91,7 @@ class _HoldToSalvageState extends State<HoldToSalvage>
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Salvage'),
+            child: const Text('Recall'),
           ),
         ],
       ),
@@ -107,12 +107,12 @@ class _HoldToSalvageState extends State<HoldToSalvage>
       key: const ValueKey('tower-sell-semantics'),
       button: true,
       enabled: enabled,
-      label: 'Sell ${widget.refund}',
-      hint: 'Hold to salvage, or activate to confirm',
+      label: 'Recall for ${widget.refund}',
+      hint: 'Hold to recall, or activate to confirm',
       onTap: enabled ? _confirm : null,
       excludeSemantics: true,
       child: Tooltip(
-        message: 'Hold to salvage +${widget.refund}',
+        message: 'Hold to recall +${widget.refund}',
         triggerMode: TooltipTriggerMode.manual,
         child: FocusableActionDetector(
           shortcuts: const {
@@ -202,7 +202,7 @@ class _HoldToSalvageState extends State<HoldToSalvage>
                                 const SizedBox(width: 8),
                                 Flexible(
                                   child: OrionText.micro(
-                                    'HOLD TO SALVAGE',
+                                    'HOLD TO RECALL',
                                     color: t.dangerRed,
                                     size: 10,
                                   ),

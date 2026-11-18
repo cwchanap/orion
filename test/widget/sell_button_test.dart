@@ -9,7 +9,7 @@ import 'package:orion/game/util/format.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  testWidgets('Sell button shows the refund for a level-1 laser', (
+  testWidgets('Recall control shows the refund for a level-1 member', (
     tester,
   ) async {
     final game = await _pumpStageWithSelectedTower(
@@ -25,7 +25,7 @@ void main() {
     expect(find.text('+35'), findsOneWidget);
   });
 
-  testWidgets('Sell button is enabled during build phase', (tester) async {
+  testWidgets('Recall control is enabled during build phase', (tester) async {
     await _pumpStageWithSelectedTower(
       tester,
       const PlacedTower(
@@ -41,7 +41,9 @@ void main() {
     expect(sellButton.properties.enabled, isTrue);
   });
 
-  testWidgets('Sell button is disabled during an active wave', (tester) async {
+  testWidgets('Recall control is disabled during an active wave', (
+    tester,
+  ) async {
     await _pumpStageWithSelectedTower(
       tester,
       const PlacedTower(
@@ -58,7 +60,7 @@ void main() {
     expect(sellButton.properties.enabled, isFalse);
   });
 
-  testWidgets('tapping Sell invokes game.sellSelectedTower', (tester) async {
+  testWidgets('holding Recall invokes game.sellSelectedTower', (tester) async {
     await _pumpStageWithSelectedTower(
       tester,
       const PlacedTower(
@@ -78,11 +80,11 @@ void main() {
     await tester.pump();
 
     // The faked snapshot has a selectedTower but the real session has none, so
-    // sellSelectedTower reports the no-selection feedback — proving the tap ran.
-    expect(find.text('Select a tower first.'), findsOneWidget);
+    // sellSelectedTower reports the no-selection feedback — proving the hold ran.
+    expect(find.text('Select a member first.'), findsOneWidget);
   });
 
-  testWidgets('Sell button renders without overflow on a narrow screen', (
+  testWidgets('Recall control renders without overflow on a narrow screen', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(400, 1200);
@@ -103,7 +105,7 @@ void main() {
   });
 
   testWidgets(
-    'Sell button renders without overflow on a narrow screen with specialization chips',
+    'Recall control renders without overflow on a narrow screen with a signature panel',
     (tester) async {
       tester.view.physicalSize = const Size(400, 1200);
       tester.view.devicePixelRatio = 1.0;
@@ -326,7 +328,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('inspector sell stays fixed in the header while the body '
+  testWidgets('inspector Recall stays fixed in the header while the body '
       'scrolls', (tester) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
@@ -362,11 +364,11 @@ void main() {
     expect(
       tester.getRect(find.byKey(const ValueKey('tower-sell'))),
       before,
-      reason: 'the header Sell must not ride the scrolling body',
+      reason: 'the header Recall control must not ride the scrolling body',
     );
   });
 
-  testWidgets('header sell completes the hold gesture without scrolling', (
+  testWidgets('header Recall completes the hold gesture without scrolling', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(360, 640);
@@ -391,7 +393,7 @@ void main() {
     await hold.up();
     await tester.pump();
 
-    expect(find.text('Select a tower first.'), findsOneWidget);
+    expect(find.text('Select a member first.'), findsOneWidget);
   });
 }
 
@@ -452,7 +454,7 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
   await tester.pump();
 
   if (pendingRunModuleOffer == null) {
-    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.tap(find.byTooltip('Inspect member'));
     await tester.pump();
   }
   return game;

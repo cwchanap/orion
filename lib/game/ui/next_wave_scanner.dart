@@ -14,12 +14,17 @@ class NextWaveScanner extends StatefulWidget {
     required this.preview,
     required this.modifierTitles,
     required this.collapseRequested,
+    required this.squad,
     this.onCollapsedTapIntercept,
     this.onExpandedChanged,
     this.onStartWave,
     this.collapsedGuideAnchorKey,
   });
   final WavePreview preview;
+
+  /// The launched squad, in order — recommended counters render as the
+  /// members who carry the recommended combat style, never as bare styles.
+  final List<Character> squad;
   final List<String> modifierTitles;
   final bool collapseRequested;
   final bool Function(Offset globalPosition)? onCollapsedTapIntercept;
@@ -102,6 +107,7 @@ class _NextWaveScannerState extends State<NextWaveScanner> {
                   autofocus: true,
                   child: WaveScannerScene(
                     preview: widget.preview,
+                    squad: widget.squad,
                     modifierTitles: widget.modifierTitles,
                     onClose: _toggle,
                     onStartWave: widget.onStartWave == null
@@ -227,11 +233,15 @@ class WaveScannerScene extends StatelessWidget {
   const WaveScannerScene({
     super.key,
     required this.preview,
+    required this.squad,
     required this.modifierTitles,
     required this.onClose,
     this.onStartWave,
   });
   final WavePreview preview;
+
+  /// The launched squad — recommended counters render as members.
+  final List<Character> squad;
   final List<String> modifierTitles;
   final VoidCallback onClose;
   final VoidCallback? onStartWave;
@@ -249,6 +259,12 @@ class WaveScannerScene extends StatelessWidget {
       ...preview.traits,
       for (final group in preview.groups) ...group.traits,
     };
+    // Recommendations arrive as combat styles; the squad owns the identity,
+    // so every recommended style expands to the member(s) carrying it.
+    final recommendedMembers = [
+      for (final member in squad)
+        if (preview.recommendedTowerTypes.contains(member.style)) member,
+    ];
     return Material(
       key: const ValueKey('next-wave-scanner-expanded'),
       color: t.voidBlack,
@@ -466,7 +482,7 @@ class WaveScannerScene extends StatelessWidget {
                               ),
                             ),
                           ),
-                        if (preview.recommendedTowerTypes.isNotEmpty) ...[
+                        if (recommendedMembers.isNotEmpty) ...[
                           const SizedBox(height: 20),
                           OrionText.micro(
                             'RECOMMENDED COUNTERS',
@@ -478,13 +494,12 @@ class WaveScannerScene extends StatelessWidget {
                             container: true,
                             explicitChildNodes: true,
                             label:
-                                'Recommended towers: ${preview.recommendedTowerTypes.map((t) => t.label).join(', ')}',
+                                'Recommended members: ${recommendedMembers.map((m) => m.displayName).join(', ')}',
                             child: Wrap(
                               spacing: 8,
                               runSpacing: 8,
                               children: [
-                                for (final type
-                                    in preview.recommendedTowerTypes)
+                                for (final member in recommendedMembers)
                                   SizedBox(
                                     width: 108,
                                     child: OrionSurface(
@@ -501,11 +516,13 @@ class WaveScannerScene extends StatelessWidget {
                                             ),
                                           ),
                                           OrionAtlasSprite(
-                                            art: OrionArt.tower(type),
+                                            art: OrionArt.characterChibi(
+                                              member,
+                                            ),
                                             size: const Size.square(56),
                                           ),
                                           OrionText.micro(
-                                            type.label,
+                                            member.displayName,
                                             color: t.textMuted,
                                             size: 10,
                                           ),

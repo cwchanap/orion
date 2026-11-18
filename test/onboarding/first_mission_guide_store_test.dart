@@ -115,7 +115,7 @@ void main() {
       final store = await _store({});
 
       await store.setSeenTips({
-        ContextualTip.droneBay,
+        ContextualTip.signature,
         ContextualTip.bossWave,
         ContextualTip.targeting,
       });
@@ -125,11 +125,11 @@ void main() {
         preferences.getStringList(
           SharedPreferencesFirstMissionGuideStore.tipsKey,
         ),
-        ['bossWave', 'droneBay', 'targeting'],
+        ['bossWave', 'signature', 'targeting'],
       );
       expect(await store.loadSeenTips(), {
         ContextualTip.bossWave,
-        ContextualTip.droneBay,
+        ContextualTip.signature,
         ContextualTip.targeting,
       });
     });
@@ -305,7 +305,7 @@ void main() {
 
       final loaded = await store.loadSeenTips();
 
-      expect(() => loaded.add(ContextualTip.railgun), throwsUnsupportedError);
+      expect(() => loaded.add(ContextualTip.signature), throwsUnsupportedError);
     });
   });
 }

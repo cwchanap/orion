@@ -10,6 +10,7 @@ import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/rules/stage_modifier_rules.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
+import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
@@ -87,7 +88,7 @@ void main() {
         await tester.pump();
         final data = tester.getSemantics(
           find.bySemanticsLabel(
-            RegExp(r'Haruto level 1 \(Laser\), ready, cost \d+, affordable'),
+            RegExp(r'Haruto, rank E, level \d+, ready, cost \d+, affordable'),
           ),
         );
         // ignore: deprecated_member_use
@@ -430,6 +431,148 @@ void main() {
     });
   });
 
+  group('squad member cards (HPA-922 task 7)', () {
+    List<Character> orderedSquad() => [
+      Character.mio,
+      Character.haruto,
+      Character.hikari,
+    ];
+
+    Iterable<OrionAtlasSprite> spritesIn(WidgetTester tester, Key cardKey) {
+      return tester
+          .widgetList<OrionAtlasSprite>(
+            find.descendant(
+              of: find.byKey(cardKey),
+              matching: find.byType(OrionAtlasSprite),
+            ),
+          )
+          .toList();
+    }
+
+    testWidgets('renders one card per squad member in squad order', (
+      tester,
+    ) async {
+      final squad = orderedSquad();
+      await tester.pumpWidget(railHost(squad: squad));
+
+      final centers = [
+        for (final member in squad)
+          tester.getCenter(find.byKey(ValueKey('tower-card-${member.name}'))),
+      ];
+      for (var i = 1; i < centers.length; i++) {
+        expect(
+          centers[i].dx,
+          greaterThan(centers[i - 1].dx),
+          reason: '${squad[i].name} must follow ${squad[i - 1].name}',
+        );
+      }
+      // Exactly one card per member — no style cards or extras exist.
+      expect(find.byType(TowerBuildRail), findsOneWidget);
+      for (final member in squad) {
+        expect(
+          find.byKey(ValueKey('tower-card-${member.name}')),
+          findsOneWidget,
+        );
+      }
+    });
+
+    testWidgets('each card shows the member chibi, never the style icon', (
+      tester,
+    ) async {
+      await tester.pumpWidget(railHost(squad: orderedSquad()));
+
+      for (final member in orderedSquad()) {
+        final sprites = spritesIn(
+          tester,
+          ValueKey('tower-card-${member.name}'),
+        );
+        expect(sprites, isNotEmpty, reason: member.name);
+        expect(
+          sprites.map((sprite) => sprite.art),
+          contains(OrionArt.characterChibi(member)),
+          reason:
+              '${member.name} must paint its own chibi descriptor '
+              '(characters/${member.name}/chibi.png)',
+        );
+        expect(
+          sprites.map((sprite) => sprite.art),
+          isNot(contains(OrionArt.tower(member.style))),
+          reason: '${member.name} must not fall back to the style sprite',
+        );
+      }
+    });
+
+    testWidgets('two same-style members map to distinct approved assets', (
+      tester,
+    ) async {
+      // Haruto and Hikari are both Laser style: the shared 512x512 check
+      // alone cannot tell their art apart — the cards must resolve the
+      // members' own per-ID chibi descriptors.
+      expect(Character.haruto.style, Character.hikari.style);
+      await tester.pumpWidget(
+        railHost(squad: const [Character.haruto, Character.hikari]),
+      );
+
+      final harutoArt = spritesIn(
+        tester,
+        const ValueKey('tower-card-haruto'),
+      ).map((sprite) => sprite.art);
+      final hikariArt = spritesIn(
+        tester,
+        const ValueKey('tower-card-hikari'),
+      ).map((sprite) => sprite.art);
+      expect(
+        OrionArt.characterChibi(Character.haruto),
+        isNot(same(OrionArt.characterChibi(Character.hikari))),
+      );
+      expect(harutoArt, contains(OrionArt.characterChibi(Character.haruto)));
+      expect(hikariArt, contains(OrionArt.characterChibi(Character.hikari)));
+      expect(
+        harutoArt,
+        isNot(contains(OrionArt.characterChibi(Character.hikari))),
+      );
+    });
+
+    testWidgets('each card carries its rank badge', (tester) async {
+      await tester.pumpWidget(railHost(squad: orderedSquad()));
+
+      for (final member in orderedSquad()) {
+        expect(
+          find.descendant(
+            of: find.byKey(ValueKey('tower-card-${member.name}')),
+            matching: find.text(member.rank.label),
+          ),
+          findsOneWidget,
+          reason: '${member.name} rank ${member.rank.label} must be visible',
+        );
+      }
+    });
+
+    testWidgets('a deployed member reads ON FIELD and places nothing', (
+      tester,
+    ) async {
+      final placed = <Character>[];
+      await tester.pumpWidget(
+        railHost(
+          squad: const [Character.haruto, Character.mio],
+          deployedMembers: const {Character.haruto},
+          onPlaceTower: placed.add,
+        ),
+      );
+
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('tower-card-haruto')),
+          matching: find.text('ON FIELD'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
+      expect(placed, isEmpty);
+    });
+  });
+
   testWidgets(
     'build rail shows every tower and preserves lock/affordability callbacks',
     (tester) async {
@@ -465,7 +608,7 @@ void main() {
         expect(placed, [Character.haruto, Character.elena]);
         expect(
           find.bySemanticsLabel(
-            RegExp(r'Elena level 1 \(Railgun\), ready, cost \d+, unaffordable'),
+            RegExp(r'Elena, rank B, level \d+, ready, cost \d+, unaffordable'),
           ),
           findsOneWidget,
         );
@@ -733,7 +876,7 @@ void main() {
       expect(
         find.bySemanticsLabel(
           RegExp(
-            r'Haruto level 1 \(Laser\), ready, cost 50, affordable, '
+            r'Haruto, rank E, level \d+, ready, cost 50, affordable, '
             r'place on selected cell',
           ),
         ),
@@ -742,7 +885,7 @@ void main() {
       expect(
         find.bySemanticsLabel(
           RegExp(
-            r'Mio level 1 \(Rocket\), ready, cost 80, unaffordable, '
+            r'Mio, rank E, level \d+, ready, cost 80, unaffordable, '
             r'place on selected cell',
           ),
         ),

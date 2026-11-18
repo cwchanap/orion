@@ -84,14 +84,11 @@ PlacedTower _placed(Character member, int id) =>
 
 void main() {
   group('ContextualTip enum', () {
-    test('declares the nine tips in resolver priority order', () {
+    test('declares the four tips in resolver priority order', () {
+      // HPA-922 deleted the five wave-unlock tips; the roster's squad
+      // membership already teaches what each member fields.
       expect(ContextualTip.values.map((tip) => tip.name), [
         'bossWave',
-        'railgun',
-        'ionChain',
-        'nanite',
-        'gravityWell',
-        'droneBay',
         'signature',
         'targeting',
         'stageModifier',
@@ -114,32 +111,12 @@ void main() {
         'Boss ahead. Check the scanner and prepare your defense.',
       );
       expect(
-        contextualTipCopy(ContextualTip.railgun),
-        'Railgun member in your squad. Pierces enemies in a line.',
-      );
-      expect(
-        contextualTipCopy(ContextualTip.ionChain),
-        'Ion Chain member in your squad. Lightning jumps between targets.',
-      );
-      expect(
-        contextualTipCopy(ContextualTip.nanite),
-        'Nanite member in your squad. Corrodes armor to help other towers.',
-      );
-      expect(
-        contextualTipCopy(ContextualTip.gravityWell),
-        'Gravity Well member in your squad. Damages enemies within its field.',
-      );
-      expect(
-        contextualTipCopy(ContextualTip.droneBay),
-        'Drone Bay member in your squad. Launches autonomous interceptors.',
-      );
-      expect(
         contextualTipCopy(ContextualTip.signature),
         'Signature ready. Upgrade this member to tier 3 to apply it.',
       );
       expect(
         contextualTipCopy(ContextualTip.targeting),
-        'Targeting modes. Choose which enemies this tower attacks first.',
+        'Targeting modes. Choose which enemies this member attacks first.',
       );
       expect(
         contextualTipCopy(ContextualTip.stageModifier),
@@ -246,26 +223,24 @@ void main() {
     });
 
     test('requires no selected cell so the collapsed scanner is usable', () {
-      // With every unlock lesson already seen, a selected cell leaves no
-      // unlock candidate — and the boss tip must NOT take over, because the
-      // collapsed scanner ignores taps while a cell is selected.
-      final unlockLessonsSeen = contextualTipTowerTypes.keys.toSet();
+      // No tip may take over while a cell is selected — the boss tip's
+      // scanner anchor is collapsed and tap-ignored in that state.
       expect(
         contextualTipFor(
           _snapshot(
             nextWavePreview: _bossPreview(),
             selectedCell: const GridPosition(2, 2),
           ),
-          unlockLessonsSeen,
+          {},
         ),
         isNull,
       );
     });
 
     test('requires no selected tower so the collapsed scanner is usable', () {
-      // Slice 3: a selected level-1 tower now legitimately yields the
-      // targeting tip — but never the boss tip, whose scanner anchor is
-      // collapsed and tap-ignored while any selection is active.
+      // A selected level-1 member legitimately yields the targeting tip —
+      // but never the boss tip, whose scanner anchor is collapsed and
+      // tap-ignored while any selection is active.
       expect(
         contextualTipFor(
           _snapshot(
@@ -297,7 +272,7 @@ void main() {
     });
 
     test('never resolves the stage modifier tip', () {
-      // The modifier tip belongs to the separate briefing route (slice 4).
+      // The modifier tip belongs to the separate briefing route.
       final tip = contextualTipFor(
         _snapshot(
           nextWavePreview: _bossPreview(),
@@ -314,50 +289,20 @@ void main() {
       expect(learnedTipsIn(_snapshot()), isEmpty);
     });
 
-    test('each placed unlock family marks exactly its own tip', () {
+    test('placed members alone teach nothing', () {
+      // Deployment is normal play, not a lesson: only reaching tier 3 or
+      // changing a targeting mode demonstrates the remaining tips.
       final snapshot = _snapshot(
         placedTowers: [
           _placed(Character.elena, 1),
           _placed(Character.tetsuo, 2),
-        ],
-      );
-      expect(learnedTipsIn(snapshot), {
-        ContextualTip.railgun,
-        ContextualTip.droneBay,
-      });
-    });
-
-    test('covers every unlock family in one board', () {
-      final snapshot = _snapshot(
-        placedTowers: [
-          _placed(Character.elena, 1),
-          _placed(Character.kaito, 2),
-          _placed(Character.shiori, 3),
-          _placed(Character.ren, 4),
-          _placed(Character.tetsuo, 5),
-        ],
-      );
-      expect(learnedTipsIn(snapshot), {
-        ContextualTip.railgun,
-        ContextualTip.ionChain,
-        ContextualTip.nanite,
-        ContextualTip.gravityWell,
-        ContextualTip.droneBay,
-      });
-    });
-
-    test('wave-1 families have no tips and teach nothing', () {
-      final snapshot = _snapshot(
-        placedTowers: [
-          _placed(Character.haruto, 1),
-          _placed(Character.mio, 2),
-          _placed(Character.jin, 3),
+          _placed(Character.haruto, 3),
         ],
       );
       expect(learnedTipsIn(snapshot), isEmpty);
     });
 
-    test('a specialized tower marks specialization learned', () {
+    test('a tier-3 member marks signature learned', () {
       final snapshot = _snapshot(
         placedTowers: [
           PlacedTower(
@@ -385,7 +330,7 @@ void main() {
       expect(learnedTipsIn(snapshot), {ContextualTip.targeting});
     });
 
-    test('default towers teach neither specialization nor targeting', () {
+    test('default members teach neither signature nor targeting', () {
       final snapshot = _snapshot(
         placedTowers: [
           _placed(Character.haruto, 1),
@@ -402,197 +347,58 @@ void main() {
     });
   });
 
-  group('unlock tips (selected-cell rail)', () {
+  group('selected-cell silence', () {
     const cell = GridPosition(2, 2);
 
-    test('an unlocked unseen Railgun is eligible when a buildable cell is '
-        'selected', () {
+    test('a buildable selected cell resolves no tip', () {
+      // HPA-922: the rail shows squad members the player already owns, so
+      // there is nothing left to teach there — not even when an unseen
+      // boss waits in the preview.
+      expect(contextualTipFor(_snapshot(selectedCell: cell), {}), isNull);
       expect(
         contextualTipFor(
-          _snapshot(unlockedTowerTypes: TowerType.values, selectedCell: cell),
-          {},
-        ),
-        ContextualTip.railgun,
-      );
-    });
-
-    test('multiple eligible tips resolve in unlock (enum) order', () {
-      final snapshot = _snapshot(
-        unlockedTowerTypes: TowerType.values,
-        selectedCell: cell,
-      );
-      expect(contextualTipFor(snapshot, {}), ContextualTip.railgun);
-      expect(
-        contextualTipFor(snapshot, {ContextualTip.railgun}),
-        ContextualTip.ionChain,
-      );
-      expect(
-        contextualTipFor(snapshot, {
-          ContextualTip.railgun,
-          ContextualTip.ionChain,
-        }),
-        ContextualTip.nanite,
-      );
-      expect(
-        contextualTipFor(snapshot, {
-          ContextualTip.railgun,
-          ContextualTip.ionChain,
-          ContextualTip.nanite,
-        }),
-        ContextualTip.gravityWell,
-      );
-      expect(
-        contextualTipFor(snapshot, {
-          ContextualTip.railgun,
-          ContextualTip.ionChain,
-          ContextualTip.nanite,
-          ContextualTip.gravityWell,
-        }),
-        ContextualTip.droneBay,
-      );
-      expect(
-        contextualTipFor(snapshot, {
-          ContextualTip.railgun,
-          ContextualTip.ionChain,
-          ContextualTip.nanite,
-          ContextualTip.gravityWell,
-          ContextualTip.droneBay,
-        }),
-        isNull,
-      );
-    });
-
-    test('a locked card is skipped in favor of the next unlocked tip', () {
-      // Only Drone Bay has cleared its unlock wave among the five.
-      expect(
-        contextualTipFor(
-          _snapshot(
-            unlockedTowerTypes: const [TowerType.laser, TowerType.droneBay],
-            selectedCell: cell,
-          ),
-          {},
-        ),
-        ContextualTip.droneBay,
-      );
-    });
-
-    test('stays silent without a selected cell', () {
-      expect(
-        contextualTipFor(_snapshot(unlockedTowerTypes: TowerType.values), {}),
-        isNull,
-      );
-    });
-
-    test('stays silent on a nonbuildable (path) selection', () {
-      expect(
-        contextualTipFor(
-          _snapshot(
-            unlockedTowerTypes: TowerType.values,
-            selectedCell: cell,
-            selectedCellBuildable: false,
-          ),
+          _snapshot(selectedCell: cell, nextWavePreview: _bossPreview()),
           {},
         ),
         isNull,
       );
     });
 
-    test('stays silent while a tower is selected', () {
-      // A selected tower replaces the rail with its radial, so no unlock
-      // card can be the candidate. (Slice 3's targeting tip may resolve in
-      // that state; marking it seen isolates the unlock question here.)
+    test('a nonbuildable (path) selection stays silent', () {
       expect(
         contextualTipFor(
-          _snapshot(
-            unlockedTowerTypes: TowerType.values,
-            selectedCell: cell,
-            selectedTower: _placed(Character.haruto, 1),
-          ),
-          {ContextualTip.targeting},
+          _snapshot(selectedCell: cell, selectedCellBuildable: false),
+          {},
         ),
         isNull,
       );
     });
 
-    test(
-      'stays silent during an active wave, a draft, or an ended session',
-      () {
-        for (final (description, snapshot) in [
-          (
-            'wave',
-            _snapshot(
-              phase: GamePhase.wave,
-              unlockedTowerTypes: TowerType.values,
-              selectedCell: cell,
+    test('a cell selection during a wave, draft or ended session stays '
+        'silent', () {
+      for (final (description, snapshot) in [
+        ('wave', _snapshot(phase: GamePhase.wave, selectedCell: cell)),
+        (
+          'draft',
+          _snapshot(
+            selectedCell: cell,
+            pendingRunModuleOffer: RunModuleOffer(
+              offerId: 1,
+              draftNumber: 1,
+              draftTotal: 3,
+              moduleIds: const [RunModuleId.heavyCaliber],
             ),
           ),
-          (
-            'draft',
-            _snapshot(
-              unlockedTowerTypes: TowerType.values,
-              selectedCell: cell,
-              pendingRunModuleOffer: RunModuleOffer(
-                offerId: 1,
-                draftNumber: 1,
-                draftTotal: 3,
-                moduleIds: const [RunModuleId.heavyCaliber],
-              ),
-            ),
-          ),
-          (
-            'won',
-            _snapshot(
-              phase: GamePhase.won,
-              unlockedTowerTypes: TowerType.values,
-              selectedCell: cell,
-            ),
-          ),
-          (
-            'lost',
-            _snapshot(
-              phase: GamePhase.lost,
-              unlockedTowerTypes: TowerType.values,
-              selectedCell: cell,
-            ),
-          ),
-        ]) {
-          expect(contextualTipFor(snapshot, {}), isNull, reason: description);
-        }
-      },
-    );
-
-    test('a placed type counts as learned and suppresses its own hint', () {
-      final snapshot = _snapshot(
-        unlockedTowerTypes: TowerType.values,
-        selectedCell: cell,
-        placedTowers: [_placed(Character.elena, 1)],
-      );
-      expect(
-        contextualTipFor(snapshot, learnedTipsIn(snapshot)),
-        ContextualTip.ionChain,
-      );
-    });
-
-    test('boss keeps priority only when nothing is selected', () {
-      // With a cell selected, unlocks are the candidates — even an unseen
-      // boss stays silent because the scanner is unusable then.
-      final cellSelected = _snapshot(
-        unlockedTowerTypes: TowerType.values,
-        selectedCell: cell,
-        nextWavePreview: _bossPreview(),
-      );
-      expect(contextualTipFor(cellSelected, {}), ContextualTip.railgun);
-
-      // Nothing selected: boss leads, exactly as before.
-      final idle = _snapshot(
-        unlockedTowerTypes: TowerType.values,
-        nextWavePreview: _bossPreview(),
-      );
-      expect(contextualTipFor(idle, {}), ContextualTip.bossWave);
+        ),
+        ('won', _snapshot(phase: GamePhase.won, selectedCell: cell)),
+        ('lost', _snapshot(phase: GamePhase.lost, selectedCell: cell)),
+      ]) {
+        expect(contextualTipFor(snapshot, {}), isNull, reason: description);
+      }
     });
   });
 
-  group('specialization tip', () {
+  group('signature tip', () {
     final level2 = PlacedTower(
       id: 1,
       character: Character.haruto,
@@ -600,7 +406,7 @@ void main() {
       level: 2,
     );
 
-    test('nothing selected: aims at a placed level-2 unspecialized tower', () {
+    test('nothing selected: aims at a placed level-2 member', () {
       expect(
         contextualTipFor(
           _snapshot(placedTowers: [level2, _placed(Character.mio, 2)]),
@@ -610,22 +416,22 @@ void main() {
       );
     });
 
-    test('nothing selected: the boss still outranks specialization', () {
+    test('nothing selected: the boss still outranks signature', () {
       final snapshot = _snapshot(
         nextWavePreview: _bossPreview(),
         placedTowers: [level2],
       );
       expect(contextualTipFor(snapshot, {}), ContextualTip.bossWave);
-      // Once the boss lesson is seen, the same board yields specialization.
+      // Once the boss lesson is seen, the same board yields signature.
       expect(
         contextualTipFor(snapshot, {ContextualTip.bossWave}),
         ContextualTip.signature,
       );
     });
 
-    test('nothing selected: stays silent without a qualifying tower', () {
-      // Only level-1 and level-3 towers: nothing left to specialize.
-      final specialized = PlacedTower(
+    test('nothing selected: stays silent without a qualifying member', () {
+      // Only tier-1 and tier-3 members: no signature step left to teach.
+      final tier3 = PlacedTower(
         id: 3,
         character: Character.haruto,
         position: const GridPosition(4, 5),
@@ -633,14 +439,14 @@ void main() {
       );
       expect(
         contextualTipFor(
-          _snapshot(placedTowers: [_placed(Character.haruto, 1), specialized]),
+          _snapshot(placedTowers: [_placed(Character.haruto, 1), tier3]),
           {},
         ),
         isNull,
       );
     });
 
-    test('nothing selected: stays silent once specialization is seen', () {
+    test('nothing selected: stays silent once signature is seen', () {
       expect(
         contextualTipFor(_snapshot(placedTowers: [level2]), {
           ContextualTip.signature,
@@ -649,11 +455,11 @@ void main() {
       );
     });
 
-    test('nothing selected: an unaffordable level-2 tower is skipped', () {
-      // Railgun specialization costs 210 — more than the 150 gold on
-      // hand — so every inspector option would be disabled. The tip stays
-      // silent until the action is actually usable, exactly like the
-      // HPA-412 upgrade tip's gold check.
+    test('nothing selected: an unaffordable tier-2 member is skipped', () {
+      // Elena's signature costs 210 — more than the 150 gold on hand — so
+      // every inspector option would be disabled. The tip stays silent
+      // until the action is actually usable, exactly like the HPA-412
+      // upgrade tip's gold check.
       final pricey = PlacedTower(
         id: 1,
         character: Character.elena,
@@ -667,10 +473,10 @@ void main() {
       );
     });
 
-    test('nothing selected: the candidate is the first affordable tower', () {
-      // 150 covers laser's 120 but not railgun's 210: the board-cell
-      // anchor must aim at the laser — the tower the player can actually
-      // specialize — not the earlier railgun on the board.
+    test('nothing selected: the candidate is the first affordable member', () {
+      // 150 covers Haruto's 120 but not Elena's 210: the board-cell anchor
+      // must aim at Haruto — the member the player can actually upgrade —
+      // not the earlier railgun member on the board.
       final pricey = PlacedTower(
         id: 1,
         character: Character.elena,
@@ -689,10 +495,10 @@ void main() {
       expect(candidate?.id, cheap.id);
     });
 
-    test('selected tower: unaffordable specialization yields to targeting', () {
-      // The radial's Specialize action would open a dead inspector, so
-      // the tip falls through to targeting for this snapshot and comes
-      // back once gold covers the cost.
+    test('selected member: unaffordable signature yields to targeting', () {
+      // The radial's signature action would open a dead inspector, so the
+      // tip falls through to targeting for this snapshot and comes back
+      // once gold covers the cost.
       final pricey = PlacedTower(
         id: 1,
         character: Character.elena,
@@ -719,8 +525,8 @@ void main() {
       );
     });
 
-    test('the selected tower itself eligible: resolves specialization', () {
-      // Selecting the level-2 tower keeps the tip, now anchored at its own
+    test('the selected member itself eligible: resolves signature', () {
+      // Selecting the tier-2 member keeps the tip, now anchored at its own
       // radial progression button.
       final snapshot = _snapshot(
         placedTowers: [level2],
@@ -730,23 +536,20 @@ void main() {
       expect(contextualTipFor(snapshot, {}), ContextualTip.signature);
     });
 
-    test(
-      'a different level-1 tower selected never inherits specialization',
-      () {
-        // The board has a level-2 tower, but the SELECTED tower cannot
-        // specialize: aiming at its Upgrade button would teach the wrong
-        // control, so the resolver yields to targeting instead.
-        final other = _placed(Character.mio, 2);
-        final snapshot = _snapshot(
-          placedTowers: [level2, other],
-          selectedCell: other.position,
-          selectedTower: other,
-        );
-        expect(contextualTipFor(snapshot, {}), ContextualTip.targeting);
-        // And once targeting is seen too, silence — still no specialization.
-        expect(contextualTipFor(snapshot, {ContextualTip.targeting}), isNull);
-      },
-    );
+    test('a different tier-1 member selected never inherits signature', () {
+      // The board has a tier-2 member, but the SELECTED member cannot
+      // take the signature step: aiming at its Upgrade button would teach
+      // the wrong control, so the resolver yields to targeting instead.
+      final other = _placed(Character.mio, 2);
+      final snapshot = _snapshot(
+        placedTowers: [level2, other],
+        selectedCell: other.position,
+        selectedTower: other,
+      );
+      expect(contextualTipFor(snapshot, {}), ContextualTip.targeting);
+      // And once targeting is seen too, silence — still no signature.
+      expect(contextualTipFor(snapshot, {ContextualTip.targeting}), isNull);
+    });
 
     test('a nonbuildable path-cell selection stays silent', () {
       expect(
@@ -796,7 +599,7 @@ void main() {
   });
 
   group('targeting tip', () {
-    test('a selected level-1 tower resolves targeting', () {
+    test('a selected tier-1 member resolves targeting', () {
       final tower = _placed(Character.haruto, 1);
       final snapshot = _snapshot(
         placedTowers: [tower],
@@ -806,7 +609,7 @@ void main() {
       expect(contextualTipFor(snapshot, {}), ContextualTip.targeting);
     });
 
-    test('a selected specialized (level-3) tower resolves targeting', () {
+    test('a selected tier-3 member resolves targeting', () {
       final tower = PlacedTower(
         id: 1,
         character: Character.haruto,
@@ -821,7 +624,7 @@ void main() {
       expect(contextualTipFor(snapshot, {}), ContextualTip.targeting);
     });
 
-    test('a selected level-2 tower whose specialization was seen yields to '
+    test('a selected tier-2 member whose signature was seen yields to '
         'targeting', () {
       final tower = PlacedTower(
         id: 1,
@@ -840,7 +643,7 @@ void main() {
       );
     });
 
-    test('specialization keeps priority over targeting for its own tower', () {
+    test('signature keeps priority over targeting for its own member', () {
       final tower = PlacedTower(
         id: 1,
         character: Character.haruto,
@@ -915,14 +718,14 @@ void main() {
     });
 
     test('nothing selected never resolves targeting', () {
-      // The radial targeting button only exists while a tower is selected.
+      // The radial targeting button only exists while a member is selected.
       final tower = _placed(Character.haruto, 1);
       expect(contextualTipFor(_snapshot(placedTowers: [tower]), {}), isNull);
     });
   });
 
   group('signatureCandidateIn', () {
-    test('returns the first placed level-2 unspecialized tower', () {
+    test('returns the first placed level-2 member', () {
       final first = PlacedTower(
         id: 1,
         character: Character.haruto,
@@ -941,8 +744,8 @@ void main() {
       expect(signatureCandidateIn(snapshot), same(first));
     });
 
-    test('is null when no placed tower can specialize', () {
-      final specialized = PlacedTower(
+    test('is null when no placed member can take the signature step', () {
+      final tier3 = PlacedTower(
         id: 1,
         character: Character.haruto,
         position: const GridPosition(2, 5),
@@ -950,7 +753,7 @@ void main() {
       );
       expect(
         signatureCandidateIn(
-          _snapshot(placedTowers: [_placed(Character.haruto, 2), specialized]),
+          _snapshot(placedTowers: [_placed(Character.haruto, 2), tier3]),
         ),
         isNull,
       );
