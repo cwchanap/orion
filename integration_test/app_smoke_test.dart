@@ -13,7 +13,7 @@ import 'package:orion/main.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('places a tower and starts a wave', (tester) async {
+  testWidgets('deploys the starter squad and starts a wave', (tester) async {
     await tester.runAsync(() async {
       final preferences = await SharedPreferences.getInstance();
       final store = SharedPreferencesFeedbackPreferencesStore(
@@ -113,7 +113,11 @@ void main() {
     );
 
     final startingGold = GameBalance.startingGold;
-    final laserCost = GameBalance.towerStats(TowerType.laser, level: 1).cost;
+    final harutoCost = GameBalance.towerStats(
+      Character.haruto.style,
+      level: 1,
+    ).cost;
+    final mioCost = GameBalance.towerStats(Character.mio.style, level: 1).cost;
 
     // 4. Tap the center of a known buildable cell to open the tower picker.
     //    Cell (0,0) is never on the enemy path (see BoardLayout.pathCells)
@@ -133,22 +137,23 @@ void main() {
           'picker within the timeout.',
     );
 
-    // 5. Place a Laser tower via TAP — tap placement must keep working
+    // 5. Deploy Haruto via TAP — tap placement must keep working
     //    alongside the drag path; gold decreases and the picker closes.
-    await tester.tap(find.byKey(const ValueKey('tower-card-laser')));
+    await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
     await _pumpUntil(
       tester,
       () =>
           tester.any(
-            find.bySemanticsLabel('Credits ${startingGold - laserCost}'),
+            find.bySemanticsLabel('Credits ${startingGold - harutoCost}'),
           ) &&
           !tester.any(find.byKey(const ValueKey('command-dock-build'))),
     );
     expect(
-      find.bySemanticsLabel('Credits ${startingGold - laserCost}'),
+      find.bySemanticsLabel('Credits ${startingGold - harutoCost}'),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('command-dock-build')), findsNothing);
+    expect(game.stateNotifier.value.deployedCharacters, {Character.haruto});
 
     // 6. Tap the top-RIGHT buildable cell (7,0) to verify the scanner overlay
     //    does not swallow taps on the upper-right board area. Cell (7,0) is
@@ -168,35 +173,57 @@ void main() {
           'intercepting taps on the upper-right board area.',
     );
 
+    // Haruto is already deployed and cannot be placed a second time.
+    await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
+    await tester.pump();
+    expect(game.stateNotifier.value.deployedCharacters, {Character.haruto});
+    expect(game.stateNotifier.value.placedTowers, hasLength(1));
+    expect(
+      find.bySemanticsLabel('Credits ${startingGold - harutoCost}'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
+
     // 6b. Long-press drag from the build rail with an OFF-BOARD release must
     //     cancel (scene 1e wiring): the DROP TO BUILD preview appears while
     //     airborne, but releasing over a non-board point places nothing and
     //     spends nothing — the no-fallback contract.
-    await _dragLaserCard(tester, dropPoint: _pointAboveBoard(tester));
+    await _dragMioCard(tester, dropPoint: _pointAboveBoard(tester));
     expect(find.text('DROP TO BUILD'), findsNothing);
     expect(
-      find.bySemanticsLabel('Credits ${startingGold - laserCost}'),
+      find.bySemanticsLabel('Credits ${startingGold - harutoCost}'),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('command-dock-build')), findsOneWidget);
 
     // 6c. A valid long-press drag/drop onto the selected buildable cell
-    //     (7,0) places EXACTLY ONCE: gold drops by exactly one laser cost
+    //     (7,0) deploys Mio EXACTLY ONCE: gold drops by exactly her cost
     //     and the successful placement clears the selection, leaving the
     //     build rail.
-    await _dragLaserCard(tester, dropPoint: _cellCenter(tester, topRightCell));
+    await _dragMioCard(tester, dropPoint: _cellCenter(tester, topRightCell));
     expect(find.text('DROP TO BUILD'), findsNothing);
     await _pumpUntil(
       tester,
       () => tester.any(
-        find.bySemanticsLabel('Credits ${startingGold - 2 * laserCost}'),
+        find.bySemanticsLabel('Credits ${startingGold - harutoCost - mioCost}'),
       ),
     );
     expect(
-      find.bySemanticsLabel('Credits ${startingGold - 2 * laserCost}'),
+      find.bySemanticsLabel('Credits ${startingGold - harutoCost - mioCost}'),
       findsOneWidget,
     );
     expect(find.byKey(const ValueKey('command-dock-build')), findsNothing);
+    expect(game.stateNotifier.value.deployedCharacters, {
+      Character.haruto,
+      Character.mio,
+    });
+    expect(game.stateNotifier.value.placedTowers, hasLength(2));
+    expect(
+      game.stateNotifier.value.placedTowers
+          .singleWhere((tower) => tower.character == Character.mio)
+          .position,
+      topRightCell,
+    );
 
     // 6d. Deselect the cell so the idle dock restores the pacing controls.
     //     Nothing interactive then hovers over board row 1, so every buildable
@@ -265,18 +292,18 @@ void main() {
           'Could not dismiss the build rail to return to the idle dock.',
     );
 
-    // 8. Select the placed Laser: tapping its cell opens the radial tower
+    // 8. Select the placed Haruto: tapping his cell opens the radial tower
     //    actions (artboard 1d); Inspect opens the tower inspector, and a
     //    targeting change hits the real game session.
     await _tapUntil(
       tester,
       () => tester.tapAt(_cellCenter(tester, targetCell)),
-      () => tester.any(find.byTooltip('Inspect tower')),
+      () => tester.any(find.byTooltip('Inspect member')),
       timeoutMessage:
           'Tapping the placed tower at (0,0) did not open the radial '
           'tower actions within the timeout.',
     );
-    await tester.tap(find.byTooltip('Inspect tower'));
+    await tester.tap(find.byTooltip('Inspect member'));
     await _pumpUntil(
       tester,
       () => tester.any(find.byKey(const ValueKey('tower-inspector'))),
@@ -295,7 +322,7 @@ void main() {
 
     // 9. Close the inspector, then deselect the tower so the idle dock's
     //    pacing controls are unobstructed; toggle auto-start on and off.
-    await tester.tap(find.byTooltip('Close tower inspector'));
+    await tester.tap(find.byTooltip('Close inspector'));
     await _pumpUntil(
       tester,
       () => !tester.any(find.byKey(const ValueKey('tower-inspector'))),
@@ -485,17 +512,17 @@ void main() {
   });
 }
 
-/// Long-press drags the Laser build card to [dropPoint]. The hold runs in
+/// Long-press drags Mio's squad card to [dropPoint]. The hold runs in
 /// real time inside [WidgetTester.runAsync] so it reliably exceeds
 /// kLongPressTimeout on the simulator (the established pattern from prior
 /// tasks for gesture-recognizer timeouts), then approaches the drop point in
 /// hops so the placement preview tracks the pointer.
-Future<void> _dragLaserCard(
+Future<void> _dragMioCard(
   WidgetTester tester, {
   required Offset dropPoint,
 }) async {
   final cardCenter = tester.getCenter(
-    find.byKey(const ValueKey('tower-card-laser')),
+    find.byKey(const ValueKey('tower-card-mio')),
   );
   await tester.runAsync(() async {
     final gesture = await tester.startGesture(cardCenter);
@@ -516,7 +543,7 @@ Future<void> _dragLaserCard(
       tester.any(find.text('DROP TO BUILD')),
       isTrue,
       reason:
-          'Holding the Laser card did not start the placement drag; the '
+          'Holding Mio\'s card did not start the placement drag; the '
           'long-press gesture never began.',
     );
     final hop = (dropPoint - cardCenter) / 3;

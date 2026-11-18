@@ -62,5 +62,8 @@ also exercise the compact viewport with enlarged text.
 At `90b39f3`, `flutter test` passed 1,803 tests, including the deterministic
 eight-wave starter and five-stage balance fixtures. `flutter analyze` was
 clean. A separate Chrome run used Flutter's temporary profile and successfully
-hot restarted. The final PR checks tab is authoritative for CI on the pushed
-head; a local test or older green run does not establish final-head CI status.
+hot restarted. The updated integration smoke test passed on an isolated
+Android API 36 emulator: it deploys Haruto by tap and Mio by drag, checks
+duplicate and off-board rejection, and exercises the wave, Camp and report.
+The final PR checks tab is authoritative for CI on the pushed head; a local
+test or older green run does not establish final-head CI status.
