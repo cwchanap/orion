@@ -91,7 +91,7 @@ void main() {
     expect(find.byKey(_expandedDetails), findsOneWidget);
     expect(find.byKey(_collapsedTrigger), findsNothing);
     expect(find.text('Heavy Caliber'), findsOneWidget);
-    expect(find.textContaining('All tower damage rises'), findsOneWidget);
+    expect(find.textContaining('All member damage rises'), findsOneWidget);
     expect(find.text('Universal'), findsOneWidget);
     expect(find.text('Cryo Reservoir'), findsOneWidget);
     expect(find.textContaining('Cryo slows last'), findsOneWidget);

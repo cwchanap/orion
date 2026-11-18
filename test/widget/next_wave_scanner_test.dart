@@ -13,11 +13,20 @@ import '../support/command_deck_fixtures.dart';
 import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
+/// Covers every style the fixture previews recommend, in a stable order.
+const _squad = [
+  Character.haruto,
+  Character.mio,
+  Character.rin,
+  Character.elena,
+];
+
 Widget scannerHost(
   WavePreview preview, {
   bool disableAnimations = false,
   bool collapseRequested = false,
   List<String> modifierTitles = const ['Standard Conditions'],
+  List<Character> squad = _squad,
 }) {
   return MaterialApp(
     // The product app hides this banner; a fixture host must too, or the
@@ -36,6 +45,7 @@ Widget scannerHost(
         alignment: Alignment.topRight,
         child: NextWaveScanner(
           preview: preview,
+          squad: squad,
           modifierTitles: modifierTitles,
           collapseRequested: collapseRequested,
           onStartWave: () {},
@@ -129,6 +139,7 @@ void main() {
             alignment: Alignment.topRight,
             child: NextWaveScanner(
               preview: commandDeckPreview(),
+              squad: _squad,
               modifierTitles: const ['Standard Conditions'],
               collapseRequested: false,
               onCollapsedTapIntercept: (position) {
@@ -166,6 +177,7 @@ void main() {
           alignment: Alignment.topRight,
           child: NextWaveScanner(
             preview: commandDeckPreview(),
+            squad: _squad,
             modifierTitles: const ['Standard Conditions'],
             collapseRequested: false,
             onCollapsedTapIntercept: (_) => false,
@@ -199,6 +211,7 @@ void main() {
             alignment: Alignment.topRight,
             child: NextWaveScanner(
               preview: commandDeckPreview(),
+              squad: _squad,
               modifierTitles: const ['Standard Conditions'],
               collapseRequested: false,
               onCollapsedTapIntercept: (_) {
@@ -285,6 +298,7 @@ void main() {
                 alignment: Alignment.topRight,
                 child: NextWaveScanner(
                   preview: preview,
+                  squad: _squad,
                   modifierTitles: const ['Standard Conditions'],
                   collapseRequested: collapseRequested,
                 ),
@@ -342,6 +356,7 @@ void main() {
               alignment: Alignment.topRight,
               child: NextWaveScanner(
                 preview: commandDeckPreview(),
+                squad: _squad,
                 modifierTitles: const ['Standard Conditions'],
                 collapseRequested: true,
               ),
@@ -490,12 +505,12 @@ void main() {
       expect(find.bySemanticsLabel('Heavy trait'), findsOneWidget);
       expect(find.bySemanticsLabel('Clear bonus 45 credits'), findsOneWidget);
       expect(
-        find.bySemanticsLabel('Recommended towers: Laser, Rocket'),
+        find.bySemanticsLabel('Recommended members: Haruto, Mio'),
         findsOneWidget,
       );
       expect(find.text('Standard Conditions'), findsOneWidget);
-      expect(find.bySemanticsLabel('Laser tower'), findsOneWidget);
-      expect(find.bySemanticsLabel('Rocket tower'), findsOneWidget);
+      expect(find.bySemanticsLabel('Haruto chibi'), findsOneWidget);
+      expect(find.bySemanticsLabel('Mio chibi'), findsOneWidget);
     } finally {
       handle.dispose();
     }
@@ -556,10 +571,10 @@ void main() {
       expect(find.text('RECOMMENDED COUNTERS'), findsOneWidget);
       expect(find.text('Ion Storm'), findsOneWidget);
 
-      // Recommended counters stay art-led with an affirmative mark each.
-      final counters = find.bySemanticsLabel(
-        'Recommended towers: Railgun, Cryo',
-      );
+      // Recommended counters stay art-led with an affirmative mark each —
+      // resolved to squad members in squad order (Rin is cryo, Elena
+      // railgun).
+      final counters = find.bySemanticsLabel('Recommended members: Rin, Elena');
       expect(counters, findsOneWidget);
       final counterArt = tester.getSize(
         find

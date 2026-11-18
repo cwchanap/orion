@@ -459,7 +459,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     final tower = _selectedTower;
     if (tower == null) {
       _publishSnapshot(
-        feedback: _draftBlockMessage() ?? 'Select a tower first.',
+        feedback: _draftBlockMessage() ?? 'Select a member first.',
       );
       return;
     }
@@ -485,7 +485,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     final tower = _selectedTower;
     if (tower == null) {
       _publishSnapshot(
-        feedback: _draftBlockMessage() ?? 'Select a tower first.',
+        feedback: _draftBlockMessage() ?? 'Select a member first.',
       );
       return;
     }
@@ -493,7 +493,7 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     final refund = _session.sellTower(tower.id);
     if (refund == null) {
       _publishSnapshot(
-        feedback: _draftBlockMessage() ?? 'Sell towers between waves.',
+        feedback: _draftBlockMessage() ?? 'Recall members between waves.',
       );
       return;
     }
@@ -517,14 +517,14 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _activeDronesByTower.remove(tower.id);
     _clearSelection();
     gameFeedback.towerSold();
-    _publishSnapshot(feedback: 'Sold for $refund gold.');
+    _publishSnapshot(feedback: 'Recalled for $refund gold.');
   }
 
   void setTargetingMode(TowerTargetingMode mode) {
     final tower = _selectedTower;
     if (tower == null) {
       _publishSnapshot(
-        feedback: _draftBlockMessage() ?? 'Select a tower first.',
+        feedback: _draftBlockMessage() ?? 'Select a member first.',
       );
       return;
     }
@@ -1367,11 +1367,11 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
   String _placementMessage(PlacementFailure? failure) {
     return switch (failure) {
-      PlacementFailure.invalidPhase => 'Build towers between waves.',
+      PlacementFailure.invalidPhase => 'Deploy members between waves.',
       PlacementFailure.pendingModuleDraft => 'Choose a Salvage Module first.',
       PlacementFailure.offBoard => 'Select a cell on the board.',
       PlacementFailure.pathBlocked => 'Cannot build on the enemy path.',
-      PlacementFailure.occupied => 'That cell already has a tower.',
+      PlacementFailure.occupied => 'That cell already has a member.',
       PlacementFailure.insufficientGold => 'Not enough gold for that member.',
       PlacementFailure.notInSquad => 'That member is not in this squad.',
       PlacementFailure.alreadyDeployed => 'That member is already deployed.',

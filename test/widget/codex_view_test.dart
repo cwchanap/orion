@@ -26,7 +26,7 @@ import '../support/reactor_rim_visual_capture.dart';
 import '../support/real_fonts.dart';
 
 void main() {
-  testWidgets('large-text tower selection reveals its detail heading', (
+  testWidgets('large-text member selection reveals its detail heading', (
     tester,
   ) async {
     await loadRealFonts();
@@ -56,11 +56,14 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('codex-tile-rocket')));
+    final mioTile = find.byKey(const ValueKey('codex-tile-mio'));
+    await tester.ensureVisible(mioTile);
+    await tester.pumpAndSettle();
+    await tester.tap(mioTile);
     await tester.pumpAndSettle();
     final heading = find.descendant(
       of: find.byKey(const ValueKey('codex-detail')),
-      matching: find.text('ROCKET'),
+      matching: find.text('MIO'),
     );
     expect(heading, findsOneWidget);
     final visibleList = tester.getRect(
@@ -88,7 +91,7 @@ void main() {
     );
   });
 
-  testWidgets('specialization descriptions have breathing room beside cost', (
+  testWidgets('signature descriptions have breathing room beside cost', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -99,7 +102,7 @@ void main() {
       MaterialApp(home: CodexView(progress: CampaignProgress())),
     );
     await tester.pumpAndSettle();
-    final description = find.text(TowerSpecialization.pulseLaser.role);
+    final description = find.text(Character.hikari.signature.role);
     final row = find
         .ancestor(of: description, matching: find.byType(Row))
         .first;
@@ -110,7 +113,7 @@ void main() {
     );
   });
 
-  testWidgets('tower detail leads with its portrait beside the heading', (
+  testWidgets('member detail leads with its chibi beside the heading', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(390, 844);
@@ -124,7 +127,7 @@ void main() {
     final portrait = find
         .descendant(of: detail, matching: find.byType(OrionAtlasSprite))
         .first;
-    final heading = find.descendant(of: detail, matching: find.text('LASER'));
+    final heading = find.descendant(of: detail, matching: find.text('HIKARI'));
     expect(
       tester.getRect(heading).left,
       greaterThanOrEqualTo(tester.getRect(portrait).right),
@@ -135,21 +138,22 @@ void main() {
     );
   });
 
-  testWidgets('renders the four section chips and Towers content by default', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CodexView(progress: CampaignProgress(), onBack: () {}),
-      ),
-    );
+  testWidgets(
+    'renders the four section chips and Characters content by default',
+    (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CodexView(progress: CampaignProgress(), onBack: () {}),
+        ),
+      );
 
-    for (final chip in const ['Towers', 'Enemies', 'Effects', 'Stages']) {
-      expect(find.text(chip), findsWidgets);
-    }
-    // Default section is Towers: the first tower label appears.
-    expect(find.text(TowerType.laser.label), findsOneWidget);
-  });
+      for (final chip in const ['Characters', 'Enemies', 'Effects', 'Stages']) {
+        expect(find.text(chip), findsWidgets);
+      }
+      // Default section is Characters: the first member's tile appears.
+      expect(find.text('Hikari'), findsWidgets);
+    },
+  );
 
   testWidgets('tapping Enemies shows the enemy section', (tester) async {
     await tester.pumpWidget(
@@ -224,7 +228,7 @@ void main() {
         .offset;
     expect(towersOffset, greaterThan(0));
 
-    // Enemies (section 1) begins at zero despite Towers' nonzero offset.
+    // Enemies (section 1) begins at zero despite Characters' nonzero offset.
     await tester.tap(find.text('Enemies'));
     await tester.pumpAndSettle();
     expect(
@@ -235,8 +239,8 @@ void main() {
       0,
     );
 
-    // Returning to Towers restores its prior offset.
-    await tester.tap(find.text('Towers'));
+    // Returning to Characters restores its prior offset.
+    await tester.tap(find.text('Characters'));
     await tester.pumpAndSettle();
     expect(
       tester
@@ -296,7 +300,7 @@ void main() {
       ),
     );
 
-    for (final chip in const ['Towers', 'Enemies', 'Effects', 'Stages']) {
+    for (final chip in const ['Characters', 'Enemies', 'Effects', 'Stages']) {
       await tester.tap(find.text(chip));
       await tester.pumpAndSettle();
     }
@@ -307,11 +311,33 @@ void main() {
   // Regression: the cadence formatter must preserve two-decimal precision for
   // fire / field-tick / drone-attack intervals instead of collapsing them via
   // number()'s one-decimal rounding.
-  testWidgets('Pulse Laser exposes its 0.24s fire interval (not prose-only)', (
-    tester,
-  ) async {
-    // Tall surface so the lazy Towers ListView builds every tower card,
-    // including the Pulse Laser specialization rows near the bottom.
+  testWidgets(
+    'Steady Volley exposes its 0.24s fire interval (not prose-only)',
+    (tester) async {
+      // Tall surface so the lazy Characters ListView builds every signature
+      // card, including Haruto's Steady Volley rows near the bottom.
+      tester.view.physicalSize = const Size(800, 10000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: CodexView(progress: CampaignProgress(), onBack: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+      // Steady Volley's core lines (fire interval) only render on Haruto's
+      // detail signature card, so isolate him via search first.
+      await tester.enterText(find.byType(TextField), 'haruto');
+      await tester.pump();
+      // The defining benefit is the 0.24s fire interval; it must render as a
+      // numeric row, not be hidden.
+      expect(find.text('0.24s'), findsOneWidget);
+      expect(find.textContaining('Steady Volley'), findsWidgets);
+    },
+  );
+
+  testWidgets('Crushing Field tick interval renders at 0.45s', (tester) async {
     tester.view.physicalSize = const Size(800, 10000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -322,30 +348,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    // Towers is the default section. Pulse Laser's defining benefit is its
-    // 0.24s fire interval; it must render as a numeric row, not be hidden.
-    expect(find.text('0.24s'), findsOneWidget);
-    // The specialization heading renders as "Pulse Laser (<cost>g)".
-    expect(
-      find.textContaining(TowerSpecialization.pulseLaser.label),
-      findsOneWidget,
-    );
-  });
-
-  testWidgets('Gravity Well field tick interval renders at 0.45s', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 10000);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: CodexView(progress: CampaignProgress(), onBack: () {}),
-      ),
-    );
-    await tester.pumpAndSettle();
-    // Both Gravity Well specializations tick at 0.45s; the Field row is a
+    // Ren's Crushing Field signature ticks at 0.45s; the Field row is a
     // single composite value string, so match by substring. number() would
     // have rendered 0.5s here.
     expect(find.textContaining('0.45s'), findsWidgets);
@@ -354,7 +357,7 @@ void main() {
   // Regression: shield/armor damage multipliers must preserve two-decimal
   // precision (e.g. 1.55, 1.65) instead of collapsing to one decimal via
   // number()'s toStringAsFixed(1) rounding.
-  testWidgets('Magnetic Railgun vs Armored multiplier renders at x1.55', (
+  testWidgets('Heat Sight vs Armored multiplier renders at x1.55', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(800, 10000);
@@ -367,12 +370,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    // Magnetic Railgun's armorDamageMultiplier is 1.55; number() would have
-    // rendered x1.6.
-    expect(find.text('x1.55'), findsOneWidget);
+    // Elena's Heat Sight signature armorDamageMultiplier is 1.55;
+    // number() would have rendered x1.6.
+    expect(find.text('x1.55'), findsWidgets);
   });
 
-  testWidgets('Overload Relay vs Shield multiplier renders at x1.65', (
+  testWidgets('unplayable Overload Relay stats never leak into the codex', (
     tester,
   ) async {
     tester.view.physicalSize = const Size(800, 10000);
@@ -385,9 +388,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    // Overload Relay's shieldDamageMultiplier is 1.65; number() would have
-    // rendered x1.6 or x1.7.
-    expect(find.text('x1.65'), findsOneWidget);
+    // x1.65 was Overload Relay's shieldDamageMultiplier; the variant has no
+    // playable member, so its numbers must not render anywhere.
+    expect(find.text('x1.65'), findsNothing);
+    // Kaito's playable signature is Live Wire (storm relay), which surfaces.
+    expect(find.textContaining('Live Wire'), findsWidgets);
   });
 
   // Regression: stageRewardLabel already prefixes uncleared rewards with
@@ -502,18 +507,18 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
   }
 
-  testWidgets('searching towers filters to matching cards only', (
+  testWidgets('searching members filters to matching tiles only', (
     tester,
   ) async {
     await pumpCodex(tester);
-    // Precondition: the Laser card is visible without filtering.
-    expect(find.text(TowerType.laser.label), findsOneWidget);
+    // Precondition: Hikari's tile is visible without filtering.
+    expect(find.text('Hikari'), findsOneWidget);
 
     await tester.enterText(searchField, 'gravity');
     await tester.pump();
 
-    expect(find.text(TowerType.laser.label), findsNothing);
-    expect(find.text(TowerType.gravityWell.label), findsOneWidget);
+    expect(find.text('Hikari'), findsNothing);
+    expect(find.text('Ren'), findsOneWidget);
   });
 
   testWidgets('query matching ignores case and surrounding whitespace', (
@@ -523,26 +528,24 @@ void main() {
     await tester.enterText(searchField, '  GRAVITY  ');
     await tester.pump();
 
-    expect(find.text(TowerType.gravityWell.label), findsOneWidget);
-    expect(find.text(TowerType.laser.label), findsNothing);
+    expect(find.text('Ren'), findsOneWidget);
+    expect(find.text('Hikari'), findsNothing);
   });
 
-  testWidgets('a specialization match shows the parent tower card', (
+  testWidgets('a signature match surfaces the owning member card', (
     tester,
   ) async {
     await pumpCodex(tester);
-    expect(find.text(TowerType.gravityWell.label), findsOneWidget);
+    expect(find.text('Ren'), findsOneWidget);
 
     await tester.enterText(searchField, 'pulse');
     await tester.pump();
 
-    // The Laser card (parent of Pulse Laser) is the single result.
-    expect(find.text(TowerType.laser.label), findsOneWidget);
-    expect(
-      find.textContaining(TowerSpecialization.pulseLaser.label),
-      findsOneWidget,
-    );
-    expect(find.text(TowerType.gravityWell.label), findsNothing);
+    // Haruto's card (owner of the Steady Volley signature) is the single
+    // result.
+    expect(find.text('Haruto'), findsOneWidget);
+    expect(find.textContaining('Steady Volley'), findsWidgets);
+    expect(find.text('Ren'), findsNothing);
   });
 
   testWidgets('enemies search filters trait glossary and cards independently', (
@@ -579,6 +582,111 @@ void main() {
     expect(find.text(EnemyTrait.armored.label), findsWidgets);
   });
 
+  testWidgets('member detail shows rank, role, upgrade cost and fixed '
+      'signature', (tester) async {
+    await pumpCodex(tester);
+    final detail = find.byKey(const ValueKey('codex-detail'));
+    final hikari = CodexData.characterFor(Character.hikari);
+
+    expect(
+      find.descendant(of: detail, matching: find.text('HIKARI')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: detail,
+        matching: find.text('RANK ${Character.hikari.rank.label}'),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: detail, matching: find.text(Character.hikari.role)),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: detail, matching: find.text('Upgrade cost')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: detail, matching: find.text('${hikari.upgradeCost}')),
+      findsOneWidget,
+    );
+    // The fixed signature card names the signature and its price — no
+    // specialization picker may remain.
+    expect(
+      find.descendant(
+        of: detail,
+        matching: find.text(Character.hikari.signatureName),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(
+        of: detail,
+        matching: find.text('${hikari.signatureCost}g'),
+      ),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('signature index cards name the owning member and cost', (
+    tester,
+  ) async {
+    await pumpCodex(tester);
+    // Default detail is Hikari; every other member's signature renders in the
+    // index as "<signatureName> — <memberName>" priced at the signature cost.
+    expect(find.text('All signatures'), findsOneWidget);
+    for (final member in Character.values.skip(1)) {
+      final entry = CodexData.characterFor(member);
+      expect(
+        find.text('${member.signatureName} — ${member.displayName}'),
+        findsOneWidget,
+        reason: '${member.name} signature card must name its owner',
+      );
+      expect(
+        find.text('${entry.signatureCost}g'),
+        findsWidgets,
+        reason: '${member.name} signature card must show the signature cost',
+      );
+    }
+    // The four unplayable combat variants never appear as signature cards.
+    for (final unused in [
+      'Hunter Bay',
+      'Overload Relay',
+      'Replicator Nanites',
+      'Crush Well',
+    ]) {
+      expect(find.textContaining(unused), findsNothing);
+    }
+  });
+
+  testWidgets('effects Used-by lines name playable members and signatures', (
+    tester,
+  ) async {
+    await pumpCodex(tester);
+    await tester.tap(find.text('Effects'));
+    await tester.pumpAndSettle();
+    for (final effect in CodexData.effects) {
+      if (effect.relatedCharacters.isEmpty) continue;
+      final usedBy =
+          'Used by: ${effect.relatedCharacters.map((m) => '${m.displayName} (${m.signatureName})').join(', ')}';
+      expect(
+        find.text(usedBy),
+        findsWidgets,
+        reason: '${effect.id} must name its members and signatures',
+      );
+    }
+    // Unplayable combat variants must never surface as an owner.
+    for (final unused in [
+      'Hunter Bay',
+      'Overload Relay',
+      'Replicator Nanites',
+      'Crush Well',
+    ]) {
+      expect(find.textContaining(unused), findsNothing);
+    }
+  });
+
   testWidgets('effects search filters the effect glossary', (tester) async {
     await pumpCodex(tester);
     await tester.tap(find.text('Effects'));
@@ -612,7 +720,7 @@ void main() {
     await tester.enterText(searchField, 'zzzz');
     await tester.pump();
 
-    expect(find.text('No matches in Towers'), findsOneWidget);
+    expect(find.text('No matches in Characters'), findsOneWidget);
     // The section ListView is retained (not swapped for a Center), so the
     // zero-result list keeps its key, controller and drag behavior.
     expect(find.byKey(const PageStorageKey<int>(0)), findsOneWidget);
@@ -634,14 +742,14 @@ void main() {
     // Centered, the message shrink-wraps its glyphs inside the list slot;
     // left-aligned, its Text box is stretched to the full slot width.
     final messageWidth = tester
-        .getSize(find.text('No matches in Towers'))
+        .getSize(find.text('No matches in Characters'))
         .width;
     final listWidth = tester
         .getSize(find.byKey(const PageStorageKey<int>(0)))
         .width;
     expect(messageWidth, lessThan(listWidth / 2));
     expect(
-      tester.getCenter(find.text('No matches in Towers')).dx,
+      tester.getCenter(find.text('No matches in Characters')).dx,
       closeTo(
         tester.getCenter(find.byKey(const PageStorageKey<int>(0))).dx,
         0.1,
@@ -653,13 +761,13 @@ void main() {
     await pumpCodex(tester);
     await tester.enterText(searchField, 'gravity');
     await tester.pump();
-    expect(find.text(TowerType.laser.label), findsNothing);
+    expect(find.text('Hikari'), findsNothing);
 
     await tester.tap(find.byTooltip('Clear'));
     await tester.pump();
 
     expect(queryText(tester), '');
-    expect(find.text(TowerType.laser.label), findsOneWidget);
+    expect(find.text('Hikari'), findsOneWidget);
     // The optional Clear action disappears once the field is empty.
     expect(find.byTooltip('Clear'), findsNothing);
   });
@@ -710,7 +818,7 @@ void main() {
       ),
     );
 
-    // Scroll Towers (section 0) down, then leave and reopen the Codex.
+    // Scroll Characters (section 0) down, then leave and reopen the Codex.
     await tester.drag(
       find.byKey(const PageStorageKey<int>(0)),
       const Offset(0, -300),
@@ -741,8 +849,8 @@ void main() {
       final enemiesOffset = sectionController(tester, 1).offset;
       expect(enemiesOffset, greaterThan(0));
 
-      // Filtering on Towers resets only Towers' scroll.
-      await tester.tap(find.text('Towers'));
+      // Filtering on Characters resets only that section's scroll.
+      await tester.tap(find.text('Characters'));
       await tester.pumpAndSettle();
       await tester.enterText(searchField, 'gravity');
       await tester.pump();
@@ -776,8 +884,8 @@ void main() {
       await tester.pumpAndSettle();
       expect(queryText(tester), '');
 
-      // Returning to Towers shows the full list reset to the top.
-      await tester.tap(find.text('Towers'));
+      // Returning to Characters shows the full list reset to the top.
+      await tester.tap(find.text('Characters'));
       await tester.pumpAndSettle();
       expect(sectionController(tester, 0).offset, 0);
     },
@@ -793,12 +901,12 @@ void main() {
       await tester.pump();
       expect(searchFocused(tester), isTrue);
 
-      // Re-tap the already-selected Towers chip: query and focus survive.
-      await tester.tap(find.text('Towers'));
+      // Re-tap the already-selected Characters chip: query and focus survive.
+      await tester.tap(find.text('Characters'));
       await tester.pump();
       expect(queryText(tester), 'gravity');
       expect(searchFocused(tester), isTrue);
-      expect(find.text(TowerType.gravityWell.label), findsOneWidget);
+      expect(find.text('Ren'), findsOneWidget);
 
       // A different chip clears the query and shows the full enemy list.
       await tester.tap(find.text('Enemies'));
@@ -813,7 +921,7 @@ void main() {
       // The query filters only the active section's own data.
       await tester.enterText(searchField, 'heavy');
       await tester.pump();
-      expect(find.text('Drone Bay'), findsNothing); // tower, other section
+      expect(find.text('Drone Bay'), findsNothing); // member, other section
       expect(find.text(EnemyArchetype.heavyDrone.label), findsOneWidget);
       expect(find.text('Drones'), findsNothing); // basic drone filtered out
       expect(find.byType(Divider), findsOneWidget); // trait + cards both hit
@@ -845,8 +953,8 @@ void main() {
       await tester.pump();
     }
 
-    // Re-tap the already-selected Towers chip: query and focus survive.
-    await mouseTap(find.text('Towers'));
+    // Re-tap the already-selected Characters chip: query and focus survive.
+    await mouseTap(find.text('Characters'));
     expect(queryText(tester), 'gravity');
     expect(searchFocused(tester), isTrue);
 
@@ -875,24 +983,24 @@ void main() {
       // The previous iteration ended on another chip; state survives the
       // repump, so return to a known section (and empty query) first.
       if (scaler != const TextScaler.linear(2)) {
-        await tester.tap(find.text('Towers'));
+        await tester.tap(find.text('Characters'));
         await tester.pump();
       }
       await tester.pumpWidget(codexHost(textScaler: scaler));
       await tester.pump();
 
       // Exactly one accessible search label, reflecting the section.
-      expect(find.bySemanticsLabel('Search towers'), findsOneWidget);
+      expect(find.bySemanticsLabel('Search characters'), findsOneWidget);
 
       // No-results message is announced while the keyboard is up.
       await tester.enterText(searchField, 'zzzz');
       await tester.pump();
-      expect(find.bySemanticsLabel('No matches in Towers'), findsOneWidget);
+      expect(find.bySemanticsLabel('No matches in Characters'), findsOneWidget);
 
       // The Clear tooltip is usable and restores the list.
       await tester.tap(find.byTooltip('Clear'));
       await tester.pump();
-      expect(find.text(TowerType.laser.label), findsOneWidget);
+      expect(find.text('Hikari'), findsOneWidget);
 
       // Switching tabs keeps the compact chrome overflow-free.
       await tester.tap(find.text('Enemies'));
@@ -957,8 +1065,8 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
-    final cardLabel = find.text(TowerType.laser.label);
-    final chromeLabel = find.text('Search towers');
+    final cardLabel = find.text('Hikari');
+    final chromeLabel = find.text('Search characters');
 
     await tester.pumpWidget(codexHost());
     await tester.pump();
@@ -1031,7 +1139,7 @@ void main() {
     // inset viewport may even scroll the no-matches message itself.
     await tester.pumpWidget(codexHost(textScaler: const TextScaler.linear(3)));
     await tester.pump();
-    await tester.tap(find.text('Towers'));
+    await tester.tap(find.text('Characters'));
     await tester.pump();
     await tester.enterText(searchField, 'zzzz');
     await tester.pump();
@@ -1053,7 +1161,7 @@ void main() {
     await dragResultList(tester, 2);
     expect(searchFocused(tester), isFalse);
 
-    await tester.tap(find.text('Towers'));
+    await tester.tap(find.text('Characters'));
     await tester.pump();
     await tester.pumpWidget(codexHost(textScaler: const TextScaler.linear(3)));
     await tester.pump();
@@ -1097,7 +1205,7 @@ void main() {
 
     testWidgets('the four tabs form a single segmented row', (tester) async {
       await pumpCodex(tester, size: const Size(390, 844));
-      const labels = ['Towers', 'Enemies', 'Effects', 'Stages'];
+      const labels = ['Characters', 'Enemies', 'Effects', 'Stages'];
 
       final top = tabRect(tester, labels.first).top;
       for (final label in labels) {
@@ -1109,7 +1217,7 @@ void main() {
       }
 
       expect(
-        find.ancestor(of: tabText('Towers'), matching: find.byType(Wrap)),
+        find.ancestor(of: tabText('Characters'), matching: find.byType(Wrap)),
         findsNothing,
         reason: 'the seg row keeps tabs on one line; Wrap may wrap them',
       );
@@ -1129,7 +1237,7 @@ void main() {
 
     testWidgets('the tab row stays a single line at 360x640', (tester) async {
       await pumpCodex(tester, size: const Size(360, 640));
-      const labels = ['Towers', 'Enemies', 'Effects', 'Stages'];
+      const labels = ['Characters', 'Enemies', 'Effects', 'Stages'];
       final top = tabRect(tester, labels.first).top;
       for (final label in labels) {
         expect(
@@ -1141,43 +1249,45 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('tower entries render as sprite tiles in a grid', (
+    testWidgets('member entries render as chibi tiles in a grid', (
       tester,
     ) async {
       await pumpCodex(tester, size: const Size(390, 844));
 
-      for (final type in TowerType.values) {
-        final tile = find.byKey(ValueKey('codex-tile-${type.name}'));
-        expect(tile, findsOneWidget, reason: '${type.name} tile missing');
+      for (final member in Character.values) {
+        final tile = find.byKey(ValueKey('codex-tile-${member.name}'));
+        expect(tile, findsOneWidget, reason: '${member.name} tile missing');
         expect(
           find.descendant(of: tile, matching: find.byType(OrionAtlasSprite)),
           findsWidgets,
-          reason: '${type.name} tile must show the atlas sprite',
+          reason: '${member.name} tile must show the chibi sprite',
         );
       }
 
-      Rect labelRect(TowerType type) => tester.getRect(find.text(type.label));
+      Rect labelRect(Character member) =>
+          tester.getRect(find.text(member.displayName));
       final firstRow = [
-        TowerType.laser,
-        TowerType.rocket,
-        TowerType.cryo,
-        TowerType.railgun,
+        Character.hikari,
+        Character.jin,
+        Character.akane,
+        Character.ren,
       ];
       final rowTop = labelRect(firstRow.first).top;
-      for (final type in firstRow) {
-        expect(labelRect(type).top, closeTo(rowTop, 4));
+      for (final member in firstRow) {
+        expect(labelRect(member).top, closeTo(rowTop, 4));
       }
       expect(
-        labelRect(TowerType.nanite).top,
+        labelRect(Character.elena).top,
         greaterThan(rowTop),
         reason: 'the fifth tile belongs to the second grid row',
       );
 
-      for (final type in TowerType.values) {
+      for (final member in Character.values) {
+        final tile = find.byKey(ValueKey('codex-tile-${member.name}'));
         expect(
-          find.text('W${GameBalance.towerUnlockWave(type)}'),
-          findsWidgets,
-          reason: '${type.name} tile needs its W-wave badge',
+          find.descendant(of: tile, matching: find.text(member.rank.label)),
+          findsOneWidget,
+          reason: '${member.name} tile needs its rank badge',
         );
       }
 
@@ -1185,7 +1295,7 @@ void main() {
       expect(find.text('Damage').evaluate().length, lessThanOrEqualTo(4));
     });
 
-    testWidgets('tapping a tile swaps the detail panel to that tower', (
+    testWidgets('tapping a tile swaps the detail panel to that member', (
       tester,
     ) async {
       await pumpCodex(tester, size: const Size(390, 844));
@@ -1199,37 +1309,31 @@ void main() {
         );
       }
       expect(
-        find.descendant(
-          of: detail,
-          matching: find.textContaining('Pulse Laser'),
-        ),
+        find.descendant(of: detail, matching: find.textContaining('Dawnbreak')),
         findsOneWidget,
       );
       expect(
         find.descendant(
           of: detail,
-          matching: find.textContaining('Siege Rocket'),
+          matching: find.textContaining('Kitchen Fire'),
         ),
         findsNothing,
       );
 
-      await tester.tap(find.byKey(const ValueKey('codex-tile-rocket')));
+      await tester.tap(find.byKey(const ValueKey('codex-tile-mio')));
       await tester.pump();
       expect(
-        find.descendant(
-          of: detail,
-          matching: find.textContaining('Pulse Laser'),
-        ),
+        find.descendant(of: detail, matching: find.textContaining('Dawnbreak')),
         findsNothing,
       );
       expect(
         find.descendant(
           of: detail,
-          matching: find.textContaining('Siege Rocket'),
+          matching: find.textContaining('Kitchen Fire'),
         ),
         findsOneWidget,
       );
-      expect(find.text(TowerType.laser.label), findsOneWidget);
+      expect(find.text('Hikari'), findsOneWidget);
     });
 
     testWidgets('the selected tile reports selected: true in semantics', (
@@ -1248,13 +1352,13 @@ void main() {
             .evaluate()
             .isNotEmpty;
 
-        expect(selected('Laser'), isTrue);
-        expect(selected('Rocket'), isFalse);
+        expect(selected('Hikari'), isTrue);
+        expect(selected('Mio'), isFalse);
 
-        await tester.tap(find.byKey(const ValueKey('codex-tile-rocket')));
+        await tester.tap(find.byKey(const ValueKey('codex-tile-mio')));
         await tester.pump();
-        expect(selected('Rocket'), isTrue);
-        expect(selected('Laser'), isFalse);
+        expect(selected('Mio'), isTrue);
+        expect(selected('Hikari'), isFalse);
       } finally {
         semantics.dispose();
       }
@@ -1310,7 +1414,7 @@ void main() {
       await pumpCodex(tester, size: const Size(390, 844));
       expect(
         find.ancestor(
-          of: find.byKey(const ValueKey('codex-tile-laser')),
+          of: find.byKey(const ValueKey('codex-tile-hikari')),
           matching: find.byKey(const PageStorageKey<int>(0)),
         ),
         findsOneWidget,
@@ -1328,19 +1432,16 @@ void main() {
       await pumpCodex(tester, size: const Size(390, 844));
       await tester.enterText(searchField, 'gravity');
       await tester.pump();
-      expect(
-        find.byKey(const ValueKey('codex-tile-gravityWell')),
-        findsOneWidget,
-      );
-      expect(find.byKey(const ValueKey('codex-tile-laser')), findsNothing);
+      expect(find.byKey(const ValueKey('codex-tile-ren')), findsOneWidget);
+      expect(find.byKey(const ValueKey('codex-tile-hikari')), findsNothing);
     });
   });
 
   group('command-deck fix round 1 (HPA-699)', () {
     final detail = find.byKey(const ValueKey('codex-detail'));
 
-    Finder tileFinder(TowerType type) =>
-        find.byKey(ValueKey('codex-tile-${type.name}'));
+    Finder tileFinder(Character member) =>
+        find.byKey(ValueKey('codex-tile-${member.name}'));
 
     Finder enemyTileFinder(EnemyArchetype archetype) =>
         find.byKey(ValueKey('codex-enemy-tile-${archetype.name}'));
@@ -1562,14 +1663,14 @@ void main() {
       );
     });
 
-    testWidgets('tower upgrade labels stay readable at 3x', (tester) async {
+    testWidgets('member upgrade labels stay readable at 3x', (tester) async {
       await loadRealFonts();
       await pumpCodex(
         tester,
         size: const Size(360, 640),
         textScaler: const TextScaler.linear(3),
       );
-      await tester.enterText(searchField, 'Rocket');
+      await tester.enterText(searchField, 'Mio');
       await tester.pumpAndSettle();
       final cost = find.descendant(
         of: detail,
@@ -1583,7 +1684,7 @@ void main() {
       );
     });
 
-    testWidgets('specialization names and descriptions stay readable at 3x', (
+    testWidgets('signature names and descriptions stay readable at 3x', (
       tester,
     ) async {
       await loadRealFonts();
@@ -1592,22 +1693,22 @@ void main() {
         size: const Size(360, 640),
         textScaler: const TextScaler.linear(3),
       );
-      await tester.enterText(searchField, 'Rocket');
+      await tester.enterText(searchField, 'Akane');
       await tester.pumpAndSettle();
       final title = find.descendant(
         of: detail,
-        matching: find.text('Siege Rocket'),
+        matching: find.text('Hearthfire'),
       );
       final description = find.descendant(
         of: detail,
-        matching: find.text(TowerSpecialization.siegeRocket.role),
+        matching: find.text(Character.akane.signature.role),
       );
       for (final text in [title, description]) {
         expect(text, findsOneWidget);
         expect(
           breaksInsideWord(tester, text, const TextScaler.linear(3)),
           isFalse,
-          reason: 'Specialization text should wrap only at word boundaries.',
+          reason: 'Signature text should wrap only at word boundaries.',
         );
       }
     });
@@ -1620,13 +1721,9 @@ void main() {
         ) async {
           await loadRealFonts();
           await pumpCodex(tester, size: size, textScaler: scaler);
-          for (final entry in CodexData.towers) {
-            final tile = tileFinder(entry.type);
-            await tester.scrollUntilVisible(
-              tile,
-              400,
-              scrollable: find.byType(Scrollable).first,
-            );
+          for (final entry in CodexData.characters) {
+            final tile = tileFinder(entry.character);
+            await tester.ensureVisible(tile);
             final label = find.descendant(
               of: tile,
               matching: find.text(entry.label),
@@ -1634,7 +1731,7 @@ void main() {
             expect(
               label,
               findsOneWidget,
-              reason: '${entry.type.name} tile must show its label',
+              reason: '${entry.character.name} tile must show its label',
             );
             final paragraph = tester.renderObject<RenderParagraph>(label);
             expect(
@@ -1643,7 +1740,7 @@ void main() {
               reason:
                   '${entry.label} truncates inside its fixed-column tile '
                   'at $size text x${scaler.scale(1).round()} — the full '
-                  'tower name must paint',
+                  'member name must paint',
             );
             expect(
               breaksInsideWord(tester, label, scaler),
@@ -1656,27 +1753,23 @@ void main() {
           }
         });
 
-        testWidgets('the wave badge never overlaps tile art or label at '
+        testWidgets('the rank badge never overlaps tile art or label at '
             '${size.width.toInt()}x${size.height.toInt()} text '
             'x${scaler.scale(1).round()}', (tester) async {
           await loadRealFonts();
           await pumpCodex(tester, size: size, textScaler: scaler);
-          for (final entry in CodexData.towers) {
-            final tile = tileFinder(entry.type);
-            await tester.scrollUntilVisible(
-              tile,
-              400,
-              scrollable: find.byType(Scrollable).first,
-            );
+          for (final entry in CodexData.characters) {
+            final tile = tileFinder(entry.character);
+            await tester.ensureVisible(tile);
             final tileRect = tester.getRect(tile);
             final badge = find.descendant(
               of: tile,
-              matching: find.text('W${entry.unlockWave}'),
+              matching: find.text(entry.character.rank.label),
             );
             expect(
               badge,
               findsOneWidget,
-              reason: '${entry.type.name} tile must show its W-wave badge',
+              reason: '${entry.character.name} tile must show its rank badge',
             );
             final badgeRect = tester.getRect(badge);
             expect(
@@ -1684,8 +1777,8 @@ void main() {
                   tileRect.contains(badgeRect.bottomRight),
               isTrue,
               reason:
-                  'the W badge must stay inside the ${entry.type.name} '
-                  'tile bounds',
+                  'the rank badge must stay inside the '
+                  '${entry.character.name} tile bounds',
             );
             final sprites = find.descendant(
               of: tile,
@@ -1698,7 +1791,8 @@ void main() {
                 badgeRect.overlaps(spriteRect),
                 isFalse,
                 reason:
-                    'the W badge overlays sprite space on ${entry.type.name} '
+                    'the rank badge overlays sprite space on '
+                    '${entry.character.name} '
                     'at $size text x${scaler.scale(1).round()}',
               );
             }
@@ -1710,7 +1804,7 @@ void main() {
             expect(
               badgeRect.overlaps(tester.getRect(label)),
               isFalse,
-              reason: 'the W badge overlaps the ${entry.label} tile label',
+              reason: 'the rank badge overlaps the ${entry.label} tile label',
             );
           }
         });
@@ -1726,13 +1820,15 @@ void main() {
           size: size,
           textScaler: const TextScaler.linear(3),
         );
-        for (final entry in CodexData.towers) {
-          await tester.enterText(searchField, entry.label);
+        for (final entry in CodexData.characters) {
+          // Query the fullName: a bare displayName like "Rin" is a substring
+          // of Hikari's "Dawnbringer" epithet and would not isolate her tile.
+          await tester.enterText(searchField, entry.character.fullName);
           await tester.pump();
           expect(
-            tileFinder(entry.type),
+            tileFinder(entry.character),
             findsOneWidget,
-            reason: 'search must isolate the ${entry.type.name} tile',
+            reason: 'search must isolate the ${entry.character.name} tile',
           );
           expect(detail, findsOneWidget);
           final title = find.descendant(
@@ -1780,7 +1876,7 @@ void main() {
         try {
           await pumpCodex(tester, size: size);
           for (final label in const [
-            'Towers',
+            'Characters',
             'Enemies',
             'Effects',
             'Stages',
@@ -1814,7 +1910,12 @@ void main() {
       try {
         await pumpCodex(tester, size: const Size(390, 844));
         final missing = <String>[];
-        for (final label in const ['Towers', 'Enemies', 'Effects', 'Stages']) {
+        for (final label in const [
+          'Characters',
+          'Enemies',
+          'Effects',
+          'Stages',
+        ]) {
           final node = tester.getSemantics(find.bySemanticsLabel(label));
           final data = node.getSemanticsData();
           if (data.flagsCollection.isButton != true) {
@@ -1831,12 +1932,12 @@ void main() {
           }
         }
         if (tester
-                .getSemantics(find.bySemanticsLabel('Towers'))
+                .getSemantics(find.bySemanticsLabel('Characters'))
                 .getSemanticsData()
                 .flagsCollection
                 .isSelected !=
             Tristate.isTrue) {
-          missing.add('Towers: selected state (active tab)');
+          missing.add('Characters: selected state (active tab)');
         }
         if (tester
                 .getSemantics(find.bySemanticsLabel('Enemies'))
@@ -1867,7 +1968,7 @@ void main() {
       try {
         await pumpCodex(tester, size: const Size(390, 844));
         final sectionChecks = <String, Pattern>{
-          'Towers': 'Pulse Laser',
+          'Characters': 'Dawnbreak',
           'Enemies': 'Standard fodder',
           'Effects': 'Chain Lightning',
           'Stages': 'Outpost Alpha',
@@ -1981,7 +2082,7 @@ void main() {
       final handle = tester.ensureSemantics();
       try {
         await pumpCodex(tester, size: const Size(390, 844));
-        final tile = tileFinder(TowerType.rocket);
+        final tile = tileFinder(Character.akane);
         final before = paintSignature(tester, tile);
         var focused = false;
         for (var i = 0; i < 14; i += 1) {
@@ -1991,7 +2092,7 @@ void main() {
                     find.byWidgetPredicate(
                       (widget) =>
                           widget is Semantics &&
-                          widget.properties.label == 'Rocket',
+                          widget.properties.label == 'Akane',
                     ),
                   )
                   .getSemanticsData()
@@ -2006,7 +2107,7 @@ void main() {
           focused,
           isTrue,
           reason:
-              'the Rocket tile never received keyboard focus within 14 '
+              'the Akane tile never received keyboard focus within 14 '
               'Tab presses — tiles must be focusable targets',
         );
         await tester.pump();
@@ -2015,7 +2116,7 @@ void main() {
           isNot(equals(before)),
           reason:
               'keyboard focus changes nothing the eye can see on the '
-              'Rocket tile — it needs a focus-driven border, overlay or '
+              'Akane tile — it needs a focus-driven border, overlay or '
               'tint INSIDE its own paint, since InkWell ink hides behind '
               'the opaque tile surface',
         );
@@ -2028,13 +2129,14 @@ void main() {
         'metric', (tester) async {
       await pumpCodex(tester);
       final missing = <String>[];
-      for (final entry in CodexData.towers) {
-        await tester.enterText(searchField, entry.label);
+      for (final entry in CodexData.characters) {
+        // Query the fullName for the same Dawnbringer/Rin substring reason.
+        await tester.enterText(searchField, entry.character.fullName);
         await tester.pump();
         expect(
-          tileFinder(entry.type),
+          tileFinder(entry.character),
           findsOneWidget,
-          reason: 'search must isolate the ${entry.type.name} tile',
+          reason: 'search must isolate the ${entry.character.name} tile',
         );
         expect(detail, findsOneWidget);
         if (find
@@ -2070,7 +2172,7 @@ void main() {
         missing,
         isEmpty,
         reason:
-            'the tower detail dropped metrics the base codex card showed — '
+            'the member detail dropped metrics the codex card showed — '
             'upgradeCost and the live _specialtyLines values from '
             'GameBalance: $missing',
       );
@@ -2330,28 +2432,29 @@ void main() {
     }
 
     await pumpScene(const Size(390, 844));
-    await tapTile(const ValueKey('codex-tile-laser'));
+    await tapTile(const ValueKey('codex-tile-hikari'));
     expect(find.byKey(const ValueKey('codex-detail')), findsOneWidget);
-    for (final type in TowerType.values) {
+    for (final member in Character.values) {
       expect(
         find.descendant(
-          of: find.byKey(ValueKey('codex-tile-${type.name}')),
+          of: find.byKey(ValueKey('codex-tile-${member.name}')),
           matching: find.byType(SpriteWidget),
         ),
         findsOneWidget,
-        reason: '${type.label} artwork must load before the capture.',
+        reason: '${member.displayName} artwork must load before the capture.',
       );
     }
     await tester.runAsync(
-      () => captureReactorRimFixture(boundaryKey, 'fixture-codex-towers.png'),
+      () =>
+          captureReactorRimFixture(boundaryKey, 'fixture-codex-characters.png'),
     );
 
     await pumpScene(const Size(360, 640));
-    await tapTile(const ValueKey('codex-tile-laser'));
+    await tapTile(const ValueKey('codex-tile-hikari'));
     await tester.runAsync(
       () => captureReactorRimFixture(
         boundaryKey,
-        'fixture-codex-towers-compact.png',
+        'fixture-codex-characters-compact.png',
       ),
     );
 
@@ -2359,11 +2462,11 @@ void main() {
       const Size(360, 640),
       textScaler: const TextScaler.linear(3),
     );
-    await tapTile(const ValueKey('codex-tile-laser'));
+    await tapTile(const ValueKey('codex-tile-hikari'));
     await tester.runAsync(
       () => captureReactorRimFixture(
         boundaryKey,
-        'fixture-codex-towers-large-text.png',
+        'fixture-codex-characters-large-text.png',
       ),
     );
 

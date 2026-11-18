@@ -204,20 +204,11 @@ class _CharacterCard extends StatelessWidget {
   final bool inSquad;
   final VoidCallback? onTap;
 
-  Color _rankColor(OrionUiTheme uiTheme) => switch (character.rank) {
-    CharacterRank.s => uiTheme.creditGold,
-    CharacterRank.a => uiTheme.warningOrange,
-    CharacterRank.b => uiTheme.systemViolet,
-    CharacterRank.c => uiTheme.systemCyan,
-    CharacterRank.d => uiTheme.naniteGreen,
-    CharacterRank.e => uiTheme.medalSilver,
-  };
-
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final owned = level != null;
-    final rankColor = _rankColor(uiTheme);
+    final rankColor = character.rank.orionColor(uiTheme);
     final nameLine = Text(
       owned ? character.displayName : '???',
       maxLines: 1,
@@ -400,14 +391,7 @@ class _CharacterSheet extends StatelessWidget {
           GameBalance.characterScalingFactor(character.rank, level),
         );
     final scale = TowerStatScale.forType(character.style);
-    final rankColor = switch (character.rank) {
-      CharacterRank.s => uiTheme.creditGold,
-      CharacterRank.a => uiTheme.warningOrange,
-      CharacterRank.b => uiTheme.systemViolet,
-      CharacterRank.c => uiTheme.systemCyan,
-      CharacterRank.d => uiTheme.naniteGreen,
-      CharacterRank.e => uiTheme.medalSilver,
-    };
+    final rankColor = character.rank.orionColor(uiTheme);
     final levelFill = (level / GameBalance.characterMaxLevel).clamp(0.0, 1.0);
 
     return KeyedSubtree(

@@ -172,6 +172,7 @@ class _MissionChromeState extends State<MissionChrome> {
         !widget.snapshot.isEnded;
     NextWaveScanner buildScanner() => NextWaveScanner(
       preview: widget.snapshot.nextWavePreview!,
+      squad: widget.snapshot.squad,
       onStartWave: widget.onStartWave,
       modifierTitles: widget.snapshot.stageModifiers.isEmpty
           ? [StageModifierMetadata.standardConditions.title]
@@ -454,7 +455,7 @@ class TowerRadialActions extends StatelessWidget {
                   SizedBox.square(
                     dimension: 56,
                     child: IconButton(
-                      tooltip: 'Inspect tower',
+                      tooltip: 'Inspect member',
                       onPressed: onInspect,
                       icon: const Icon(Icons.info_outline),
                     ),

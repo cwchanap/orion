@@ -178,7 +178,6 @@ void main() {
         ),
       ]) {
         var upgrades = 0;
-        var specializations = 0;
         var targets = 0;
         var sells = 0;
         final stats = GameBalance.towerStats(tower.type, level: tower.level);
@@ -219,7 +218,7 @@ void main() {
           await tester.tap(action);
         }
 
-        expect((upgrades, specializations, targets, sells), (0, 0, 0, 0));
+        expect((upgrades, targets, sells), (0, 0, 0));
       }
     } finally {
       semantics.dispose();
@@ -304,82 +303,75 @@ void main() {
     }
   });
 
-  testWidgets(
-    'L2 inspector: dominant hero art, art-forward specialization cards',
-    (tester) async {
-      // Representative scene 1d state: level-2 tower with both specialization
-      // choices affordable and visible.
-      final tower = const PlacedTower(
-        id: 7,
-        character: Character.haruto,
-        position: GridPosition(2, 3),
-        level: 2,
-      );
-      final stats = GameBalance.towerStats(tower.type, level: tower.level);
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: orionThemeData,
-          home: TowerInspector(
-            snapshot: commandDeckSnapshot(
-              gold: 9999,
-              selectedTower: tower,
-              selectedTowerStats: stats,
-            ),
-            onUpgrade: () {},
-            onTargetingChanged: (_) {},
-            onSell: () {},
-            sellRefund: 84,
+  testWidgets('L2 inspector: dominant hero art, fixed signature panel', (
+    tester,
+  ) async {
+    // Representative scene 1d state: a level-2 member whose fixed signature
+    // preview is visible next to the tier-2→3 upgrade action.
+    final tower = const PlacedTower(
+      id: 7,
+      character: Character.haruto,
+      position: GridPosition(2, 3),
+      level: 2,
+    );
+    final stats = GameBalance.towerStats(tower.type, level: tower.level);
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: TowerInspector(
+          snapshot: commandDeckSnapshot(
+            gold: 9999,
+            selectedTower: tower,
+            selectedTowerStats: stats,
           ),
+          onUpgrade: () {},
+          onTargetingChanged: (_) {},
+          onSell: () {},
+          sellRefund: 84,
         ),
-      );
+      ),
+    );
 
-      // Tower art dominates the header instead of sitting inline at icon size.
-      final heroArt = tester.getSize(
-        find
-            .descendant(
-              of: find.byKey(const ValueKey('tower-inspector-hero')),
-              matching: find.byType(OrionAtlasSprite),
-            )
-            .first,
-      );
-      expect(heroArt.shortestSide, greaterThanOrEqualTo(56));
+    // Tower art dominates the header instead of sitting inline at icon size.
+    final heroArt = tester.getSize(
+      find
+          .descendant(
+            of: find.byKey(const ValueKey('tower-inspector-hero')),
+            matching: find.byType(OrionAtlasSprite),
+          )
+          .first,
+    );
+    expect(heroArt.shortestSide, greaterThanOrEqualTo(56));
 
-      // The fixed signature surfaces under its own section label — there is
-      // no free choice, only the member's signature applied at tier 3.
-      expect(find.text('SIGNATURE - TIER 3'), findsOneWidget);
+    // The fixed signature surfaces under its own section label — there is
+    // no free choice, only the member's signature applied at tier 3.
+    expect(find.text('SIGNATURE - TIER 3'), findsOneWidget);
 
-      // The signature panel names the member's one fixed signature.
-      final panel = find.byKey(
-        ValueKey('tower-signature-${tower.character.signature.name}'),
-      );
-      expect(panel, findsOneWidget);
-      expect(
-        find.textContaining(tower.character.signature.label),
-        findsWidgets,
-      );
+    // The signature panel names the member's one fixed signature.
+    final panel = find.byKey(
+      ValueKey('tower-signature-${tower.character.signature.name}'),
+    );
+    expect(panel, findsOneWidget);
+    expect(find.textContaining(tower.character.signature.label), findsWidgets);
 
-      // The tier-2->3 upgrade action carries the signature price.
-      await tester.ensureVisible(find.byKey(const ValueKey('tower-upgrade')));
-      expect(find.text('Upgrade ${stats.specializationCost}'), findsOneWidget);
+    // The tier-2->3 upgrade action carries the signature price.
+    await tester.ensureVisible(find.byKey(const ValueKey('tower-upgrade')));
+    expect(find.text('Upgrade ${stats.specializationCost}'), findsOneWidget);
 
-      // Existing gauge pipeline stays TowerStatScale-driven, restyled with
-      // per-stat accents and a readable gauge height.
-      final scale = TowerStatScale.forType(tower.type);
-      final damageBar = _statBarFill(
-        tester,
-        const ValueKey('tower-stat-damage'),
-      );
-      expect(damageBar, scale.damageFill(stats));
-    },
-  );
+    // Existing gauge pipeline stays TowerStatScale-driven, restyled with
+    // per-stat accents and a readable gauge height.
+    final scale = TowerStatScale.forType(tower.type);
+    final damageBar = _statBarFill(tester, const ValueKey('tower-stat-damage'));
+    expect(damageBar, scale.damageFill(stats));
+  });
 
   testWidgets('capture scene 1d fixture', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    // Representative scene 1d state: L2 laser with both specialization
-    // choices affordable. Real Roboto so the evidence shows true metrics.
+    // Representative scene 1d state: L2 member with the signature preview
+    // affordable. Real Roboto so the evidence shows true metrics.
     await loadRealFonts();
     // The memo can hold a pending future from an earlier cold-cache test
     // in this process; clear it so this fixture's warmed cache is used.
@@ -1028,7 +1020,7 @@ void main() {
       );
 
       final sellRect = tester.getRect(find.byKey(const ValueKey('tower-sell')));
-      final closeRect = tester.getRect(find.byTooltip('Close tower inspector'));
+      final closeRect = tester.getRect(find.byTooltip('Close inspector'));
       for (final rect in [sellRect, closeRect]) {
         expect(rect.left, greaterThanOrEqualTo(0));
         expect(rect.top, greaterThanOrEqualTo(0));
@@ -1047,7 +1039,7 @@ void main() {
       await hold.up();
       expect(sells, 1);
 
-      await tester.tap(find.byTooltip('Close tower inspector'));
+      await tester.tap(find.byTooltip('Close inspector'));
       expect(closes, 1);
     });
 
@@ -1352,7 +1344,7 @@ void main() {
         findsOneWidget,
       );
       for (final finder in [
-        find.byTooltip('Close tower inspector'),
+        find.byTooltip('Close inspector'),
         find.byKey(const ValueKey('tower-sell')),
       ]) {
         final rect = tester.getRect(finder);

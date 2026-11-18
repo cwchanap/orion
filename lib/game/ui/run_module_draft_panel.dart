@@ -71,16 +71,16 @@ class RunModuleDraftPanel extends StatelessWidget {
 /// null because their effect text already states the payoff directly.
 String? _beneficiaryContext(RunModuleDefinition definition, int count) {
   if (!definition.affectsTowerStats) return null;
-  final noun = count == 1 ? 'tower' : 'towers';
+  final noun = count == 1 ? 'member' : 'members';
   if (definition.tower == null) {
     return count == 0
-        ? 'Affects every tower you build'
-        : 'Affects your $count placed $noun';
+        ? 'Affects every member you deploy'
+        : 'Affects your $count deployed $noun';
   }
   final type = definition.affinityLabel;
   return count == 0
-      ? 'Benefits $type towers you build later'
-      : 'Affects your $count placed $type $noun';
+      ? 'Benefits $type members you deploy later'
+      : 'Affects your $count deployed $type $noun';
 }
 
 class _RunModuleCard extends StatelessWidget {

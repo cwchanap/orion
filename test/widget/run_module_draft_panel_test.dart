@@ -59,9 +59,9 @@ void main() {
     try {
       // With no placed towers, stat modules say who they will benefit.
       const contextById = {
-        RunModuleId.heavyCaliber: '. Affects every tower you build',
+        RunModuleId.heavyCaliber: '. Affects every member you deploy',
         RunModuleId.emergencySalvage: '',
-        RunModuleId.cryoReservoir: '. Benefits Cryo towers you build later',
+        RunModuleId.cryoReservoir: '. Benefits Cryo members you deploy later',
       };
       for (final id in offer.moduleIds) {
         final definition = runModuleDefinition(id);
@@ -193,9 +193,9 @@ void main() {
         onSelected: (id) => selected = id,
       );
 
-      expect(find.text('Affects your 3 placed towers'), findsOneWidget);
-      expect(find.text('Affects your 2 placed Cryo towers'), findsOneWidget);
-      expect(find.text('Affects your 1 placed tower'), findsOneWidget);
+      expect(find.text('Affects your 3 deployed members'), findsOneWidget);
+      expect(find.text('Affects your 2 deployed Cryo members'), findsOneWidget);
+      expect(find.text('Affects your 1 deployed member'), findsOneWidget);
       expect(tester.takeException(), isNull);
 
       final semantics = tester.ensureSemantics();
@@ -204,7 +204,7 @@ void main() {
         expect(
           find.bySemanticsLabel(
             '${cryo.title}. ${cryo.effectText} Affinity: Cryo. '
-            'Affects your 2 placed Cryo towers',
+            'Affects your 2 deployed Cryo members',
           ),
           findsOneWidget,
         );
@@ -225,10 +225,13 @@ void main() {
         RunModuleId.rocketFusing,
       ], const {});
 
-      expect(find.text('Affects every tower you build'), findsOneWidget);
-      expect(find.text('Benefits Cryo towers you build later'), findsOneWidget);
+      expect(find.text('Affects every member you deploy'), findsOneWidget);
       expect(
-        find.text('Benefits Rocket towers you build later'),
+        find.text('Benefits Cryo members you deploy later'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Benefits Rocket members you deploy later'),
         findsOneWidget,
       );
     });
@@ -251,8 +254,8 @@ void main() {
       );
 
       expect(find.textContaining('Affects'), findsNWidgets(2));
-      expect(find.textContaining('build later'), findsNothing);
-      expect(find.textContaining('you build'), findsNothing);
+      expect(find.textContaining('deploy later'), findsNothing);
+      expect(find.textContaining('you deploy'), findsNothing);
 
       final semantics = tester.ensureSemantics();
       try {

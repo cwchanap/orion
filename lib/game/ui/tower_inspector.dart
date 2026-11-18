@@ -86,7 +86,7 @@ class TowerInspector extends StatelessWidget {
                           ),
                         ),
                         child: OrionAtlasSprite(
-                          art: OrionArt.tower(tower.type),
+                          art: OrionArt.characterChibi(tower.character),
                           size: const Size(56, 56),
                         ),
                       ),
@@ -126,7 +126,7 @@ class TowerInspector extends StatelessWidget {
                       const SizedBox(width: 4),
                       IconButton(
                         autofocus: true,
-                        tooltip: 'Close tower inspector',
+                        tooltip: 'Close inspector',
                         onPressed: onClose,
                         icon: const Icon(Icons.close, size: 18),
                       ),
@@ -790,7 +790,7 @@ String _targetingTooltip(TowerTargetingMode mode) => switch (mode) {
   TowerTargetingMode.first => 'Target the enemy furthest along the path',
   TowerTargetingMode.strongest => 'Target the enemy with the highest health',
   TowerTargetingMode.weakest => 'Target the enemy with the lowest health',
-  TowerTargetingMode.closest => 'Target the enemy closest to this tower',
+  TowerTargetingMode.closest => 'Target the enemy closest to this member',
   TowerTargetingMode.shielded => 'Target shielded enemies first',
   TowerTargetingMode.armored => 'Target armored enemies first',
 };

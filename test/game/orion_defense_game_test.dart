@@ -825,7 +825,7 @@ void main() {
 
       game.upgradeSelectedTower();
 
-      expect(game.snapshot.feedback, 'Select a tower first.');
+      expect(game.snapshot.feedback, 'Select a member first.');
     });
 
     test('upgradeSelectedTower reports feedback when tower is maxed', () {
@@ -2224,7 +2224,7 @@ void main() {
 
       game.setTargetingMode(TowerTargetingMode.strongest);
 
-      expect(game.snapshot.feedback, 'Select a tower first.');
+      expect(game.snapshot.feedback, 'Select a member first.');
       expect(game.snapshot.selectedTower, isNull);
     });
 
@@ -2306,7 +2306,7 @@ void main() {
 
         expect(game.children.whereType<TowerComponent>(), isEmpty);
         expect(game.snapshot.selectedTower, isNull);
-        expect(game.snapshot.feedback, 'Sold for 35 gold.');
+        expect(game.snapshot.feedback, 'Recalled for 35 gold.');
         expect(game.snapshot.gold, GameBalance.startingGold - 50 + 35);
       },
     );
@@ -2320,7 +2320,7 @@ void main() {
 
       game.sellSelectedTower();
 
-      expect(game.snapshot.feedback, 'Select a tower first.');
+      expect(game.snapshot.feedback, 'Select a member first.');
     });
 
     test('sellSelectedTower is denied during an active wave', () {
@@ -2340,7 +2340,7 @@ void main() {
       game.sellSelectedTower();
       game.processLifecycleEvents();
 
-      expect(game.snapshot.feedback, 'Sell towers between waves.');
+      expect(game.snapshot.feedback, 'Recall members between waves.');
       expect(game.children.whereType<TowerComponent>(), hasLength(1));
     });
 
@@ -4373,7 +4373,7 @@ void main() {
         game.processLifecycleEvents();
         game.sellSelectedTower();
         game.processLifecycleEvents();
-        expect(game.snapshot.feedback, 'Sell towers between waves.');
+        expect(game.snapshot.feedback, 'Recall members between waves.');
         expect(
           feedback.calls.where(
             (call) => call == _RecordedFeedbackCall.towerSold,

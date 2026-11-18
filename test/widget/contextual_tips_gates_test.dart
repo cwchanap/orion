@@ -17,8 +17,7 @@ import '../widget_test.dart' as harness;
 
 const _bossCopy = 'Boss ahead. Check the scanner and prepare your defense.';
 
-/// A squad carrying every tip-family member, ordered so Drone Bay's card
-/// sits past the 360px rail viewport — the reveal test needs it offscreen.
+/// A six-member squad exercising the rail's full capacity.
 const _tipSquad = [
   Character.haruto,
   Character.mio,
@@ -392,18 +391,27 @@ void main() {
     final ref = await _pumpMission(tester, guideStore: store);
     final game = ref.game!;
 
-    // An unlock tip is displayed on the selected-cell rail when the wave
-    // begins — it must stay unseen for a later build phase.
+    // The targeting tip is displayed on a selected member's radial when the
+    // wave begins — it must stay unseen for a later build phase.
+    final member = PlacedTower(
+      id: 1,
+      character: Character.haruto,
+      position: const GridPosition(2, 2),
+    );
     await _project(
       tester,
       game,
       commandDeckSnapshot(
-        selectedCell: const GridPosition(2, 2),
+        selectedCell: member.position,
+        selectedTower: member,
+        placedTowers: [member],
         squad: _tipSquad,
       ),
     );
     expect(
-      find.text('Railgun member in your squad. Pierces enemies in a line.'),
+      find.text(
+        'Targeting modes. Choose which enemies this member attacks first.',
+      ),
       findsOneWidget,
     );
 
@@ -511,14 +519,27 @@ void main() {
     final store = _GatedFirstMissionGuideStore(completed: true);
     final ref = await _pumpMission(tester, guideStore: store);
     final game = ref.game!;
-    const cell = GridPosition(2, 2);
-    const ionCopy =
-        'Ion Chain member in your squad. Lightning jumps between targets.';
+    const targetingCopy =
+        'Targeting modes. Choose which enemies this member attacks first.';
+    // An affordable tier-2 member selected: signature shows first, then the
+    // targeting tip chains in once signature is acknowledged.
+    final member = PlacedTower(
+      id: 1,
+      character: Character.haruto,
+      position: const GridPosition(2, 2),
+      level: 2,
+    );
 
     await _project(
       tester,
       game,
-      commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
+      commandDeckSnapshot(
+        gold: 300,
+        selectedCell: member.position,
+        selectedTower: member,
+        placedTowers: [member],
+        squad: _tipSquad,
+      ),
     );
     await tester.tap(find.text('Got it'));
     await tester.pump();
@@ -526,7 +547,7 @@ void main() {
     // button is still inside an IgnorePointer.
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump();
-    expect(find.text(ionCopy), findsOneWidget);
+    expect(find.text(targetingCopy), findsOneWidget);
     await tester.tap(find.text('Got it'));
     await tester.pump();
 
@@ -537,8 +558,8 @@ void main() {
       await tester.pump();
     }
     expect(await store.loadSeenTips(), {
-      ContextualTip.railgun,
-      ContextualTip.ionChain,
+      ContextualTip.signature,
+      ContextualTip.targeting,
     });
   });
 
@@ -656,169 +677,11 @@ void main() {
     },
   );
 
-  group('unlock tips on the selected-cell rail', () {
-    const railgunCopy =
-        'Railgun member in your squad. Pierces enemies in a line.';
-    const ionChainCopy =
-        'Ion Chain member in your squad. Lightning jumps between targets.';
-    const droneBayCopy =
-        'Drone Bay member in your squad. Launches autonomous interceptors.';
-    const cell = GridPosition(2, 2);
-
-    PlacedTower placedTower(Character member, int id) => PlacedTower(
-      id: id,
-      character: member,
-      position: GridPosition(2, 2 + id),
-    );
-
-    testWidgets('tip anchors to the rail card; no Wave pill is present in '
-        'this dock branch', (tester) async {
-      final store = InMemoryFirstMissionGuideStore(completed: true);
-      final ref = await _pumpMission(tester, guideStore: store);
-
-      await _project(
-        tester,
-        ref.game!,
-        commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
-      );
-
-      expect(find.text(railgunCopy), findsOneWidget);
-      expect(find.text('Got it'), findsOneWidget);
-      // The selected-cell branch replaces the idle bar: no Wave pill exists
-      // to obstruct, ever.
-      expect(find.byTooltip('Start Wave'), findsNothing);
-
-      await tester.tap(find.text('Got it'));
-      await tester.pump();
-      await tester.pump();
-
-      expect(find.text(railgunCopy), findsNothing);
-      // The next unlock candidate chains in immediately.
-      expect(find.text(ionChainCopy), findsOneWidget);
-      expect(await store.loadSeenTips(), {ContextualTip.railgun});
-    });
-
-    testWidgets(
-      'offscreen Drone Bay card is revealed once at 360x640 and 1.3x text '
-      'scale, with Got it reachable',
-      (tester) async {
-        tester.platformDispatcher.textScaleFactorTestValue = 1.3;
-        addTearDown(tester.platformDispatcher.clearAllTestValues);
-        // Everything up to Drone Bay already seen: Drone Bay is the one
-        // candidate, and its card sits past the 360px viewport's end.
-        final preloaded = InMemoryFirstMissionGuideStore(
-          completed: true,
-          seenTips: {
-            ContextualTip.railgun,
-            ContextualTip.ionChain,
-            ContextualTip.nanite,
-            ContextualTip.gravityWell,
-          },
-        );
-        final ref = await _pumpMission(tester, guideStore: preloaded);
-        final game = ref.game!;
-
-        await _project(
-          tester,
-          game,
-          commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
-        );
-        // The reveal animation's ticker starts in the mount frame's
-        // post-frame callbacks, so its first tick lands one frame later;
-        // give it its full 240ms window before asserting.
-        await tester.pump(const Duration(milliseconds: 260));
-        await tester.pump();
-
-        expect(find.text(droneBayCopy), findsOneWidget);
-        final card = tester.getRect(
-          find.byKey(const ValueKey('tower-card-tetsuo')),
-        );
-        expect(card.left, greaterThanOrEqualTo(0));
-        expect(card.right, lessThanOrEqualTo(360));
-        final gotIt = tester.getRect(find.text('Got it'));
-        expect(gotIt.left, greaterThanOrEqualTo(0));
-        expect(gotIt.right, lessThanOrEqualTo(360));
-        expect(gotIt.top, greaterThanOrEqualTo(0));
-
-        await tester.tap(find.text('Got it'));
-        await tester.pump();
-        await tester.pump();
-        expect(await preloaded.loadSeenTips(), {
-          ContextualTip.railgun,
-          ContextualTip.ionChain,
-          ContextualTip.nanite,
-          ContextualTip.gravityWell,
-          ContextualTip.droneBay,
-        });
-      },
-    );
-
-    testWidgets(
-      'dock branch transitions with the tip active never duplicate the card '
-      'GlobalKey',
-      (tester) async {
-        final store = InMemoryFirstMissionGuideStore(completed: true);
-        final ref = await _pumpMission(tester, guideStore: store);
-        final game = ref.game!;
-
-        await _project(
-          tester,
-          game,
-          commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
-        );
-        expect(find.text(railgunCopy), findsOneWidget);
-
-        // Deselect → idle branch (persistent rail, no anchor) runs through
-        // the AnimatedSwitcher, then re-select → build branch again.
-        await _project(tester, game, commandDeckSnapshot());
-        await _project(
-          tester,
-          game,
-          commandDeckSnapshot(selectedCell: cell, squad: _tipSquad),
-        );
-
-        expect(tester.takeException(), isNull);
-        expect(find.text(railgunCopy), findsOneWidget);
-      },
-    );
-
-    testWidgets('placing a tower teaches its unlock tip without Got it', (
-      tester,
-    ) async {
-      final store = InMemoryFirstMissionGuideStore(completed: true);
-      final ref = await _pumpMission(tester, guideStore: store);
-      final game = ref.game!;
-
-      // A snapshot fact: a Railgun is on the board. The learned union must
-      // acknowledge it post-frame with no explicit Got it.
-      await _project(
-        tester,
-        game,
-        commandDeckSnapshot(placedTowers: [placedTower(Character.elena, 1)]),
-      );
-      await tester.pump();
-      expect(await store.loadSeenTips(), {ContextualTip.railgun});
-
-      // Selecting a cell now skips Railgun: its lesson is learned.
-      await _project(
-        tester,
-        game,
-        commandDeckSnapshot(
-          selectedCell: cell,
-          squad: _tipSquad,
-          placedTowers: [placedTower(Character.elena, 1)],
-        ),
-      );
-      expect(find.text(railgunCopy), findsNothing);
-      expect(find.text(ionChainCopy), findsOneWidget);
-    });
-  });
-
-  group('specialization and targeting tips', () {
-    const specCopy =
+  group('signature and targeting tips', () {
+    const signatureCopy =
         'Signature ready. Upgrade this member to tier 3 to apply it.';
     const targetingCopy =
-        'Targeting modes. Choose which enemies this tower attacks first.';
+        'Targeting modes. Choose which enemies this member attacks first.';
     final bubble = find.byKey(
       const ValueKey('first-mission-guide-callout-bubble'),
     );
@@ -833,7 +696,7 @@ void main() {
     );
 
     testWidgets(
-      'nothing selected: specialization points at the qualifying tower cell '
+      'nothing selected: signature points at the qualifying member cell '
       'and never covers the Wave pill',
       (tester) async {
         final store = InMemoryFirstMissionGuideStore(completed: true);
@@ -842,12 +705,12 @@ void main() {
         await _project(
           tester,
           ref.game!,
-          // Railgun specialization costs 210 — above the fixture's 150
+          // Elena's signature costs 210 — above the fixture's 150
           // gold — so cover it for the tip to be eligible at all.
           commandDeckSnapshot(gold: 300, placedTowers: [levelTwoTower()]),
         );
 
-        expect(find.text(specCopy), findsOneWidget);
+        expect(find.text(signatureCopy), findsOneWidget);
         expect(find.text('Got it'), findsOneWidget);
         // The idle dock is live with nothing selected, so the board-cell
         // bubble must dodge the Wave pill.
@@ -861,7 +724,7 @@ void main() {
     );
 
     testWidgets(
-      'selecting the qualifying tower anchors specialization at its radial '
+      'selecting the qualifying member anchors the signature tip at its radial '
       'progression button, clear of the Wave pill',
       (tester) async {
         final store = InMemoryFirstMissionGuideStore(completed: true);
@@ -871,7 +734,7 @@ void main() {
         await _project(
           tester,
           ref.game!,
-          // Railgun specialization costs 210 — above the fixture's 150
+          // Elena's signature costs 210 — above the fixture's 150
           // gold — so cover it for the tip to be eligible at all.
           commandDeckSnapshot(
             gold: 300,
@@ -884,11 +747,11 @@ void main() {
           ),
         );
 
-        expect(find.text(specCopy), findsOneWidget);
-        final specialize = find.byTooltip('Upgrade 210');
-        expect(specialize, findsOneWidget);
+        expect(find.text(signatureCopy), findsOneWidget);
+        final signatureUpgrade = find.byTooltip('Upgrade 210');
+        expect(signatureUpgrade, findsOneWidget);
         expect(
-          tester.getRect(bubble).intersect(tester.getRect(specialize)),
+          tester.getRect(bubble).intersect(tester.getRect(signatureUpgrade)),
           isEmpty,
           reason: 'the bubble must leave the progression button tappable',
         );
@@ -928,7 +791,7 @@ void main() {
           ),
         );
 
-        expect(find.text(specCopy), findsNothing);
+        expect(find.text(signatureCopy), findsNothing);
         expect(find.text(targetingCopy), findsOneWidget);
         final button = find.byTooltip('Targeting: First. Change targeting');
         expect(button, findsOneWidget);
@@ -982,7 +845,7 @@ void main() {
             'sit over the Inspect/Salvage row above it',
       );
       expect(
-        bubbleRect.intersect(tester.getRect(find.byTooltip('Inspect tower'))),
+        bubbleRect.intersect(tester.getRect(find.byTooltip('Inspect member'))),
         isEmpty,
       );
       expect(
@@ -1097,7 +960,7 @@ void main() {
 
       // Opening the inspector through the radial's Inspect action must
       // yield the tip to the modal.
-      await tester.tap(find.byTooltip('Inspect tower'));
+      await tester.tap(find.byTooltip('Inspect member'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 260));
       await tester.pump();
@@ -1113,7 +976,7 @@ void main() {
     });
 
     testWidgets(
-      'specialized and retargeted towers auto-acknowledge their tips',
+      'signature-applied and retargeted members auto-acknowledge their tips',
       (tester) async {
         final store = InMemoryFirstMissionGuideStore(completed: true);
         final ref = await _pumpMission(tester, guideStore: store);
@@ -1142,7 +1005,7 @@ void main() {
         );
         await tester.pump();
 
-        expect(find.text(specCopy), findsNothing);
+        expect(find.text(signatureCopy), findsNothing);
         expect(find.text(targetingCopy), findsNothing);
         expect(
           await store.loadSeenTips(),

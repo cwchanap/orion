@@ -449,6 +449,89 @@ class TowerStats {
   final double clusterBurstDamageMultiplier;
   final double clusterBurstRadius;
 
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is TowerStats &&
+          type == other.type &&
+          level == other.level &&
+          specialization == other.specialization &&
+          cost == other.cost &&
+          upgradeCost == other.upgradeCost &&
+          specializationCost == other.specializationCost &&
+          range == other.range &&
+          damage == other.damage &&
+          fireInterval == other.fireInterval &&
+          projectileSpeed == other.projectileSpeed &&
+          splashRadius == other.splashRadius &&
+          slowMultiplier == other.slowMultiplier &&
+          slowDuration == other.slowDuration &&
+          pierceCount == other.pierceCount &&
+          pierceWidth == other.pierceWidth &&
+          chainCount == other.chainCount &&
+          chainRange == other.chainRange &&
+          chainFalloff == other.chainFalloff &&
+          corrosionDamagePerSecond == other.corrosionDamagePerSecond &&
+          corrosionDuration == other.corrosionDuration &&
+          armorShred == other.armorShred &&
+          fieldRadius == other.fieldRadius &&
+          fieldDuration == other.fieldDuration &&
+          fieldTickInterval == other.fieldTickInterval &&
+          droneCount == other.droneCount &&
+          droneLifetime == other.droneLifetime &&
+          droneDamage == other.droneDamage &&
+          droneAttackInterval == other.droneAttackInterval &&
+          maxActiveDrones == other.maxActiveDrones &&
+          shieldDamageMultiplier == other.shieldDamageMultiplier &&
+          armorDamageMultiplier == other.armorDamageMultiplier &&
+          slowedDamageMultiplier == other.slowedDamageMultiplier &&
+          prismSplitDamageMultiplier == other.prismSplitDamageMultiplier &&
+          prismSplitRange == other.prismSplitRange &&
+          clusterBurstCount == other.clusterBurstCount &&
+          clusterBurstDamageMultiplier == other.clusterBurstDamageMultiplier &&
+          clusterBurstRadius == other.clusterBurstRadius;
+
+  @override
+  int get hashCode => Object.hashAll([
+    type,
+    level,
+    specialization,
+    cost,
+    upgradeCost,
+    specializationCost,
+    range,
+    damage,
+    fireInterval,
+    projectileSpeed,
+    splashRadius,
+    slowMultiplier,
+    slowDuration,
+    pierceCount,
+    pierceWidth,
+    chainCount,
+    chainRange,
+    chainFalloff,
+    corrosionDamagePerSecond,
+    corrosionDuration,
+    armorShred,
+    fieldRadius,
+    fieldDuration,
+    fieldTickInterval,
+    droneCount,
+    droneLifetime,
+    droneDamage,
+    droneAttackInterval,
+    maxActiveDrones,
+    shieldDamageMultiplier,
+    armorDamageMultiplier,
+    slowedDamageMultiplier,
+    prismSplitDamageMultiplier,
+    prismSplitRange,
+    clusterBurstCount,
+    clusterBurstDamageMultiplier,
+    clusterBurstRadius,
+  ]);
+
   bool get canUpgrade => level < 3;
 
   /// The one authoritative price of the next battle-tier transition: tier 1→2
@@ -913,13 +996,13 @@ final class RunModuleDefinition {
 
   String get effectText => switch (id) {
     RunModuleId.heavyCaliber =>
-      'All tower damage rises ${percent(damageMultiplier - 1)}; '
+      'All member damage rises ${percent(damageMultiplier - 1)}; '
           'attack interval rises ${percent(fireIntervalMultiplier - 1)}.',
     RunModuleId.overclockRelay =>
       'Attack interval drops ${percent(1 - fireIntervalMultiplier)}; '
-          'all tower damage drops ${percent(1 - damageMultiplier)}.',
+          'all member damage drops ${percent(1 - damageMultiplier)}.',
     RunModuleId.longSight =>
-      'All towers gain ${percent(rangeMultiplier - 1)} range.',
+      'All members gain ${percent(rangeMultiplier - 1)} range.',
     RunModuleId.emergencySalvage => 'Gain $immediateGold gold immediately.',
     RunModuleId.cryoReservoir =>
       'Cryo slows last ${number(slowDurationBonus)} seconds longer.',
@@ -927,7 +1010,7 @@ final class RunModuleDefinition {
       'Rocket splash grows ${percent(splashRadiusMultiplier - 1)}; '
           'damage drops ${percent(1 - damageMultiplier)}.',
     RunModuleId.relayCalibration =>
-      'All towers gain ${percent(rangeMultiplier - 1)} range; '
+      'All members gain ${percent(rangeMultiplier - 1)} range; '
           'attack interval drops ${percent(1 - fireIntervalMultiplier)}.',
     RunModuleId.relayArc => 'Ion Chain arcs to $chainCountBonus more target.',
     RunModuleId.salvagedDrones =>
@@ -1363,17 +1446,6 @@ class GameBalance {
       clearBonus: 0,
     ),
   ];
-
-  static int towerUnlockWave(TowerType type) {
-    return switch (type) {
-      TowerType.laser || TowerType.rocket || TowerType.cryo => 1,
-      TowerType.railgun => 2,
-      TowerType.ionChain => 3,
-      TowerType.nanite => 4,
-      TowerType.gravityWell => 5,
-      TowerType.droneBay => 6,
-    };
-  }
 
   static List<TowerSpecialization> specializationsFor(TowerType type) {
     return switch (type) {

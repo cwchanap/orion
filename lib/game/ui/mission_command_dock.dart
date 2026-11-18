@@ -1117,15 +1117,22 @@ double _largeTextTowerCardHeight(BuildContext context) {
     return height;
   }
 
+  // The compact card's second line is either the readout cost or the
+  // deployed "ON FIELD" micro label — the label's looser line height is the
+  // taller of the two, so the card must size for whichever the member shows.
+  final secondLine = math.max(
+    heightOf(
+      '50',
+      OrionTypography.readout(
+        size: _largeTextTowerCostSize(scaler),
+        color: uiTheme.creditGold,
+      ),
+    ),
+    heightOf('ON FIELD', OrionTypography.microLabel(color: uiTheme.textMuted)),
+  );
   final labelsHeight =
       heightOf('LASER', OrionTypography.microLabel(color: uiTheme.textMuted)) +
-      heightOf(
-        '50',
-        OrionTypography.readout(
-          size: _largeTextTowerCostSize(scaler),
-          color: uiTheme.creditGold,
-        ),
-      );
+      secondLine;
   return math.max(_TowerBuildCard.compactHeight, labelsHeight + 10);
 }
 
@@ -1198,7 +1205,7 @@ class _TowerBuildCard extends StatelessWidget {
     final textScaler = requestedScaler;
     final scaleFactor = textScaler.scale(1);
     final sprite = OrionAtlasSprite(
-      art: OrionArt.tower(character.style),
+      art: OrionArt.characterChibi(character),
       size: const Size(58, 58),
     );
     final nameStyle = OrionTypography.microLabel(
@@ -1282,12 +1289,22 @@ class _TowerBuildCard extends StatelessWidget {
         ],
       ),
     );
-    final price = Text(
-      '${stats.cost}',
-      maxLines: 1,
-      textScaler: textScaler,
-      style: priceStyle,
-    );
+    final price = deployed
+        ? Text(
+            'ON FIELD',
+            maxLines: 1,
+            textScaler: textScaler,
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: uiTheme.textMuted,
+            ),
+          )
+        : Text(
+            '${stats.cost}',
+            maxLines: 1,
+            textScaler: textScaler,
+            style: priceStyle,
+          );
     final name = Text(
       character.displayName.toUpperCase(),
       maxLines: 1,
@@ -1306,6 +1323,21 @@ class _TowerBuildCard extends StatelessWidget {
         maxLines: 1,
         textScaler: textScaler,
         style: priceStyle,
+      ),
+    );
+    // Rank reads off the Camp color mapping so the same member carries one
+    // identity from roster to dock.
+    final rankBadge = Positioned(
+      top: 2,
+      left: 4,
+      child: Text(
+        character.rank.label,
+        maxLines: 1,
+        textScaler: textScaler,
+        style: OrionTypography.readout(
+          size: 10,
+          color: character.rank.orionColor(uiTheme),
+        ),
       ),
     );
 
@@ -1369,6 +1401,7 @@ class _TowerBuildCard extends StatelessWidget {
                     ),
                   ),
                   levelBadge,
+                  rankBadge,
                 ],
               ),
             ),
@@ -1431,7 +1464,7 @@ class _TowerBuildCard extends StatelessWidget {
             ],
           ),
           child: OrionAtlasSprite(
-            art: OrionArt.tower(character.style),
+            art: OrionArt.characterChibi(character),
             size: const Size(64, 64),
           ),
         ),
@@ -1484,10 +1517,10 @@ class _TowerBuildCard extends StatelessWidget {
   }
 
   String _cardLabel(TowerStats stats, bool affordable) {
-    final state = deployed ? 'already deployed' : 'ready';
+    final state = deployed ? 'already on field' : 'ready';
     final affordability = affordable ? 'affordable' : 'unaffordable';
-    return '${character.displayName} level $characterLevel '
-        '(${character.style.label}), $state, cost ${stats.cost}, '
+    return '${character.displayName}, rank ${character.rank.label}, '
+        'level $characterLevel, $state, cost ${stats.cost}, '
         '$affordability, place on selected cell';
   }
 }

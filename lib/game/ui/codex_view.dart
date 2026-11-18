@@ -32,10 +32,10 @@ class CodexView extends StatefulWidget {
 
 class _CodexViewState extends State<CodexView> {
   int _section = 0;
-  static const _sections = ['Towers', 'Enemies', 'Effects', 'Stages'];
-  TowerType? _selectedTower;
+  static const _sections = ['Characters', 'Enemies', 'Effects', 'Stages'];
+  Character? _selectedCharacter;
   EnemyArchetype? _selectedEnemy;
-  final _towerGridKey = GlobalKey();
+  final _characterGridKey = GlobalKey();
   final _enemyGridKey = GlobalKey();
   final _enemyDetailKey = GlobalKey();
 
@@ -94,12 +94,14 @@ class _CodexViewState extends State<CodexView> {
     if (controller.hasClients) controller.jumpTo(0);
   }
 
-  void _selectTower(TowerType tower) {
-    setState(() => _selectedTower = tower);
+  void _selectCharacter(Character character) {
+    setState(() => _selectedCharacter = character);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _section != 0 || _selectedTower != tower) return;
+      if (!mounted || _section != 0 || _selectedCharacter != character) {
+        return;
+      }
       final controller = _scrollControllers[0];
-      final grid = _towerGridKey.currentContext?.findRenderObject();
+      final grid = _characterGridKey.currentContext?.findRenderObject();
       if (!controller.hasClients || grid is! RenderBox || !grid.hasSize) return;
       final viewport = RenderAbstractViewport.maybeOf(grid);
       if (viewport == null) return;
@@ -348,22 +350,22 @@ class _CodexViewState extends State<CodexView> {
     List<Widget> children;
     switch (_section) {
       case 0:
-        final towers = CodexData.towers
-            .where((t) => codexMatches(query, t.searchTerms))
+        final characters = CodexData.characters
+            .where((c) => codexMatches(query, c.searchTerms))
             .toList();
-        if (towers.isEmpty) {
+        if (characters.isEmpty) {
           children = const [];
           break;
         }
-        final detail = towers.firstWhere(
-          (t) => t.type == _selectedTower,
-          orElse: () => towers.first,
+        final detail = characters.firstWhere(
+          (c) => c.character == _selectedCharacter,
+          orElse: () => characters.first,
         );
         children = [
-          _towerGrid(towers, detail.type),
+          _characterGrid(characters, detail.character),
           const SizedBox(height: 12),
-          _towerDetail(detail),
-          ..._specIndex(towers, detail),
+          _characterDetail(detail),
+          ..._signatureIndex(characters, detail),
         ];
       case 1:
         final traits = CodexData.traits
@@ -421,10 +423,10 @@ class _CodexViewState extends State<CodexView> {
                         color: uiTheme.textMuted,
                       ),
                     ),
-                    if (ef.relatedSpecializations.isNotEmpty) ...[
+                    if (ef.relatedCharacters.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Used by: ${ef.relatedSpecializations.map((s) => s.label).join(', ')}',
+                        'Used by: ${ef.relatedCharacters.map((member) => '${member.displayName} (${member.signatureName})').join(', ')}',
                         style: OrionTypography.microLabel(
                           color: uiTheme.textMuted,
                         ),
@@ -473,18 +475,21 @@ class _CodexViewState extends State<CodexView> {
     );
   }
 
-  Widget _towerGrid(List<CodexTowerEntry> towers, TowerType detailType) {
+  Widget _characterGrid(
+    List<CodexCharacterEntry> characters,
+    Character detailCharacter,
+  ) {
     return Padding(
-      key: _towerGridKey,
+      key: _characterGridKey,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final columns = _tileColumns(constraints.maxWidth, [
-            for (final t in towers) t.label,
+            for (final c in characters) c.label,
           ]);
           return Column(
             children: [
-              for (var row = 0; row < towers.length; row += columns) ...[
+              for (var row = 0; row < characters.length; row += columns) ...[
                 if (row > 0) const SizedBox(height: 8),
                 IntrinsicHeight(
                   child: Row(
@@ -493,13 +498,15 @@ class _CodexViewState extends State<CodexView> {
                       for (var col = 0; col < columns; col++) ...[
                         if (col > 0) const SizedBox(width: 8),
                         Expanded(
-                          child: row + col < towers.length
+                          child: row + col < characters.length
                               ? _CodexTile(
-                                  entry: towers[row + col],
+                                  entry: characters[row + col],
                                   selected:
-                                      towers[row + col].type == detailType,
-                                  onSelect: () =>
-                                      _selectTower(towers[row + col].type),
+                                      characters[row + col].character ==
+                                      detailCharacter,
+                                  onSelect: () => _selectCharacter(
+                                    characters[row + col].character,
+                                  ),
                                 )
                               : const SizedBox(height: 92),
                         ),
@@ -585,15 +592,45 @@ class _CodexViewState extends State<CodexView> {
     return ((maxWidth + gap) / (tile + gap)).floor().clamp(1, 4);
   }
 
-  Widget _towerDetail(CodexTowerEntry t) {
+  Widget _characterDetail(CodexCharacterEntry t) {
     final uiTheme = OrionUiTheme.of(context);
     final stats = t.baseStats;
-    final scale = TowerStatScale.forType(t.type);
+    final scale = TowerStatScale.forType(t.character.style);
     final secondaryFill = scale.secondaryFill(stats);
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
+    final rankColor = t.character.rank.orionColor(uiTheme);
     final heading = Text(
       t.label.toUpperCase(),
       style: OrionTypography.readout(size: 20, color: uiTheme.textPrimary),
+    );
+    final rankLine = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: rankColor.withValues(alpha: .18),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: rankColor.withValues(alpha: .7)),
+          ),
+          child: Text(
+            'RANK ${t.character.rank.label}',
+            style: OrionTypography.microLabel(size: 10, color: rankColor),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Flexible(
+          child: Text(
+            t.character.role,
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: uiTheme.textMuted,
+            ),
+          ),
+        ),
+      ],
     );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -606,12 +643,17 @@ class _CodexViewState extends State<CodexView> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (largeText) ...[heading, const SizedBox(height: 8)],
+            if (largeText) ...[
+              heading,
+              const SizedBox(height: 4),
+              rankLine,
+              const SizedBox(height: 8),
+            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 OrionAtlasSprite(
-                  art: OrionArt.tower(t.type),
+                  art: OrionArt.characterChibi(t.character),
                   size: const Size.square(56),
                 ),
                 const SizedBox(width: 12),
@@ -620,9 +662,14 @@ class _CodexViewState extends State<CodexView> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (!largeText) ...[heading, const SizedBox(height: 4)],
+                      if (!largeText) ...[
+                        heading,
+                        const SizedBox(height: 4),
+                        rankLine,
+                      ],
+                      const SizedBox(height: 4),
                       Text(
-                        'Available from wave ${t.unlockWave}',
+                        t.character.fullName,
                         style: OrionTypography.microLabel(
                           size: 10,
                           color: uiTheme.textMuted,
@@ -639,6 +686,14 @@ class _CodexViewState extends State<CodexView> {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              t.character.bio,
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: uiTheme.textMuted,
+              ),
             ),
             const SizedBox(height: 12),
             // Damage / Fire interval only when meaningful (drone bay has damage 0).
@@ -673,28 +728,32 @@ class _CodexViewState extends State<CodexView> {
             for (final (k, v) in _specialtyLines(stats)) _line(k, v),
             const SizedBox(height: 12),
             Text(
-              'Specializations',
+              'Signature',
               style: OrionTypography.microLabel(
                 size: 10,
                 color: uiTheme.textMuted,
               ),
             ),
-            for (final spec in t.specializations)
-              _specCard(t, spec, includeCoreLines: true),
+            _signatureCard(
+              t,
+              t.signature,
+              includeCoreLines: true,
+              showOwner: false,
+            ),
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _specIndex(
-    List<CodexTowerEntry> towers,
-    CodexTowerEntry detail,
+  List<Widget> _signatureIndex(
+    List<CodexCharacterEntry> characters,
+    CodexCharacterEntry detail,
   ) {
     final uiTheme = OrionUiTheme.of(context);
     final others = [
-      for (final t in towers)
-        if (t.type != detail.type) t,
+      for (final c in characters)
+        if (c.character != detail.character) c,
     ];
     if (others.isEmpty) return const [];
     return [
@@ -702,37 +761,37 @@ class _CodexViewState extends State<CodexView> {
       Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: Text(
-          'All specializations',
+          'All signatures',
           style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
         ),
       ),
-      for (final t in others)
-        for (final spec in t.specializations)
-          _specCard(t, spec, includeCoreLines: false),
+      for (final c in others)
+        _signatureCard(c, c.signature, includeCoreLines: false),
     ];
   }
 
-  Widget _specCard(
-    CodexTowerEntry t,
-    CodexSpecializationEntry spec, {
+  Widget _signatureCard(
+    CodexCharacterEntry t,
+    CodexSignatureEntry signature, {
     required bool includeCoreLines,
+    bool showOwner = true,
   }) {
     final uiTheme = OrionUiTheme.of(context);
     final largeText = MediaQuery.textScalerOf(context).scale(1) > 1.5;
     final art = OrionAtlasSprite(
-      art: OrionArt.specialization(spec.specialization),
+      art: OrionArt.characterChibi(t.character),
       size: const Size.square(34),
     );
     final cost = Text(
-      '${t.specializationCost}g',
+      '${t.signatureCost}g',
       style: OrionTypography.readout(size: 14, color: uiTheme.creditGold),
     );
     final title = Text(
-      spec.label,
+      showOwner ? '${signature.label} — ${t.label}' : signature.label,
       style: OrionTypography.readout(size: 14, color: uiTheme.textPrimary),
     );
     final description = Text(
-      spec.description,
+      signature.description,
       style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
     );
     return Padding(
@@ -767,10 +826,10 @@ class _CodexViewState extends State<CodexView> {
               ),
             if (includeCoreLines)
               for (final (k, v) in _specializationCoreLines(
-                spec.specializedStats,
+                signature.specializedStats,
               ))
                 _line(k, v),
-            for (final (k, v) in _specialtyLines(spec.specializedStats))
+            for (final (k, v) in _specialtyLines(signature.specializedStats))
               _line(k, v),
           ],
         ),
@@ -1310,15 +1369,16 @@ class _CodexTile extends StatelessWidget {
     required this.onSelect,
   });
 
-  final CodexTowerEntry entry;
+  final CodexCharacterEntry entry;
   final bool selected;
   final VoidCallback onSelect;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final rankColor = entry.character.rank.orionColor(uiTheme);
     return _CodexCardTile(
-      tileKey: ValueKey('codex-tile-${entry.type.name}'),
+      tileKey: ValueKey('codex-tile-${entry.character.name}'),
       label: entry.label,
       selected: selected,
       onSelect: onSelect,
@@ -1330,17 +1390,14 @@ class _CodexTile extends StatelessWidget {
           Align(
             alignment: Alignment.centerRight,
             child: Text(
-              'W${entry.unlockWave}',
-              style: OrionTypography.microLabel(
-                size: 10,
-                color: uiTheme.textDim,
-              ),
+              entry.character.rank.label,
+              style: OrionTypography.microLabel(size: 10, color: rankColor),
             ),
           ),
           const SizedBox(height: 4),
           Center(
             child: OrionAtlasSprite(
-              art: OrionArt.tower(entry.type),
+              art: OrionArt.characterChibi(entry.character),
               size: const Size.square(46),
             ),
           ),
