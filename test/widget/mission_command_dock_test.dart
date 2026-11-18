@@ -2,6 +2,7 @@ import 'dart:ui' show SemanticsAction;
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -571,6 +572,59 @@ void main() {
       await tester.tap(find.byKey(const ValueKey('tower-card-haruto')));
       expect(placed, isEmpty);
     });
+
+    testWidgets(
+      'compact deployed label is never clipped at 320x568 / 2x text',
+      (tester) async {
+        // Bundled fonts for real metrics: at 2x the 'ON FIELD' micro label
+        // (~96px) is far wider than the name/cost the compact card sized
+        // its label slot from (~45px for 'MIO'/'80') — the card must size
+        // for whichever label it shows, including on short-name members.
+        await loadRealFonts(withMaterialIcons: false);
+        tester.view.physicalSize = const Size(320, 568);
+        tester.view.devicePixelRatio = 1;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(
+          MaterialApp(
+            builder: (context, child) => MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: const TextScaler.linear(2)),
+              child: child!,
+            ),
+            home: Scaffold(
+              body: Align(
+                alignment: Alignment.bottomLeft,
+                child: SizedBox(
+                  width: 320,
+                  child: TowerBuildRail(
+                    phase: GamePhase.build,
+                    gold: 999,
+                    squad: const [Character.mio, Character.haruto],
+                    squadLevels: const {},
+                    deployedCharacters: const {Character.mio, Character.haruto},
+                    onPlaceTower: (_) {},
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        final onField = find.text('ON FIELD');
+        expect(onField, findsNWidgets(2));
+        for (final element in onField.evaluate()) {
+          final paragraph = element.renderObject! as RenderParagraph;
+          expect(
+            paragraph.didExceedMaxLines,
+            isFalse,
+            reason: 'ON FIELD must fit its compact card at 2x text',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   testWidgets(

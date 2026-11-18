@@ -1235,12 +1235,20 @@ class _TowerBuildCard extends StatelessWidget {
       return width;
     }
 
+    // The compact card's label slot must fit whichever second line it can
+    // show: the readout cost OR the deployed 'ON FIELD' micro label —
+    // which shares nameStyle's metrics and is far wider than any cost, so
+    // it joins the width measurement even before the member deploys. That
+    // keeps every card's width stable when deployment flips the label.
     final cardWidth = compact
         ? math.max(
             baseWidth,
             58.0 +
                 math.max(
-                  textWidth(character.displayName.toUpperCase(), nameStyle),
+                  math.max(
+                    textWidth(character.displayName.toUpperCase(), nameStyle),
+                    textWidth('ON FIELD', nameStyle),
+                  ),
                   textWidth('${stats.cost}', priceStyle),
                 ),
           )
