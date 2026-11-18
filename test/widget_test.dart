@@ -97,17 +97,33 @@ Future<void> openResetCampaignDialog(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Opens the briefing for [mapLabel] and taps [actionLabel]. Launch awaits
+/// one queued squad write before the route pops (HPA-922 task 6), so a
+/// delayed store holds the stage start hostage: pass the store's
+/// save-completions list as [drainCompletions] and this helper completes the
+/// launch write so the stage can mount.
 Future<void> startStageFromBriefing(
   WidgetTester tester, {
   String mapLabel = 'Alpha',
   String actionLabel = 'Start Mission',
+  List<Completer<void>>? drainCompletions,
 }) async {
   await tester.ensureVisible(find.text(mapLabel));
   await tester.tap(find.text(mapLabel));
   await tester.pumpAndSettle();
   expect(find.byTooltip(actionLabel), findsOneWidget);
+  final completionsBefore = drainCompletions?.length ?? 0;
   await tester.tap(find.byTooltip(actionLabel));
   await tester.pump();
+  if (drainCompletions != null) {
+    await _pumpUntil(tester, () => drainCompletions.length > completionsBefore);
+    drainCompletions[completionsBefore].complete();
+    // Fixed pumps: the pop animation hands off to _startStage, and the
+    // mounted game then keeps a live ticker that never settles.
+    for (var i = 0; i < 4; i++) {
+      await tester.pump();
+    }
+  }
 }
 
 void expectSemanticsLabel(
@@ -1484,7 +1500,11 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Replay Mission',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishVictory(
         tester,
@@ -1516,15 +1536,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Saved.'), findsOneWidget);
@@ -1550,15 +1574,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Saved.'), findsOneWidget);
@@ -1613,7 +1641,10 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester);
+      await startStageFromBriefing(
+        tester,
+        drainCompletions: store.saveCompletions,
+      );
 
       final firstAttemptGame = game!;
       expect(
@@ -1626,7 +1657,7 @@ void main() {
         firstAttemptGame,
         result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
       );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       expect(find.text('Blueprint recovery pending'), findsOneWidget);
       expect(
@@ -1634,7 +1665,7 @@ void main() {
         isNot(contains(RunModuleId.relayCalibration)),
       );
 
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       expect(
         find.text('Blueprint recovered: Relay Calibration'),
@@ -1676,6 +1707,7 @@ void main() {
         tester,
         mapLabel: 'Rift',
         actionLabel: 'Start Mission',
+        drainCompletions: store.saveCompletions,
       );
 
       expect(game!.snapshot.gold, GameBalance.startingGold);
@@ -1685,8 +1717,8 @@ void main() {
         game!,
         result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
       );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-      store.saveCompletions.single.complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('Replay Mission'));
@@ -1702,9 +1734,8 @@ void main() {
   testWidgets(
     'fresh first-clear save failure reports Blueprint not recovered',
     (tester) async {
-      final store = _TestCampaignProgressStore(
-        saveError: StateError('save failed'),
-      );
+      // Index 0 is the launch's squad write; the result write must fail.
+      final store = _TestCampaignProgressStore(failOnSaveIndices: {1});
       OrionDefenseGame? game;
 
       await tester.pumpWidget(
@@ -1732,7 +1763,8 @@ void main() {
   ) async {
     final store = _TestCampaignProgressStore(
       delaySaves: true,
-      failOnSaveIndices: {0},
+      // Index 0 is the launch's squad write; the result write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -1743,15 +1775,18 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester);
+    await startStageFromBriefing(
+      tester,
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Blueprint not recovered'), findsOneWidget);
@@ -1759,8 +1794,8 @@ void main() {
     store.failOnSaveIndices.clear();
 
     await tester.tap(find.byTooltip('Retry Save'));
-    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-    store.saveCompletions[1].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+    store.saveCompletions[2].complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Blueprint recovered: Relay Calibration'), findsOneWidget);
@@ -1822,6 +1857,7 @@ void main() {
         tester,
         mapLabel: 'Rift',
         actionLabel: 'Start Mission',
+        drainCompletions: store.saveCompletions,
       );
 
       await publishVictory(
@@ -1829,7 +1865,7 @@ void main() {
         game!,
         result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
       );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       expect(find.text('Blueprint recovery pending'), findsOneWidget);
       expect(
@@ -1837,7 +1873,7 @@ void main() {
         findsOneWidget,
       );
 
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       expect(find.text('Blueprint recovered: Salvaged Drones'), findsOneWidget);
     },
@@ -1867,6 +1903,7 @@ void main() {
         tester,
         mapLabel: 'Relay',
         actionLabel: 'Start Mission',
+        drainCompletions: store.saveCompletions,
       );
 
       final firstAttemptGame = game!;
@@ -1880,7 +1917,7 @@ void main() {
         firstAttemptGame,
         result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
       );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       expect(find.text('Blueprint recovery pending'), findsOneWidget);
       expect(
@@ -1888,7 +1925,7 @@ void main() {
         isNot(contains(RunModuleId.relayArc)),
       );
 
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       expect(find.text('Blueprint recovered: Relay Arc'), findsOneWidget);
 
@@ -1918,7 +1955,8 @@ void main() {
           'aurora-gate',
         }),
         delaySaves: true,
-        failOnSaveIndices: {0},
+        // Index 0 is the launch's squad write; the result write must fail.
+        failOnSaveIndices: {1},
       );
       OrionDefenseGame? game;
 
@@ -1933,6 +1971,7 @@ void main() {
         tester,
         mapLabel: 'Bastion',
         actionLabel: 'Start Mission',
+        drainCompletions: store.saveCompletions,
       );
       expect(
         game!.availableRunModules,
@@ -1944,8 +1983,8 @@ void main() {
         game!,
         result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
       );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-      store.saveCompletions.single.complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
 
       expect(find.text('Blueprint not recovered'), findsOneWidget);
@@ -1953,8 +1992,8 @@ void main() {
       store.failOnSaveIndices.clear();
 
       await tester.tap(find.byTooltip('Retry Save'));
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-      store.saveCompletions[1].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+      store.saveCompletions[2].complete();
       await tester.pumpAndSettle();
 
       expect(find.text('Blueprint recovered: Siege Rounds'), findsOneWidget);
@@ -2091,11 +2130,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(tester, game!, result: expectedResult);
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(store.progress.resultFor('outpost-alpha'), expectedResult);
@@ -2106,10 +2149,11 @@ void main() {
       tester,
       mapLabel: 'Relay',
       actionLabel: 'Start Mission',
+      drainCompletions: store.saveCompletions,
     );
     await publishVictory(tester, game!, result: relayResult);
-    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-    store.saveCompletions[1].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 3);
+    store.saveCompletions[3].complete();
     await tester.pumpAndSettle();
 
     expect(store.progress.resultFor('outpost-alpha'), expectedResult);
@@ -2125,7 +2169,8 @@ void main() {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
       delaySaves: true,
-      saveError: StateError('save failed'),
+      // Index 0 is the launch's squad write; the result write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -2136,15 +2181,19 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
@@ -2159,7 +2208,8 @@ void main() {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
       delaySaves: true,
-      failOnSaveIndices: {0},
+      // Index 0 is the launch's squad write; the result write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -2170,27 +2220,31 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
-    await tester.pumpAndSettle();
-
-    expect(find.byTooltip('Retry Save'), findsOneWidget);
-    expect(store.saveCalls, 1);
-    store.failOnSaveIndices.clear();
-
-    await tester.tap(find.byTooltip('Retry Save'));
     await _pumpUntil(tester, () => store.saveCompletions.length > 1);
     store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
+    expect(find.byTooltip('Retry Save'), findsOneWidget);
     expect(store.saveCalls, 2);
+    store.failOnSaveIndices.clear();
+
+    await tester.tap(find.byTooltip('Retry Save'));
+    await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+    store.saveCompletions[2].complete();
+    await tester.pumpAndSettle();
+
+    expect(store.saveCalls, 3);
     expect(find.text('Saved.'), findsOneWidget);
     expect(
       store.progress.resultFor('outpost-alpha'),
@@ -2204,7 +2258,8 @@ void main() {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
       delaySaves: true,
-      failOnSaveIndices: {0},
+      // Index 0 is the launch's squad write; the result write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -2215,19 +2270,23 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('Retry Save'), findsOneWidget);
-    expect(store.saveCalls, 1);
+    expect(store.saveCalls, 2);
     store.failOnSaveIndices.clear();
 
     // Both taps happen before the first retry completion. The save-state
@@ -2235,13 +2294,13 @@ void main() {
     final retryButton = find.byTooltip('Retry Save');
     await tester.tap(retryButton);
     await tester.tap(retryButton);
-    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 2);
 
-    expect(store.saveCalls, 2);
-    store.saveCompletions[1].complete();
+    expect(store.saveCalls, 3);
+    store.saveCompletions[2].complete();
     await tester.pumpAndSettle();
 
-    expect(store.saveCalls, 2);
+    expect(store.saveCalls, 3);
     expect(find.text('Saved.'), findsOneWidget);
     expect(
       store.progress.resultFor('outpost-alpha'),
@@ -2291,7 +2350,8 @@ void main() {
     await tester.pump();
 
     expect(find.text('MISSION FAILED'), findsOneWidget);
-    expect(store.saveCalls, 0);
+    // Only the launch's squad write lands; a loss writes no progress.
+    expect(store.saveCalls, 1);
   });
 
   testWidgets('Mission Retry survives consecutive losses', (tester) async {
@@ -2326,7 +2386,8 @@ void main() {
     await tester.tap(find.byTooltip('Retry'));
     await tester.pumpAndSettle();
     expect(game!.snapshot.phase, GamePhase.build);
-    expect(store.saveCalls, 0);
+    // Only the launch's squad write lands; losses and retries write nothing.
+    expect(store.saveCalls, 1);
   });
 
   testWidgets('Mission Retry is safe under rapid taps on a loss', (
@@ -2358,7 +2419,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(game!.snapshot.phase, GamePhase.build);
-    expect(store.saveCalls, 0);
+    // Only the launch's squad write lands; losses and retries write nothing.
+    expect(store.saveCalls, 1);
   });
 
   testWidgets('Mission World Map exit stays blocked while saving', (
@@ -2377,21 +2439,25 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
     game!.returnToMap();
     await tester.pump();
 
     expect(find.text('Saving result…'), findsOneWidget);
     expect(find.text('SECTOR MAP'), findsNothing);
 
-    store.saveCompletions.single.complete();
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
   });
 
@@ -2549,7 +2615,8 @@ void main() {
   ) async {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
-      saveError: StateError('save failed'),
+      // Index 0 is the launch's squad write; the result write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -2602,7 +2669,8 @@ void main() {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
       delaySaves: true,
-      failOnSaveIndices: {0},
+      // Index 0 is the launch's squad write; the result write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -2613,21 +2681,25 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
     await tester.pumpWidget(const MaterialApp(home: SizedBox()));
     await tester.pumpAndSettle();
-    store.saveCompletions.single.complete();
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(tester.takeException(), isNull);
-    expect(store.saveCalls, 1);
+    expect(store.saveCalls, 2);
     expect(
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
@@ -2719,7 +2791,8 @@ void main() {
     await publishEndlessWaveClear(tester, game!, 7);
     await tester.pumpAndSettle();
     expect(store.progress.endlessBestFor('outpost-alpha'), 7);
-    expect(store.saveCalls, 2);
+    // One squad write on launch plus the two best writes.
+    expect(store.saveCalls, 3);
     // Endless writes never touch the mission result or award rewards.
     expect(
       store.progress.resultFor('outpost-alpha'),
@@ -2748,7 +2821,7 @@ void main() {
     // A run that does not beat the saved best never queues a write.
     await publishEndlessWaveClear(tester, game!, 3);
     await tester.pumpAndSettle();
-    expect(store.saveCalls, 2);
+    expect(store.saveCalls, 3);
     expect(store.progress.endlessBestFor('outpost-alpha'), 7);
 
     await publishLoss(tester, game!);
@@ -2832,10 +2905,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishEndlessWaveClear(tester, game!, 5);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       await publishLoss(tester, game!);
       await tester.pump();
@@ -2845,7 +2922,7 @@ void main() {
       expect(reportActionOnPressed(tester, 'Replay Endless'), isNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNull);
 
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       expect(find.text('Saved.'), findsOneWidget);
       expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
@@ -2860,10 +2937,10 @@ void main() {
       // a no-op while the next higher count queues a fresh write.
       await publishEndlessWaveClear(tester, game!, 5);
       await tester.pumpAndSettle();
-      expect(store.saveCalls, 1);
+      expect(store.saveCalls, 2);
       await publishEndlessWaveClear(tester, game!, 6);
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-      store.saveCompletions[1].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+      store.saveCompletions[2].complete();
       await tester.pumpAndSettle();
       expect(store.progress.endlessBestFor('outpost-alpha'), 6);
     },
@@ -2875,7 +2952,8 @@ void main() {
       final store = _TestCampaignProgressStore(
         progress: _progressWithAlphaCleared(),
         delaySaves: true,
-        failOnSaveIndices: {0},
+        // Index 0 is the launch's squad write; the best write must fail.
+        failOnSaveIndices: {1},
       );
       OrionDefenseGame? game;
 
@@ -2886,14 +2964,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishEndlessWaveClear(tester, game!, 4);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       await publishLoss(tester, game!);
       await tester.pump();
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
 
       expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
@@ -2902,8 +2984,8 @@ void main() {
       expect(store.progress.endlessBestFor('outpost-alpha'), isNull);
 
       await tester.tap(find.byTooltip('Retry Save'));
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-      store.saveCompletions[1].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+      store.saveCompletions[2].complete();
       await tester.pumpAndSettle();
 
       expect(find.text('Saved.'), findsOneWidget);
@@ -2917,7 +2999,8 @@ void main() {
     final store = _TestCampaignProgressStore(
       progress: _progressWithAlphaCleared(),
       delaySaves: true,
-      failOnSaveIndices: {1},
+      // Index 0 is the launch's squad write; wave 7's write must fail.
+      failOnSaveIndices: {2},
     );
     OrionDefenseGame? game;
 
@@ -2928,22 +3011,26 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Endless');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Endless',
+      drainCompletions: store.saveCompletions,
+    );
 
     // Wave 4's record write commits; wave 7's fails. The report must name
     // the standing record — "progress unchanged" would be a lie here.
     await publishEndlessWaveClear(tester, game!, 4);
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-    store.saveCompletions.single.complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
     expect(store.progress.endlessBestFor('outpost-alpha'), 4);
 
     await publishEndlessWaveClear(tester, game!, 7);
-    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 2);
 
     await publishLoss(tester, game!);
     await tester.pump();
-    store.saveCompletions[1].complete();
+    store.saveCompletions[2].complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Save failed — best 4 waves kept.'), findsOneWidget);
@@ -2958,7 +3045,9 @@ void main() {
       final store = _TestCampaignProgressStore(
         progress: _progressWithAlphaCleared(),
         delaySaves: true,
-        failOnSaveIndices: {0, 2},
+        // Index 0 is the launch's squad write: the best write fails, and a
+        // duplicate retry (index 3) would fail too if it ever queued.
+        failOnSaveIndices: {1, 3},
       );
       OrionDefenseGame? game;
 
@@ -2969,14 +3058,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
       await tester.pumpAndSettle();
 
       await publishEndlessWaveClear(tester, game!, 4);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
       await publishLoss(tester, game!);
       await tester.pump();
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       expect(find.byTooltip('Retry Save'), findsOneWidget);
 
@@ -2986,11 +3079,11 @@ void main() {
       // failure flips the committed record's report back to failed.
       await tester.tap(find.byTooltip('Retry Save'));
       await tester.tap(find.byTooltip('Retry Save'));
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
 
       store.saveCompletions.last.complete();
       await tester.pumpAndSettle();
-      expect(store.saveCalls, 2);
+      expect(store.saveCalls, 3);
 
       for (final pending in store.saveCompletions) {
         if (!pending.isCompleted) pending.complete();
@@ -3008,7 +3101,8 @@ void main() {
     final store = _TestCampaignProgressStore(
       progress: _progressWithAlphaCleared(),
       delaySaves: true,
-      failOnSaveIndices: {0},
+      // Index 0 is the launch's squad write; the best write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -3019,14 +3113,18 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Endless');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Endless',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishEndlessWaveClear(tester, game!, 4);
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
     await publishLoss(tester, game!);
     await tester.pump();
-    store.saveCompletions.single.complete();
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
 
     expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
@@ -3044,7 +3142,8 @@ void main() {
       final store = _TestCampaignProgressStore(
         progress: _progressWithAlphaCleared(),
         delaySaves: true,
-        failOnSaveIndices: {1},
+        // Index 0 is the launch's squad write; wave 7's write must fail.
+        failOnSaveIndices: {2},
       );
       OrionDefenseGame? game;
 
@@ -3055,21 +3154,25 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
 
       // Wave 4 commits; wave 7 fails.
       await publishEndlessWaveClear(tester, game!, 4);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-      store.saveCompletions.single.complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       expect(store.progress.endlessBestFor('outpost-alpha'), 4);
 
       await publishEndlessWaveClear(tester, game!, 7);
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
 
       await publishLoss(tester, game!);
       await tester.pump();
-      store.saveCompletions[1].complete();
+      store.saveCompletions[2].complete();
       await tester.pumpAndSettle();
 
       expect(find.text('Save failed — best 4 waves kept.'), findsOneWidget);
@@ -3101,10 +3204,14 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishEndlessWaveClear(tester, game!, 4);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       // Tapping the in-game World Map button while save is in flight.
       await tester.tap(find.byTooltip('World Map'));
@@ -3117,7 +3224,7 @@ void main() {
       );
 
       // After save settles, returning to map works.
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
 
       await tester.tap(find.byTooltip('World Map'));
@@ -3132,7 +3239,8 @@ void main() {
       final store = _TestCampaignProgressStore(
         progress: _progressWithAlphaCleared(),
         delaySaves: true,
-        failOnSaveIndices: {0},
+        // Index 0 is the launch's squad write; the wave-4 write must fail.
+        failOnSaveIndices: {1},
       );
       OrionDefenseGame? game;
 
@@ -3143,23 +3251,27 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishEndlessWaveClear(tester, game!, 4);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
       await publishEndlessWaveClear(tester, game!, 7);
       await tester.pump();
 
-      // First save fails.
-      store.saveCompletions[0].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      // First best save fails.
+      store.saveCompletions[1].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
       await tester.pump();
 
       // Failure toast is suppressed because write 2 is queued.
       expect(find.text('Could not save campaign progress.'), findsNothing);
 
-      // Second save succeeds.
-      store.saveCompletions[1].complete();
+      // Second best save succeeds.
+      store.saveCompletions[2].complete();
       await tester.pumpAndSettle();
 
       expect(store.progress.endlessBestFor('outpost-alpha'), 7);
@@ -3182,15 +3294,19 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishEndlessWaveClear(tester, game!, 4);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
       // The second clear queues behind the in-flight write — the serialized
       // queue has not reached the store for it yet.
       await publishEndlessWaveClear(tester, game!, 7);
       await tester.pump();
-      expect(store.saveCalls, 1);
+      expect(store.saveCalls, 2);
 
       await publishLoss(tester, game!);
       await tester.pump();
@@ -3198,14 +3314,14 @@ void main() {
 
       // The first commit's callback ran while the second write still counted
       // in _pendingSaves, so it must not unblock the report actions.
-      store.saveCompletions[0].complete();
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
       await tester.pump();
       expect(find.text('Saving result…'), findsOneWidget);
       expect(reportActionOnPressed(tester, 'Replay Endless'), isNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNull);
 
-      store.saveCompletions[1].complete();
+      store.saveCompletions[2].complete();
       await tester.pumpAndSettle();
       expect(find.text('Saved.'), findsOneWidget);
       expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
@@ -3239,7 +3355,8 @@ void main() {
       expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
       expect(find.text('Best: 5 waves'), findsOneWidget);
       expect(find.text('Best result already saved.'), findsOneWidget);
-      expect(store.saveCalls, 0);
+      // Only the launch's squad write lands; nothing improves on the best.
+      expect(store.saveCalls, 1);
       await tester.ensureVisible(find.text('MISSION DETAILS'));
       await tester.tap(find.text('MISSION DETAILS'));
       await tester.pump();
@@ -3253,7 +3370,7 @@ void main() {
       // A run that does not beat the saved best never queues a write.
       await publishEndlessWaveClear(tester, game!, 3);
       await tester.pumpAndSettle();
-      expect(store.saveCalls, 0);
+      expect(store.saveCalls, 1);
 
       await publishLoss(tester, game!);
       await tester.pump();
@@ -3291,7 +3408,8 @@ void main() {
       expect(find.textContaining('New best'), findsNothing);
       expect(find.text('No result to save.'), findsOneWidget);
       expect(find.text('Best result already saved.'), findsNothing);
-      expect(store.saveCalls, 0);
+      // Only the launch's squad write lands; a zero-wave loss writes nothing.
+      expect(store.saveCalls, 1);
       expect(reportActionOnPressed(tester, 'Replay Endless'), isNotNull);
       expect(reportActionOnPressed(tester, 'World Map'), isNotNull);
 
@@ -3313,7 +3431,8 @@ void main() {
       final store = _TestCampaignProgressStore(
         progress: _progressWithAlphaCleared(),
         delaySaves: true,
-        failOnSaveIndices: {0},
+        // Index 0 is the launch's squad write; the first best write fails.
+        failOnSaveIndices: {1},
       );
       OrionDefenseGame? game;
 
@@ -3324,11 +3443,15 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Endless');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Endless',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishEndlessWaveClear(tester, game!, 2);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-      store.saveCompletions.single.complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
       await tester.pump();
       await tester.pump();
 
@@ -3340,8 +3463,8 @@ void main() {
 
       // The next improving wave recovers: a fresh write commits the best.
       await publishEndlessWaveClear(tester, game!, 3);
-      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
-      store.saveCompletions[1].complete();
+      await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+      store.saveCompletions[2].complete();
       await tester.pumpAndSettle();
       expect(store.progress.endlessBestFor('outpost-alpha'), 3);
 
@@ -3403,11 +3526,15 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Endless');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Endless',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishEndlessWaveClear(tester, game!, 4);
     await publishEndlessWaveClear(tester, game!, 7);
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
     // Save A is in flight, save B is queued behind it — the exit is gated.
     game!.returnToMap();
@@ -3415,19 +3542,20 @@ void main() {
     expect(find.text('SECTOR MAP'), findsNothing);
 
     // Save A drains but B is still pending, so the exit stays gated.
-    store.saveCompletions[0].complete();
-    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 2);
     game!.returnToMap();
     await tester.pump();
     expect(find.text('SECTOR MAP'), findsNothing);
 
-    store.saveCompletions[1].complete();
+    store.saveCompletions[2].complete();
     await tester.pumpAndSettle();
 
     game!.returnToMap();
     await tester.pumpAndSettle();
     expect(find.text('SECTOR MAP'), findsOneWidget);
-    expect(store.saveCalls, 2);
+    // The launch squad write plus the two best writes.
+    expect(store.saveCalls, 3);
     // The queued saves committed in order: the later best (7) survives.
     expect(store.progress.endlessBestFor('outpost-alpha'), 7);
     expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
@@ -3493,18 +3621,22 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Replay Mission',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishVictory(tester, game!, result: result);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       await tester.pumpAndSettle();
 
-      store.saveCompletions[0].complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
 
-      expect(store.saveCalls, 1);
+      expect(store.saveCalls, 2);
       expect(store.progress.resultFor('outpost-alpha'), result);
       expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
       expect(store.squad, CampaignSave.starterSquad);
@@ -3522,7 +3654,8 @@ void main() {
           'asteroid-foundry',
         }),
         delaySaves: true,
-        failOnSaveIndices: {0},
+        // Index 0 is the launch's squad write; the result write must fail.
+        failOnSaveIndices: {1},
       );
       OrionDefenseGame? game;
 
@@ -3533,29 +3666,32 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Replay Mission',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishVictory(
         tester,
         game!,
         result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
       );
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       await tester.pumpWidget(const MaterialApp(home: SizedBox()));
       await tester.pumpAndSettle();
 
-      store.saveCompletions[0].complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(store.saveCalls, 1);
+      expect(store.saveCalls, 2);
     },
   );
 
   testWidgets('retained replay result does not write a save', (tester) async {
     final store = _TestCampaignProgressStore(
-      saveError: StateError('save failed'),
       progress: CampaignProgress(
         bestResultsByStageId: {
           'outpost-alpha': const StageResult(
@@ -3587,7 +3723,8 @@ void main() {
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    expect(store.saveCalls, 0);
+    // Only the launch's squad write lands; a retained result queues nothing.
+    expect(store.saveCalls, 1);
     expect(find.text('Could not save campaign progress.'), findsNothing);
     expect(find.text('Best result already saved.'), findsOneWidget);
   });
@@ -3618,14 +3755,18 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+      await startStageFromBriefing(
+        tester,
+        actionLabel: 'Replay Mission',
+        drainCompletions: store.saveCompletions,
+      );
 
       await publishVictory(tester, game!, result: result);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
       // The Reset button is disabled while the save is in flight. Drain the
       // pending save first, then return to the map and trigger the reset.
-      store.saveCompletions.single.complete();
+      store.saveCompletions[1].complete();
       await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('World Map').last);
       await tester.pumpAndSettle();
@@ -3749,18 +3890,22 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await startStageFromBriefing(
+      tester,
+      actionLabel: 'Replay Mission',
+      drainCompletions: store.saveCompletions,
+    );
 
     await publishVictory(
       tester,
       game!,
       result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
-    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
 
     // Drain the pending save first; the Reset button is disabled while
     // the save is in flight.
-    store.saveCompletions.single.complete();
+    store.saveCompletions[1].complete();
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('World Map').last);
     await tester.pumpAndSettle();
@@ -3866,7 +4011,8 @@ void main() {
           'nebula-relay',
           'asteroid-foundry',
         }),
-        saveError: StateError('save failed'),
+        // Index 0 is the launch's squad write; the result write must fail.
+        failOnSaveIndices: {1},
       );
       OrionDefenseGame? game;
 
@@ -3910,7 +4056,8 @@ void main() {
         'nebula-relay',
         'asteroid-foundry',
       }),
-      failOnSaveIndices: {0},
+      // Index 0 is the launch's squad write; the result write must fail.
+      failOnSaveIndices: {1},
     );
     OrionDefenseGame? game;
 
@@ -3923,7 +4070,7 @@ void main() {
     await tester.pumpAndSettle();
     await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
 
-    // First save attempt fails (save index 0).
+    // First save attempt fails (save index 1).
     await publishVictory(
       tester,
       game!,
@@ -3932,7 +4079,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
 
-    // The retry (save index 1) succeeds.
+    // The retry (save index 2) succeeds.
     await tester.tap(find.byTooltip('Retry Save'));
     await tester.pumpAndSettle();
     expect(find.text('Saved.'), findsOneWidget);
@@ -3949,9 +4096,11 @@ void main() {
     );
   });
 
-  testWidgets('null store marks Mission report failed without throwing', (
-    tester,
-  ) async {
+  testWidgets('null store blocks launch without throwing', (tester) async {
+    // The squad write is the launch precondition (HPA-922 task 6): with no
+    // store it can never commit, so the sheet stays open with retryable
+    // feedback and no run mounts — instead of launching a run whose report
+    // could only fail.
     OrionDefenseGame? game;
 
     await tester.pumpWidget(
@@ -3964,17 +4113,19 @@ void main() {
 
     expect(find.text('Could not load campaign progress.'), findsOneWidget);
 
-    await startStageFromBriefing(tester);
-
-    await publishVictory(
-      tester,
-      game!,
-      result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
-    );
+    await tester.ensureVisible(find.text('Alpha'));
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Start Mission'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
-    expect(find.text('Could not save campaign progress.'), findsNothing);
+    expect(
+      find.text('Could not save squad changes — tap a launch action to retry.'),
+      findsOneWidget,
+    );
+    expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+    expect(game, isNull);
+    expect(tester.takeException(), isNull);
   });
 
   test('snapshot exposes the current tower unlocks', () {
@@ -6745,6 +6896,340 @@ void main() {
       );
     });
   }
+
+  group('squad launch persistence (HPA-922 task 6)', () {
+    Future<void> openBriefing(
+      WidgetTester tester, {
+      String mapLabel = 'Alpha',
+    }) async {
+      await tester.ensureVisible(find.text(mapLabel));
+      await tester.tap(find.text(mapLabel));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+    }
+
+    /// Toggles [member] inside the briefing's local draft via the picker's
+    /// row — exactly what the draft-edit affordance renders as a tap.
+    Future<void> pickSquadMember(WidgetTester tester, Character member) async {
+      final pick = find.byKey(ValueKey('briefing-squad-pick-${member.name}'));
+      // EDIT toggles — only open the picker when it isn't already showing.
+      if (!tester.any(pick)) {
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('briefing-squad-edit')),
+        );
+        await tester.tap(find.byKey(const ValueKey('briefing-squad-edit')));
+        await tester.pumpAndSettle();
+      }
+      await tester.ensureVisible(pick);
+      await tester.tap(pick);
+      await tester.pumpAndSettle();
+    }
+
+    /// Taps a launch action, then fixed-pumps: a mounted game keeps a live
+    /// ticker so pumpAndSettle can never be used after launch. The pumps
+    /// settle the queued squad save, the one route pop and the single
+    /// _startStage continuation.
+    Future<void> launchFromBriefing(
+      WidgetTester tester, {
+      String actionLabel = 'Start Mission',
+    }) async {
+      await tester.tap(find.byTooltip(actionLabel));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump();
+      }
+    }
+
+    testWidgets(
+      'mission launch writes the drafted squad once and the game reads '
+      'committed state',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 2,
+            Character.sayo: 3,
+          },
+          squad: const [Character.haruto, Character.mio],
+        );
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await openBriefing(tester);
+        await pickSquadMember(tester, Character.sayo);
+        await launchFromBriefing(tester);
+
+        // Exactly one write: the whole atomic CampaignSave carries the draft.
+        expect(store.saveCalls, 1);
+        expect(store.squad, [Character.haruto, Character.mio, Character.sayo]);
+        expect(store.ownedLevels, const {
+          Character.haruto: 1,
+          Character.mio: 2,
+          Character.sayo: 3,
+        });
+        // The squad-only write must not touch committed progress.
+        expect(store.progress.bestResultsByStageId, isEmpty);
+
+        // The launched game reads the committed result, in draft order.
+        expect(game, isNotNull);
+        expect(game!.snapshot.squadLevels.keys.toList(), [
+          Character.haruto,
+          Character.mio,
+          Character.sayo,
+        ]);
+        expect(game!.snapshot.squadLevels[Character.sayo], 3);
+      },
+    );
+
+    testWidgets('cancel writes nothing and keeps the committed squad', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(
+        ownedLevels: const {
+          Character.haruto: 1,
+          Character.mio: 1,
+          Character.sayo: 3,
+        },
+        squad: const [Character.haruto, Character.mio],
+      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+
+      await openBriefing(tester);
+      await pickSquadMember(tester, Character.sayo);
+      await tester.tap(find.byTooltip('Dismiss'));
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 0);
+      expect(store.squad, [Character.haruto, Character.mio]);
+    });
+
+    for (final (actionLabel, mode) in [
+      ('Replay Mission', RunMode.mission),
+      ('Endless', RunMode.endless),
+    ]) {
+      testWidgets('$actionLabel launch saves exactly once', (tester) async {
+        final store = _TestCampaignProgressStore(
+          progress: _progressWithResults({OrionCampaign.stageOneId}),
+        );
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await openBriefing(tester);
+        await launchFromBriefing(tester, actionLabel: actionLabel);
+
+        expect(store.saveCalls, 1);
+        expect(game, isNotNull);
+        expect(game!.mode, mode);
+        expect(
+          game!.snapshot.squadLevels.keys.toList(),
+          CampaignSave.starterSquad,
+        );
+      });
+    }
+
+    testWidgets(
+      'an empty committed squad blocks launch until a member is picked',
+      (tester) async {
+        // A v4 profile can load with a fully-filtered empty squad; the
+        // briefing must never launch it.
+        final store = _TestCampaignProgressStore(squad: const []);
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await openBriefing(tester);
+        expect(
+          find.text('Select at least one squad member to deploy.'),
+          findsOneWidget,
+        );
+        await launchFromBriefing(tester);
+        expect(store.saveCalls, 0);
+        expect(game, isNull);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+
+        await pickSquadMember(tester, Character.mio);
+        await launchFromBriefing(tester);
+        expect(store.saveCalls, 1);
+        expect(store.squad, [Character.mio]);
+        expect(game, isNotNull);
+      },
+    );
+
+    testWidgets(
+      'a pending launch save keeps the sheet mounted and blocks re-entry',
+      (tester) async {
+        final store = _TestCampaignProgressStore(delaySaves: true);
+        var created = 0;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (game) => created += 1,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await openBriefing(tester);
+        await tester.tap(find.byTooltip('Start Mission'));
+        await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+        // The save completer can be created during the tap's microtask drain,
+        // before any frame rebuilds the dirty sheet.
+        await tester.pump();
+
+        // Mid-flight: the route is still up, the launch action is inert, and
+        // a second tap must not enqueue another write.
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(find.text('Saving squad…'), findsOneWidget);
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.tap(find.byTooltip('Dismiss'));
+        await tester.pump();
+        expect(store.saveCompletions, hasLength(1));
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+
+        store.saveCompletions.single.complete();
+        for (var i = 0; i < 4; i++) {
+          await tester.pump();
+        }
+        expect(created, 1);
+        expect(store.squad, CampaignSave.starterSquad);
+      },
+    );
+
+    testWidgets(
+      'a failed launch save reports inside the still-open sheet and retry '
+      'saves once then launches once',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 1,
+            Character.sayo: 4,
+          },
+          squad: const [Character.haruto, Character.mio],
+          failOnSaveIndices: {0},
+        );
+        var created = 0;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (game) => created += 1,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await openBriefing(tester);
+        await pickSquadMember(tester, Character.sayo);
+        await launchFromBriefing(tester);
+
+        // Failed write: no navigation, no commit, draft preserved, retryable
+        // feedback inside the modal.
+        expect(store.saveCalls, 1);
+        expect(created, 0);
+        expect(store.squad, [Character.haruto, Character.mio]);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(
+          find.text(
+            'Could not save squad changes — tap a launch action to retry.',
+          ),
+          findsOneWidget,
+        );
+
+        await launchFromBriefing(tester);
+        expect(store.saveCalls, 2);
+        expect(created, 1);
+        expect(store.squad, [Character.haruto, Character.mio, Character.sayo]);
+        expect(store.ownedLevels[Character.sayo], 4);
+      },
+    );
+
+    testWidgets(
+      'a reloaded page seeds the briefing with the committed squad order',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 2,
+            Character.sayo: 3,
+          },
+          squad: const [Character.haruto, Character.mio],
+        );
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+
+        // Reorder to [mio, sayo, haruto] — drop/re-add pushes re-added
+        // members to the end — then launch: one write.
+        await openBriefing(tester);
+        await pickSquadMember(tester, Character.haruto);
+        await pickSquadMember(tester, Character.haruto);
+        await pickSquadMember(tester, Character.sayo);
+        await launchFromBriefing(tester);
+        expect(store.squad, [Character.mio, Character.haruto, Character.sayo]);
+
+        // "Remount": a fresh page over the same store must reload the saved
+        // order — and non-default levels ride along untouched. An empty
+        // tree between mounts forces a new element tree: pumpWidget reuses
+        // the root element when the root widget type is unchanged.
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+        await openBriefing(tester);
+        final positions = <double>[];
+        for (final member in const [
+          Character.mio,
+          Character.haruto,
+          Character.sayo,
+        ]) {
+          final token = find.byKey(
+            ValueKey('briefing-squad-token-${member.name}'),
+          );
+          await tester.ensureVisible(token);
+          positions.add(tester.getRect(token).left);
+        }
+        expect(positions[0], lessThan(positions[1]));
+        expect(positions[1], lessThan(positions[2]));
+      },
+    );
+
+    testWidgets('reset restores the starter roster after a saved launch', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(
+        ownedLevels: const {
+          Character.haruto: 1,
+          Character.mio: 1,
+          Character.sayo: 4,
+        },
+        squad: const [Character.sayo],
+      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+
+      await openResetCampaignDialog(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+
+      expect(store.resetCalls, 1);
+      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+      expect(store.squad, CampaignSave.starterSquad);
+    });
+  });
 }
 
 /// Warms fonts and the game's sprite sheets into their process-global caches
@@ -7080,7 +7565,6 @@ CampaignProgress _progressWithAlphaCleared({int? endlessBest}) {
 class _TestCampaignProgressStore implements CampaignProgressStore {
   _TestCampaignProgressStore({
     this.loadError,
-    this.saveError,
     this.delaySaves = false,
     this.delayResets = false,
     this.failOnSaveIndices = const {},
@@ -7093,7 +7577,6 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
        squad = squad ?? CampaignSave.starterSquad;
 
   final Object? loadError;
-  final Object? saveError;
   final bool delaySaves;
   final bool delayResets;
   final Set<int> failOnSaveIndices;
@@ -7132,11 +7615,6 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     if (failOnSaveIndices.contains(saveCalls - 1)) {
       throw StateError('save ${saveCalls - 1} failed');
     }
-    final error = saveError;
-    if (error != null) {
-      throw error;
-    }
-
     progress = save.progress;
     ownedLevels = save.ownedLevels;
     squad = save.squad;

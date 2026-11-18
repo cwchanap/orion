@@ -17,18 +17,24 @@ import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
 /// Full-height modal stage briefing (scene 1b): full-bleed wide stage-key-art
-/// hero, stage identity, run facts, conditions, prior result, and one launch
-/// action.
+/// hero, stage identity, run facts, conditions, prior result, the squad
+/// picker, and the launch actions.
 ///
 /// Presentation only — the page derives the run inputs from committed campaign
-/// state and passes them as primitives; no briefing view-model exists.
-class StageBriefingSheet extends StatelessWidget {
+/// state and passes them as primitives; no briefing view-model exists. The
+/// squad section edits a route-local draft seeded from the committed roster:
+/// tapping a member never writes, Cancel discards the whole draft, and Launch
+/// hands the draft to [onLaunch] exactly once (HPA-922 task 6).
+class StageBriefingSheet extends StatefulWidget {
   const StageBriefingSheet({
     super.key,
     required this.stage,
     required this.result,
     required this.startingGold,
     required this.startingBaseHealth,
+    required this.squad,
+    required this.ownedLevels,
+    required this.onLaunch,
     this.endlessBest,
     this.modifierTip,
   });
@@ -44,6 +50,21 @@ class StageBriefingSheet extends StatelessWidget {
   /// stage-adjusted base health).
   final int startingBaseHealth;
 
+  /// The last-committed ordered squad — seeds the route-local draft.
+  final List<Character> squad;
+
+  /// Every owned character mapped to its persistent level; the picker offers
+  /// exactly these members, in [Character.values] order.
+  final Map<Character, int> ownedLevels;
+
+  /// Called once per launch tap with the local draft, after the draft's
+  /// single queued write has been requested. Resolves `true` only when the
+  /// write committed; the sheet then pops itself with the selected [RunMode]
+  /// and the page's post-route continuation starts the stage. A `false`
+  /// return keeps the modal open with retryable feedback — the caller must
+  /// not pop or launch itself.
+  final Future<bool> Function(RunMode mode, List<Character> draft) onLaunch;
+
   /// Renders the once-only stage-modifier tip over this sheet when set
   /// (and real modifiers are present): the modifier tile's anchor key plus
   /// its acknowledgement. The briefing route — not this sheet — owns the
@@ -51,8 +72,96 @@ class StageBriefingSheet extends StatelessWidget {
   final ({GlobalKey anchorKey, VoidCallback onDone})? modifierTip;
 
   @override
+  State<StageBriefingSheet> createState() => _StageBriefingSheetState();
+}
+
+class _StageBriefingSheetState extends State<StageBriefingSheet> {
+  /// The route-local squad draft — seeded from the committed roster, edited
+  /// in place, discarded by Cancel, and written once on Launch.
+  late final List<Character> _draft = List.of(widget.squad);
+
+  var _pickerOpen = false;
+  var _launching = false;
+  var _launchFailed = false;
+  String? _editFeedback;
+
+  /// Anchors the YOUR SQUAD section so opening the picker can scroll it —
+  /// and its new chips — into view.
+  final _squadSectionKey = GlobalKey();
+
+  bool get _launchEnabled => _draft.isNotEmpty && !_launching;
+
+  void _togglePicker() {
+    if (_launching) {
+      return;
+    }
+    setState(() {
+      _pickerOpen = !_pickerOpen;
+      _editFeedback = null;
+    });
+    if (_pickerOpen) {
+      // The picker grows the section below the current fold; reveal it so
+      // every offered member is tappable without a manual scroll.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        final squadContext = _squadSectionKey.currentContext;
+        if (squadContext != null) {
+          Scrollable.ensureVisible(
+            squadContext,
+            alignment: 1,
+            duration: const Duration(milliseconds: 200),
+          );
+        }
+      });
+    }
+  }
+
+  /// Adds a member to the draft's end or removes it — the only order edit
+  /// the picker models, which keeps the displayed order unambiguous.
+  void _toggleMember(Character member) {
+    if (_launching) {
+      return;
+    }
+    setState(() {
+      if (_draft.remove(member)) {
+        _editFeedback = null;
+      } else if (_draft.length >= GameBalance.squadMaxSize) {
+        _editFeedback = 'Squad is full — remove a member first.';
+      } else {
+        _draft.add(member);
+        _editFeedback = null;
+      }
+    });
+  }
+
+  Future<void> _launch(RunMode mode) async {
+    if (!_launchEnabled) {
+      return;
+    }
+    setState(() {
+      _launching = true;
+      _launchFailed = false;
+    });
+    final committed = await widget.onLaunch(mode, List.of(_draft));
+    if (!mounted) {
+      return;
+    }
+    if (committed) {
+      // The page's post-route continuation owns _startStage: pop exactly
+      // once with the mode and never start anything here.
+      Navigator.of(context).pop(mode);
+      return;
+    }
+    setState(() {
+      _launching = false;
+      _launchFailed = true;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
+    final stage = widget.stage;
+    final result = widget.result;
     final isOptional = !stage.isMainPath;
     final accent = isOptional ? uiTheme.systemViolet : uiTheme.systemCyan;
     final metadata = stage.modifiers.isEmpty
@@ -76,14 +185,14 @@ class StageBriefingSheet extends StatelessWidget {
       ),
       _BriefingStatTile(
         icon: Icons.shield_outlined,
-        value: '$startingBaseHealth',
+        value: '${widget.startingBaseHealth}',
         label: 'HULL',
         color: uiTheme.systemCyan,
         horizontal: largeText,
       ),
       _BriefingStatTile(
         icon: Icons.hexagon,
-        value: '$startingGold',
+        value: '${widget.startingGold}',
         label: 'START',
         color: uiTheme.creditGold,
         valueColor: uiTheme.creditGold,
@@ -94,7 +203,7 @@ class StageBriefingSheet extends StatelessWidget {
       _BriefingIntelRow(
         icon: medalIcon(StageMedal.gold),
         color: uiTheme.creditGold,
-        title: '$startingBaseHealth/$startingBaseHealth',
+        title: '${widget.startingBaseHealth}/${widget.startingBaseHealth}',
         detail: 'GOLD · NO LEAKS',
       ),
       _BriefingIntelRow(
@@ -105,288 +214,337 @@ class StageBriefingSheet extends StatelessWidget {
       ),
     ];
 
-    return Material(
-      color: uiTheme.voidBlack,
-      child: SizedBox.expand(
-        key: const ValueKey('stage-briefing'),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.5,
-                child: Image.asset(
-                  'assets/images/reactor_rim_ui/boards/nebula.png',
-                  fit: BoxFit.cover,
-                  excludeFromSemantics: true,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const SizedBox.shrink(),
-                ),
-              ),
-            ),
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      uiTheme.voidBlack,
-                      uiTheme.voidBlack.withValues(alpha: 0.28),
-                    ],
+    // While a launch save is in flight the route cannot be dismissed — the
+    // PopScope vetoes barrier taps and the system back gesture; the sheet's
+    // own Dismiss and launch controls disable alongside.
+    return PopScope(
+      canPop: !_launching,
+      child: Material(
+        color: uiTheme.voidBlack,
+        child: SizedBox.expand(
+          key: const ValueKey('stage-briefing'),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.5,
+                  child: Image.asset(
+                    'assets/images/reactor_rim_ui/boards/nebula.png',
+                    fit: BoxFit.cover,
+                    excludeFromSemantics: true,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const SizedBox.shrink(),
                   ),
                 ),
               ),
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: heroHeight,
-              child: IgnorePointer(
-                child: _BriefingHero(
-                  stage: stage,
-                  scrimColor: uiTheme.voidBlack,
-                ),
-              ),
-            ),
-            Column(
-              children: [
-                const SizedBox(height: headerHeight),
-                Expanded(
-                  child: OrionScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          height: heroHeight - headerHeight,
-                          child: Stack(
-                            fit: StackFit.expand,
-                            children: [
-                              Positioned(
-                                left: 16,
-                                right: 16,
-                                bottom: 24,
-                                child: _BriefingIdentity(
-                                  stage: stage,
-                                  accent: accent,
-                                  badgeLabel: isOptional
-                                      ? 'OPTIONAL'
-                                      : 'PRIMARY',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 14),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Column(
-                                key: const ValueKey('briefing-facts'),
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if (largeText)
-                                    Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        for (final (index, fact)
-                                            in facts.indexed) ...[
-                                          if (index > 0)
-                                            const SizedBox(height: 8),
-                                          fact,
-                                        ],
-                                      ],
-                                    )
-                                  else
-                                    Row(
-                                      children: [
-                                        for (final (index, fact)
-                                            in facts.indexed) ...[
-                                          if (index > 0)
-                                            const SizedBox(width: 8),
-                                          Expanded(child: fact),
-                                        ],
-                                      ],
-                                    ),
-                                  if (metadata.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    KeyedSubtree(
-                                      key: modifierTip?.anchorKey,
-                                      child: _BriefingModifierTile(
-                                        key: const ValueKey(
-                                          'briefing-modifier',
-                                        ),
-                                        title: metadata.first.title,
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                              // The tile above names the modifier, so this is
-                              // its effect, not its name again. The artboard has
-                              // no conditions section at all -- it expects the
-                              // player to know what ION STORM does -- but a
-                              // modifier's actual numbers are worth a line, and
-                              // repeating the title alongside the tile is not.
-                              if (metadata.isNotEmpty) ...[
-                                const SizedBox(height: 7),
-                                Text(
-                                  metadata.first.description,
-                                  key: const ValueKey(
-                                    'briefing-modifier-effect',
-                                  ),
-                                  style: OrionTypography.microLabel(
-                                    color: uiTheme.textMuted,
-                                  ),
-                                ),
-                              ],
-                              const SizedBox(height: 16),
-                              _BriefingThreatProfile(stage: stage),
-                              const SizedBox(height: 12),
-                              if (largeText) ...[
-                                medalCriteria[0],
-                                const SizedBox(height: 8),
-                                medalCriteria[1],
-                              ] else
-                                Row(
-                                  children: [
-                                    Expanded(child: medalCriteria[0]),
-                                    const SizedBox(width: 8),
-                                    Expanded(child: medalCriteria[1]),
-                                  ],
-                                ),
-                              if (metadata.length > 1) ...[
-                                const SizedBox(height: 16),
-                                Text(
-                                  'CONDITIONS',
-                                  style: OrionTypography.microLabel(
-                                    size: 11,
-                                    color: uiTheme.systemCyan,
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                                for (final entry in metadata.skip(1)) ...[
-                                  _BriefingIntelRow(
-                                    icon: Icons.radar_rounded,
-                                    color: uiTheme.systemCyan,
-                                    title: entry.title,
-                                    detail: entry.description,
-                                  ),
-                                  const SizedBox(height: 7),
-                                ],
-                              ],
-                              const SizedBox(height: 9),
-                              if (stage.reward != null) ...[
-                                _BriefingIntelRow(
-                                  icon: rewardIcon(stage.reward!),
-                                  color: uiTheme.creditGold,
-                                  title: 'SALVAGE',
-                                  detail: _briefingRewardLabel(
-                                    stage.reward!,
-                                    earned: result != null,
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                              ],
-                              if (result != null) ...[
-                                _BriefingIntelRow(
-                                  icon: medalIcon(result!.medal),
-                                  color: medalColor(uiTheme, result!.medal),
-                                  title: 'BEST RESULT',
-                                  detail:
-                                      'Best: ${result!.medal.label} • '
-                                      '${result!.bestBaseHealth} base health',
-                                ),
-                                const SizedBox(height: 7),
-                                _BriefingIntelRow(
-                                  icon: Icons.all_inclusive_rounded,
-                                  color: uiTheme.systemViolet,
-                                  title: 'ENDLESS',
-                                  detail: endlessBest == null
-                                      ? 'No endless run yet'
-                                      : 'Endless best: $endlessBest ${endlessBest == 1 ? 'wave' : 'waves'}',
-                                ),
-                                const SizedBox(height: 7),
-                              ],
-                              // A stage's blueprint module is knowable before
-                              // deploying: locked stages tease the module name
-                              // and exact effect; the committed `result` is the
-                              // first-clear signal that flips the row to
-                              // Recovered.
-                              if (stage.blueprint case final blueprint?) ...[
-                                _BriefingIntelRow(
-                                  icon: Icons.memory_rounded,
-                                  color: uiTheme.systemViolet,
-                                  title: 'BLUEPRINT',
-                                  detail: _briefingBlueprintLabel(
-                                    runModuleDefinition(blueprint),
-                                    recovered: result != null,
-                                  ),
-                                ),
-                                const SizedBox(height: 7),
-                              ],
-                            ],
-                          ),
-                        ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        uiTheme.voidBlack,
+                        uiTheme.voidBlack.withValues(alpha: 0.28),
                       ],
                     ),
                   ),
                 ),
-                Padding(
-                  padding: EdgeInsets.fromLTRB(
-                    14,
-                    12,
-                    14,
-                    24 +
-                        math.max(
-                          MediaQuery.viewPaddingOf(context).bottom,
-                          MediaQuery.viewInsetsOf(context).bottom,
-                        ),
-                  ),
-                  child: result == null
-                      ? _BriefingLaunchAction(
-                          label: 'Start Mission',
-                          kicker: 'DEPLOY',
-                          accent: accent,
-                          icon: Icons.play_arrow_rounded,
-                          onPressed: () =>
-                              Navigator.of(context).pop(RunMode.mission),
-                        )
-                      : _BriefingReplayActions(accent: accent),
-                ),
-              ],
-            ),
-            Positioned(
-              top: 12,
-              left: 14,
-              child: OrionSurface(
-                role: OrionSurfaceRole.floating,
-                padding: EdgeInsets.zero,
-                radius: 14,
-                child: IconButton(
-                  tooltip: 'Dismiss',
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: Icon(
-                    Icons.chevron_left_rounded,
-                    color: uiTheme.systemCyan,
+              ),
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: heroHeight,
+                child: IgnorePointer(
+                  child: _BriefingHero(
+                    stage: stage,
+                    scrimColor: uiTheme.voidBlack,
                   ),
                 ),
               ),
-            ),
-            // Last so the shared, hit-transparent callout sits above the
-            // sheet chrome; only its own Got it row intercepts taps.
-            if (stage.modifiers.isNotEmpty && modifierTip != null)
-              Positioned.fill(
-                child: ContextualTipCallout(
-                  tip: ContextualTip.stageModifier,
-                  anchorKey: modifierTip!.anchorKey,
-                  onDone: modifierTip!.onDone,
-                  preferAbove: true,
+              Column(
+                children: [
+                  const SizedBox(height: headerHeight),
+                  Expanded(
+                    child: OrionScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(
+                            height: heroHeight - headerHeight,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Positioned(
+                                  left: 16,
+                                  right: 16,
+                                  bottom: 24,
+                                  child: _BriefingIdentity(
+                                    stage: stage,
+                                    accent: accent,
+                                    badgeLabel: isOptional
+                                        ? 'OPTIONAL'
+                                        : 'PRIMARY',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Column(
+                                  key: const ValueKey('briefing-facts'),
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if (largeText)
+                                      Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.stretch,
+                                        children: [
+                                          for (final (index, fact)
+                                              in facts.indexed) ...[
+                                            if (index > 0)
+                                              const SizedBox(height: 8),
+                                            fact,
+                                          ],
+                                        ],
+                                      )
+                                    else
+                                      Row(
+                                        children: [
+                                          for (final (index, fact)
+                                              in facts.indexed) ...[
+                                            if (index > 0)
+                                              const SizedBox(width: 8),
+                                            Expanded(child: fact),
+                                          ],
+                                        ],
+                                      ),
+                                    if (metadata.isNotEmpty) ...[
+                                      const SizedBox(height: 8),
+                                      KeyedSubtree(
+                                        key: widget.modifierTip?.anchorKey,
+                                        child: _BriefingModifierTile(
+                                          key: const ValueKey(
+                                            'briefing-modifier',
+                                          ),
+                                          title: metadata.first.title,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                // The tile above names the modifier, so this is
+                                // its effect, not its name again. The artboard has
+                                // no conditions section at all -- it expects the
+                                // player to know what ION STORM does -- but a
+                                // modifier's actual numbers are worth a line, and
+                                // repeating the title alongside the tile is not.
+                                if (metadata.isNotEmpty) ...[
+                                  const SizedBox(height: 7),
+                                  Text(
+                                    metadata.first.description,
+                                    key: const ValueKey(
+                                      'briefing-modifier-effect',
+                                    ),
+                                    style: OrionTypography.microLabel(
+                                      color: uiTheme.textMuted,
+                                    ),
+                                  ),
+                                ],
+                                const SizedBox(height: 16),
+                                _BriefingThreatProfile(stage: stage),
+                                const SizedBox(height: 12),
+                                if (largeText) ...[
+                                  medalCriteria[0],
+                                  const SizedBox(height: 8),
+                                  medalCriteria[1],
+                                ] else
+                                  Row(
+                                    children: [
+                                      Expanded(child: medalCriteria[0]),
+                                      const SizedBox(width: 8),
+                                      Expanded(child: medalCriteria[1]),
+                                    ],
+                                  ),
+                                if (metadata.length > 1) ...[
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'CONDITIONS',
+                                    style: OrionTypography.microLabel(
+                                      size: 11,
+                                      color: uiTheme.systemCyan,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 7),
+                                  for (final entry in metadata.skip(1)) ...[
+                                    _BriefingIntelRow(
+                                      icon: Icons.radar_rounded,
+                                      color: uiTheme.systemCyan,
+                                      title: entry.title,
+                                      detail: entry.description,
+                                    ),
+                                    const SizedBox(height: 7),
+                                  ],
+                                ],
+                                const SizedBox(height: 9),
+                                if (stage.reward != null) ...[
+                                  _BriefingIntelRow(
+                                    icon: rewardIcon(stage.reward!),
+                                    color: uiTheme.creditGold,
+                                    title: 'SALVAGE',
+                                    detail: _briefingRewardLabel(
+                                      stage.reward!,
+                                      earned: result != null,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 7),
+                                ],
+                                if (result != null) ...[
+                                  _BriefingIntelRow(
+                                    icon: medalIcon(result.medal),
+                                    color: medalColor(uiTheme, result.medal),
+                                    title: 'BEST RESULT',
+                                    detail:
+                                        'Best: ${result.medal.label} • '
+                                        '${result.bestBaseHealth} base health',
+                                  ),
+                                  const SizedBox(height: 7),
+                                  _BriefingIntelRow(
+                                    icon: Icons.all_inclusive_rounded,
+                                    color: uiTheme.systemViolet,
+                                    title: 'ENDLESS',
+                                    detail: widget.endlessBest == null
+                                        ? 'No endless run yet'
+                                        : 'Endless best: ${widget.endlessBest} ${widget.endlessBest == 1 ? 'wave' : 'waves'}',
+                                  ),
+                                  const SizedBox(height: 7),
+                                ],
+                                // A stage's blueprint module is knowable before
+                                // deploying: locked stages tease the module name
+                                // and exact effect; the committed `result` is the
+                                // first-clear signal that flips the row to
+                                // Recovered.
+                                if (stage.blueprint case final blueprint?) ...[
+                                  _BriefingIntelRow(
+                                    icon: Icons.memory_rounded,
+                                    color: uiTheme.systemViolet,
+                                    title: 'BLUEPRINT',
+                                    detail: _briefingBlueprintLabel(
+                                      runModuleDefinition(blueprint),
+                                      recovered: result != null,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 7),
+                                ],
+                                const SizedBox(height: 9),
+                                _BriefingSquad(
+                                  key: _squadSectionKey,
+                                  draft: _draft,
+                                  ownedLevels: widget.ownedLevels,
+                                  pickerOpen: _pickerOpen,
+                                  enabled: !_launching,
+                                  feedback: _editFeedback,
+                                  onTogglePicker: _togglePicker,
+                                  onToggleMember: _toggleMember,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: EdgeInsets.fromLTRB(
+                      14,
+                      12,
+                      14,
+                      24 +
+                          math.max(
+                            MediaQuery.viewPaddingOf(context).bottom,
+                            MediaQuery.viewInsetsOf(context).bottom,
+                          ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_launching || _launchFailed)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              _launching
+                                  ? 'Saving squad…'
+                                  : 'Could not save squad changes — tap a '
+                                        'launch action to retry.',
+                              key: const ValueKey('briefing-launch-status'),
+                              textAlign: TextAlign.center,
+                              style: OrionTypography.microLabel(
+                                color: _launching
+                                    ? uiTheme.textMuted
+                                    : uiTheme.warningOrange,
+                              ),
+                            ),
+                          ),
+                        if (result == null)
+                          _BriefingLaunchAction(
+                            label: 'Start Mission',
+                            kicker: 'DEPLOY',
+                            accent: accent,
+                            icon: Icons.play_arrow_rounded,
+                            onPressed: _launchEnabled
+                                ? () => _launch(RunMode.mission)
+                                : null,
+                          )
+                        else
+                          _BriefingReplayActions(
+                            accent: accent,
+                            enabled: _launchEnabled,
+                            onLaunch: _launch,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              Positioned(
+                top: 12,
+                left: 14,
+                child: OrionSurface(
+                  role: OrionSurfaceRole.floating,
+                  padding: EdgeInsets.zero,
+                  radius: 14,
+                  child: IconButton(
+                    tooltip: 'Dismiss',
+                    onPressed: _launching
+                        ? null
+                        : () => Navigator.of(context).pop(),
+                    icon: Icon(
+                      Icons.chevron_left_rounded,
+                      color: uiTheme.systemCyan,
+                    ),
+                  ),
                 ),
               ),
-          ],
+              // Last so the shared, hit-transparent callout sits above the
+              // sheet chrome; only its own Got it row intercepts taps.
+              if (stage.modifiers.isNotEmpty && widget.modifierTip != null)
+                Positioned.fill(
+                  child: ContextualTipCallout(
+                    tip: ContextualTip.stageModifier,
+                    anchorKey: widget.modifierTip!.anchorKey,
+                    onDone: widget.modifierTip!.onDone,
+                    preferAbove: true,
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -640,9 +798,15 @@ TextStyle _briefingLaunchLabelStyle(Color color) => OrionTypography.microLabel(
 ).copyWith(letterSpacing: 3.6, shadows: const []);
 
 class _BriefingReplayActions extends StatelessWidget {
-  const _BriefingReplayActions({required this.accent});
+  const _BriefingReplayActions({
+    required this.accent,
+    required this.enabled,
+    required this.onLaunch,
+  });
 
   final Color accent;
+  final bool enabled;
+  final Future<void> Function(RunMode mode) onLaunch;
 
   @override
   Widget build(BuildContext context) {
@@ -670,7 +834,7 @@ class _BriefingReplayActions extends StatelessWidget {
           accent: accent,
           icon: Icons.replay_rounded,
           compactVertical: stackActions,
-          onPressed: () => Navigator.of(context).pop(RunMode.mission),
+          onPressed: enabled ? () => onLaunch(RunMode.mission) : null,
         );
         final endless = _BriefingLaunchAction(
           label: 'Endless',
@@ -678,7 +842,7 @@ class _BriefingReplayActions extends StatelessWidget {
           accent: accent,
           icon: Icons.all_inclusive_rounded,
           compactVertical: stackActions,
-          onPressed: () => Navigator.of(context).pop(RunMode.endless),
+          onPressed: enabled ? () => onLaunch(RunMode.endless) : null,
         );
         if (stackActions) {
           return Column(
@@ -699,7 +863,8 @@ class _BriefingReplayActions extends StatelessWidget {
 }
 
 /// A solid, filled launch action on the briefing sheet (such as Launch,
-/// Replay, or Endless).
+/// Replay, or Endless). A null [onPressed] dims the action and removes its
+/// tap — used while a squad save is in flight or the draft is empty.
 class _BriefingLaunchAction extends StatelessWidget {
   const _BriefingLaunchAction({
     required this.label,
@@ -714,7 +879,7 @@ class _BriefingLaunchAction extends StatelessWidget {
   final String kicker;
   final Color accent;
   final IconData icon;
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final bool compactVertical;
 
   @override
@@ -726,46 +891,52 @@ class _BriefingLaunchAction extends StatelessWidget {
       child: Semantics(
         button: true,
         label: label,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(18),
-            gradient: orionBriefingDeployFill,
-            boxShadow: [
-              BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 24),
-            ],
-          ),
-          child: Material(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(18),
-            child: InkWell(
-              onTap: onPressed,
+        enabled: onPressed != null,
+        child: Opacity(
+          opacity: onPressed == null ? 0.45 : 1,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(18),
-              splashColor: uiTheme.voidBlack.withValues(alpha: 0.18),
-              highlightColor: uiTheme.voidBlack.withValues(alpha: 0.10),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: compactVertical ? 12 : 22,
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(icon, color: uiTheme.voidBlack),
-                    const SizedBox(width: 10),
-                    Flexible(
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        // On a filled accent the label must be the dark ink,
-                        // which microLabel's muted-only rule cannot express.
-                        child: ExcludeSemantics(
-                          child: Text(
-                            kicker,
-                            style: _briefingLaunchLabelStyle(uiTheme.voidBlack),
+              gradient: orionBriefingDeployFill,
+              boxShadow: [
+                BoxShadow(color: accent.withValues(alpha: 0.3), blurRadius: 24),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              borderRadius: BorderRadius.circular(18),
+              child: InkWell(
+                onTap: onPressed,
+                borderRadius: BorderRadius.circular(18),
+                splashColor: uiTheme.voidBlack.withValues(alpha: 0.18),
+                highlightColor: uiTheme.voidBlack.withValues(alpha: 0.10),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: compactVertical ? 12 : 22,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, color: uiTheme.voidBlack),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          // On a filled accent the label must be the dark ink,
+                          // which microLabel's muted-only rule cannot express.
+                          child: ExcludeSemantics(
+                            child: Text(
+                              kicker,
+                              style: _briefingLaunchLabelStyle(
+                                uiTheme.voidBlack,
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1071,4 +1242,347 @@ String _briefingRewardLabel(CampaignReward reward, {required bool earned}) {
       '$prefix +${GameBalance.voidBastionHealthBonus} HP',
     CampaignReward.challengeBadge => '$prefix Challenge Badge',
   };
+}
+
+/// The YOUR SQUAD briefing section (artboard 14): the committed-seeded draft
+/// as ordered chibi tokens, an EDIT affordance opening the owned-member
+/// picker, and a count against the six-member cap.
+///
+/// Every tap mutates only the route-local draft — the sheet owns all draft
+/// state, so this section is pure presentation.
+class _BriefingSquad extends StatelessWidget {
+  const _BriefingSquad({
+    super.key,
+    required this.draft,
+    required this.ownedLevels,
+    required this.pickerOpen,
+    required this.enabled,
+    required this.feedback,
+    required this.onTogglePicker,
+    required this.onToggleMember,
+  });
+
+  /// The local draft in deploy order — token order is the launch order.
+  final List<Character> draft;
+
+  /// Every member the picker may offer, with its persistent level.
+  final Map<Character, int> ownedLevels;
+
+  final bool pickerOpen;
+
+  /// False while a launch save is in flight — tokens and picker stay mounted
+  /// (so the draft reads identically on retry) but stop answering taps.
+  final bool enabled;
+
+  /// Inline edit feedback such as the six-member cap message.
+  final String? feedback;
+
+  final VoidCallback onTogglePicker;
+  final ValueChanged<Character> onToggleMember;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    // Picker order follows the Camp roster's character order, not the draft.
+    final owned = [
+      for (final member in Character.values)
+        if (ownedLevels.containsKey(member)) member,
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'YOUR SQUAD',
+                style: OrionTypography.microLabel(
+                  size: 11,
+                  color: uiTheme.systemCyan,
+                ),
+              ),
+            ),
+            Text(
+              '${draft.length} / ${GameBalance.squadMaxSize}',
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: uiTheme.textMuted,
+              ),
+            ),
+            const SizedBox(width: 10),
+            InkWell(
+              key: const ValueKey('briefing-squad-edit'),
+              onTap: enabled ? onTogglePicker : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                child: Text(
+                  pickerOpen ? 'DONE' : 'EDIT',
+                  style: OrionTypography.microLabel(
+                    size: 11,
+                    color: enabled ? uiTheme.systemCyan : uiTheme.textMuted,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        if (draft.isEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Text(
+              'Select at least one squad member to deploy.',
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: uiTheme.warningOrange,
+              ),
+            ),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final (index, member) in draft.indexed)
+                _BriefingSquadToken(
+                  key: ValueKey('briefing-squad-token-${member.name}'),
+                  member: member,
+                  level: ownedLevels[member] ?? 1,
+                  position: index + 1,
+                  onTap: enabled ? () => onToggleMember(member) : null,
+                ),
+            ],
+          ),
+        if (pickerOpen) ...[
+          const SizedBox(height: 9),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final member in owned)
+                _BriefingSquadPick(
+                  key: ValueKey('briefing-squad-pick-${member.name}'),
+                  member: member,
+                  level: ownedLevels[member]!,
+                  selected: draft.contains(member),
+                  onTap: enabled ? () => onToggleMember(member) : null,
+                ),
+            ],
+          ),
+        ],
+        if (feedback != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            feedback!,
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: uiTheme.warningOrange,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// One ordered squad token: the member's chibi portrait, name, and level.
+/// Tapping removes the member from the draft — removal is a draft edit, so
+/// it stays local until launch.
+class _BriefingSquadToken extends StatelessWidget {
+  const _BriefingSquadToken({
+    super.key,
+    required this.member,
+    required this.level,
+    required this.position,
+    required this.onTap,
+  });
+
+  final Character member;
+  final int level;
+
+  /// 1-based deploy position shown as the order badge.
+  final int position;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Semantics(
+      button: true,
+      label:
+          'Squad member $position: ${member.displayName}, level $level. '
+          'Activate to remove.',
+      child: OrionSurface(
+        role: OrionSurfaceRole.card,
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 30,
+                height: 30,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: OrionAtlasSprite(
+                          art: OrionArt.characterChibi(member),
+                          size: const Size.square(30),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      child: ExcludeSemantics(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: uiTheme.voidBlack.withValues(alpha: 0.72),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 2),
+                            child: Text(
+                              '$position',
+                              style: OrionTypography.microLabel(
+                                size: 10,
+                                color: uiTheme.systemCyan,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 7),
+              ExcludeSemantics(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      member.displayName,
+                      style: OrionTypography.readout(
+                        size: 10,
+                        color: uiTheme.textPrimary,
+                      ),
+                    ),
+                    Text(
+                      'Lv $level',
+                      style: OrionTypography.microLabel(
+                        size: 10,
+                        color: uiTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 5),
+              Icon(
+                Icons.close_rounded,
+                size: 12,
+                color: onTap == null ? uiTheme.textMuted : uiTheme.systemCyan,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// One picker chip: offered owned member with selected checkmark state.
+class _BriefingSquadPick extends StatelessWidget {
+  const _BriefingSquadPick({
+    super.key,
+    required this.member,
+    required this.level,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Character member;
+  final int level;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    return Semantics(
+      button: true,
+      selected: selected,
+      label:
+          '${member.displayName}, level $level'
+          '${selected ? ', in squad' : ''}',
+      child: OrionSurface(
+        role: OrionSurfaceRole.card,
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Opacity(
+                opacity: selected ? 1 : 0.55,
+                child: SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(6),
+                    child: OrionAtlasSprite(
+                      art: OrionArt.characterChibi(member),
+                      size: const Size.square(30),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 7),
+              ExcludeSemantics(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      member.displayName,
+                      style: selected
+                          ? OrionTypography.readout(
+                              size: 10,
+                              color: uiTheme.textPrimary,
+                            )
+                          : OrionTypography.microLabel(
+                              size: 10,
+                              color: uiTheme.textMuted,
+                            ),
+                    ),
+                    Text(
+                      'Lv $level',
+                      style: OrionTypography.microLabel(
+                        size: 10,
+                        color: uiTheme.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 5),
+              Icon(
+                selected ? Icons.check_circle_rounded : Icons.circle_outlined,
+                size: 13,
+                color: selected ? uiTheme.systemCyan : uiTheme.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
