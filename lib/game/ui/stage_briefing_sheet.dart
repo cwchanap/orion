@@ -93,6 +93,13 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
 
   ModalRoute<Object?>? _route;
 
+  /// A launch whose save committed while a pushed route covered this sheet.
+  /// Popping immediately would dismiss the covering route, and unwinding
+  /// [_launching] would wedge "Saving squad…" behind it — so the mode waits
+  /// here until the route regains `isCurrent`, when [didChangeDependencies]
+  /// hands it to [_finishDeferredLaunch].
+  RunMode? _deferredLaunchMode;
+
   var _pickerOpen = false;
   var _launching = false;
   var _launchFailed = false;
@@ -122,6 +129,10 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
       _route = route;
       _route?.registerPopEntry(this);
     }
+    // ModalRoute.of subscribes to every _ModalScopeStatus change, so this
+    // refires when the route regains `isCurrent` — the only moment a
+    // deferred launch may finish.
+    _finishDeferredLaunch();
   }
 
   @override
@@ -197,12 +208,19 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
     }
     if (committed) {
       // The page's post-route continuation owns _startStage: pop exactly
-      // once with the mode and never start anything here. If the route has
-      // somehow already been dismissed while the save resolved, popping
-      // again could hit the route beneath — leave the committed save
-      // standing instead.
+      // once with the mode and never start anything here.
       final route = ModalRoute.of(context);
-      if (route == null || !route.isCurrent) {
+      if (route == null || !route.isActive) {
+        // The route is already gone or being removed — leave the committed
+        // save standing; popping now could hit the route beneath.
+        return;
+      }
+      if (!route.isCurrent) {
+        // Active but covered — a route pushed on top while the save was in
+        // flight. Popping now would dismiss the covering route; unwinding
+        // _launching would strand "Saving squad…" behind it. Keep the
+        // in-flight state and defer the finish until the cover lifts.
+        _deferredLaunchMode = mode;
         return;
       }
       Navigator.of(context).pop(mode);
@@ -223,6 +241,29 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
       return;
     }
     Navigator.of(context).pop();
+  }
+
+  /// Finishes a launch whose save committed while a pushed route covered
+  /// the sheet. Called from [didChangeDependencies] — which refires on the
+  /// `isCurrent` flip — but the pop itself waits one frame: the status
+  /// change lands mid route-update, and a synchronous Navigator pop there
+  /// would re-enter the transition machinery before the history settles.
+  void _finishDeferredLaunch() {
+    if (_deferredLaunchMode == null || _route?.isCurrent != true) {
+      return;
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final mode = _deferredLaunchMode;
+      if (!mounted || mode == null) {
+        return;
+      }
+      final route = ModalRoute.of(context);
+      if (route == null || !route.isCurrent) {
+        return;
+      }
+      _deferredLaunchMode = null;
+      Navigator.of(context).pop(mode);
+    });
   }
 
   @override
@@ -1377,9 +1418,10 @@ class _BriefingSquad extends StatelessWidget {
               key: const ValueKey('briefing-squad-edit'),
               onTap: enabled ? onTogglePicker : null,
               borderRadius: BorderRadius.circular(8),
-              // The ink region is the hit target: keep it at the 48px floor.
+              // The ink region is the hit target: keep it at the 48px floor
+              // in both dimensions — EDIT's real-font width is ~44px alone.
               child: ConstrainedBox(
-                constraints: const BoxConstraints(minHeight: 48),
+                constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
                 child: Center(
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8),

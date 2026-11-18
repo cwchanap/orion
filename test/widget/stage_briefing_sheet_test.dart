@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
@@ -45,6 +46,10 @@ Future<_PopRecorder> _pumpBriefing(
   Size viewport = _productViewport,
   TextScaler textScaler = TextScaler.noScaling,
   bool disableAnimations = false,
+  // Production always opens scroll-controlled, which stretches the sheet to
+  // full height and leaves zero barrier area: tests that must reach the
+  // barrier's real dismiss inputs opt into the half-height layout here.
+  bool isScrollControlled = true,
 }) async {
   tester.view.physicalSize = viewport;
   tester.view.devicePixelRatio = 1;
@@ -67,7 +72,7 @@ Future<_PopRecorder> _pumpBriefing(
               onPressed: () {
                 showModalBottomSheet<RunMode>(
                   context: context,
-                  isScrollControlled: true,
+                  isScrollControlled: isScrollControlled,
                   useSafeArea: true,
                   // Same policy as the page: sheet drags pop imperatively
                   // and cannot consult the launch-save veto.
@@ -141,6 +146,30 @@ InkWell _launchInkWell(WidgetTester tester, String tooltip) =>
         matching: find.byType(InkWell),
       ),
     );
+
+/// Fires the modal barrier's own dismiss affordance — the
+/// [SemanticsAction.dismiss] the platform dispatches for a11y scrim
+/// dismissal — through the real semantics pipeline instead of replaying the
+/// `Navigator.maybePop` call the barrier would make. Requires an active
+/// [WidgetTester.ensureSemantics] handle so the tree is built.
+Future<void> _dismissBarrierViaSemantics(WidgetTester tester) async {
+  final barrierSemantics = find.descendant(
+    of: find.byType(ModalBarrier),
+    matching: find.byWidgetPredicate(
+      (widget) => widget is Semantics && widget.properties.onDismiss != null,
+    ),
+  );
+  expect(barrierSemantics, findsOneWidget);
+  final node = tester.getSemantics(barrierSemantics);
+  expect(node.getSemanticsData().hasAction(SemanticsAction.dismiss), isTrue);
+  // Dispatch through the SemanticsOwner that actually owns the app's render
+  // view — the same entry point a11y action events use.
+  tester.binding.renderViews.single.owner!.semanticsOwner!.performAction(
+    node.id,
+    SemanticsAction.dismiss,
+  );
+  await tester.pump();
+}
 
 void main() {
   testWidgets('390x844 primary composition opens with a full-bleed wide hero', (
@@ -1326,7 +1355,68 @@ void main() {
     );
 
     testWidgets(
-      'a launch in flight vetoes a same-frame dismiss, back and barrier pop',
+      'a launch in flight vetoes same-frame dismiss, back and barrier '
+      'dismissal, and the failure restores dismissal',
+      (tester) async {
+        // Disposed explicitly at the end — the binding's handle check runs
+        // before addTearDown callbacks.
+        final semantics = tester.ensureSemantics();
+        final gate = Completer<bool>();
+        // Half-height leaves real scrim above the sheet, so the barrier's
+        // dismiss affordances — the scrim-tap gesture and the a11y dismiss
+        // action — are genuine inputs a user could make, not replays of the
+        // maybePop call the barrier would issue internally.
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+          isScrollControlled: false,
+        );
+        final sheetRect = tester.getRect(
+          find.byKey(const ValueKey('stage-briefing')),
+        );
+        expect(sheetRect.top, greaterThan(0));
+        final scrimTap = Offset(sheetRect.center.dx, sheetRect.top / 2);
+
+        await tester.ensureVisible(find.byTooltip('Start Mission'));
+        await tester.tap(find.byTooltip('Start Mission'));
+        // No pump: the save is already in flight but the sheet has not
+        // rebuilt once, so every dismissal surface still holds its pre-launch
+        // wiring — the IconButton's stale callback, the system back path and
+        // the barrier's real dismiss inputs must all be vetoed synchronously.
+        await tester.tap(find.byTooltip('Dismiss'));
+        await tester.binding.handlePopRoute();
+        await tester.tapAt(scrimTap);
+        await _dismissBarrierViaSemantics(tester);
+        await tester.pump();
+
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(recorder.launches, hasLength(1));
+        expect(recorder.popped, isNull);
+
+        // The veto lifts with the failure: the same real barrier dismiss
+        // action now pops the route.
+        gate.complete(false);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(
+          find.text(
+            'Could not save squad changes — tap a launch action to retry.',
+          ),
+          findsOneWidget,
+        );
+
+        await _dismissBarrierViaSemantics(tester);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+        semantics.dispose();
+      },
+    );
+
+    testWidgets(
+      'a save that commits while a pushed route covers the sheet finishes '
+      'once uncovered — the cover stays and no second launch runs',
       (tester) async {
         final gate = Completer<bool>();
         final recorder = await _pumpBriefing(
@@ -1337,25 +1427,41 @@ void main() {
         );
 
         await tester.tap(find.byTooltip('Start Mission'));
-        // No pump: the save is already in flight but the sheet has not
-        // rebuilt once, so every dismissal surface still holds its pre-launch
-        // wiring — the IconButton's stale callback, the system back path and
-        // the barrier's maybePop must all be vetoed synchronously.
-        await tester.tap(find.byTooltip('Dismiss'));
-        await tester.binding.handlePopRoute();
-        // The modal barrier's onDismiss is exactly Navigator.maybePop on the
-        // sheet's context — issue the same call.
-        final sheetContext = tester.element(find.byType(StageBriefingSheet));
-        await Navigator.maybePop(sheetContext);
         await tester.pump();
 
-        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
-        expect(recorder.launches, hasLength(1));
-        expect(recorder.popped, isNull);
+        // Cover the briefing with a pushed route while the save is in
+        // flight: the sheet route stays active but is no longer current.
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        final route = ModalRoute.of(sheetContext)!;
+        unawaited(
+          showDialog<void>(
+            context: sheetContext,
+            builder: (_) => const AlertDialog(content: Text('covering')),
+          ),
+        );
+        await tester.pumpAndSettle();
+        expect(find.text('covering'), findsOneWidget);
+        expect(route.isCurrent, isFalse);
+        expect(route.isActive, isTrue);
 
+        // The save commits while covered: the write stands, but the
+        // covering route must not be popped and the sheet must not wedge
+        // behind it on a permanent "Saving squad…".
         gate.complete(true);
         await tester.pumpAndSettle();
+        expect(find.text('covering'), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(recorder.popped, isNull);
+        expect(recorder.launches, hasLength(1));
+
+        // Lifting the cover finishes the pending launch: the sheet pops
+        // once with the mode and no second save is written.
+        Navigator.of(tester.element(find.text('covering'))).pop();
+        await tester.pumpAndSettle();
+        expect(find.text('covering'), findsNothing);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
         expect(recorder.popped, RunMode.mission);
+        expect(recorder.launches, hasLength(1));
       },
     );
 
@@ -1524,9 +1630,11 @@ void main() {
       },
     );
 
-    testWidgets('squad controls meet the 48px touch-target floor', (
-      tester,
-    ) async {
+    testWidgets('squad controls meet the 48px touch-target floor in both '
+        'dimensions', (tester) async {
+      // Real ChakraPetch metrics — placeholder glyphs would fake the EDIT
+      // width that the floor must constrain.
+      await loadRealFonts();
       await _pumpBriefing(
         tester,
         stage: OrionCampaign.stageOne,
@@ -1537,7 +1645,9 @@ void main() {
       final edit = find.byKey(const ValueKey('briefing-squad-edit'));
       await tester.ensureVisible(edit);
       await tester.pumpAndSettle();
-      expect(tester.getRect(edit).height, greaterThanOrEqualTo(48));
+      var editRect = tester.getRect(edit);
+      expect(editRect.width, greaterThanOrEqualTo(48));
+      expect(editRect.height, greaterThanOrEqualTo(48));
       expect(
         tester
             .getRect(find.byKey(const ValueKey('briefing-squad-token-haruto')))
@@ -1546,6 +1656,10 @@ void main() {
       );
 
       await _openSquadPicker(tester);
+      // DONE replaces EDIT while the picker is open — same floor both ways.
+      editRect = tester.getRect(edit);
+      expect(editRect.width, greaterThanOrEqualTo(48));
+      expect(editRect.height, greaterThanOrEqualTo(48));
       final pick = find.byKey(const ValueKey('briefing-squad-pick-sayo'));
       await tester.ensureVisible(pick);
       await tester.pumpAndSettle();
