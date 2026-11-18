@@ -26,14 +26,20 @@ class CodexCharacterEntry {
   final int signatureCost;
   final CodexSignatureEntry signature;
 
-  /// Authored text a search can hit: the member's names and role plus the
-  /// fixed signature's names and role sentence.
+  /// Authored text a search can hit: the member's names and role, the
+  /// internal style label and the fixed signature's names and role
+  /// sentence. The style/signature labels are playable-only aliases — they
+  /// still appear on inspector and module surfaces, so queries like
+  /// "Cryo" or "Deep Freeze" must resolve to the members that field them
+  /// without ever advertising an unused combat variant.
   Iterable<String> get searchTerms => [
     label,
     character.fullName,
     character.role,
+    character.style.label,
     character.signatureName,
     signature.label,
+    signature.specialization.label,
     signature.description,
   ];
 }
@@ -155,7 +161,17 @@ class CodexData {
   ];
 
   static CodexCharacterEntry characterFor(Character character) {
-    final baseStats = GameBalance.towerStats(character.style, level: 1);
+    // The catalog's declared reference level is the member's level-1
+    // baseline: apply the same rank+level damage-channel scaling
+    // TowerStatsResolver applies in battle and Camp, so the entry shows
+    // the member's real deploy numbers (S-rank Hikari reads damage 24,
+    // not the raw style's 12). Costs stay style-based — scaling only
+    // touches damage channels.
+    final factor = GameBalance.characterScalingFactor(character.rank, 1);
+    final baseStats = GameBalance.towerStats(
+      character.style,
+      level: 1,
+    ).scaleDamageChannels(factor);
     return CodexCharacterEntry(
       character: character,
       label: character.displayName,
@@ -170,7 +186,7 @@ class CodexData {
           character.style,
           level: 3,
           specialization: character.signature,
-        ),
+        ).scaleDamageChannels(factor),
         description: character.signature.role,
       ),
     );

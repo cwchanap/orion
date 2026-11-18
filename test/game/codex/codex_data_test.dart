@@ -5,6 +5,7 @@ import 'package:orion/game/campaign/stage_modifier_metadata.dart';
 import 'package:orion/game/campaign/stage_reward_label.dart';
 import 'package:orion/game/codex/codex_data.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/tower_stats_resolver.dart';
 
 /// The four combat variants with no playable member: they may stay in the
 /// internal enums but must never surface in the Codex.
@@ -34,22 +35,110 @@ void main() {
         expect(entry.signature.description, entry.character.signature.role);
         expect(
           entry.signature.specializedStats,
-          GameBalance.towerStats(
-            entry.character.style,
-            level: 3,
-            specialization: entry.character.signature,
+          TowerStatsResolver.resolve(
+            PlacedTower(
+              id: 0,
+              character: entry.character,
+              position: const GridPosition(0, 0),
+              level: 3,
+            ),
           ),
+          reason:
+              '${entry.character.name} signature stats must match the '
+              'resolver pipeline Camp uses',
         );
       }
+    });
+
+    test('base stats match the character-resolved level-1 baseline', () {
+      // Camp resolves member stats through TowerStatsResolver: style/tier
+      // stats × rank+character-level damage-channel scaling (no stage or
+      // run-module layers in the catalog). The Codex must show the same
+      // level-1 baseline the battle deploys, not raw style stats — e.g.
+      // S-rank Hikari reads damage 24, not the style's unscaled 12.
+      for (final entry in CodexData.characters) {
+        expect(
+          entry.baseStats,
+          TowerStatsResolver.resolve(
+            PlacedTower(
+              id: 0,
+              character: entry.character,
+              position: const GridPosition(0, 0),
+            ),
+          ),
+          reason:
+              '${entry.character.name} base stats must match the '
+              'resolver pipeline Camp uses',
+        );
+      }
+    });
+
+    test('same-style members with distinct ranks scale by their own rank', () {
+      // Haruto (rank E) and Hikari (rank S) share the Laser style: if the
+      // catalog keyed scaling off the style instead of the character, both
+      // entries would show identical damage.
+      expect(Character.haruto.style, Character.hikari.style);
+      expect(Character.haruto.rank, isNot(Character.hikari.rank));
+      final haruto = CodexData.characters.firstWhere(
+        (c) => c.character == Character.haruto,
+      );
+      final hikari = CodexData.characters.firstWhere(
+        (c) => c.character == Character.hikari,
+      );
+      expect(
+        hikari.baseStats.damage,
+        greaterThan(haruto.baseStats.damage),
+        reason: 'S-rank scaling must outdamage E-rank on a shared style',
+      );
+      expect(
+        hikari.signature.specializedStats.damage,
+        greaterThan(haruto.signature.specializedStats.damage),
+      );
+    });
+
+    test('rank scaling reaches every damage channel, not only damage', () {
+      // The resolver scales damage, corrosionDamagePerSecond and
+      // droneDamage together — verify a corrosion member and a drone member
+      // pick their channels up too.
+      final shiori = CodexData.characters.firstWhere(
+        (c) => c.character == Character.shiori,
+      );
+      final rawNanite = GameBalance.towerStats(
+        Character.shiori.style,
+        level: 1,
+      );
+      final shioriFactor = GameBalance.characterScalingFactor(
+        Character.shiori.rank,
+        1,
+      );
+      expect(
+        shiori.baseStats.corrosionDamagePerSecond,
+        rawNanite.corrosionDamagePerSecond * shioriFactor,
+      );
+
+      final tetsuo = CodexData.characters.firstWhere(
+        (c) => c.character == Character.tetsuo,
+      );
+      final rawBay = GameBalance.towerStats(Character.tetsuo.style, level: 1);
+      final tetsuoFactor = GameBalance.characterScalingFactor(
+        Character.tetsuo.rank,
+        1,
+      );
+      expect(tetsuo.baseStats.droneDamage, rawBay.droneDamage * tetsuoFactor);
     });
 
     test('style costs come from the level-1 style stats', () {
       for (final entry in CodexData.characters) {
         final base = GameBalance.towerStats(entry.character.style, level: 1);
-        expect(entry.baseStats, base);
+        // Costs stay style-based — rank scales damage channels, never gold.
         expect(entry.deployCost, base.cost);
         expect(entry.upgradeCost, base.upgradeCost);
         expect(entry.signatureCost, base.specializationCost);
+        expect(entry.baseStats.cost, base.cost);
+        expect(
+          entry.signature.specializedStats.specializationCost,
+          base.specializationCost,
+        );
       }
     });
 
@@ -279,6 +368,40 @@ void main() {
           reason: entry.character.name,
         );
       }
+    });
+
+    test('each member is found by its style and fixed-signature labels', () {
+      // Style and signature labels stay visible on inspector/module
+      // surfaces, so the Codex must answer them — but only the member's own
+      // playable labels, never the unused combat variants.
+      for (final entry in CodexData.characters) {
+        expect(
+          codexMatches(entry.character.style.label, entry.searchTerms),
+          isTrue,
+          reason: '${entry.character.name} / ${entry.character.style.label}',
+        );
+        expect(
+          codexMatches(entry.signature.specialization.label, entry.searchTerms),
+          isTrue,
+          reason:
+              '${entry.character.name} / '
+              '${entry.signature.specialization.label}',
+        );
+      }
+    });
+
+    test('playable alias queries resolve to the right members', () {
+      Set<Character> hits(String query) => CodexData.characters
+          .where((c) => codexMatches(query, c.searchTerms))
+          .map((c) => c.character)
+          .toSet();
+
+      // Style aliases shared by several members return all of them.
+      expect(hits('Cryo'), {Character.jin, Character.rin});
+      expect(hits('Ion Chain'), {Character.kaito});
+      expect(hits('Gravity Well'), {Character.ren});
+      // A playable specialization label finds the member it belongs to.
+      expect(hits('Deep Freeze'), {Character.jin});
     });
 
     test('querying "Steady Volley" finds exactly Haruto', () {

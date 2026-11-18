@@ -1392,7 +1392,13 @@ void main() {
         return fills;
       }
 
-      final stats = GameBalance.towerStats(TowerType.laser, level: 1);
+      // The default detail is Hikari (first in Character.values): her
+      // catalog stats already carry S-rank damage-channel scaling, so the
+      // fills must come from the entry's resolved baseline, not raw
+      // style stats.
+      final stats = CodexData.characters
+          .firstWhere((c) => c.character == Character.hikari)
+          .baseStats;
       final scale = TowerStatScale.forType(TowerType.laser);
       final fills = barFills();
       expect(
