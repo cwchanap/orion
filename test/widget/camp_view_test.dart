@@ -1,3 +1,7 @@
+import 'dart:ui' as ui;
+
+import 'package:flame/cache.dart';
+import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
@@ -5,7 +9,6 @@ import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/camp_view.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/tower_stat_scale.dart';
-import 'package:orion/game/util/format.dart';
 
 import '../support/orion_finders.dart';
 
@@ -51,6 +54,23 @@ Future<void> _showCard(WidgetTester tester, Character character) async {
   // settle so its render box reflects the final scroll offset.
   await tester.ensureVisible(_card(character));
   await tester.pumpAndSettle();
+}
+
+/// Fails `Flame.images.load` for the named files and defers to the real
+/// cache for everything else — the only seam [OrionArtDescriptor] loads
+/// through, so a listed portrait error surfaces exactly like a missing
+/// asset: the shared `sprite` future completes with an error and the
+/// `OrionAtlasSprite` fallback branch renders.
+final class _FailingImages extends Images {
+  final failures = <String>{};
+
+  @override
+  Future<ui.Image> load(String fileName, {String? key, String? package}) {
+    if (failures.contains(fileName)) {
+      return Future.error(StateError('missing $fileName'));
+    }
+    return super.load(fileName, key: key, package: package);
+  }
 }
 
 void main() {
@@ -203,48 +223,64 @@ void main() {
     expect(find.byKey(const ValueKey('character-sheet')), findsNothing);
   });
 
-  testWidgets('sheet stat bars use the shared scale and persistent level', (
-    tester,
-  ) async {
-    await _pumpCamp(
-      tester,
-      ownedLevels: const {Character.elena: 10},
-      squad: const [Character.elena],
-    );
-    await _showCard(tester, Character.elena);
-    await tester.tap(_card(Character.elena));
-    await tester.pumpAndSettle();
+  testWidgets(
+    'sheet stat bars render the shared-scale fractions from rank and level',
+    (tester) async {
+      // Two same-style members at different rank+level: one shared scale
+      // object (railgun) while the fills differ through the real deploy
+      // pipeline — style tier-1 stats scaled by the persistent factor.
+      const owned = {Character.elena: 10, Character.sayo: 2};
+      expect(
+        Character.elena.style,
+        Character.sayo.style,
+        reason: 'the pair must exercise one shared TowerStatScale',
+      );
+      double expectedFill(Character character, String label) {
+        final stats = GameBalance.towerStats(character.style, level: 1)
+            .scaleDamageChannels(
+              GameBalance.characterScalingFactor(
+                character.rank,
+                owned[character]!,
+              ),
+            );
+        final scale = TowerStatScale.forType(character.style);
+        return switch (label) {
+          'DAMAGE' => scale.damageFill(stats),
+          'FIRE' => scale.fireFill(stats),
+          'RANGE' => scale.rangeFill(stats),
+          _ => scale.secondaryFill(stats)!,
+        };
+      }
 
-    expect(find.text('LV 10 / 40'), findsOneWidget);
+      for (final character in owned.keys) {
+        await _pumpCamp(tester, ownedLevels: owned, squad: [character]);
+        await _showCard(tester, character);
+        await tester.tap(_card(character));
+        await tester.pumpAndSettle();
 
-    // The sheet's damage figure must equal the real deploy pipeline: style
-    // tier-1 stats scaled by the persistent rank+level factor.
-    final stats = GameBalance.towerStats(Character.elena.style, level: 1)
-        .scaleDamageChannels(
-          GameBalance.characterScalingFactor(Character.elena.rank, 10),
-        );
-    expect(find.text(number(stats.damage)), findsOneWidget);
-
-    // Fills come from TowerStatScale — assert the contract still holds for
-    // every roster member rather than a bespoke meter.
-    for (final character in Character.values) {
-      final scale = TowerStatScale.forType(character.style);
-      final resolved = GameBalance.towerStats(character.style, level: 1)
-          .scaleDamageChannels(
-            GameBalance.characterScalingFactor(character.rank, 1),
+        for (final label in const ['DAMAGE', 'FIRE', 'RANGE', 'PIERCE']) {
+          final bar = tester.widget<FractionallySizedBox>(
+            find.byKey(ValueKey('sheet-stat-fill-$label')),
           );
-      expect(scale.damageFill(resolved), inInclusiveRange(0, 1));
-      expect(scale.fireFill(resolved), inInclusiveRange(0, 1));
-      expect(scale.rangeFill(resolved), inInclusiveRange(0, 1));
-    }
-  });
+          expect(
+            bar.widthFactor,
+            closeTo(expectedFill(character, label), 1e-9),
+            reason: '${character.name} $label',
+          );
+        }
 
-  testWidgets('missing portrait art falls back to the roster icon', (
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+
+  testWidgets('portrait descriptors declare the roster fallback contract', (
     tester,
   ) async {
-    // The descriptor contract: every character portrait and chibi declares a
-    // fallback icon plus its semantics label, so a cold Flame cache never
-    // strands the card without a placeholder.
+    // Every character portrait and chibi declares a fallback icon plus its
+    // semantics label, so an unresolvable load never strands a card without
+    // a placeholder.
     for (final character in Character.values) {
       final portrait = OrionArt.characterPortrait(character);
       expect(
@@ -266,22 +302,64 @@ void main() {
       );
       expect(chibi.fallbackIcon, Icons.person_outline, reason: character.name);
     }
+  });
 
-    // Cold-cache render: no image resolves, yet every card still mounts its
-    // semantics label and no exception leaks.
-    final semantics = tester.ensureSemantics();
-    try {
+  testWidgets(
+    'a failed portrait load renders the roster icon on card and sheet',
+    (tester) async {
+      // Force the real descriptor load path to error: Flame.images is the
+      // single seam OrionArtDescriptor._loadSprite reads through. The shared
+      // sprite memo must reset alongside so the new loader (not a prior
+      // generation's pending future) serves these builds.
+      final images = _FailingImages()
+        ..failures.add(OrionArt.characterPortrait(Character.haruto).fileName);
+      final previous = Flame.images;
+      Flame.images = images;
+      OrionArtDescriptor.resetSpriteCache();
+      addTearDown(() {
+        Flame.images = previous;
+        OrionArtDescriptor.resetSpriteCache();
+      });
+
       await _pumpCamp(tester);
       await _showCard(tester, Character.haruto);
+
+      // The failed card portrait paints the descriptor's fallback icon.
+      final harutoCard = _card(Character.haruto);
       expect(
-        find.bySemanticsLabel(RegExp('^Haruto, rank E, level 1')),
+        find.descendant(of: harutoCard, matching: find.byIcon(Icons.person)),
         findsOneWidget,
       );
-    } finally {
-      semantics.dispose();
-    }
-    expect(tester.takeException(), isNull);
-  });
+      final semantics = tester.ensureSemantics();
+      try {
+        expect(
+          find.bySemanticsLabel(RegExp('^Haruto, rank E, level 1')),
+          findsOneWidget,
+        );
+      } finally {
+        semantics.dispose();
+      }
+
+      // The sheet stays fully usable over the same failed art: fallback icon
+      // in the hero, identity, signature and stats all render, Back works.
+      await tester.tap(harutoCard);
+      await tester.pumpAndSettle();
+      final sheet = find.byKey(const ValueKey('character-sheet'));
+      expect(sheet, findsOneWidget);
+      expect(
+        find.descendant(of: sheet, matching: find.byIcon(Icons.person)),
+        findsOneWidget,
+      );
+      expect(findOrionTitle('Haruto Sakaki'), findsOneWidget);
+      expect(find.text('Steady Volley'), findsOneWidget);
+      expect(find.text('DAMAGE'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Back'));
+      await tester.pumpAndSettle();
+      expect(sheet, findsNothing);
+      expect(tester.takeException(), isNull);
+    },
+  );
 
   testWidgets('camp stays usable at 320x568 with 2x text', (tester) async {
     await _pumpCamp(

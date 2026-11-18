@@ -2117,8 +2117,18 @@ void main() {
       medal: StageMedal.silver,
       bestBaseHealth: 14,
     );
+    // A non-default, subset-ordered profile: result writes must carry these
+    // levels and this squad order through every composed save unchanged, and
+    // each launched game must read them from committed state.
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.mio: 5,
+        Character.sayo: 9,
+        Character.tetsuo: 4,
+      },
+      squad: const [Character.tetsuo, Character.sayo],
       delaySaves: true,
     );
     OrionDefenseGame? game;
@@ -2136,6 +2146,13 @@ void main() {
       drainCompletions: store.saveCompletions,
     );
 
+    // The first game launches on the committed non-default squad, in order.
+    expect(game!.snapshot.squadLevels.keys.toList(), [
+      Character.tetsuo,
+      Character.sayo,
+    ]);
+    expect(game!.snapshot.squadLevels.values.toList(), [4, 9]);
+
     await publishVictory(tester, game!, result: expectedResult);
     await _pumpUntil(tester, () => store.saveCompletions.length > 1);
     store.saveCompletions[1].complete();
@@ -2151,6 +2168,12 @@ void main() {
       actionLabel: 'Start Mission',
       drainCompletions: store.saveCompletions,
     );
+    // The second launch reads the same committed squad and levels.
+    expect(game!.snapshot.squadLevels.keys.toList(), [
+      Character.tetsuo,
+      Character.sayo,
+    ]);
+    expect(game!.snapshot.squadLevels.values.toList(), [4, 9]);
     await publishVictory(tester, game!, result: relayResult);
     await _pumpUntil(tester, () => store.saveCompletions.length > 3);
     store.saveCompletions[3].complete();
@@ -2159,8 +2182,13 @@ void main() {
     expect(store.progress.resultFor('outpost-alpha'), expectedResult);
     expect(store.progress.resultFor('nebula-relay'), relayResult);
     // Ownership and squad carry through every composed save untouched.
-    expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
-    expect(store.squad, CampaignSave.starterSquad);
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.mio: 5,
+      Character.sayo: 9,
+      Character.tetsuo: 4,
+    });
+    expect(store.squad, [Character.tetsuo, Character.sayo]);
   });
 
   testWidgets('Mission save failure reports unchanged progress', (
@@ -3512,9 +3540,17 @@ void main() {
     // The serialized save queue composes each payload on the last committed
     // state: a second endless best queued behind the first still writes
     // after it drains, and the mission exit stays gated until the queue
-    // empties.
+    // empties. A non-default, subset-ordered profile must ride through every
+    // queued write untouched — and launch the game with its own levels.
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.mio: 6,
+        Character.kaito: 8,
+        Character.sayo: 3,
+      },
+      squad: const [Character.sayo, Character.kaito],
       delaySaves: true,
     );
     OrionDefenseGame? game;
@@ -3531,6 +3567,13 @@ void main() {
       actionLabel: 'Endless',
       drainCompletions: store.saveCompletions,
     );
+
+    // The endless launch also reads the committed non-default squad.
+    expect(game!.snapshot.squadLevels.keys.toList(), [
+      Character.sayo,
+      Character.kaito,
+    ]);
+    expect(game!.snapshot.squadLevels.values.toList(), [3, 8]);
 
     await publishEndlessWaveClear(tester, game!, 4);
     await publishEndlessWaveClear(tester, game!, 7);
@@ -3558,8 +3601,13 @@ void main() {
     expect(store.saveCalls, 3);
     // The queued saves committed in order: the later best (7) survives.
     expect(store.progress.endlessBestFor('outpost-alpha'), 7);
-    expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
-    expect(store.squad, CampaignSave.starterSquad);
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.mio: 6,
+      Character.kaito: 8,
+      Character.sayo: 3,
+    });
+    expect(store.squad, [Character.sayo, Character.kaito]);
   });
 
   testWidgets('navigation and Settings stay disabled while a campaign '
@@ -4049,13 +4097,21 @@ void main() {
     tester,
   ) async {
     // A failed mission save offers Retry Save; after the retry succeeds the
-    // report reads saved and the map shows no stale failure breadcrumb.
+    // report reads saved and the map shows no stale failure breadcrumb. The
+    // non-default levels and subset squad order ride through the failed
+    // attempt and the retried write unchanged.
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({
         'outpost-alpha',
         'nebula-relay',
         'asteroid-foundry',
       }),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.sayo: 8,
+        Character.kaito: 3,
+      },
+      squad: const [Character.kaito, Character.sayo],
       // Index 0 is the launch's squad write; the result write must fail.
       failOnSaveIndices: {1},
     );
@@ -4094,6 +4150,13 @@ void main() {
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     );
+    // Failure and retry never touched the roster halves of the save.
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.sayo: 8,
+      Character.kaito: 3,
+    });
+    expect(store.squad, [Character.kaito, Character.sayo]);
   });
 
   testWidgets('null store blocks launch without throwing', (tester) async {
@@ -7102,6 +7165,26 @@ void main() {
         expect(store.saveCompletions, hasLength(1));
         expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
 
+        // Real dismissal paths — system back, the barrier's maybePop (its
+        // literal onDismiss body) and a downward sheet drag — are all vetoed
+        // while the save is in flight.
+        await tester.binding.handlePopRoute();
+        await tester.pump();
+        final sheetContext = tester.element(
+          find.byKey(const ValueKey('stage-briefing')),
+        );
+        await Navigator.maybePop(sheetContext);
+        await tester.pump();
+        await tester.fling(
+          find.byTooltip('Dismiss'),
+          const Offset(0, 300),
+          1200,
+        );
+        await tester.pumpAndSettle();
+        expect(store.saveCompletions, hasLength(1));
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(find.text('Saving squad…'), findsOneWidget);
+
         store.saveCompletions.single.complete();
         for (var i = 0; i < 4; i++) {
           await tester.pump();
@@ -7204,6 +7287,23 @@ void main() {
         }
         expect(positions[0], lessThan(positions[1]));
         expect(positions[1], lessThan(positions[2]));
+
+        // The remounted briefing carries the non-default persistent levels,
+        // not starter 1s.
+        for (final (member, level) in const [
+          (Character.mio, 2),
+          (Character.haruto, 1),
+          (Character.sayo, 3),
+        ]) {
+          expect(
+            find.descendant(
+              of: find.byKey(ValueKey('briefing-squad-token-${member.name}')),
+              matching: find.text('Lv $level'),
+            ),
+            findsOneWidget,
+            reason: member.name,
+          );
+        }
       },
     );
 
@@ -7213,14 +7313,42 @@ void main() {
       final store = _TestCampaignProgressStore(
         ownedLevels: const {
           Character.haruto: 1,
-          Character.mio: 1,
+          Character.mio: 2,
           Character.sayo: 4,
         },
         squad: const [Character.sayo],
       );
-      await tester.pumpWidget(testGamePage(progressStore: store));
+      OrionDefenseGame? game;
+      var gameIndex = 0;
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) {
+            game = created;
+            gameIndex += 1;
+          },
+        ),
+      );
       await tester.pumpAndSettle();
 
+      // A real saved launch first: the drafted subset order and non-default
+      // levels reach both the store and the mounted game.
+      await openBriefing(tester);
+      await pickSquadMember(tester, Character.mio);
+      await launchFromBriefing(tester);
+      expect(store.saveCalls, 1);
+      expect(store.squad, [Character.sayo, Character.mio]);
+      expect(game, isNotNull);
+      expect(gameIndex, 1);
+      expect(game!.snapshot.squadLevels.keys.toList(), [
+        Character.sayo,
+        Character.mio,
+      ]);
+      expect(game!.snapshot.squadLevels.values.toList(), [4, 2]);
+
+      // Back to the map, then reset — the page and store revert together.
+      game!.returnToMap();
+      await tester.pumpAndSettle();
       await openResetCampaignDialog(tester);
       await tester.tap(find.widgetWithText(TextButton, 'Reset'));
       await tester.pumpAndSettle();
@@ -7228,6 +7356,30 @@ void main() {
       expect(store.resetCalls, 1);
       expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
       expect(store.squad, CampaignSave.starterSquad);
+
+      // The live page already reflects the starters: its next briefing seeds
+      // the starter draft in starter order — the sayo token is gone.
+      await openBriefing(tester);
+      expect(
+        find.byKey(const ValueKey('briefing-squad-token-haruto')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('briefing-squad-token-mio')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('briefing-squad-token-sayo')),
+        findsNothing,
+      );
+
+      // And the next launched game deploys the starter roster at level 1.
+      await launchFromBriefing(tester);
+      expect(gameIndex, 2);
+      expect(game!.snapshot.squadLevels, {
+        Character.haruto: 1,
+        Character.mio: 1,
+      });
     });
   });
 }
