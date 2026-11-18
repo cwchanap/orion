@@ -1,13 +1,14 @@
 # HPA-922 character squad validation
 
 - **PR:** [#50](https://github.com/cwchanap/orion/pull/50)
-- **Code tested:** `90b39f33ad9c7d1bba9f3093e5dcaa2a0ea076d0`
+- **Code tested:** `90b39f33ad9c7d1bba9f3093e5dcaa2a0ea076d0`;
+  battle rank colors rechecked at `4fa3053c2f999335c3053b0d0d893210f71c9861`
 **Environment:** Flutter web debug server, Chrome DevTools MCP, isolated browser
 context, 390 x 844 logical pixels at device pixel ratio 2 with touch emulation.
-The initial walkthrough and the three non-Camp screenshots were taken at
-`5f4d9739315084fbd5128b81f9d9fb18871cff54`; subsequent code changes fixed Camp
-cards and a build-phase combat assertion, without changing those three screens.
-Camp was recaptured and combat/save failure retested at `90b39f3`.
+The initial walkthrough, sheet and briefing screenshots were taken at
+`5f4d9739315084fbd5128b81f9d9fb18871cff54`; subsequent fixes did not change
+those two screens. Camp was recaptured and combat/save failure retested at
+`90b39f3`. Battle was recaptured after aligning rank rings with the roster.
 
 ## Visual comparison
 
@@ -19,7 +20,7 @@ references are design guidance, not exact replicas.
 | 10 Camp | [Top](hpa-922-evidence/10-camp-fixed.jpg), [scrolled](hpa-922-evidence/10-camp-bottom.jpg) | Twelve rank-ordered portraits; only Haruto and Mio are owned on a fresh profile. Locked cards use dark, contrast-crushed grayscale and `???`. Both owned cards show full `SQUAD` tags. The roster scrolls under the fixed navigation. |
 | 11 Character sheet | [Haruto](hpa-922-evidence/11-sheet.png) | Portrait, E rank, level, combat stats, signature and bio are visible. No level-up action. The approved full-size placeholder art occupies the left of the sheet rather than the mockup's full-width hero. |
 | 14 Briefing | [Squad draft](hpa-922-evidence/14-briefing.jpg) | Ordered member chips, count, edit and deploy actions are visible with the existing stage details. |
-| 15 Battle | [Deployed squad](hpa-922-evidence/15-battle.jpg) | Approved chibi sprites appear on the board and in squad order in the dock. Both deployed cards show `ON FIELD` and cannot deploy again. |
+| 15 Battle | [Deployed squad](hpa-922-evidence/15-battle-final.jpg) | Approved chibi sprites appear on the board and in squad order in the dock. Both deployed cards show `ON FIELD` and cannot deploy again; E-rank rings match the roster palette. |
 
 The current Orion theme, space board and Camp bay backdrop are intentionally
 retained until the separate retheme work. The mockups' Scrip, recruitment,
