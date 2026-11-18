@@ -4191,6 +4191,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('launch retries store initialization after a failed load', (
+    tester,
+  ) async {
+    // A transient initial-load failure leaves _store null; Launch must retry
+    // the loader — not return false forever — so a recoverable failure cannot
+    // permanently disable stage starts.
+    var loadAttempts = 0;
+    final recoveredStore = _TestCampaignProgressStore();
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStoreLoader: () async {
+          loadAttempts += 1;
+          if (loadAttempts == 1) {
+            throw StateError('no store');
+          }
+          return recoveredStore;
+        },
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not load campaign progress.'), findsOneWidget);
+
+    await tester.ensureVisible(find.text('Alpha'));
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Start Mission'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(loadAttempts, 2);
+    // The committed profile reloaded before the draft write, so the launch
+    // save lands on the recovered store and the run mounts.
+    expect(recoveredStore.saveCalls, 1);
+    expect(recoveredStore.squad, CampaignSave.starterSquad);
+    expect(game?.stage.id, 'outpost-alpha');
+  });
+
   test('snapshot exposes the current tower unlocks', () {
     // Squad unlocks follow the wave schedule on the squad's own styles:
     // wave-1 styles first, railgun after Wave 1 clears.
