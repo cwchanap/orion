@@ -30,6 +30,12 @@ class CampaignSave {
   /// [GameBalance.squadMaxSize] entries.
   final List<Character> squad;
 
+  /// A copy of this save with the ordered squad replaced — the single
+  /// committed-base write the stage briefing issues on Launch (HPA-922
+  /// task 6). Progress and roster levels ride along untouched.
+  CampaignSave withSquad(List<Character> draft) =>
+      CampaignSave(progress: progress, ownedLevels: ownedLevels, squad: draft);
+
   /// Fresh-profile starters (HPA-922): every new or discarded save owns
   /// Haruto and Mio at level 1, with both selected for the squad.
   static const Map<Character, int> starterOwnedLevels = {

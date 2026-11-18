@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
+import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/campaign/stage_definition.dart';
 import 'package:orion/game/campaign/stage_modifier_metadata.dart';
@@ -21,11 +24,14 @@ const _productViewport = Size(390, 844);
 
 class _PopRecorder {
   RunMode? popped;
+
+  /// Every (mode, draft) handed to `onLaunch`, in call order.
+  final launches = <(RunMode, List<Character>)>[];
 }
 
 /// Pumps a host that opens [stage]'s briefing through the same modal policy
 /// the page uses (scroll-controlled, safe area, transparent background) and
-/// records the value the sheet pops with.
+/// records the value the sheet pops with plus every launch invocation.
 Future<_PopRecorder> _pumpBriefing(
   WidgetTester tester, {
   required StageDefinition stage,
@@ -33,6 +39,9 @@ Future<_PopRecorder> _pumpBriefing(
   int? endlessBest,
   int startingGold = GameBalance.startingGold,
   int startingBaseHealth = GameBalance.initialBaseHealth,
+  List<Character> squad = CampaignSave.starterSquad,
+  Map<Character, int> ownedLevels = CampaignSave.starterOwnedLevels,
+  Future<bool> Function(RunMode mode, List<Character> draft)? onLaunch,
   Size viewport = _productViewport,
   TextScaler textScaler = TextScaler.noScaling,
   bool disableAnimations = false,
@@ -68,6 +77,12 @@ Future<_PopRecorder> _pumpBriefing(
                     endlessBest: endlessBest,
                     startingGold: startingGold,
                     startingBaseHealth: startingBaseHealth,
+                    squad: squad,
+                    ownedLevels: ownedLevels,
+                    onLaunch: (mode, draft) async {
+                      recorder.launches.add((mode, List.of(draft)));
+                      return onLaunch?.call(mode, draft) ?? true;
+                    },
                   ),
                 ).then((value) => recorder.popped = value);
               },
@@ -108,6 +123,21 @@ Future<void> _dismissBriefing(WidgetTester tester) async {
   await tester.tap(find.byTooltip('Dismiss'));
   await tester.pumpAndSettle();
 }
+
+/// Scrolls the squad section into view and opens its owned-member picker.
+Future<void> _openSquadPicker(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const ValueKey('briefing-squad-edit')));
+  await tester.tap(find.byKey(const ValueKey('briefing-squad-edit')));
+  await tester.pumpAndSettle();
+}
+
+InkWell _launchInkWell(WidgetTester tester, String tooltip) =>
+    tester.widget<InkWell>(
+      find.descendant(
+        of: find.byTooltip(tooltip),
+        matching: find.byType(InkWell),
+      ),
+    );
 
 void main() {
   testWidgets('390x844 primary composition opens with a full-bleed wide hero', (
@@ -1068,6 +1098,327 @@ void main() {
     });
   });
 
+  group('squad draft (HPA-922 task 6)', () {
+    const owned = {
+      Character.haruto: 1,
+      Character.mio: 2,
+      Character.sayo: 3,
+      Character.rin: 2,
+      Character.elena: 1,
+      Character.kaito: 4,
+      Character.tetsuo: 2,
+    };
+
+    testWidgets('squad tokens render the saved roster in order', (
+      tester,
+    ) async {
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        ownedLevels: owned,
+        squad: const [Character.mio, Character.haruto, Character.sayo],
+      );
+
+      expect(find.text('YOUR SQUAD'), findsOneWidget);
+      expect(find.textContaining('3 / 6'), findsWidgets);
+      final positions = <double>[];
+      for (final member in const [
+        Character.mio,
+        Character.haruto,
+        Character.sayo,
+      ]) {
+        final token = find.byKey(
+          ValueKey('briefing-squad-token-${member.name}'),
+        );
+        await tester.ensureVisible(token);
+        positions.add(tester.getRect(token).left);
+      }
+      expect(positions[0], lessThan(positions[1]));
+      expect(positions[1], lessThan(positions[2]));
+    });
+
+    testWidgets(
+      'draft edits stay local and Cancel discards them without a launch',
+      (tester) async {
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          squad: const [Character.haruto, Character.mio],
+        );
+
+        await _openSquadPicker(tester);
+        await tester.tap(
+          find.byKey(const ValueKey('briefing-squad-pick-sayo')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('briefing-squad-token-sayo')),
+          findsOneWidget,
+        );
+
+        // Removing from the token row mutates only the local draft.
+        await tester.tap(
+          find.byKey(const ValueKey('briefing-squad-token-haruto')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.byKey(const ValueKey('briefing-squad-token-haruto')),
+          findsNothing,
+        );
+        expect(recorder.launches, isEmpty);
+
+        // Cancel pops null and performs no write at all.
+        await tester.tap(find.byTooltip('Dismiss'));
+        await tester.pumpAndSettle();
+        expect(recorder.popped, isNull);
+        expect(recorder.launches, isEmpty);
+      },
+    );
+
+    testWidgets(
+      'a v4-filtered empty draft disables launch until a member is picked',
+      (tester) async {
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          squad: const [],
+        );
+
+        expect(
+          find.text('Select at least one squad member to deploy.'),
+          findsOneWidget,
+        );
+        expect(_launchInkWell(tester, 'Start Mission').onTap, isNull);
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        expect(recorder.launches, isEmpty);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+
+        await _openSquadPicker(tester);
+        await tester.tap(
+          find.byKey(const ValueKey('briefing-squad-pick-haruto')),
+        );
+        await tester.pumpAndSettle();
+        expect(
+          find.text('Select at least one squad member to deploy.'),
+          findsNothing,
+        );
+        expect(_launchInkWell(tester, 'Start Mission').onTap, isNotNull);
+      },
+    );
+
+    testWidgets('the six-member cap rejects a seventh with feedback', (
+      tester,
+    ) async {
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        ownedLevels: owned,
+        squad: const [
+          Character.haruto,
+          Character.mio,
+          Character.sayo,
+          Character.rin,
+          Character.elena,
+          Character.kaito,
+        ],
+      );
+
+      await _openSquadPicker(tester);
+      await tester.tap(
+        find.byKey(const ValueKey('briefing-squad-pick-tetsuo')),
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Squad is full — remove a member first.'),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('briefing-squad-token-tetsuo')),
+        findsNothing,
+      );
+    });
+
+    testWidgets('launch passes the draft order and pops once on commit', (
+      tester,
+    ) async {
+      final recorder = await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        ownedLevels: owned,
+        squad: const [Character.haruto, Character.mio],
+      );
+
+      // Reorder: drop Haruto, re-add it — the explicit draft order places the
+      // re-added member last.
+      await _openSquadPicker(tester);
+      await tester.tap(
+        find.byKey(const ValueKey('briefing-squad-pick-haruto')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey('briefing-squad-pick-haruto')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('briefing-squad-pick-sayo')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pumpAndSettle();
+
+      expect(recorder.launches, hasLength(1));
+      expect(recorder.launches.single.$1, RunMode.mission);
+      expect(recorder.launches.single.$2, [
+        Character.mio,
+        Character.haruto,
+        Character.sayo,
+      ]);
+      expect(recorder.popped, RunMode.mission);
+    });
+
+    testWidgets(
+      'a pending launch disables launch and dismiss, keeps the sheet mounted',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pump();
+        expect(recorder.launches, hasLength(1));
+        expect(find.text('Saving squad…'), findsOneWidget);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(_launchInkWell(tester, 'Start Mission').onTap, isNull);
+        expect(
+          tester
+              .widget<IconButton>(
+                find.widgetWithIcon(IconButton, Icons.chevron_left_rounded),
+              )
+              .onPressed,
+          isNull,
+        );
+
+        // A second tap while saving must not queue a second write, and the
+        // route must not be poppable while the save is in flight.
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pump();
+        expect(recorder.launches, hasLength(1));
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        expect(
+          ModalRoute.of(sheetContext)!.popDisposition,
+          RoutePopDisposition.doNotPop,
+        );
+
+        gate.complete(true);
+        await tester.pumpAndSettle();
+        expect(recorder.popped, RunMode.mission);
+      },
+    );
+
+    testWidgets(
+      'a failed launch keeps the sheet open with retryable feedback and the '
+      'draft intact',
+      (tester) async {
+        var attempts = 0;
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          squad: const [Character.haruto, Character.mio],
+          onLaunch: (mode, draft) async => ++attempts > 1,
+        );
+
+        // Token removal is a draft edit — the squad section sits below the
+        // fold at product size, so reveal it before tapping.
+        await tester.ensureVisible(
+          find.byKey(const ValueKey('briefing-squad-token-mio')),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(
+          find.byKey(const ValueKey('briefing-squad-token-mio')),
+        );
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        expect(attempts, 1);
+        expect(recorder.popped, isNull);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+        expect(
+          find.text(
+            'Could not save squad changes — tap a launch action to retry.',
+          ),
+          findsOneWidget,
+        );
+        // The draft survived the failed write and the action stays retryable.
+        expect(
+          find.byKey(const ValueKey('briefing-squad-token-mio')),
+          findsNothing,
+        );
+        expect(_launchInkWell(tester, 'Start Mission').onTap, isNotNull);
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        expect(attempts, 2);
+        expect(recorder.launches, hasLength(2));
+        expect(recorder.launches.last.$2, [Character.haruto]);
+        expect(recorder.popped, RunMode.mission);
+      },
+    );
+
+    for (final (tooltip, expected) in [
+      ('Replay Mission', RunMode.mission),
+      ('Endless', RunMode.endless),
+    ]) {
+      testWidgets('$tooltip goes through onLaunch with the draft', (
+        tester,
+      ) async {
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+          ownedLevels: owned,
+          squad: const [Character.mio, Character.haruto],
+        );
+
+        await tester.tap(find.byTooltip(tooltip));
+        await tester.pumpAndSettle();
+
+        expect(recorder.launches, hasLength(1));
+        expect(recorder.launches.single.$1, expected);
+        expect(recorder.launches.single.$2, [Character.mio, Character.haruto]);
+        expect(recorder.popped, expected);
+      });
+    }
+
+    testWidgets('squad section stays readable at 320x568 and 2x text', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        ownedLevels: owned,
+        squad: const [Character.mio, Character.haruto],
+        viewport: const Size(320, 568),
+        textScaler: const TextScaler.linear(2),
+      );
+      await _openSquadPicker(tester);
+      expect(find.text('YOUR SQUAD'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   testWidgets('capture scene 1b fixture', (tester) async {
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
@@ -1106,6 +1457,9 @@ void main() {
               result: null,
               startingGold: GameBalance.startingGold,
               startingBaseHealth: GameBalance.initialBaseHealth,
+              squad: CampaignSave.starterSquad,
+              ownedLevels: CampaignSave.starterOwnedLevels,
+              onLaunch: (mode, draft) async => true,
             ),
           ),
         ),

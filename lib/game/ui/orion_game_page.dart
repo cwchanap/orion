@@ -1189,6 +1189,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
                   },
                 )
               : null,
+          // The launch draft seeds from committed state — the same values a
+          // run would read — while the sheet edits its local copy and hands
+          // the draft back through onLaunch.
+          squad: _committedSquad,
+          ownedLevels: _committedOwnedLevels,
+          onLaunch: (mode, draft) => _persistSquadDraft(draft),
         ),
       ),
     );
@@ -1197,6 +1203,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _startStage(stage, mode);
     }
   }
+
+  /// The stage briefing's single write on Launch (HPA-922 task 6): the
+  /// sheet's local draft is committed through the same committed-base queue
+  /// as every other campaign write. The returned future settles only after
+  /// the queued save's `finally` clears the pending flag, so the sheet pops
+  /// — and this page's post-route continuation starts the stage — strictly
+  /// after the write lands or is reported lost.
+  Future<bool> _persistSquadDraft(List<Character> draft) => _persistSave(
+    buildSave: (committed) => committed.withSquad(draft),
+    onCommitted: (payload) => _squad = payload.squad,
+    // Failure feedback lives inside the still-mounted sheet (retryable); a
+    // map breadcrumb would sit hidden under the modal route.
+    onFailed: () {},
+  );
 
   Future<void> _openFeedbackSettings() async {
     if (_isSavingFeedback || !_feedbackPreferencesLoaded || _isBusy) {
@@ -1382,10 +1402,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
     });
   }
 
-  Future<void> _persistSave({
-    CampaignProgress? nextProgress,
+  /// Queues one atomic campaign write and resolves `true` only once the
+  /// queued task has committed (and [onCommitted] ran) — `false` on any
+  /// failure, a missing store, or a reset that invalidated the write. The
+  /// future awaits the queued task itself, so it settles strictly after its
+  /// `finally` reconciles the pending-save counter: a caller can gate a
+  /// follow-on step (stage launch) on the busy flag being clear again.
+  Future<bool> _persistSave({
     required CampaignSave Function(CampaignSave committed) buildSave,
-    VoidCallback? rollback,
     ValueChanged<CampaignSave>? onCommitted,
     VoidCallback? onFailed,
   }) async {
@@ -1396,20 +1420,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
       } else {
         _showCampaignPersistenceFailure();
       }
-      return;
+      return false;
     }
 
     final saveGeneration = _progressGeneration;
-
-    // Optimistic update: scoped to provided fields. Applied immediately so
-    // the UI reflects the change without waiting for the queued save to run.
-    if (nextProgress != null) _progress = nextProgress;
     _pendingSaves++;
     _setSavingProgress(true);
 
-    // Queue the COMPLETE transaction — persistence, targeted rollback, and
+    // Queue the COMPLETE transaction — persistence, failure reporting, and
     // saving-state reconciliation — so the next writer cannot start until
-    // this one has committed or rolled back.
+    // this one has committed or reported.
     //
     // The persisted payload is built from the last-known committed disk state
     // (_committed*), NOT from the shared optimistic _progress/profile
@@ -1423,6 +1443,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // advances so the next queued save composes on top of it. A per-call
     // snapshot would not suffice, because a later snapshot could still carry
     // an earlier mutation that eventually fails.
+    var committed = false;
     final saveTask = _saveQueue.then((_) async {
       try {
         if (saveGeneration != _progressGeneration) {
@@ -1442,12 +1463,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
           _committedOwnedLevels = payload.ownedLevels;
           _committedSquad = payload.squad;
           onCommitted?.call(payload);
+          committed = true;
         } else if (onFailed != null) {
           onFailed();
         }
       } catch (_) {
         if (saveGeneration == _progressGeneration) {
-          rollback?.call();
           if (onFailed != null) {
             onFailed();
           } else if (mounted) {
@@ -1461,6 +1482,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
     });
     _saveQueue = saveTask.catchError((_) {});
+    try {
+      await saveTask;
+    } catch (_) {
+      // A task-level throw (only the reconciliation `finally` could produce
+      // one) reports as not-committed; the swallowed queue error above keeps
+      // the chain alive for the next writer.
+    }
+    return committed;
   }
 
   void _handleStageWon(StageCompletion completion) {
