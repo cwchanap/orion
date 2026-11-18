@@ -171,6 +171,16 @@ Future<void> _dismissBarrierViaSemantics(WidgetTester tester) async {
   await tester.pump();
 }
 
+/// A route whose push and pop both finish synchronously — its whole
+/// lifecycle can land between two builds, which is exactly what lets an
+/// inherited `isCurrent` notification coalesce away (true → true).
+PageRouteBuilder<void> _instantCover() => PageRouteBuilder<void>(
+  transitionDuration: Duration.zero,
+  reverseTransitionDuration: Duration.zero,
+  pageBuilder: (_, _, _) =>
+      const SizedBox.expand(child: ColoredBox(color: Color(0xFF000000))),
+);
+
 void main() {
   testWidgets('390x844 primary composition opens with a full-bleed wide hero', (
     tester,
@@ -1459,6 +1469,91 @@ void main() {
         Navigator.of(tester.element(find.text('covering'))).pop();
         await tester.pumpAndSettle();
         expect(find.text('covering'), findsNothing);
+        expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+        expect(recorder.popped, RunMode.mission);
+        expect(recorder.launches, hasLength(1));
+      },
+    );
+
+    testWidgets(
+      'a deferred launch finishes after a cover pushed and popped inside '
+      'one frame — no isCurrent notification is ever built',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pump();
+
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        final navigator = Navigator.of(sheetContext);
+        unawaited(navigator.push(_instantCover()));
+        expect(ModalRoute.of(sheetContext)!.isCurrent, isFalse);
+
+        // The save commits while covered, then the cover is popped — all
+        // before a single build, so _ModalScopeStatus never observes
+        // isCurrent:false and no dependency notification can refire. idle()
+        // runs microtasks without a frame so _launch still sees the cover.
+        gate.complete(true);
+        await tester.idle();
+        navigator.pop();
+        await tester.pumpAndSettle();
+
+        expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+        expect(recorder.popped, RunMode.mission);
+        expect(recorder.launches, hasLength(1));
+      },
+    );
+
+    testWidgets(
+      'a deferred launch survives a re-cover that lands before the deferred '
+      'post-frame callback and lifts before the next build',
+      (tester) async {
+        final gate = Completer<bool>();
+        final recorder = await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          ownedLevels: owned,
+          onLaunch: (mode, draft) => gate.future,
+        );
+
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pump();
+
+        final sheetContext = tester.element(find.byType(StageBriefingSheet));
+        final navigator = Navigator.of(sheetContext);
+        unawaited(
+          showDialog<void>(
+            context: sheetContext,
+            builder: (_) => const AlertDialog(content: Text('covering')),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // The save commits while covered; the finish waits for the sheet
+        // to become current again.
+        gate.complete(true);
+        await tester.pumpAndSettle();
+        expect(find.text('covering'), findsOneWidget);
+        expect(recorder.popped, isNull);
+
+        // Pop the cover, then queue a callback that re-covers the sheet
+        // inside the same post-frame window the deferred finish is
+        // scheduled into — FIFO order puts the re-cover first — and a
+        // microtask that removes it before the next inherited-status build.
+        Navigator.of(sheetContext).pop();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          unawaited(navigator.push(_instantCover()));
+          scheduleMicrotask(() => navigator.pop());
+        });
+        await tester.pump(const Duration(milliseconds: 400));
+        await tester.pumpAndSettle();
+
         expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
         expect(recorder.popped, RunMode.mission);
         expect(recorder.launches, hasLength(1));
