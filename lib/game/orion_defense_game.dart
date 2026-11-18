@@ -5,6 +5,7 @@ import 'package:flame/components.dart';
 import 'package:flame/events.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 
 import 'assets/game_board_skin.dart';
 import 'assets/game_boss_sheet.dart';
@@ -657,11 +658,38 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _publishSnapshot();
   }
 
+  bool _postFrameUpdatePending = false;
+
   @override
   void update(double dt) {
     if (_isPaused) {
       processLifecycleEvents();
       _removeInactiveEnemyReferences();
+      return;
+    }
+    // Flame's GameWidget calls update(0) from inside its LayoutBuilder's
+    // layout pass, i.e. while the framework is in persistent callbacks.
+    // Settling gameplay there lets combat callbacks — a resolved kill, a
+    // leak, a finished wave — publish snapshots and fire win/loss
+    // callbacks while Flutter is building, which it forbids. Lifecycle
+    // still settles inline so pending mounts keep their timing; the
+    // gameplay tick reruns on the frame's post-frame slot where those
+    // side effects are legal. Repeated build passes share the one
+    // deferred settle, and a removed game skips it entirely.
+    if (dt == 0 &&
+        SchedulerBinding.instance.schedulerPhase ==
+            SchedulerPhase.persistentCallbacks) {
+      processLifecycleEvents();
+      _removeInactiveEnemyReferences();
+      if (!_postFrameUpdatePending) {
+        _postFrameUpdatePending = true;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          _postFrameUpdatePending = false;
+          if (!isRemoved) {
+            update(0);
+          }
+        });
+      }
       return;
     }
     final scaledDt = dt * _speedMultiplier;
