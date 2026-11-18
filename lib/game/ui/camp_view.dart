@@ -10,6 +10,21 @@ import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 import 'tower_stat_scale.dart';
 
+/// Width of [data] laid out in [style] under the ambient text scaler. The
+/// badge strip and the roster grid use it so SQUAD-tag placement follows
+/// real font metrics at every text scale instead of a hard-coded width.
+double _measureLabel(BuildContext context, String data, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: data, style: style),
+    maxLines: 1,
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 /// Camp roster destination (HPA-922) reached from the bottom navigation —
 /// the character counterpart of the removed R&D lab, reusing its bay
 /// backdrop until HPA-926 ships final art.
@@ -158,26 +173,50 @@ class _CampViewState extends State<CampView> {
           ),
         ),
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              // Three columns at the 390 product width, matching artboard 10.
-              maxCrossAxisExtent: 128,
-              mainAxisSpacing: 10,
-              crossAxisSpacing: 10,
-              childAspectRatio: 0.68,
-            ),
-            itemCount: Character.values.length,
-            itemBuilder: (context, index) {
-              final character = Character.values[index];
-              final level = widget.ownedLevels[character];
-              return _CharacterCard(
-                character: character,
-                level: level,
-                inSquad: widget.squad.contains(character),
-                onTap: level == null
-                    ? null
-                    : () => setState(() => _sheet = character),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // Three columns at the 390 product width, matching artboard 10
+              // — but only while a card can still host the SQUAD pill. Under
+              // large text the pill can outgrow a ~91px card, so the grid
+              // drops columns (e.g. two at 320 with 2x text) rather than
+              // shrinking accessible text or clipping the tag.
+              final pillWidth =
+                  _measureLabel(
+                    context,
+                    'SQUAD',
+                    OrionTypography.microLabel(
+                      size: 10,
+                      color: uiTheme.systemViolet,
+                    ),
+                  ) +
+                  10;
+              final crossAxis = constraints.maxWidth - 28;
+              final relaxed = (crossAxis / 128).ceil();
+              final fitsPill = ((crossAxis + 10) / (pillWidth + 24))
+                  .floor()
+                  .clamp(1, relaxed);
+              final columns = fitsPill < relaxed ? fitsPill : relaxed;
+              return GridView.builder(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
+                  mainAxisSpacing: 10,
+                  crossAxisSpacing: 10,
+                  childAspectRatio: 0.68,
+                ),
+                itemCount: Character.values.length,
+                itemBuilder: (context, index) {
+                  final character = Character.values[index];
+                  final level = widget.ownedLevels[character];
+                  return _CharacterCard(
+                    character: character,
+                    level: level,
+                    inSquad: widget.squad.contains(character),
+                    onTap: level == null
+                        ? null
+                        : () => setState(() => _sheet = character),
+                  );
+                },
               );
             },
           ),
@@ -291,9 +330,19 @@ class _CharacterCard extends StatelessWidget {
                   right: 6,
                   child: LayoutBuilder(
                     builder: (context, constraints) {
+                      // Rank badge grows with the ambient text scaler so the
+                      // glyph stays painted at 2x instead of clipping inside
+                      // a fixed 20px box.
+                      final rankStyle = OrionTypography.microLabel(
+                        size: 11,
+                        color: rankColor,
+                      );
                       final rankBadge = Container(
-                        width: 20,
-                        height: 20,
+                        constraints: const BoxConstraints(
+                          minWidth: 20,
+                          minHeight: 20,
+                        ),
+                        padding: const EdgeInsets.symmetric(horizontal: 3),
                         alignment: Alignment.center,
                         decoration: BoxDecoration(
                           color: rankColor.withValues(alpha: .18),
@@ -303,57 +352,48 @@ class _CharacterCard extends StatelessWidget {
                             width: 1.2,
                           ),
                         ),
-                        child: Text(
-                          character.rank.label,
-                          style: OrionTypography.microLabel(
-                            size: 11,
-                            color: rankColor,
-                          ),
-                        ),
+                        child: Text(character.rank.label, style: rankStyle),
                       );
-                      final squadBadge = !inSquad
-                          ? null
-                          : DecoratedBox(
-                              decoration: BoxDecoration(
-                                color: uiTheme.systemViolet.withValues(
-                                  alpha: .22,
-                                ),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: uiTheme.systemViolet.withValues(
-                                    alpha: .7,
-                                  ),
-                                ),
-                              ),
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 5,
-                                  vertical: 2,
-                                ),
-                                child: Text(
-                                  'SQUAD',
-                                  maxLines: 1,
-                                  // Fixed chrome: the narrowest card (~91px
-                                  // at 320) cannot hold a scaled-up pill
-                                  // beside the rank badge, and the card's
-                                  // semantics already announce squad
-                                  // membership — so the tag never scales
-                                  // and never ellipsizes.
-                                  textScaler: TextScaler.noScaling,
-                                  style: OrionTypography.microLabel(
-                                    size: 10,
-                                    color: uiTheme.systemViolet,
-                                  ),
-                                ),
-                              ),
-                            );
-                      if (squadBadge == null) {
+                      if (!inSquad) {
                         return Row(children: [rankBadge]);
                       }
-                      // ~65px of pill plus the 20px rank badge need ~88px of
-                      // row to sit side by side; below that the pill drops
-                      // to its own right-aligned row instead of clipping.
-                      if (constraints.maxWidth >= 88) {
+                      final squadStyle = OrionTypography.microLabel(
+                        size: 10,
+                        color: uiTheme.systemViolet,
+                      );
+                      final squadBadge = DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: uiTheme.systemViolet.withValues(alpha: .22),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: uiTheme.systemViolet.withValues(alpha: .7),
+                          ),
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          // Inherits the ambient text scaler: large-text
+                          // users get a larger tag.
+                          child: Text('SQUAD', maxLines: 1, style: squadStyle),
+                        ),
+                      );
+                      // Rank + pill sit side by side only while the row can
+                      // hold both at their real measured widths; below that
+                      // the pill drops to its own right-aligned row instead
+                      // of clipping or ellipsizing.
+                      final rankGlyphWidth = _measureLabel(
+                        context,
+                        character.rank.label,
+                        rankStyle,
+                      );
+                      final rankWidth = rankGlyphWidth + 6 < 20
+                          ? 20.0
+                          : rankGlyphWidth + 6;
+                      final pillWidth =
+                          _measureLabel(context, 'SQUAD', squadStyle) + 10;
+                      if (constraints.maxWidth >= rankWidth + pillWidth + 4) {
                         return Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [rankBadge, squadBadge],

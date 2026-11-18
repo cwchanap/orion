@@ -11,10 +11,12 @@ import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/camp_view.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tower_stat_scale.dart';
 
 import '../support/orion_finders.dart';
+import '../support/real_fonts.dart';
 
 const _productViewport = Size(390, 844);
 
@@ -35,20 +37,27 @@ final class _StubImages extends Images {
   }
 }
 
-/// A fully opaque portrait stand-in: the left half near-white, the right
-/// half near-black. The shipped portraits are JPG-derived RGB with no alpha
-/// channel, which is exactly what defeated the old srcIn silhouette — a
-/// synthetic split makes the resulting luminance spread measurable.
-Future<ui.Image> _splitPortraitImage(WidgetTester tester) {
+/// A fully opaque portrait stand-in with four vertical bands: bright,
+/// saturated amber, mid gray and near-black. The shipped portraits are
+/// JPG-derived RGB with no alpha channel, which is exactly what defeated the
+/// old srcIn silhouette — synthetic bands make the rendered luminance
+/// spread, desaturation and midtone crush measurable.
+Future<ui.Image> _bandedPortraitImage(WidgetTester tester) {
   const side = 8;
+  const bands = [
+    [0xF0, 0xF0, 0xF0], // bright neutral
+    [0xFF, 0xD0, 0x40], // saturated amber (high luma, high chroma)
+    [0x80, 0x80, 0x80], // midtone
+    [0x10, 0x10, 0x10], // dark
+  ];
   final pixels = Uint8List(side * side * 4);
   for (var y = 0; y < side; y++) {
     for (var x = 0; x < side; x++) {
       final offset = (y * side + x) * 4;
-      final bright = x < side / 2 ? 0xF0 : 0x10;
-      pixels[offset] = bright;
-      pixels[offset + 1] = bright;
-      pixels[offset + 2] = bright;
+      final band = bands[x * bands.length ~/ side];
+      pixels[offset] = band[0];
+      pixels[offset + 1] = band[1];
+      pixels[offset + 2] = band[2];
       pixels[offset + 3] = 0xFF;
     }
   }
@@ -75,11 +84,13 @@ Future<void> _pumpCamp(
   Size viewport = _productViewport,
   TextScaler textScaler = TextScaler.noScaling,
 }) async {
+  await loadRealFonts();
   tester.view.physicalSize = viewport;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
+      theme: orionThemeData,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(textScaler: textScaler),
         child: child!,
@@ -435,15 +446,17 @@ void main() {
   // not just widget presence.
 
   /// Asserts the SQUAD tag on [character]'s card paints all five glyphs at
-  /// the current card constraints, stays inside the card, and does not
-  /// overlap the rank badge.
+  /// the current card constraints, stays inside the card, keeps the rank
+  /// glyph painted, and does not overlap the rank badge.
   void expectReadableSquadTag(WidgetTester tester, Character character) {
     final card = _card(character);
+    final cardRect = tester.getRect(card);
     final tag = find.descendant(of: card, matching: find.text('SQUAD'));
     expect(tag, findsOneWidget);
     final paragraph = tester.renderObject<RenderParagraph>(tag);
-    // Ellipsis ('SQ…') lays out no box for the closing 'D' — checking the
-    // final glyph's paint box catches clipping that a widget find cannot.
+    // Ellipsis ('SQ…') or an edge clip lays out no box for the closing 'D' —
+    // checking the final glyph's paint box catches clipping that a widget
+    // find cannot.
     expect(
       paragraph.getBoxesForSelection(
         const TextSelection(baseOffset: 4, extentOffset: 5),
@@ -452,12 +465,23 @@ void main() {
       reason: 'SQUAD is ellipsized — the closing D has no paint box',
     );
     final tagRect = tester.getRect(tag);
-    final cardRect = tester.getRect(card);
     expect(tagRect.right, lessThanOrEqualTo(cardRect.right));
     expect(tagRect.bottom, lessThanOrEqualTo(cardRect.bottom));
-    final rankRect = tester.getRect(
-      find.descendant(of: card, matching: find.text(character.rank.label)),
+
+    final rank = find.descendant(
+      of: card,
+      matching: find.text(character.rank.label),
     );
+    final rankParagraph = tester.renderObject<RenderParagraph>(rank);
+    expect(
+      rankParagraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 0, extentOffset: 1),
+      ),
+      isNotEmpty,
+      reason: 'rank glyph clipped at this text scale',
+    );
+    final rankRect = tester.getRect(rank);
+    expect(rankRect.right, lessThanOrEqualTo(cardRect.right));
     expect(
       tagRect.overlaps(rankRect),
       isFalse,
@@ -486,8 +510,64 @@ void main() {
       viewport: const Size(320, 568),
       textScaler: const TextScaler.linear(2),
     );
+
+    // A scaled-up pill cannot fit three ~91px columns; the grid must widen
+    // to two columns rather than shrink the accessible label. (Checked
+    // before scrolling — the grid lazily disposes off-screen cards.)
+    final first = tester.getRect(_card(Character.hikari));
+    final second = tester.getRect(_card(Character.jin));
+    final third = tester.getRect(_card(Character.akane));
+    expect(second.left, greaterThan(first.right));
+    expect(
+      third.top,
+      greaterThan(first.top),
+      reason: 'at 320 with 2x text the roster must drop to two columns',
+    );
+
     await _showCard(tester, Character.haruto);
     expectReadableSquadTag(tester, Character.haruto);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('squad tag grows with the ambient text scaler', (tester) async {
+    const owned = {Character.haruto: 7};
+    const squad = [Character.haruto];
+    await _pumpCamp(tester, ownedLevels: owned, squad: squad);
+    await _showCard(tester, Character.haruto);
+    final tag = find.descendant(
+      of: _card(Character.haruto),
+      matching: find.text('SQUAD'),
+    );
+    expect(
+      tester.widget<Text>(tag).textScaler,
+      isNull,
+      reason: 'the SQUAD tag must inherit MediaQuery text scaling',
+    );
+    final width1x = tester.getRect(tag).width;
+
+    await _pumpCamp(
+      tester,
+      ownedLevels: owned,
+      squad: squad,
+      textScaler: const TextScaler.linear(2),
+    );
+    await _showCard(tester, Character.haruto);
+    expectReadableSquadTag(tester, Character.haruto);
+    final width2x = tester
+        .getRect(
+          find.descendant(
+            of: _card(Character.haruto),
+            matching: find.text('SQUAD'),
+          ),
+        )
+        .width;
+    expect(
+      width2x,
+      greaterThan(width1x * 1.5),
+      reason:
+          'tag text must grow under the 2x accessibility scaler '
+          '(1x=$width1x, 2x=$width2x)',
+    );
     expect(tester.takeException(), isNull);
   });
 
@@ -520,10 +600,10 @@ void main() {
     );
   });
 
-  testWidgets('locked silhouette keeps discernible luminance over opaque art', (
+  testWidgets('locked silhouette mutes chroma, crushes midtones, keeps shape', (
     tester,
   ) async {
-    final portrait = await _splitPortraitImage(tester);
+    final portrait = await _bandedPortraitImage(tester);
     final previous = Flame.images;
     Flame.images = _StubImages({
       OrionArt.characterPortrait(Character.hikari).fileName: portrait,
@@ -537,8 +617,8 @@ void main() {
     await _pumpCamp(tester, ownedLevels: const {}, squad: const []);
 
     // Grid items are repaint-boundary wrapped, so the card's composited
-    // pixels (silhouette filter + locked opacity over the card fill) can be
-    // sampled directly.
+    // pixels (silhouette filter + locked opacity over the card fill) can
+    // be sampled directly.
     final cardRect = tester.getRect(_card(Character.hikari));
     final boundary = tester.renderObject<RenderRepaintBoundary>(
       find
@@ -560,11 +640,11 @@ void main() {
       reason: 'expected the card repaint boundary, not an ancestor',
     );
 
-    // Sample the portrait area above the name scrim and clear of the badge
-    // strip: bright-left vs dark-right halves of the synthetic portrait.
-    // rawRgba bytes are premultiplied, so the stored channels already are
-    // the pixel composited over black — the on-screen darkness.
-    double meanLuma(double xFrom, double xTo) {
+    // Sample the portrait area above the name scrim and clear of the
+    // badge strip, once per synthetic band. rawRgba bytes are
+    // premultiplied, so the stored channels already are the pixel
+    // composited over black — the on-screen darkness.
+    double meanChannel(int channel, double xFrom, double xTo) {
       var sum = 0.0;
       var count = 0;
       final yFrom = (shot.height * 0.30).round();
@@ -575,19 +655,24 @@ void main() {
           x < (shot.width * xTo).round();
           x++
         ) {
-          final offset = (y * shot.width + x) * 4;
-          sum +=
-              0.2126 * bytes.getUint8(offset) +
-              0.7152 * bytes.getUint8(offset + 1) +
-              0.0722 * bytes.getUint8(offset + 2);
+          sum += bytes.getUint8((y * shot.width + x) * 4 + channel);
           count++;
         }
       }
       return sum / count;
     }
 
-    final bright = meanLuma(0.08, 0.42);
-    final dark = meanLuma(0.58, 0.92);
+    double luma(double xFrom, double xTo) =>
+        0.2126 * meanChannel(0, xFrom, xTo) +
+        0.7152 * meanChannel(1, xFrom, xTo) +
+        0.0722 * meanChannel(2, xFrom, xTo);
+
+    final bright = luma(0.03, 0.22);
+    final amber = luma(0.28, 0.47);
+    final mid = luma(0.53, 0.72);
+    final dark = luma(0.78, 0.97);
+
+    // Shape: the bright band must separate clearly from the dark band.
     expect(
       bright - dark,
       greaterThanOrEqualTo(28),
@@ -605,5 +690,28 @@ void main() {
       lessThan(176),
       reason: 'locked art is not muted — it reads as owned',
     );
+
+    // No color: the saturated amber band must render near-neutral —
+    // costume/palette hues are part of the hidden identity.
+    final r = meanChannel(0, 0.28, 0.47);
+    final g = meanChannel(1, 0.28, 0.47);
+    final b = meanChannel(2, 0.28, 0.47);
+    expect(
+      (r - g).abs() < 8 && (g - b).abs() < 8,
+      isTrue,
+      reason: 'silhouette leaks color: r=$r g=$g b=$b',
+    );
+
+    // Contrast crush: a 50% midtone must land well below a linear share
+    // of the bright band — that is what turns costume/facial detail into
+    // a flat shadow instead of a readable portrait.
+    expect(
+      mid,
+      lessThan(bright * 0.45),
+      reason:
+          'midtone detail survives: mid $mid vs bright $bright — '
+          'the treatment must crush midtones, not just dim uniformly',
+    );
+    expect(amber, greaterThan(dark + 20), reason: 'amber band vanished');
   });
 }
