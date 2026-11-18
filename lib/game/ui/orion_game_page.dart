@@ -1194,13 +1194,23 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// the queued save's `finally` clears the pending flag, so the sheet pops
   /// — and this page's post-route continuation starts the stage — strictly
   /// after the write lands or is reported lost.
-  Future<bool> _persistSquadDraft(List<Character> draft) => _persistSave(
-    buildSave: (committed) => committed.withSquad(draft),
-    onCommitted: (payload) => _squad = payload.squad,
-    // Failure feedback lives inside the still-mounted sheet (retryable); a
-    // map breadcrumb would sit hidden under the modal route.
-    onFailed: () {},
-  );
+  Future<bool> _persistSquadDraft(List<Character> draft) async {
+    // A failed initial load leaves _store null and Launch would retry the
+    // write forever: a transient load failure must not permanently disable
+    // stage starts. Launch is the player's explicit retry, so recover the
+    // store — and the committed profile the save is based on — through the
+    // full load path before reporting the write as lost.
+    if (_store == null) {
+      await _loadProgress();
+    }
+    return _persistSave(
+      buildSave: (committed) => committed.withSquad(draft),
+      onCommitted: (payload) => _squad = payload.squad,
+      // Failure feedback lives inside the still-mounted sheet (retryable); a
+      // map breadcrumb would sit hidden under the modal route.
+      onFailed: () {},
+    );
+  }
 
   Future<void> _openFeedbackSettings() async {
     if (_isSavingFeedback || !_feedbackPreferencesLoaded || _isBusy) {
