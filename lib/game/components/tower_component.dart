@@ -157,11 +157,11 @@ class TowerComponent extends CircleComponent {
   static Color _rankColor(CharacterRank rank) {
     return switch (rank) {
       CharacterRank.s => const Color(0xFFFFC857),
-      CharacterRank.a => const Color(0xFFA98BFF),
-      CharacterRank.b => const Color(0xFF46E6FF),
-      CharacterRank.c => const Color(0xFF7BE495),
-      CharacterRank.d => const Color(0xFFCFDBE6),
-      CharacterRank.e => const Color(0xFFD9925A),
+      CharacterRank.a => const Color(0xFFFF8A3D),
+      CharacterRank.b => const Color(0xFFA98BFF),
+      CharacterRank.c => const Color(0xFF46E6FF),
+      CharacterRank.d => const Color(0xFF7BE495),
+      CharacterRank.e => const Color(0xFFCFDBE6),
     };
   }
 
