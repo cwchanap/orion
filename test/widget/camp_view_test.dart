@@ -1,18 +1,71 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flame/cache.dart';
 import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/ui/camp_view.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tower_stat_scale.dart';
 
 import '../support/orion_finders.dart';
 
 const _productViewport = Size(390, 844);
+
+/// An [Images] that serves in-memory stubs for the listed files and leaves
+/// every other load pending (matching the cold-cache behaviour the rest of
+/// this file relies on). Lets a test paint a real [OrionAtlasSprite] frame
+/// without touching real profile art.
+final class _StubImages extends Images {
+  _StubImages(this.stubs);
+
+  final Map<String, ui.Image> stubs;
+
+  @override
+  Future<ui.Image> load(String fileName, {String? key, String? package}) {
+    final stub = stubs[fileName];
+    if (stub != null) return Future.value(stub);
+    return Completer<ui.Image>().future;
+  }
+}
+
+/// A fully opaque portrait stand-in: the left half near-white, the right
+/// half near-black. The shipped portraits are JPG-derived RGB with no alpha
+/// channel, which is exactly what defeated the old srcIn silhouette — a
+/// synthetic split makes the resulting luminance spread measurable.
+Future<ui.Image> _splitPortraitImage(WidgetTester tester) {
+  const side = 8;
+  final pixels = Uint8List(side * side * 4);
+  for (var y = 0; y < side; y++) {
+    for (var x = 0; x < side; x++) {
+      final offset = (y * side + x) * 4;
+      final bright = x < side / 2 ? 0xF0 : 0x10;
+      pixels[offset] = bright;
+      pixels[offset + 1] = bright;
+      pixels[offset + 2] = bright;
+      pixels[offset + 3] = 0xFF;
+    }
+  }
+  return tester
+      .runAsync(() {
+        final decoded = Completer<ui.Image>();
+        ui.decodeImageFromPixels(
+          pixels,
+          side,
+          side,
+          ui.PixelFormat.rgba8888,
+          decoded.complete,
+        );
+        return decoded.future;
+      })
+      .then((image) => image!);
+}
 
 /// Pumps the standalone Camp (with its own header) inside a plain MaterialApp.
 Future<void> _pumpCamp(
@@ -374,5 +427,183 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  // --- Task 8 (live-browser findings): the SQUAD tag clipped to 'SQ…' and
+  // locked portraits flattened to an invisible black slab. These regressions
+  // assert the *rendered* outcome — every glyph painted, no rank overlap —
+  // not just widget presence.
+
+  /// Asserts the SQUAD tag on [character]'s card paints all five glyphs at
+  /// the current card constraints, stays inside the card, and does not
+  /// overlap the rank badge.
+  void expectReadableSquadTag(WidgetTester tester, Character character) {
+    final card = _card(character);
+    final tag = find.descendant(of: card, matching: find.text('SQUAD'));
+    expect(tag, findsOneWidget);
+    final paragraph = tester.renderObject<RenderParagraph>(tag);
+    // Ellipsis ('SQ…') lays out no box for the closing 'D' — checking the
+    // final glyph's paint box catches clipping that a widget find cannot.
+    expect(
+      paragraph.getBoxesForSelection(
+        const TextSelection(baseOffset: 4, extentOffset: 5),
+      ),
+      isNotEmpty,
+      reason: 'SQUAD is ellipsized — the closing D has no paint box',
+    );
+    final tagRect = tester.getRect(tag);
+    final cardRect = tester.getRect(card);
+    expect(tagRect.right, lessThanOrEqualTo(cardRect.right));
+    expect(tagRect.bottom, lessThanOrEqualTo(cardRect.bottom));
+    final rankRect = tester.getRect(
+      find.descendant(of: card, matching: find.text(character.rank.label)),
+    );
+    expect(
+      tagRect.overlaps(rankRect),
+      isFalse,
+      reason: 'SQUAD tag overlaps the rank badge',
+    );
+  }
+
+  testWidgets('squad tag paints the full word at the 390 product width', (
+    tester,
+  ) async {
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 7},
+      squad: const [Character.haruto],
+    );
+    await _showCard(tester, Character.haruto);
+    expectReadableSquadTag(tester, Character.haruto);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('squad tag stays whole at 320 with 2x text', (tester) async {
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 7},
+      squad: const [Character.haruto],
+      viewport: const Size(320, 568),
+      textScaler: const TextScaler.linear(2),
+    );
+    await _showCard(tester, Character.haruto);
+    expectReadableSquadTag(tester, Character.haruto);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('locked cards silhouette the shared portrait descriptor', (
+    tester,
+  ) async {
+    await _pumpCamp(tester, ownedLevels: const {}, squad: const []);
+    final hikari = _card(Character.hikari);
+
+    // The locked art still flows through the shared descriptor, so the
+    // error-fallback contract (Icons.person) is unchanged.
+    final sprite = tester.widget<OrionAtlasSprite>(
+      find.descendant(of: hikari, matching: find.byType(OrionAtlasSprite)),
+    );
+    expect(
+      sprite.art,
+      same(OrionArt.characterPortrait(Character.hikari)),
+      reason: 'locked cards must keep the shared portrait descriptor',
+    );
+
+    final filter = tester.widget<ColorFiltered>(
+      find.descendant(of: hikari, matching: find.byType(ColorFiltered)),
+    );
+    expect(
+      filter.colorFilter,
+      same(orionLockedPortraitFilter),
+      reason:
+          'locked portraits must use the shared muted-silhouette filter — '
+          'srcIn flattens opaque art to a black slab',
+    );
+  });
+
+  testWidgets('locked silhouette keeps discernible luminance over opaque art', (
+    tester,
+  ) async {
+    final portrait = await _splitPortraitImage(tester);
+    final previous = Flame.images;
+    Flame.images = _StubImages({
+      OrionArt.characterPortrait(Character.hikari).fileName: portrait,
+    });
+    OrionArtDescriptor.resetSpriteCache();
+    addTearDown(() {
+      Flame.images = previous;
+      OrionArtDescriptor.resetSpriteCache();
+    });
+
+    await _pumpCamp(tester, ownedLevels: const {}, squad: const []);
+
+    // Grid items are repaint-boundary wrapped, so the card's composited
+    // pixels (silhouette filter + locked opacity over the card fill) can be
+    // sampled directly.
+    final cardRect = tester.getRect(_card(Character.hikari));
+    final boundary = tester.renderObject<RenderRepaintBoundary>(
+      find
+          .ancestor(
+            of: _card(Character.hikari),
+            matching: find.byType(RepaintBoundary),
+          )
+          .first,
+    );
+    late ui.Image shot;
+    late ByteData bytes;
+    await tester.runAsync(() async {
+      shot = await boundary.toImage();
+      bytes = (await shot.toByteData(format: ui.ImageByteFormat.rawRgba))!;
+    });
+    expect(
+      shot.width,
+      closeTo(cardRect.width, 2),
+      reason: 'expected the card repaint boundary, not an ancestor',
+    );
+
+    // Sample the portrait area above the name scrim and clear of the badge
+    // strip: bright-left vs dark-right halves of the synthetic portrait.
+    // rawRgba bytes are premultiplied, so the stored channels already are
+    // the pixel composited over black — the on-screen darkness.
+    double meanLuma(double xFrom, double xTo) {
+      var sum = 0.0;
+      var count = 0;
+      final yFrom = (shot.height * 0.30).round();
+      final yTo = (shot.height * 0.55).round();
+      for (var y = yFrom; y < yTo; y++) {
+        for (
+          var x = (shot.width * xFrom).round();
+          x < (shot.width * xTo).round();
+          x++
+        ) {
+          final offset = (y * shot.width + x) * 4;
+          sum +=
+              0.2126 * bytes.getUint8(offset) +
+              0.7152 * bytes.getUint8(offset + 1) +
+              0.0722 * bytes.getUint8(offset + 2);
+          count++;
+        }
+      }
+      return sum / count;
+    }
+
+    final bright = meanLuma(0.08, 0.42);
+    final dark = meanLuma(0.58, 0.92);
+    expect(
+      bright - dark,
+      greaterThanOrEqualTo(28),
+      reason:
+          'locked portrait lost its shape: bright $bright vs dark $dark '
+          '(srcIn flattened the opaque art)',
+    );
+    expect(
+      bright,
+      greaterThanOrEqualTo(40),
+      reason: 'silhouette is near-invisible against the dark card',
+    );
+    expect(
+      bright,
+      lessThan(176),
+      reason: 'locked art is not muted — it reads as owned',
+    );
   });
 }

@@ -396,6 +396,35 @@ const orionLockDesaturate = ColorFilter.mode(
   BlendMode.saturation,
 );
 
+/// Locked roster portraits (Camp artboard 10). The character art is fully
+/// opaque JPG-derived RGB, so a `srcIn` silhouette has no alpha to key on and
+/// flattens the whole card to a black slab. Keeping each pixel's luminance —
+/// crushed to about half, matching the disabled-button treatment — reads as
+/// an intentionally muted shadow: the figure's shapes stay discernible while
+/// palette and identity stay hidden.
+const orionLockedPortraitFilter = ColorFilter.matrix([
+  .1173,
+  .3934,
+  .0399,
+  0,
+  0,
+  .1173,
+  .3934,
+  .0399,
+  0,
+  0,
+  .1173,
+  .3934,
+  .0399,
+  0,
+  0,
+  0,
+  0,
+  0,
+  1,
+  0,
+]);
+
 const orionHexLockBadge = Color(0xFF0E1822);
 
 const orionHexCheckInk = Color(0xFF17122E);

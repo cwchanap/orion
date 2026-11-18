@@ -243,8 +243,10 @@ class _CharacterCard extends StatelessWidget {
             child: Stack(
               fit: StackFit.expand,
               children: [
-                // Locked members read as silhouettes: srcIn blacks the art
-                // where it draws and the low opacity keeps it a shadow.
+                // Locked members read as muted silhouettes: the shared
+                // filter keeps the art's luminance so shapes stay
+                // discernible — srcIn instead flattened these opaque
+                // portraits into an invisible black slab.
                 Positioned.fill(
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(12),
@@ -253,10 +255,7 @@ class _CharacterCard extends StatelessWidget {
                             art: OrionArt.characterPortrait(character),
                           )
                         : ColorFiltered(
-                            colorFilter: ColorFilter.mode(
-                              uiTheme.voidBlack,
-                              BlendMode.srcIn,
-                            ),
+                            colorFilter: orionLockedPortraitFilter,
                             child: OrionAtlasSprite(
                               art: OrionArt.characterPortrait(character),
                             ),
@@ -290,9 +289,9 @@ class _CharacterCard extends StatelessWidget {
                   top: 6,
                   left: 6,
                   right: 6,
-                  child: Row(
-                    children: [
-                      Container(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final rankBadge = Container(
                         width: 20,
                         height: 20,
                         alignment: Alignment.center,
@@ -311,40 +310,71 @@ class _CharacterCard extends StatelessWidget {
                             color: rankColor,
                           ),
                         ),
-                      ),
-                      const Spacer(),
-                      if (inSquad)
-                        Flexible(
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: uiTheme.systemViolet.withValues(
-                                alpha: .22,
-                              ),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
+                      );
+                      final squadBadge = !inSquad
+                          ? null
+                          : DecoratedBox(
+                              decoration: BoxDecoration(
                                 color: uiTheme.systemViolet.withValues(
-                                  alpha: .7,
+                                  alpha: .22,
+                                ),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                  color: uiTheme.systemViolet.withValues(
+                                    alpha: .7,
+                                  ),
                                 ),
                               ),
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 5,
-                                vertical: 2,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 2,
+                                ),
+                                child: Text(
+                                  'SQUAD',
+                                  maxLines: 1,
+                                  // Fixed chrome: the narrowest card (~91px
+                                  // at 320) cannot hold a scaled-up pill
+                                  // beside the rank badge, and the card's
+                                  // semantics already announce squad
+                                  // membership — so the tag never scales
+                                  // and never ellipsizes.
+                                  textScaler: TextScaler.noScaling,
+                                  style: OrionTypography.microLabel(
+                                    size: 10,
+                                    color: uiTheme.systemViolet,
+                                  ),
+                                ),
                               ),
-                              child: Text(
-                                'SQUAD',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: OrionTypography.microLabel(
-                                  size: 10,
-                                  color: uiTheme.systemViolet,
-                                ).copyWith(letterSpacing: 1.1),
-                              ),
-                            ),
+                            );
+                      if (squadBadge == null) {
+                        return Row(children: [rankBadge]);
+                      }
+                      // ~65px of pill plus the 20px rank badge need ~88px of
+                      // row to sit side by side; below that the pill drops
+                      // to its own right-aligned row instead of clipping.
+                      if (constraints.maxWidth >= 88) {
+                        return Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [rankBadge, squadBadge],
+                        );
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: rankBadge,
                           ),
-                        ),
-                    ],
+                          const SizedBox(height: 4),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: squadBadge,
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
                 Positioned(
