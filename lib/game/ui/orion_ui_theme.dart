@@ -398,26 +398,27 @@ const orionLockDesaturate = ColorFilter.mode(
 
 /// Locked roster portraits (Camp artboard 10). The character art is fully
 /// opaque JPG-derived RGB, so a `srcIn` silhouette has no alpha to key on and
-/// flattens the whole card to a black slab. Keeping each pixel's luminance —
-/// crushed to about half, matching the disabled-button treatment — reads as
-/// an intentionally muted shadow: the figure's shapes stay discernible while
-/// palette and identity stay hidden.
+/// flattens the whole card to a black slab. The approved mockup instead reads
+/// locked members as shadows: this maps every pixel to its luminance — no
+/// costume or palette hue survives — then crushes the curve (0.8·luma − 64)
+/// so anything under ~80 luminance, i.e. most facial/costume detail, falls to
+/// black while the figure's mass stays discernible against the muted field.
 const orionLockedPortraitFilter = ColorFilter.matrix([
-  .1173,
-  .3934,
-  .0399,
+  .17008,
+  .57216,
+  .05776,
   0,
+  -64,
+  .17008,
+  .57216,
+  .05776,
   0,
-  .1173,
-  .3934,
-  .0399,
+  -64,
+  .17008,
+  .57216,
+  .05776,
   0,
-  0,
-  .1173,
-  .3934,
-  .0399,
-  0,
-  0,
+  -64,
   0,
   0,
   0,
