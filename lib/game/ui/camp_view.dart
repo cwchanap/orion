@@ -61,9 +61,9 @@ class CampView extends StatefulWidget {
   /// Up affordability gate both read it.
   final int scrip;
 
-  /// True while a campaign write is in flight — the Level Up action is
-  /// single-flight, so the sheet holds its busy state until the page
-  /// clears the flag.
+  /// True while a campaign write — save or reset — is in flight: the
+  /// Level Up action is single-flight, so the sheet holds its busy state
+  /// until the page clears the flag.
   final bool isSavingProgress;
 
   /// Asks the owner to buy one persistent level for the character whose
@@ -729,7 +729,7 @@ class _CharacterSheet extends StatelessWidget {
                   _SheetStatBar(
                     label: 'DAMAGE',
                     value: number(stats.damage),
-                    delta: _levelDelta(stats.damage, nextStats?.damage),
+                    next: _levelNext(stats.damage, nextStats?.damage, number),
                     fill: scale.damageFill(stats),
                     barFill: orionBarDamage,
                   ),
@@ -748,10 +748,14 @@ class _CharacterSheet extends StatelessWidget {
                   if (scale.secondaryMetric case final metric?)
                     _SheetStatBar(
                       label: _sheetSecondaryLabel(metric),
-                      value: _sheetSecondaryValue(metric, stats),
-                      delta: _levelDelta(
+                      value: _sheetSecondaryValue(
+                        metric,
+                        metric.valueOf(stats),
+                      ),
+                      next: _levelNext(
                         metric.valueOf(stats),
                         nextStats == null ? null : metric.valueOf(nextStats),
+                        (value) => _sheetSecondaryValue(metric, value),
                       ),
                       fill: scale.secondaryFill(stats) ?? 0,
                       barFill: orionBarSecondary,
@@ -894,13 +898,17 @@ class _CharacterSheet extends StatelessWidget {
   }
 }
 
-/// The next-level gain for one channel as a '+N' readout; null when the
-/// channel doesn't scale with persistent level (fire cadence, range,
-/// pierce/chain/slow/splash all ride at style base).
-String? _levelDelta(double current, double? next) {
-  if (next == null) return null;
-  final delta = next - current;
-  return delta > 0 ? '+${decimal(delta)}' : null;
+/// The next-level value for one channel as a '→ N' readout paired with
+/// the row's current value; null when the channel doesn't scale with
+/// persistent level (fire cadence, range, pierce/chain/slow/splash all
+/// ride at style base) or when there is no next level.
+String? _levelNext(
+  double current,
+  double? next,
+  String Function(double) format,
+) {
+  if (next == null || next <= current) return null;
+  return '→ ${format(next)}';
 }
 
 /// One combat stat row on the sheet, mirroring the Codex/inspector bars so a
@@ -909,7 +917,7 @@ class _SheetStatBar extends StatelessWidget {
   const _SheetStatBar({
     required this.label,
     required this.value,
-    this.delta,
+    this.next,
     required this.fill,
     required this.barFill,
   });
@@ -917,9 +925,10 @@ class _SheetStatBar extends StatelessWidget {
   final String label;
   final String value;
 
-  /// The next-level gain ('+8') rendered under the value — only channels
-  /// the persistent level factor scales carry one.
-  final String? delta;
+  /// The level+1 value ('→ 94') rendered under the current [value] — the
+  /// before→after pair the sheet previews; only channels the persistent
+  /// level factor scales carry one.
+  final String? next;
   final double fill;
   final Gradient barFill;
 
@@ -939,10 +948,10 @@ class _SheetStatBar extends StatelessWidget {
           textAlign: TextAlign.end,
           style: OrionTypography.readout(size: 12, color: uiTheme.textPrimary),
         ),
-        if (delta case final delta?)
+        if (next case final next?)
           Text(
-            delta,
-            key: ValueKey('sheet-stat-delta-$label'),
+            next,
+            key: ValueKey('sheet-stat-next-$label'),
             textAlign: TextAlign.end,
             maxLines: 1,
             style: OrionTypography.microLabel(
@@ -1018,8 +1027,10 @@ String _sheetSecondaryLabel(TowerSecondaryMetric metric) => switch (metric) {
   TowerSecondaryMetric.droneDamage => 'DRONES',
 };
 
-String _sheetSecondaryValue(TowerSecondaryMetric metric, TowerStats stats) {
-  final value = number(metric.valueOf(stats));
+/// The metric readout for the sheet — current and next values share it so
+/// the before→after pair always carries the same units.
+String _sheetSecondaryValue(TowerSecondaryMetric metric, double rawValue) {
+  final value = number(rawValue);
   return switch (metric) {
     TowerSecondaryMetric.slowDuration => '${value}s',
     TowerSecondaryMetric.chainCount ||
