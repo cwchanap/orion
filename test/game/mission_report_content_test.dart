@@ -88,7 +88,7 @@ void main() {
     expect(content.comparisonText, 'Base health improved: 14 → 17');
   });
 
-  test('projects retained best without implying a new write', () {
+  test('projects retained best with save copy that still credits Scrip', () {
     final content = projectVictoryReport(
       snapshot: terminalSnapshot(phase: GamePhase.won, baseHealth: 14),
       result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
@@ -104,7 +104,9 @@ void main() {
       content.comparisonText,
       'Saved best retained: Gold • 20 base health',
     );
-    expect(content.saveText, 'Best result already saved.');
+    // HPA-923: the retained-best write still credited this run's Scrip
+    // award, so the copy must not imply nothing was saved.
+    expect(content.saveText, 'Result saved. Best medal unchanged.');
   });
 
   test('projects failed save copy', () {
@@ -154,20 +156,37 @@ void main() {
     expect(loss.emptyModulesText, 'No Salvage Modules acquired');
   });
 
-  test('passes optional reward fact through unchanged', () {
-    const reward = MissionRewardFact(
+  test('passes reward facts through as separate ordered entries', () {
+    // HPA-923: blueprint and Scrip facts share the one MissionRewardFact
+    // type as distinct list entries — no Scrip-specific fact type.
+    const blueprint = MissionRewardFact(
       title: 'Blueprint recovered',
       detail: 'Heavy Caliber Mk II',
+    );
+    const scrip = MissionRewardFact(
+      title: 'Scrip credited: 1050',
+      detail: 'Added to your Scrip wallet.',
     );
     final content = projectVictoryReport(
       snapshot: terminalSnapshot(phase: GamePhase.won),
       result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
       priorSavedResult: null,
       saveState: MissionSaveState.saved,
-      reward: reward,
+      rewards: const [blueprint, scrip],
     );
 
-    expect(content.reward, same(reward));
+    expect(content.rewards, [blueprint, scrip]);
+  });
+
+  test('victory rewards default to empty when omitted', () {
+    final content = projectVictoryReport(
+      snapshot: terminalSnapshot(phase: GamePhase.won),
+      result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      priorSavedResult: null,
+      saveState: MissionSaveState.saved,
+    );
+
+    expect(content.rewards, isEmpty);
   });
 
   group('projectEndlessReport', () {
@@ -194,7 +213,7 @@ void main() {
       expect(content.outcomeText, 'Survived 5 waves');
       expect(content.comparisonText, 'New best!');
       expect(content.result, isNull);
-      expect(content.reward, isNull);
+      expect(content.rewards, isEmpty);
       expect(content.saveState, MissionSaveState.saved);
       expect(content.saveText, 'Saved.');
       expect(
@@ -360,16 +379,20 @@ void main() {
         );
 
         expect(content.result, isNull, reason: saveState.name);
-        expect(content.reward, isNull, reason: saveState.name);
+        expect(content.rewards, isEmpty, reason: saveState.name);
       }
     });
 
-    test('victory projections keep result and reward in any '
+    test('victory projections keep result and rewards in any '
         'save state', () {
       const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
-      const reward = MissionRewardFact(
+      const blueprint = MissionRewardFact(
         title: 'Blueprint: Relay Calibration',
         detail: 'All towers +8% range, −8% attack interval',
+      );
+      const scrip = MissionRewardFact(
+        title: 'Scrip credited: 1050',
+        detail: 'Added to your Scrip wallet.',
       );
       for (final saveState in MissionSaveState.values) {
         final content = projectVictoryReport(
@@ -377,11 +400,11 @@ void main() {
           result: result,
           priorSavedResult: null,
           saveState: saveState,
-          reward: reward,
+          rewards: const [blueprint, scrip],
         );
 
         expect(content.result, result, reason: saveState.name);
-        expect(content.reward, same(reward), reason: saveState.name);
+        expect(content.rewards, [blueprint, scrip], reason: saveState.name);
       }
     });
   });

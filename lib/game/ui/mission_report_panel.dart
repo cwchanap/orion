@@ -263,7 +263,7 @@ class _ReportBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final reward = content.reward;
+    final rewards = content.rewards;
     final result = content.result;
 
     final snapshot = content.snapshot;
@@ -403,9 +403,9 @@ class _ReportBody extends StatelessWidget {
               ),
             ),
           ),
-        if (content.didWin && !isEndless && reward != null) ...[
+        if (content.didWin && !isEndless && rewards.isNotEmpty) ...[
           const SizedBox(height: 14),
-          _RewardsPanel(reward: reward),
+          _RewardsPanel(rewards: rewards),
         ],
         ExpansionTile(
           tilePadding: EdgeInsets.zero,
@@ -659,14 +659,13 @@ class _MedalCriterion extends StatelessWidget {
 }
 
 class _RewardsPanel extends StatelessWidget {
-  const _RewardsPanel({required this.reward});
+  const _RewardsPanel({required this.rewards});
 
-  final MissionRewardFact? reward;
+  final List<MissionRewardFact> rewards;
 
   @override
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
-    final reward = this.reward;
     return OrionSurface(
       role: OrionSurfaceRole.card,
       padding: const EdgeInsets.all(12),
@@ -676,7 +675,8 @@ class _RewardsPanel extends StatelessWidget {
         children: [
           OrionText.micro('REWARDS', color: uiTheme.creditGold, size: 10),
           const SizedBox(height: 8),
-          if (reward != null)
+          for (var index = 0; index < rewards.length; index++) ...[
+            if (index > 0) const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -692,14 +692,14 @@ class _RewardsPanel extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        reward.title,
+                        rewards[index].title,
                         style: OrionTypography.microLabel(
                           size: 11,
                           color: uiTheme.creditGold,
                         ),
                       ),
                       Text(
-                        reward.detail,
+                        rewards[index].detail,
                         style: OrionTypography.microLabel(
                           size: 10,
                           color: uiTheme.textMuted,
@@ -710,6 +710,7 @@ class _RewardsPanel extends StatelessWidget {
                 ),
               ],
             ),
+          ],
         ],
       ),
     );

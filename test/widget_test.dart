@@ -2206,6 +2206,7 @@ void main() {
   ) async {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
+      scrip: 300,
       delaySaves: true,
       failOnSaveIndices: {0},
     );
@@ -2235,6 +2236,8 @@ void main() {
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
     );
+    // The failed write credited nothing: the wallet is the committed 300.
+    expect(store.scrip, 300);
   });
 
   testWidgets('Mission Retry Save retries once and can commit', (tester) async {
@@ -2285,6 +2288,7 @@ void main() {
   ) async {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
+      scrip: 300,
       delaySaves: true,
       failOnSaveIndices: {0},
     );
@@ -2313,7 +2317,8 @@ void main() {
     store.failOnSaveIndices.clear();
 
     // Both taps happen before the first retry completion. The save-state
-    // guard must collapse them into one additional queued write.
+    // guard must collapse them into one additional queued write — and the
+    // wallet must credit the captured award exactly once.
     final retryButton = find.byTooltip('Retry Save');
     await tester.tap(retryButton);
     await tester.tap(retryButton);
@@ -2325,6 +2330,7 @@ void main() {
 
     expect(store.saveCalls, 2);
     expect(find.text('Saved.'), findsOneWidget);
+    expect(store.scrip, 450);
     expect(
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
@@ -2334,6 +2340,7 @@ void main() {
   testWidgets('Mission loss does not write campaign progress', (tester) async {
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({'outpost-alpha'}),
+      scrip: 500,
     );
     OrionDefenseGame? game;
 
@@ -2376,6 +2383,9 @@ void main() {
 
     expect(find.text('MISSION FAILED'), findsOneWidget);
     expect(store.saveCalls, 0);
+    // A loss is never a Scrip event: the wallet stays exactly as committed.
+    expect(store.scrip, 500);
+    expect(find.textContaining('Scrip'), findsNothing);
   });
 
   testWidgets('Mission Retry survives consecutive losses', (tester) async {
@@ -3982,42 +3992,374 @@ void main() {
     },
   );
 
-  testWidgets('retained replay result does not write a save', (tester) async {
-    final store = _TestCampaignProgressStore(
-      progress: CampaignProgress(
-        bestResultsByStageId: {
-          'outpost-alpha': const StageResult(
-            medal: StageMedal.gold,
-            bestBaseHealth: 20,
+  // HPA-923 task 3 mandatory regression: an unchanged best is a wallet
+  // event, not a no-op — the run still queues exactly one win transaction
+  // and the report's saved copy no longer implies nothing was earned.
+  testWidgets(
+    'retained replay result still pays its Scrip award once committed',
+    (tester) async {
+      const savedBest = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+      final store = _TestCampaignProgressStore(
+        progress: CampaignProgress(
+          bestResultsByStageId: {'outpost-alpha': savedBest},
+        ),
+        scrip: 500,
+        delaySaves: true,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      // The Silver replay award (100 × 125%) is pending — the report shows
+      // the exact captured amount before the write commits.
+      expect(store.saveCalls, 1);
+      expect(find.text('Scrip pending'), findsOneWidget);
+      expect(
+        find.text('125 Scrip credits after this result is saved.'),
+        findsOneWidget,
+      );
+
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+
+      // The stored Gold best is retained untouched while the wallet
+      // still credits the replay award.
+      expect(store.progress.resultFor('outpost-alpha'), savedBest);
+      expect(store.scrip, 625);
+      expect(find.text('Could not save campaign progress.'), findsNothing);
+      expect(find.text('Best result already saved.'), findsNothing);
+      expect(find.text('Result saved. Best medal unchanged.'), findsOneWidget);
+      expect(find.text('Scrip credited: 125'), findsOneWidget);
+
+      final reloaded = await store.load();
+      expect(reloaded.scrip, 625);
+      expect(reloaded.progress.resultFor('outpost-alpha'), savedBest);
+    },
+  );
+
+  group('mission Scrip awards (HPA-923 task 3)', () {
+    testWidgets(
+      'first clear pays the first-clear award and reports pending then '
+      'credited Scrip beside the blueprint fact',
+      (tester) async {
+        final store = _TestCampaignProgressStore(delaySaves: true);
+        OrionDefenseGame? game;
+
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
           ),
-        },
-      ),
+        );
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester);
+
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+        // Alpha first clear at Gold: 900 + (100 × 150%) = 1050, shown as
+        // exact pending copy before the write commits — never "credited".
+        expect(find.text('Scrip pending'), findsOneWidget);
+        expect(
+          find.text('1050 Scrip credits after this result is saved.'),
+          findsOneWidget,
+        );
+        expect(find.textContaining('credited'), findsNothing);
+        expect(find.text('Blueprint recovery pending'), findsOneWidget);
+
+        store.saveCompletions[0].complete();
+        await tester.pumpAndSettle();
+
+        expect(store.scrip, 1050);
+        expect(find.text('Scrip credited: 1050'), findsOneWidget);
+        expect(
+          find.text('Blueprint recovered: Relay Calibration'),
+          findsOneWidget,
+        );
+
+        final reloaded = await store.load();
+        expect(reloaded.scrip, 1050);
+        expect(
+          reloaded.progress.resultFor('outpost-alpha'),
+          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+      },
     );
-    OrionDefenseGame? game;
 
-    await tester.pumpWidget(
-      testGamePage(
-        progressStore: store,
-        onGameCreated: (created) => game = created,
-      ),
+    testWidgets('a higher-medal replay pays more Scrip', (tester) async {
+      // Alpha replay base 100 scales by medal: Clear pays 100, Gold 150.
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      await tester.pumpAndSettle();
+      expect(store.scrip, 150);
+
+      // The same-stage replay at Clear pays less — medal scales the award.
+      await tester.tap(find.byTooltip('Replay Mission'));
+      await tester.pumpAndSettle();
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.clear, bestBaseHealth: 3),
+      );
+      await tester.pumpAndSettle();
+
+      expect(store.scrip, 250);
+      expect(find.text('Scrip credited: 100'), findsOneWidget);
+      final reloaded = await store.load();
+      expect(reloaded.scrip, 250);
+    });
+
+    testWidgets(
+      'a failed save keeps prior Scrip and medal, then Retry Save credits '
+      'the same captured award once',
+      (tester) async {
+        const savedBest = StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        );
+        final store = _TestCampaignProgressStore(
+          progress: CampaignProgress(
+            bestResultsByStageId: {'outpost-alpha': savedBest},
+          ),
+          scrip: 300,
+          delaySaves: true,
+          failOnSaveIndices: {0},
+        );
+        OrionDefenseGame? game;
+
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+        store.saveCompletions[0].complete();
+        await tester.pumpAndSettle();
+
+        // Nothing advanced: wallet, best and report all say not credited.
+        expect(find.text('Scrip not credited'), findsOneWidget);
+        expect(
+          find.text('Retry Save to keep this 150 Scrip award.'),
+          findsOneWidget,
+        );
+        expect(store.scrip, 300);
+        expect(store.progress.resultFor('outpost-alpha'), savedBest);
+
+        store.failOnSaveIndices.clear();
+        await tester.tap(find.byTooltip('Retry Save'));
+        await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+        store.saveCompletions[1].complete();
+        await tester.pumpAndSettle();
+
+        // The retry credits the captured 150 — not recomputed, not doubled.
+        expect(store.saveCalls, 2);
+        expect(store.scrip, 450);
+        expect(find.text('Scrip credited: 150'), findsOneWidget);
+        expect(
+          store.progress.resultFor('outpost-alpha'),
+          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        final reloaded = await store.load();
+        expect(reloaded.scrip, 450);
+      },
     );
-    await tester.pumpAndSettle();
 
-    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-    await publishVictory(
+    testWidgets('a duplicate stage-won callback does not double-pay', (
       tester,
-      game!,
-      result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+    ) async {
+      final store = _TestCampaignProgressStore();
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester);
+
+      const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+      await publishVictory(tester, game!, result: result);
+      // A second completion for the same attempt is dropped by the page's
+      // first-StageCompletion guard before it can queue another award.
+      game!.onStageWon?.call(
+        StageCompletion(stage: game!.stage, result: result),
+      );
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 1);
+      expect(store.scrip, 1050);
+    });
+
+    testWidgets(
+      'a replay after the committed first clear pays the replay award, '
+      'not another first-clear bonus',
+      (tester) async {
+        final store = _TestCampaignProgressStore();
+        OrionDefenseGame? game;
+
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester);
+
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await tester.pumpAndSettle();
+        expect(store.scrip, 1050);
+
+        // Replay recaptures the committed result, so firstClear is false:
+        // this win pays only the Gold replay award (150), never 1050 again.
+        await tester.tap(find.byTooltip('Replay Mission'));
+        await tester.pumpAndSettle();
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await tester.pumpAndSettle();
+
+        expect(store.saveCalls, 2);
+        expect(store.scrip, 1200);
+        expect(find.text('Scrip credited: 150'), findsOneWidget);
+        expect(
+          find.text('Result saved. Best medal unchanged.'),
+          findsOneWidget,
+        );
+      },
     );
 
-    expect(
-      store.progress.resultFor('outpost-alpha'),
-      const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+    testWidgets(
+      'a win after reset pays the first-clear award again on the wiped '
+      'profile',
+      (tester) async {
+        final store = _TestCampaignProgressStore();
+        OrionDefenseGame? game;
+
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester);
+
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await tester.pumpAndSettle();
+        expect(store.scrip, 1050);
+
+        await tester.tap(find.byTooltip('World Map'));
+        await tester.pumpAndSettle();
+        await openResetCampaignDialog(tester);
+        await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+        await tester.pumpAndSettle();
+        expect(store.scrip, 0);
+
+        await startStageFromBriefing(tester);
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await tester.pumpAndSettle();
+
+        // The reset wiped the committed best, so the next clear is a fresh
+        // first clear — the award recomputes from the wiped profile.
+        expect(store.scrip, 1050);
+        expect(
+          store.progress.resultFor('outpost-alpha'),
+          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+      },
     );
-    expect(store.saveCalls, 0);
-    expect(find.text('Could not save campaign progress.'), findsNothing);
-    expect(find.text('Best result already saved.'), findsOneWidget);
+
+    testWidgets('endless clears and the run-over report never pay Scrip', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(
+        progress: _progressWithAlphaCleared(),
+        scrip: 500,
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+      await publishEndlessWaveClear(tester, game!, 4);
+      await tester.pumpAndSettle();
+      await publishLoss(tester, game!);
+      await tester.pumpAndSettle();
+
+      expect(find.text('ENDLESS RUN OVER'), findsOneWidget);
+      expect(find.textContaining('Scrip'), findsNothing);
+      expect(store.scrip, 500);
+      final reloaded = await store.load();
+      expect(reloaded.scrip, 500);
+    });
   });
 
   testWidgets(
@@ -7966,13 +8308,13 @@ void main() {
         expect(store.progress.resultFor('outpost-alpha'), victory);
         expect(store.squad, [Character.haruto, Character.mio, Character.sayo]);
         expect(store.ownedLevels[Character.sayo], 3);
-        // Task 3 credits the Scrip award; until then the wallet rides
-        // through the victory save untouched.
-        expect(store.scrip, 500);
+        // Task 3: the first-clear Gold award (1050) credits on top of the
+        // wallet that write A carried through the queue.
+        expect(store.scrip, 1550);
 
         // The composed aggregate is what a restarted page would reload.
         final reloaded = await store.load();
-        expect(reloaded.scrip, 500);
+        expect(reloaded.scrip, 1550);
         expect(reloaded.squad, [
           Character.haruto,
           Character.mio,
@@ -8193,11 +8535,12 @@ void main() {
         await publishVictory(tester, game!, result: victory);
         await tester.pumpAndSettle();
 
-        // Write 1 committed: win, squad and wallet are all on disk.
+        // Write 1 committed: win, squad and wallet are all on disk — the
+        // first-clear Gold award (1050) credited on top of the seeded 500.
         expect(find.text('Saved.'), findsOneWidget);
         expect(store.saveCalls, 1);
         expect(store.progress.resultFor('outpost-alpha'), victory);
-        expect(store.scrip, 500);
+        expect(store.scrip, 1550);
 
         await tester.tap(find.byTooltip('World Map').last);
         await tester.pumpAndSettle();
@@ -8218,7 +8561,7 @@ void main() {
         );
         expect(store.squad, [Character.haruto, Character.mio]);
         expect(store.progress.resultFor('outpost-alpha'), victory);
-        expect(store.scrip, 500);
+        expect(store.scrip, 1550);
 
         // The retry builds a fresh payload on the committed aggregate: the
         // draft squad lands with write 1's result still riding along.
@@ -8232,7 +8575,7 @@ void main() {
           Character.mio: 2,
           Character.sayo: 3,
         });
-        expect(store.scrip, 500);
+        expect(store.scrip, 1550);
         expect(game!.snapshot.squadLevels, {
           Character.haruto: 1,
           Character.mio: 2,
@@ -8241,7 +8584,7 @@ void main() {
 
         // Reload sees exactly the last committed aggregate.
         final reloaded = await store.load();
-        expect(reloaded.scrip, 500);
+        expect(reloaded.scrip, 1550);
         expect(reloaded.progress.resultFor('outpost-alpha'), victory);
         expect(reloaded.squad, [
           Character.haruto,

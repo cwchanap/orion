@@ -601,10 +601,12 @@ void main() {
       tester,
       _victoryContent(
         MissionSaveState.saved,
-        reward: const MissionRewardFact(
-          title: 'Blueprint fragment',
-          detail: 'Unlocks a new blueprint after saving.',
-        ),
+        rewards: const [
+          MissionRewardFact(
+            title: 'Blueprint fragment',
+            detail: 'Unlocks a new blueprint after saving.',
+          ),
+        ],
       ),
     );
 
@@ -717,10 +719,12 @@ void main() {
       _victoryContent(
         MissionSaveState.saved,
         moduleIds: const [RunModuleId.heavyCaliber],
-        reward: const MissionRewardFact(
-          title: 'Blueprint fragment',
-          detail: 'Unlocks a new blueprint after saving.',
-        ),
+        rewards: const [
+          MissionRewardFact(
+            title: 'Blueprint fragment',
+            detail: 'Unlocks a new blueprint after saving.',
+          ),
+        ],
       ),
       onReplay: () {},
       onReturnToMap: () {},
@@ -1039,10 +1043,12 @@ void main() {
                   RunModuleId.heavyCaliber,
                   RunModuleId.overclockRelay,
                 ],
-                reward: const MissionRewardFact(
-                  title: 'Blueprint fragment',
-                  detail: 'Unlocks a new blueprint after saving.',
-                ),
+                rewards: const [
+                  MissionRewardFact(
+                    title: 'Blueprint fragment',
+                    detail: 'Unlocks a new blueprint after saving.',
+                  ),
+                ],
               ),
               onReplay: () {},
               onReturnToMap: () {},
@@ -1223,10 +1229,12 @@ void main() {
         tester,
         _victoryContent(
           MissionSaveState.saved,
-          reward: const MissionRewardFact(
-            title: 'Blueprint fragment',
-            detail: 'Unlocks a new blueprint after saving.',
-          ),
+          rewards: const [
+            MissionRewardFact(
+              title: 'Blueprint fragment',
+              detail: 'Unlocks a new blueprint after saving.',
+            ),
+          ],
         ),
       );
 
@@ -1253,10 +1261,12 @@ void main() {
         moduleIds: const [],
         saveState: MissionSaveState.saved,
         saveText: 'Saved.',
-        reward: const MissionRewardFact(
-          title: 'Blueprint fragment',
-          detail: 'Unlocks a new blueprint after saving.',
-        ),
+        rewards: const [
+          MissionRewardFact(
+            title: 'Blueprint fragment',
+            detail: 'Unlocks a new blueprint after saving.',
+          ),
+        ],
         nextOpportunityText:
             'Replay for a better result or continue on the World Map.',
       );
@@ -1478,10 +1488,12 @@ void main() {
             tester,
             _victoryContent(
               MissionSaveState.saving,
-              reward: const MissionRewardFact(
-                title: 'Blueprint fragment',
-                detail: 'Unlocks a new blueprint after saving.',
-              ),
+              rewards: const [
+                MissionRewardFact(
+                  title: 'Blueprint fragment',
+                  detail: 'Unlocks a new blueprint after saving.',
+                ),
+              ],
             ),
             onReplay: () {},
             onReturnToMap: () {},
@@ -1519,10 +1531,12 @@ void main() {
           tester,
           _victoryContent(
             MissionSaveState.failed,
-            reward: const MissionRewardFact(
-              title: 'Blueprint fragment',
-              detail: 'Unlocks a new blueprint after saving.',
-            ),
+            rewards: const [
+              MissionRewardFact(
+                title: 'Blueprint fragment',
+                detail: 'Unlocks a new blueprint after saving.',
+              ),
+            ],
           ),
           onRetrySave: () {},
           onReturnToMap: () {},
@@ -1556,17 +1570,24 @@ void main() {
               bestBaseHealth: 20,
             ),
             saveState: MissionSaveState.saved,
-            reward: const MissionRewardFact(
-              title: 'Blueprint fragment',
-              detail: 'Unlocks a new blueprint after saving.',
-            ),
+            rewards: const [
+              MissionRewardFact(
+                title: 'Blueprint fragment',
+                detail: 'Unlocks a new blueprint after saving.',
+              ),
+            ],
           ),
         );
         expect(
           find.text('Saved best retained: Gold • 20 base health'),
           findsOneWidget,
         );
-        expect(find.text('Best result already saved.'), findsOneWidget);
+        // HPA-923: a retained best still credits the run's Scrip award, so
+        // the copy must say the result (and its payout) was saved.
+        expect(
+          find.text('Result saved. Best medal unchanged.'),
+          findsOneWidget,
+        );
 
         final panel = rewardsCard(tester);
         expect(
@@ -1590,10 +1611,12 @@ void main() {
             tester,
             _victoryContent(
               state,
-              reward: const MissionRewardFact(
-                title: 'Blueprint fragment',
-                detail: 'Unlocks a new blueprint after saving.',
-              ),
+              rewards: const [
+                MissionRewardFact(
+                  title: 'Blueprint fragment',
+                  detail: 'Unlocks a new blueprint after saving.',
+                ),
+              ],
             ),
           );
           final panel = rewardsCard(tester);
@@ -1612,6 +1635,43 @@ void main() {
             ),
             findsOneWidget,
             reason: state.name,
+          );
+        }
+      });
+
+      testWidgets('blueprint and Scrip render as separate facts in the '
+          'rewards card', (tester) async {
+        // HPA-923 task 3: one Rewards card, one row per fact — blueprint
+        // and Scrip share the same MissionRewardFact styling as distinct
+        // ordered entries.
+        await _pumpPanel(
+          tester,
+          _victoryContent(
+            MissionSaveState.saved,
+            rewards: const [
+              MissionRewardFact(
+                title: 'Blueprint recovered: Relay Calibration',
+                detail: 'Available in Salvage Module drafts on future runs.',
+              ),
+              MissionRewardFact(
+                title: 'Scrip credited: 1050',
+                detail: 'Added to your Scrip wallet.',
+              ),
+            ],
+          ),
+        );
+
+        final panel = rewardsCard(tester);
+        for (final text in const [
+          'Blueprint recovered: Relay Calibration',
+          'Available in Salvage Module drafts on future runs.',
+          'Scrip credited: 1050',
+          'Added to your Scrip wallet.',
+        ]) {
+          expect(
+            find.descendant(of: panel, matching: find.text(text)),
+            findsOneWidget,
+            reason: text,
           );
         }
       });
@@ -1686,7 +1746,7 @@ GameSnapshot _syntheticSnapshot({
 MissionReportContent _victoryContent(
   MissionSaveState saveState, {
   List<RunModuleId> moduleIds = const [],
-  MissionRewardFact? reward,
+  List<MissionRewardFact> rewards = const [],
   String stageName = 'Outpost Alpha',
 }) {
   return projectVictoryReport(
@@ -1694,7 +1754,7 @@ MissionReportContent _victoryContent(
     result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
     priorSavedResult: null,
     saveState: saveState,
-    reward: reward,
+    rewards: rewards,
   );
 }
 
@@ -1710,6 +1770,7 @@ MissionReportContent _victoryContentNullSaveState() {
     emptyModulesText: 'No Salvage Modules acquired',
     saveState: null,
     saveText: 'Save status pending.',
+    rewards: const [],
     nextOpportunityText:
         'Replay for a better result or continue on the World Map.',
   );

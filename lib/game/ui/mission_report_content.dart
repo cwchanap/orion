@@ -31,9 +31,10 @@ final class MissionReportContent {
     this.emptyModulesText,
     this.saveState,
     this.saveText,
-    this.reward,
+    required List<MissionRewardFact> rewards,
     required this.nextOpportunityText,
-  }) : moduleIds = List.unmodifiable(moduleIds);
+  }) : moduleIds = List.unmodifiable(moduleIds),
+       rewards = List.unmodifiable(rewards);
 
   final GameSnapshot snapshot;
   final String stageId;
@@ -47,7 +48,7 @@ final class MissionReportContent {
   final String? emptyModulesText;
   final MissionSaveState? saveState;
   final String? saveText;
-  final MissionRewardFact? reward;
+  final List<MissionRewardFact> rewards;
   final String nextOpportunityText;
 }
 
@@ -72,7 +73,7 @@ MissionReportContent projectVictoryReport({
   required StageResult result,
   required StageResult? priorSavedResult,
   required MissionSaveState saveState,
-  MissionRewardFact? reward,
+  List<MissionRewardFact> rewards = const [],
 }) {
   final comparison = compareMissionResult(result, priorSavedResult);
   final comparisonText = switch (comparison) {
@@ -104,11 +105,13 @@ MissionReportContent projectVictoryReport({
       MissionSaveState.saving => 'Saving result…',
       MissionSaveState.saved =>
         comparison == MissionResultComparison.retained
-            ? 'Best result already saved.'
+            // HPA-923: a retained best still credited this run's Scrip
+            // award — the copy must not imply nothing was earned.
+            ? 'Result saved. Best medal unchanged.'
             : 'Saved.',
       MissionSaveState.failed => 'Save failed — progress unchanged.',
     },
-    reward: reward,
+    rewards: rewards,
     nextOpportunityText: switch (saveState) {
       MissionSaveState.saving =>
         'Saving must finish before you replay or leave.',
@@ -160,6 +163,7 @@ MissionReportContent projectEndlessReport({
             ? 'Save failed — progress unchanged.'
             : 'Save failed — best $savedBest ${savedBest == 1 ? 'wave' : 'waves'} kept.',
     },
+    rewards: const [],
     nextOpportunityText: switch (saveState) {
       MissionSaveState.saving =>
         'Saving must finish before you replay or leave.',
@@ -183,6 +187,7 @@ MissionReportContent projectLossReport({required GameSnapshot snapshot}) {
     emptyModulesText: snapshot.acquiredRunModules.isEmpty
         ? 'No Salvage Modules acquired'
         : null,
+    rewards: const [],
     nextOpportunityText: 'Adjust your build and retry when ready.',
   );
 }
