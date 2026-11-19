@@ -4240,6 +4240,90 @@ void main() {
     },
   );
 
+  testWidgets(
+    'a covered briefing keeps the recovery guard so a stale draft cannot launch',
+    (tester) async {
+      var loadAttempts = 0;
+      final recoveryCompleter = Completer<CampaignProgressStore>();
+      final realStore = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+        // The recovered profile owns no Mio — the starter draft the briefing
+        // seeded from is stale once this profile lands.
+        ownedLevels: const {
+          Character.haruto: 1,
+          Character.kaito: 6,
+          Character.sayo: 4,
+        },
+        squad: const [Character.kaito, Character.sayo],
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStoreLoader: () async {
+            loadAttempts += 1;
+            if (loadAttempts == 1) {
+              throw StateError('transient read failure');
+            }
+            return recoveryCompleter.future;
+          },
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Open the Alpha briefing while the initial load failed — it shows the
+      // starter defaults.
+      await tester.ensureVisible(find.text('Alpha'));
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      final sheetElement = tester.element(
+        find.byKey(const ValueKey('stage-briefing')),
+      );
+
+      // Launch parks on the pending recovery; another route covering the
+      // briefing keeps the mismatch pop from dismissing it.
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pump();
+      expect(loadAttempts, 2);
+      unawaited(
+        Navigator.of(sheetElement).push(
+          MaterialPageRoute<void>(
+            builder: (_) => const Scaffold(body: Text('cover')),
+          ),
+        ),
+      );
+      await tester.pump();
+      recoveryCompleter.complete(realStore);
+      await tester.pumpAndSettle();
+
+      // Mismatch was detected but the covered sheet was not dismissed and
+      // nothing was written.
+      expect(realStore.saveCalls, 0);
+      expect(find.text('cover'), findsOneWidget);
+
+      // Uncover the briefing and retry — the guard must still abort instead
+      // of writing the starter draft over the recovered squad.
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('stage-briefing')), findsOneWidget);
+      await tester.tap(find.byTooltip('Start Mission'));
+      await tester.pumpAndSettle();
+
+      expect(realStore.saveCalls, 0);
+      expect(realStore.squad, [Character.kaito, Character.sayo]);
+      expect(realStore.ownedLevels.containsKey(Character.mio), isFalse);
+      expect(game, isNull);
+      expect(find.byKey(const ValueKey('stage-briefing')), findsNothing);
+      expect(
+        find.text(
+          'Campaign progress recovered — review squad before launching.',
+        ),
+        findsOneWidget,
+      );
+    },
+  );
+
   test('snapshot exposes the current tower unlocks', () {
     // Squad unlocks follow the wave schedule on the squad's own styles:
     // wave-1 styles first, railgun after Wave 1 clears.

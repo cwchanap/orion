@@ -505,19 +505,16 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
 
     final component = _towerComponents.remove(tower.id);
     component?.removeFromParent();
-    for (final drone
-        in children
-            .whereType<DroneComponent>()
-            .where((drone) => drone.ownerTowerId == tower.id)
-            .toList()) {
-      drone.removeFromParent();
-    }
-    for (final field
-        in children
-            .whereType<GravityFieldComponent>()
-            .where((field) => field.ownerTowerId == tower.id)
-            .toList()) {
-      field.removeFromParent();
+    // Sweep the tracked set, not children: a drone/field queued in the same
+    // update that ended the wave is not in children until the next lifecycle
+    // pass, and removeFromParent cancels that pending mount.
+    for (final entity in _combatEntityComponents.toList()) {
+      if ((entity is DroneComponent && entity.ownerTowerId == tower.id) ||
+          (entity is GravityFieldComponent &&
+              entity.ownerTowerId == tower.id)) {
+        entity.removeFromParent();
+        _combatEntityComponents.remove(entity);
+      }
     }
     _activeDronesByTower.remove(tower.id);
     _clearSelection();
