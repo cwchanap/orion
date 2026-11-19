@@ -32,3 +32,19 @@ String decimal(double value) {
   }
   return text;
 }
+
+/// Thousand-grouped integer readout — '1240' renders '1,240'. Currency
+/// amounts (Scrip wallet, level-up prices) read through it so five-figure
+/// wallets stay legible.
+String grouped(int value) {
+  final digits = value.abs().toString();
+  final buffer = StringBuffer(value < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    final remaining = digits.length - i;
+    buffer.write(digits[i]);
+    if (remaining > 3 && remaining % 3 == 1) {
+      buffer.write(',');
+    }
+  }
+  return buffer.toString();
+}

@@ -37,6 +37,7 @@ import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_surface.dart';
 import 'package:orion/game/ui/run_module_draft_panel.dart';
@@ -5113,6 +5114,233 @@ void main() {
 
     expect(find.text('SECTOR MAP'), findsOneWidget);
     expect(findOrionTitle('Camp'), findsNothing);
+  });
+
+  group('camp level-up purchases (HPA-923 task 4)', () {
+    /// Opens the Camp tab and the sheet for [character] on the running page.
+    Future<void> openSheet(WidgetTester tester, Character character) async {
+      await tester.tap(find.byTooltip('Camp'));
+      await tester.pumpAndSettle();
+      final card = find.byKey(ValueKey('camp-card-${character.name}'));
+      await tester.scrollUntilVisible(
+        card,
+        250,
+        scrollable: find.descendant(
+          of: find.byType(GridView),
+          matching: find.byType(Scrollable),
+        ),
+      );
+      await tester.ensureVisible(card);
+      await tester.pumpAndSettle();
+      await tester.tap(card);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+    }
+
+    testWidgets(
+      'a press commits one atomic write, republishes the sheet and the '
+      'raised level reaches battle',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+        );
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await openSheet(tester, Character.haruto);
+
+        // levelUpCost(4) = 180 rides on the action label.
+        expect(find.text('LEVEL UP · 180'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('level-up-button')));
+        await tester.pumpAndSettle();
+
+        // One write: the level raised and the wallet debited in the same
+        // committed payload.
+        expect(store.saveCalls, 1);
+        expect(store.ownedLevels[Character.haruto], 5);
+        expect(store.scrip, 320);
+
+        // The sheet stays mounted and republishes committed state — level,
+        // balance and the new 5→6 price all read the saved profile.
+        expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+        expect(find.text('LV 5 / 40'), findsOneWidget);
+        expect(find.bySemanticsLabel('320 Scrip'), findsOneWidget);
+        expect(
+          find.text('LEVEL UP · ${GameBalance.levelUpCost(5)}'),
+          findsOneWidget,
+        );
+
+        // Back to the roster — the committed level shows there too.
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('camp-card-haruto')),
+            matching: find.text('Lv 5'),
+          ),
+          findsOneWidget,
+        );
+
+        // The raised persistent level reaches battle: a launched run reads
+        // the committed profile for its squad levels.
+        await tester.tap(find.byTooltip('Map'));
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester);
+        expect(game!.snapshot.squadLevels[Character.haruto], 5);
+
+        final reloaded = await store.load();
+        expect(reloaded.ownedLevels[Character.haruto], 5);
+        expect(reloaded.scrip, 320);
+      },
+    );
+
+    testWidgets(
+      'a failed write keeps level and wallet, leaves the sheet mounted '
+      'and stays retryable',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+          delaySaves: true,
+          failOnSaveIndices: {0},
+        );
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+        await openSheet(tester, Character.haruto);
+
+        await tester.tap(find.byKey(const ValueKey('level-up-button')));
+        await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+        store.saveCompletions[0].complete();
+        await tester.pumpAndSettle();
+
+        // Nothing advanced: the committed level, wallet and sheet all read
+        // the pre-press state, the shell breadcrumb reports, and the page
+        // did not navigate anywhere.
+        expect(find.text('Could not save campaign progress.'), findsOneWidget);
+        expect(find.text('LV 4 / 40'), findsOneWidget);
+        expect(find.bySemanticsLabel('500 Scrip'), findsOneWidget);
+        expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+        expect(findOrionTitle('Camp'), findsOneWidget);
+        expect(store.ownedLevels[Character.haruto], 4);
+        expect(store.scrip, 500);
+        expect(store.saveCalls, 1);
+
+        // The action is retryable: not busy, not disabled.
+        final retryable = tester.widget<OrionPrimaryButton>(
+          find.byKey(const ValueKey('level-up-button')),
+        );
+        expect(retryable.onPressed, isNotNull);
+        expect(retryable.loading, isFalse);
+
+        await tester.tap(find.byKey(const ValueKey('level-up-button')));
+        await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+        store.saveCompletions[1].complete();
+        await tester.pumpAndSettle();
+
+        expect(store.saveCalls, 2);
+        expect(store.ownedLevels[Character.haruto], 5);
+        expect(store.scrip, 320);
+        expect(find.text('Could not save campaign progress.'), findsNothing);
+        expect(find.text('LV 5 / 40'), findsOneWidget);
+
+        final reloaded = await store.load();
+        expect(reloaded.ownedLevels[Character.haruto], 5);
+        expect(reloaded.scrip, 320);
+      },
+    );
+
+    testWidgets('level up is single-flight on rapid taps', (tester) async {
+      final store = _TestCampaignProgressStore(
+        ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+        squad: const [Character.haruto, Character.mio],
+        scrip: 500,
+        delaySaves: true,
+      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+      await openSheet(tester, Character.haruto);
+
+      // Both presses land before the busy rebuild: the page's
+      // single-flight guard must collapse them into one queued write —
+      // the same protection the mission Retry Save guard provides.
+      final levelUp = find.byKey(const ValueKey('level-up-button'));
+      await tester.tap(levelUp);
+      await tester.tap(levelUp);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      expect(store.saveCalls, 1);
+      expect(store.saveCompletions, hasLength(1));
+
+      // The busy rebuild lands on the next frame — the write is still in
+      // flight, so the action renders inert and further taps reach nothing.
+      await tester.pump();
+      final busy = tester.widget<OrionPrimaryButton>(levelUp);
+      expect(busy.loading, isTrue);
+      await tester.tap(levelUp);
+      await tester.pump();
+      expect(store.saveCalls, 1);
+
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 1);
+      expect(store.ownedLevels[Character.haruto], 5);
+      expect(store.scrip, 320);
+      expect(find.text('LV 5 / 40'), findsOneWidget);
+    });
+
+    testWidgets(
+      'insufficient funds and the cap keep the button off the write path',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: GameBalance.characterMaxLevel,
+          },
+          squad: const [Character.haruto],
+          scrip: 30,
+        );
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+        await openSheet(tester, Character.haruto);
+
+        expect(
+          find.text('NEEDS ${GameBalance.levelUpCost(1)} SCRIP'),
+          findsOneWidget,
+        );
+        var button = tester.widget<OrionPrimaryButton>(
+          find.byKey(const ValueKey('level-up-button')),
+        );
+        expect(button.onPressed, isNull);
+        await tester.tap(find.byKey(const ValueKey('level-up-button')));
+        await tester.pumpAndSettle();
+        expect(store.saveCalls, 0);
+
+        // Back to the roster and open the capped member: the cap reason
+        // replaces the price and stays off the write path as well.
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const ValueKey('camp-card-mio')));
+        await tester.pumpAndSettle();
+        expect(find.text('MAX LEVEL REACHED'), findsOneWidget);
+        button = tester.widget<OrionPrimaryButton>(
+          find.byKey(const ValueKey('level-up-button')),
+        );
+        expect(button.onPressed, isNull);
+        await tester.tap(find.byKey(const ValueKey('level-up-button')));
+        await tester.pumpAndSettle();
+
+        expect(store.saveCalls, 0);
+        expect(store.ownedLevels[Character.mio], GameBalance.characterMaxLevel);
+        expect(store.scrip, 30);
+      },
+    );
   });
 
   testWidgets('world map shows locked, unlocked, and cleared stages', (

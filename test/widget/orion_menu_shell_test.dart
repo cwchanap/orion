@@ -265,6 +265,7 @@ void main() {
         child: const CampView(
           ownedLevels: CampaignSave.starterOwnedLevels,
           squad: CampaignSave.starterSquad,
+          scrip: 0,
           embeddedInMenuShell: true,
         ),
       ),

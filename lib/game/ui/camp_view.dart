@@ -6,6 +6,7 @@ import '../models/game_models.dart';
 import '../util/format.dart';
 import 'orion_atlas_sprite.dart';
 import 'orion_menu_shell.dart';
+import 'orion_primary_button.dart';
 import 'orion_scroll_view.dart';
 import 'orion_surface.dart';
 import 'orion_typography.dart';
@@ -34,13 +35,17 @@ double _measureLabel(BuildContext context, String data, TextStyle style) {
 /// Task-6 view (artboard 10): all twelve [Character] entries in roster order
 /// as portrait cards — owned cards show rank, level and the SQUAD tag while
 /// locked cards read as silhouettes. Tapping an owned card opens the
-/// read-only character sheet (artboard 11) in place; the sheet carries no
-/// level-up or R&D affordances.
+/// character sheet (artboard 11) in place; the sheet carries the committed
+/// Scrip wallet, a next-level stat preview and the single Level Up
+/// purchase action (HPA-923 task 4).
 class CampView extends StatefulWidget {
   const CampView({
     super.key,
     required this.ownedLevels,
     required this.squad,
+    required this.scrip,
+    this.isSavingProgress = false,
+    this.onLevelUp,
     this.onBack,
     this.embeddedInMenuShell = false,
   });
@@ -51,6 +56,20 @@ class CampView extends StatefulWidget {
 
   /// The saved squad roster — members carry the SQUAD marker.
   final List<Character> squad;
+
+  /// The committed Scrip wallet — the sheet's balance chip and the Level
+  /// Up affordability gate both read it.
+  final int scrip;
+
+  /// True while a campaign write is in flight — the Level Up action is
+  /// single-flight, so the sheet holds its busy state until the page
+  /// clears the flag.
+  final bool isSavingProgress;
+
+  /// Asks the owner to buy one persistent level for the character whose
+  /// sheet is open; the game page routes it through the committed save
+  /// queue. Null renders the action disabled (previews, read-only hosts).
+  final ValueChanged<Character>? onLevelUp;
 
   final VoidCallback? onBack;
   final bool embeddedInMenuShell;
@@ -71,6 +90,7 @@ class _CampViewState extends State<CampView> {
     // shrinking underneath an open sheet.
     final sheetLevel = sheet == null ? null : widget.ownedLevels[sheet];
     final sheetOpen = sheet != null && sheetLevel != null;
+    final levelUp = widget.onLevelUp;
     return PopScope(
       canPop: !sheetOpen,
       onPopInvokedWithResult: (didPop, _) {
@@ -88,6 +108,9 @@ class _CampViewState extends State<CampView> {
                   ? _CharacterSheet(
                       character: sheet,
                       level: sheetLevel,
+                      scrip: widget.scrip,
+                      levelUpBusy: widget.isSavingProgress,
+                      onLevelUp: levelUp == null ? null : () => levelUp(sheet),
                       onBack: () => setState(() => _sheet = null),
                     )
                   : _buildRoster(uiTheme),
@@ -460,19 +483,37 @@ class _CharacterCard extends StatelessWidget {
   }
 }
 
-/// The read-only character sheet (artboard 11): portrait hero, rank + full
-/// name + role, persistent level against the 40-level cap, the fixed
-/// signature panel, bio, and combat stat bars derived from the shared
-/// balance/stat scale. No level-up or currency affordances by design.
+/// The character sheet (artboard 11): portrait hero, rank + full name +
+/// role, persistent level against the 40-level cap, the fixed signature
+/// panel, bio, and combat stat bars derived from the shared balance/stat
+/// scale — plus the committed Scrip balance, a next-level preview on the
+/// scaling channels and the single Level Up purchase action (HPA-923
+/// task 4). Mutation lives in `CampaignSave.withLevelUp`; the sheet only
+/// previews, gates and fires [onLevelUp].
 class _CharacterSheet extends StatelessWidget {
   const _CharacterSheet({
     required this.character,
     required this.level,
+    required this.scrip,
+    required this.levelUpBusy,
+    required this.onLevelUp,
     required this.onBack,
   });
 
   final Character character;
   final int level;
+
+  /// The committed Scrip balance — shown in the header chip and compared
+  /// against the next-level cost.
+  final int scrip;
+
+  /// True while the page's save queue holds an in-flight write; the
+  /// purchase action stays single-flight.
+  final bool levelUpBusy;
+
+  /// Fires the level purchase for [character]; null disables the action.
+  final VoidCallback? onLevelUp;
+
   final VoidCallback onBack;
 
   @override
@@ -482,9 +523,28 @@ class _CharacterSheet extends StatelessWidget {
         .scaleDamageChannels(
           GameBalance.characterScalingFactor(character.rank, level),
         );
+    // The next-level preview rides the exact scaling path the purchase
+    // produces: [levelUpCost] returns null at the cap, so `nextStats` and
+    // the action's price retire together.
+    final cost = GameBalance.levelUpCost(level);
+    final nextStats = cost == null
+        ? null
+        : GameBalance.towerStats(character.style, level: 1).scaleDamageChannels(
+            GameBalance.characterScalingFactor(character.rank, level + 1),
+          );
     final scale = TowerStatScale.forType(character.style);
     final rankColor = character.rank.orionColor(uiTheme);
     final levelFill = (level / GameBalance.characterMaxLevel).clamp(0.0, 1.0);
+    // The action is reachable only when the committed wallet covers the
+    // price and a write isn't already in flight; `levelUpBusy` holds the
+    // button in its loading state so a second press can't enqueue.
+    final canBuy =
+        onLevelUp != null && cost != null && scrip >= cost && !levelUpBusy;
+    final String? disabledReason = switch (cost) {
+      null => 'MAX LEVEL REACHED',
+      final price when scrip < price => 'NEEDS ${grouped(price)} SCRIP',
+      _ => null,
+    };
 
     return KeyedSubtree(
       key: const ValueKey('character-sheet'),
@@ -514,6 +574,15 @@ class _CharacterSheet extends StatelessWidget {
                       color: uiTheme.systemViolet,
                     ),
                   ),
+                ),
+                const SizedBox(width: 8),
+                // The committed wallet — same chip the menu shell uses for
+                // medals, reading the aggregate the page publishes.
+                OrionResourceChip(
+                  icon: Icons.payments_rounded,
+                  iconColor: uiTheme.creditGold,
+                  count: grouped(scrip),
+                  semanticsLabel: '${grouped(scrip)} Scrip',
                 ),
               ],
             ),
@@ -660,6 +729,7 @@ class _CharacterSheet extends StatelessWidget {
                   _SheetStatBar(
                     label: 'DAMAGE',
                     value: number(stats.damage),
+                    delta: _levelDelta(stats.damage, nextStats?.damage),
                     fill: scale.damageFill(stats),
                     barFill: orionBarDamage,
                   ),
@@ -679,6 +749,10 @@ class _CharacterSheet extends StatelessWidget {
                     _SheetStatBar(
                       label: _sheetSecondaryLabel(metric),
                       value: _sheetSecondaryValue(metric, stats),
+                      delta: _levelDelta(
+                        metric.valueOf(stats),
+                        nextStats == null ? null : metric.valueOf(nextStats),
+                      ),
                       fill: scale.secondaryFill(stats) ?? 0,
                       barFill: orionBarSecondary,
                     ),
@@ -776,10 +850,57 @@ class _CharacterSheet extends StatelessWidget {
               ),
             ),
           ),
+          // Pinned purchase strip (artboard 11): the price rides on the
+          // button label; a readable reason sits above it whenever the
+          // action is gated, and the loading state keeps presses
+          // single-flight.
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 4, 14, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (disabledReason != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text(
+                      disabledReason,
+                      textAlign: TextAlign.center,
+                      maxLines: 2,
+                      style: OrionTypography.microLabel(
+                        size: 10,
+                        color: cost == null
+                            ? uiTheme.textMuted
+                            : uiTheme.warningOrange,
+                      ),
+                    ),
+                  ),
+                OrionPrimaryButton(
+                  key: const ValueKey('level-up-button'),
+                  label: cost == null
+                      ? 'LEVEL UP'
+                      : 'LEVEL UP · ${grouped(cost)}',
+                  icon: Icons.upgrade_rounded,
+                  onPressed: canBuy ? onLevelUp : null,
+                  loading: levelUpBusy,
+                  height: 52,
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
+}
+
+/// The next-level gain for one channel as a '+N' readout; null when the
+/// channel doesn't scale with persistent level (fire cadence, range,
+/// pierce/chain/slow/splash all ride at style base).
+String? _levelDelta(double current, double? next) {
+  if (next == null) return null;
+  final delta = next - current;
+  return delta > 0 ? '+${decimal(delta)}' : null;
 }
 
 /// One combat stat row on the sheet, mirroring the Codex/inspector bars so a
@@ -788,12 +909,17 @@ class _SheetStatBar extends StatelessWidget {
   const _SheetStatBar({
     required this.label,
     required this.value,
+    this.delta,
     required this.fill,
     required this.barFill,
   });
 
   final String label;
   final String value;
+
+  /// The next-level gain ('+8') rendered under the value — only channels
+  /// the persistent level factor scales carry one.
+  final String? delta;
   final double fill;
   final Gradient barFill;
 
@@ -804,10 +930,27 @@ class _SheetStatBar extends StatelessWidget {
       label,
       style: OrionTypography.microLabel(size: 10, color: uiTheme.textMuted),
     );
-    final valueWidget = Text(
-      value,
-      textAlign: TextAlign.end,
-      style: OrionTypography.readout(size: 12, color: uiTheme.textPrimary),
+    final valueWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          textAlign: TextAlign.end,
+          style: OrionTypography.readout(size: 12, color: uiTheme.textPrimary),
+        ),
+        if (delta case final delta?)
+          Text(
+            delta,
+            key: ValueKey('sheet-stat-delta-$label'),
+            textAlign: TextAlign.end,
+            maxLines: 1,
+            style: OrionTypography.microLabel(
+              size: 10,
+              color: uiTheme.naniteGreen,
+            ),
+          ),
+      ],
     );
     final bar = SizedBox(
       height: 8,
@@ -859,7 +1002,7 @@ class _SheetStatBar extends StatelessWidget {
           SizedBox(width: 78, child: labelWidget),
           Expanded(child: bar),
           const SizedBox(width: 10),
-          SizedBox(width: 44, child: valueWidget),
+          SizedBox(width: 56, child: valueWidget),
         ],
       ),
     );
