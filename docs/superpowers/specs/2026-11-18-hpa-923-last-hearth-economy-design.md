@@ -28,7 +28,7 @@ Keep stages, boards, waves, bosses, medals, run modules, Endless, the Codex, gui
 
 No Scrip from losses or Endless mode. No Scrip from in-battle gold, and no exchange between the two currencies.
 
-## Balance: one source of truth
+## Balance: shared constants and per-stage data
 
 Put **shared** tunables in `GameBalance` (`lib/game/models/game_models.dart`): flare prices, rank odds, duplicate refunds, level costs and medal percentages. Put the **per-stage** first-clear and replay Scrip numbers on the existing `StageDefinition` beside its blueprint/reward data; this avoids maintaining a second stage-ID registry. Keep calculation/roll logic in small pure classes under `lib/game/rules/`. The following numbers are initial tuning values, not a live-ops system:
 
@@ -52,7 +52,7 @@ Proposed per-stage starting values (set `firstClearScrip` and `replayScrip` dire
 
 **Stage 1 guarantee and medal tradeoff:** A Clear-medal first win pays exactly 1,000 (the price of ten flares). A Silver/Gold first win pays 1,025/1,050, respectively. This preserves the hard *at least ten flares* onboarding guarantee and applies the ticket's better-medal bonus without silently capping rewards. Stage 1 replays pay 100/125/150 by medal. Stage 2 first clear pays 300/330/360 and replays 120/150/180. Tune shared multipliers/prices in `GameBalance` and stage-specific amounts in `StageDefinition` only.
 
-`StageScripRules.award(StageDefinition stage, StageMedal medal, {required bool firstClear})` is pure and returns a nonnegative integer. No stage-id lookup/switch and no dependency on the saved **best** medal. `OrionCampaign.validateStages` requires positive first-clear bonuses and replay bases for all seven production stages and checks `stageOne.firstClearScrip + stageOne.replayScrip >= 10 × GameBalance.flareCost` at Clear medal. Zero-default test-fixture stages need not pass production campaign validation. Tests cover all seven real stages, all medals, first/replay distinction and the Stage-1 guarantee.
+`StageScripRules.award(StageDefinition stage, StageMedal medal, {required bool firstClear})` is pure and returns a nonnegative integer. No stage-id lookup/switch and no dependency on the saved **best** medal. `OrionCampaign.validate()` (which checks the **real** `OrionCampaign.stages`) requires positive first-clear bonuses and replay bases for all seven production stages and checks `stageOne.firstClearScrip + stageOne.replayScrip >= 10 × GameBalance.flareCost` at Clear medal. Leave the general-purpose `validateStages(customDefinitions)` compatible with zero-default lightweight test fixtures; do not add a production-only branch or a stage-ID exception inside that reusable helper. Tests cover all seven real stages, all medals, first/replay distinction and the Stage-1 guarantee.
 
 ## Recruitment rules (pure, seeded, atomic)
 
