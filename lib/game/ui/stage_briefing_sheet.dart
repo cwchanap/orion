@@ -1415,10 +1415,14 @@ class _BriefingScripRewards extends StatelessWidget {
                 .reduce(math.max);
             const columns = 3;
             const gap = 8.0;
-            const tilePadding = 18.0;
+            // A tile's real text inset is its 9px horizontal padding plus
+            // OrionSurface's 1.5px border on each side — 21px, not 18.
+            // Using only the padding picked three columns at widths where
+            // the widest label still ellipsized inside the border.
+            const tileTextInset = 18.0 + 3.0;
             final columnTextWidth =
                 (constraints.maxWidth - (columns - 1) * gap) / columns -
-                tilePadding;
+                tileTextInset;
             final tiles = tilesFor(horizontal || widestLabel > columnTextWidth);
             if (horizontal || widestLabel > columnTextWidth) {
               return Column(
