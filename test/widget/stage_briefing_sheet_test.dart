@@ -2193,6 +2193,46 @@ void main() {
       expect(find.text('SCRIP REWARD'), findsNothing);
     });
 
+    for (final scale in [1.0, 1.5]) {
+      testWidgets('scrip labels stay readable at 320x568 and ${scale}x text', (
+        tester,
+      ) async {
+        await loadRealFonts();
+        await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          viewport: const Size(320, 568),
+          textScaler: TextScaler.linear(scale),
+        );
+
+        await tester.ensureVisible(section());
+        await tester.pumpAndSettle();
+        for (final label in [
+          'SCRIP REWARD',
+          'FIRST CLEAR',
+          'EVERY REPLAY',
+          'GOLD MEDAL',
+        ]) {
+          final paragraph = tester.renderObject<RenderParagraph>(
+            find.descendant(of: section(), matching: find.text(label)),
+          );
+          expect(
+            paragraph.didExceedMaxLines,
+            isFalse,
+            reason: '$label is truncated',
+          );
+          expect(
+            paragraph.getBoxesForSelection(
+              TextSelection(baseOffset: 0, extentOffset: label.length),
+            ),
+            hasLength(1),
+            reason: '$label must not split mid-word',
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+
     testWidgets('scrip labels stay readable at 320x568 and 2x text', (
       tester,
     ) async {
