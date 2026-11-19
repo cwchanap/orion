@@ -1055,22 +1055,46 @@ void main() {
     await tester.pumpAndSettle();
     final editable = tester.state<EditableTextState>(find.byType(EditableText));
     expect(editable.selectionOverlay!.handlesAreVisible, isTrue);
-    // Collapsed chrome swaps in handle-less controls: the overlay still
-    // tracks the selection, but every drag-handle gesture target is zero
-    // size, so the root-overlay handle cannot cover the shell's tab bar.
-    final handleTargets = find.descendant(
-      of: find.byType(CompositedTransformFollower),
-      matching: find.byType(RawGestureDetector),
+
+    // The handle must be genuinely displayed — a real, non-empty gesture
+    // target — yet sit entirely above the shell's tab bar.
+    final tabs = tester.getRect(find.byTooltip('Map'));
+    final handleRects = [
+      for (final target in tester.widgetList<RawGestureDetector>(
+        find.descendant(
+          of: find.byType(CompositedTransformFollower),
+          matching: find.byType(RawGestureDetector),
+        ),
+      ))
+        tester.getRect(find.byWidget(target)),
+    ];
+    final visibleHandles = handleRects.where((rect) => !rect.isEmpty).toList();
+    expect(
+      visibleHandles,
+      isNotEmpty,
+      reason: 'a displayed selection handle must keep its hit target',
     );
-    expect(handleTargets, findsWidgets);
-    for (final target in tester.widgetList<RawGestureDetector>(handleTargets)) {
+    for (final rect in visibleHandles) {
       expect(
-        tester.getRect(find.byWidget(target)).isEmpty,
-        isTrue,
-        reason: 'a visible selection handle must have no hit target',
+        rect.bottom,
+        lessThanOrEqualTo(tabs.top),
+        reason:
+            'a visible selection handle must not overlap the tab bar: '
+            '$rect vs $tabs',
       );
     }
-    final tabs = tester.getRect(find.byTooltip('Map'));
+
+    // And it must still work: dragging the caret handle left moves the
+    // caret — real touch selection adjustment, not a visual prop.
+    final caretBefore = editable.textEditingValue.selection.baseOffset;
+    await tester.dragFrom(visibleHandles.first.center, const Offset(-36, 0));
+    await tester.pumpAndSettle();
+    expect(
+      editable.textEditingValue.selection.baseOffset,
+      lessThan(caretBefore),
+      reason: 'dragging the caret handle must adjust the selection',
+    );
+
     expect(
       tabs.bottom,
       lessThanOrEqualTo(360 - 200),
