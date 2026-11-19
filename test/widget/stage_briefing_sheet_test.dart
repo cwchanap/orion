@@ -2233,6 +2233,55 @@ void main() {
       });
     }
 
+    testWidgets('scrip labels stay whole at the column-breakpoint width', (
+      tester,
+    ) async {
+      // Regression: the fit check once ignored OrionSurface's two 1.5px
+      // borders, so at widths just above the old breakpoint it picked
+      // three columns even though 'EVERY REPLAY' (83px at 1x real fonts)
+      // still ellipsized inside its 102.67px tile (81.67px of real text
+      // space). 352px leaves a LayoutBuilder width of 324 — inside the
+      // 9px window between the buggy and correct thresholds.
+      await loadRealFonts();
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        viewport: const Size(352, 568),
+      );
+
+      await tester.ensureVisible(section());
+      await tester.pumpAndSettle();
+      for (final label in ['FIRST CLEAR', 'EVERY REPLAY', 'GOLD MEDAL']) {
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(of: section(), matching: find.text(label)),
+        );
+        expect(
+          paragraph.didExceedMaxLines,
+          isFalse,
+          reason: '$label ellipsizes inside a column that does not fit',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('scrip chips stay three-across at the product viewport', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+
+      await tester.ensureVisible(section());
+      await tester.pumpAndSettle();
+      Offset topOf(String label) => tester.getTopLeft(
+        find.descendant(of: section(), matching: find.text(label)),
+      );
+      // Column-collapse is a compact-width fallback only: at 390px the
+      // three chips still share one row.
+      expect(topOf('FIRST CLEAR').dy, topOf('EVERY REPLAY').dy);
+      expect(topOf('EVERY REPLAY').dy, topOf('GOLD MEDAL').dy);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('scrip labels stay readable at 320x568 and 2x text', (
       tester,
     ) async {
