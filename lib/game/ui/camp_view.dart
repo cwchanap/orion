@@ -1011,7 +1011,13 @@ class _SheetStatBar extends StatelessWidget {
           SizedBox(width: 78, child: labelWidget),
           Expanded(child: bar),
           const SizedBox(width: 10),
-          SizedBox(width: 56, child: valueWidget),
+          // 56 keeps the common single-value column aligned; the box may
+          // grow so a longer '→ 11.8/s' readout at intermediate a11y
+          // scales is never truncated under the 1.5x stacked threshold.
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 56),
+            child: valueWidget,
+          ),
         ],
       ),
     );
