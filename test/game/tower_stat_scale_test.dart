@@ -5,11 +5,31 @@ import 'package:orion/game/ui/tower_stat_scale.dart';
 void main() {
   test('every tower scale matches the pinned tuning maxima', () {
     // Independent expected values, pinned to the GameBalance tables rather
-    // than recomputing _build's reduce(max) formulas: damage is the highest
-    // damage across level 1, level 2, and both level-3 specializations,
-    // shotsPerSecond is 1 / the fastest fire interval, range is the longest
-    // range, and secondary is the strongest secondary stat.
-    const expected =
+    // than recomputing _build's reduce(max) formulas: damage (and damage-channel
+    // secondaries) scale by the style's highest-rank, max-level character
+    // factor so scaled character stats do not saturate the gauge; shotsPerSecond,
+    // range, and utility secondaries stay unscaled.
+    final dMax = GameBalance.characterScalingFactor(
+      CharacterRank.d,
+      GameBalance.characterMaxLevel,
+    );
+    final cMax = GameBalance.characterScalingFactor(
+      CharacterRank.c,
+      GameBalance.characterMaxLevel,
+    );
+    final bMax = GameBalance.characterScalingFactor(
+      CharacterRank.b,
+      GameBalance.characterMaxLevel,
+    );
+    final aMax = GameBalance.characterScalingFactor(
+      CharacterRank.a,
+      GameBalance.characterMaxLevel,
+    );
+    final sMax = GameBalance.characterScalingFactor(
+      CharacterRank.s,
+      GameBalance.characterMaxLevel,
+    );
+    final expected =
         <
           TowerType,
           ({
@@ -20,43 +40,43 @@ void main() {
           })
         >{
           TowerType.laser: (
-            damage: 20,
+            damage: 20 * sMax,
             shotsPerSecond: 25 / 6,
             range: 170,
             secondary: null,
           ),
           TowerType.rocket: (
-            damage: 54,
+            damage: 54 * aMax,
             shotsPerSecond: 1,
             range: 190,
             secondary: 96,
           ),
           TowerType.cryo: (
-            damage: 14,
+            damage: 14 * sMax,
             shotsPerSecond: 1.470588,
             range: 160,
             secondary: 2.8,
           ),
           TowerType.railgun: (
-            damage: 70,
+            damage: 70 * bMax,
             shotsPerSecond: 0.8,
             range: 255,
             secondary: 5,
           ),
           TowerType.ionChain: (
-            damage: 24,
+            damage: 24 * cMax,
             shotsPerSecond: 1.282051,
             range: 175,
             secondary: 6,
           ),
           TowerType.nanite: (
-            damage: 9,
+            damage: 9 * bMax,
             shotsPerSecond: 1.315789,
             range: 165,
-            secondary: 11,
+            secondary: 11 * bMax,
           ),
           TowerType.gravityWell: (
-            damage: 14,
+            damage: 14 * aMax,
             shotsPerSecond: 0.952381,
             range: 185,
             secondary: null,
@@ -65,7 +85,7 @@ void main() {
             damage: 0,
             shotsPerSecond: 0.487805,
             range: 175,
-            secondary: 18,
+            secondary: 18 * dMax,
           ),
         };
 
@@ -133,5 +153,23 @@ void main() {
       ).secondaryMetric!.valueOf(droneBay),
       droneBay.droneDamage,
     );
+  });
+
+  test('tier-1 scaled damage never saturates the bar for any character', () {
+    for (final character in Character.values) {
+      final scale = TowerStatScale.forType(character.style);
+      if (scale.damageMax <= 0) continue;
+      for (final level in [1, GameBalance.characterMaxLevel]) {
+        final stats = GameBalance.towerStats(character.style, level: 1)
+            .scaleDamageChannels(
+              GameBalance.characterScalingFactor(character.rank, level),
+            );
+        expect(
+          scale.damageFill(stats),
+          lessThan(1.0),
+          reason: '${character.name} at lv $level should leave tier headroom',
+        );
+      }
+    }
   });
 }

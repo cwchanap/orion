@@ -177,15 +177,19 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _bossSheet = await GameBossSheet.load(images);
     // Only the active squad's chibis are battle art; portraits stay lazy for
     // the Camp/roster UI and off-squad members are never touched.
-    for (final member in _session.squad) {
-      try {
-        _chibiSprites[member] = await OrionArt.characterChibi(member).sprite;
-      } catch (_) {
-        // Missing art must not stall the battle: the member deploys with the
-        // legacy socket rendering instead.
-        debugPrint('chibi preload failed for ${member.name}');
-      }
-    }
+    await Future.wait([
+      for (final member in _session.squad)
+        OrionArt.characterChibi(member).sprite.then<void>(
+          (sprite) {
+            _chibiSprites[member] = sprite;
+          },
+          onError: (Object _, StackTrace _) {
+            // Missing art must not stall the battle: the member deploys with
+            // the legacy socket rendering instead.
+            debugPrint('chibi preload failed for ${member.name}');
+          },
+        ),
+    ]);
     // The dock allows placements while the awaits above are in flight; any
     // component built in that window captured a null chibi, so hand it the
     // resolved sprite. Members whose load failed keep the socket render.
@@ -1369,7 +1373,43 @@ class OrionDefenseGame extends FlameGame with TapCallbacks, HasTimeScale {
     _applyTimeScale();
   }
 
+  bool _postFrameSnapshotPending = false;
+  String? _deferredSnapshotFeedback;
+  bool _hasDeferredSnapshotFeedback = false;
+
   void _publishSnapshot({String? feedback}) {
+    if (SchedulerBinding.instance.schedulerPhase ==
+        SchedulerPhase.persistentCallbacks) {
+      if (feedback != null) {
+        _deferredSnapshotFeedback = feedback;
+        _hasDeferredSnapshotFeedback = true;
+      }
+      if (!_postFrameSnapshotPending) {
+        _postFrameSnapshotPending = true;
+        SchedulerBinding.instance.addPostFrameCallback((_) {
+          if (!_postFrameSnapshotPending) {
+            return;
+          }
+          _postFrameSnapshotPending = false;
+          final deferredFeedback = _hasDeferredSnapshotFeedback
+              ? _deferredSnapshotFeedback
+              : null;
+          _deferredSnapshotFeedback = null;
+          _hasDeferredSnapshotFeedback = false;
+          if (!isRemoved) {
+            _publishSnapshotNow(feedback: deferredFeedback);
+          }
+        });
+      }
+      return;
+    }
+    _postFrameSnapshotPending = false;
+    _deferredSnapshotFeedback = null;
+    _hasDeferredSnapshotFeedback = false;
+    _publishSnapshotNow(feedback: feedback);
+  }
+
+  void _publishSnapshotNow({String? feedback}) {
     _board?.selectedRange = _selectedTower == null
         ? 0
         : _session.resolveTowerStats(_selectedTower!).range;

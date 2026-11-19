@@ -174,4 +174,30 @@ void main() {
       expect(game.snapshot.phase, GamePhase.build);
     },
   );
+
+  testWidgets(
+    '_publishSnapshot defers notification during persistentCallbacks for any caller',
+    (tester) async {
+      final game = await mountGame(tester);
+      var triggered = false;
+
+      await tester.pumpWidget(
+        ValueListenableBuilder<GameSnapshot>(
+          valueListenable: game.stateNotifier,
+          builder: (context, snapshot, _) {
+            if (!triggered) {
+              triggered = true;
+              // Simulate a caller invoking _publishSnapshot during build.
+              game.togglePause();
+            }
+            return GameWidget(game: game);
+          },
+        ),
+      );
+      await tester.pump();
+
+      expect(tester.takeException(), isNull);
+      expect(game.snapshot.isPaused, isTrue);
+    },
+  );
 }

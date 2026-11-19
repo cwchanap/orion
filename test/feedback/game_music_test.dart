@@ -408,6 +408,8 @@ GameSnapshot _snapshot({
   stageName: 'Test Stage',
   stageLabel: 'Test',
   unlockedTowerTypes: const [],
+  squad: GameBalance.starterSquad,
+  squadLevels: GameBalance.starterOwnedLevels,
   stageModifiers: const [],
   selectedCell: null,
   selectedTower: null,

@@ -98,16 +98,14 @@ class StageModifierRules {
   }
 
   static int effectiveClearBonus({
-    required int campaignAdjustedClearBonus,
+    required int baseClearBonus,
     required Iterable<StageModifier> stageModifiers,
   }) {
-    if (campaignAdjustedClearBonus <= 0 ||
+    if (baseClearBonus <= 0 ||
         !stageModifiers.contains(StageModifier.enhancedClearBonus)) {
-      return campaignAdjustedClearBonus;
+      return baseClearBonus;
     }
-    return (campaignAdjustedClearBonus *
-            GameBalance.enhancedClearBonusMultiplier)
-        .round();
+    return (baseClearBonus * GameBalance.enhancedClearBonusMultiplier).round();
   }
 
   static TowerStats effectiveTowerStats({

@@ -1,5 +1,4 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/tower_stats_resolver.dart';
 
@@ -14,19 +13,6 @@ void main() {
   );
 
   group('TowerStatsResolver.resolve', () {
-    test('base stats are unchanged by campaign progress modifiers', () {
-      // Campaign modifiers now carry only side-stage rewards (starting
-      // gold/health, Challenge Badge) — nothing that touches tower stats.
-      const mods = CampaignModifiers(bonusGold: 15, bonusHealth: 3);
-      final stats = TowerStatsResolver.resolve(
-        tower(Character.haruto),
-        campaignModifiers: mods,
-      );
-      final base = GameBalance.towerStats(TowerType.laser, level: 1);
-      expect(stats.damage, base.damage);
-      expect(stats.slowDuration, base.slowDuration);
-    });
-
     test('applies run modules after character scaling', () {
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
       final factor = GameBalance.characterScalingFactor(
@@ -51,10 +37,7 @@ void main() {
     test('laser damage unchanged for an unscaled starter member', () {
       // Haruto is rank e with a 1.0 base multiplier, so the persistent
       // character pipeline leaves his tier-1 damage at the style base.
-      final stats = TowerStatsResolver.resolve(
-        tower(Character.haruto),
-        campaignModifiers: CampaignModifiers.empty,
-      );
+      final stats = TowerStatsResolver.resolve(tower(Character.haruto));
       final base = GameBalance.towerStats(TowerType.laser, level: 1);
       expect(stats.damage, base.damage);
     });
@@ -205,11 +188,6 @@ void main() {
     );
 
     test('all modifiers preserve base progression costs', () {
-      const campaignModifiers = CampaignModifiers(
-        bonusGold: 15,
-        bonusHealth: 3,
-      );
-
       for (final character in Character.values) {
         final type = character.style;
         for (final tier in [1, 2, 3]) {
@@ -226,7 +204,6 @@ void main() {
           );
           final resolved = TowerStatsResolver.resolve(
             tower,
-            campaignModifiers: campaignModifiers,
             stageModifiers: StageModifier.values,
             runModules: RunModuleId.values,
           );

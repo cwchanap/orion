@@ -862,6 +862,70 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('compact card badges never overlap the name at 3x text scale', (
+    tester,
+  ) async {
+    await loadRealFonts(withMaterialIcons: false);
+    tester.view.physicalSize = const Size(390, 844);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(
+            context,
+          ).copyWith(textScaler: const TextScaler.linear(3)),
+          child: child!,
+        ),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.bottomLeft,
+            child: TowerBuildRail(
+              phase: GamePhase.build,
+              gold: 999,
+              squad: const [Character.haruto, Character.mio],
+              squadLevels: const {Character.haruto: 40, Character.mio: 1},
+              deployedCharacters: const {},
+              onPlaceTower: (_) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final cardFinder = find.byKey(const ValueKey('tower-card-haruto'));
+    final card = tester.getRect(cardFinder);
+    final rank = tester.getRect(
+      find.descendant(of: cardFinder, matching: find.text('E')),
+    );
+    final level = tester.getRect(
+      find.descendant(of: cardFinder, matching: find.text('LV.40')),
+    );
+    final name = tester.getRect(
+      find.descendant(of: cardFinder, matching: find.text('HARUTO')),
+    );
+    final price = tester.getRect(
+      find.descendant(
+        of: cardFinder,
+        matching: find.text(
+          '${GameBalance.towerStats(TowerType.laser, level: 1).cost}',
+        ),
+      ),
+    );
+    expect(rank.overlaps(name), isFalse);
+    expect(rank.overlaps(price), isFalse);
+    expect(level.overlaps(name), isFalse);
+    expect(level.overlaps(price), isFalse);
+    expect(rank.right, lessThanOrEqualTo(name.left));
+    expect(price.right, lessThanOrEqualTo(level.left));
+    expect(rank.top, greaterThanOrEqualTo(card.top));
+    expect(level.right, lessThanOrEqualTo(card.right));
+    expect(level.bottom, lessThanOrEqualTo(card.bottom));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('tower prices do not shrink when text scale increases', (
     tester,
   ) async {
@@ -1885,7 +1949,7 @@ void main() {
       (tester) async {
         final stage = OrionCampaign.stageById('void-bastion');
         final expected = StageModifierRules.effectiveClearBonus(
-          campaignAdjustedClearBonus: stage.waves.first.clearBonus,
+          baseClearBonus: stage.waves.first.clearBonus,
           stageModifiers: stage.modifiers,
         );
         expect(

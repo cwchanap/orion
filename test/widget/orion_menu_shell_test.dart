@@ -275,9 +275,10 @@ void main() {
     // Card labels merge with their inner text in the semantics tree, so
     // match the authored label as the leading run of the node's label.
     expect(
-      find.bySemanticsLabel(RegExp('^Hikari, rank S, locked')),
-      findsOneWidget,
+      find.bySemanticsLabel('Locked character, rank S, not recruited'),
+      findsNWidgets(2),
     );
+    expect(find.bySemanticsLabel(RegExp('Hikari')), findsNothing);
 
     // Haruto and Mio close the roster order; on a compact screen their
     // cards only exist once the grid builds them lazily. The shell's tab

@@ -36,13 +36,11 @@ class CampaignSave {
   CampaignSave withSquad(List<Character> draft) =>
       CampaignSave(progress: progress, ownedLevels: ownedLevels, squad: draft);
 
-  /// Fresh-profile starters (HPA-922): every new or discarded save owns
-  /// Haruto and Mio at level 1, with both selected for the squad.
-  static const Map<Character, int> starterOwnedLevels = {
-    Character.haruto: 1,
-    Character.mio: 1,
-  };
-  static const List<Character> starterSquad = [Character.haruto, Character.mio];
+  /// Fresh-profile starters (HPA-922): aliases [GameBalance]'s single
+  /// canonical definition.
+  static const Map<Character, int> starterOwnedLevels =
+      GameBalance.starterOwnedLevels;
+  static const List<Character> starterSquad = GameBalance.starterSquad;
 
   // `static const` is impossible here because `CampaignProgress` wraps its
   // inputs in `Map.unmodifiable` (not const). `static final` preserves the

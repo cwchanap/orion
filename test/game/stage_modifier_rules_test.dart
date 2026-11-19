@@ -208,14 +208,14 @@ void main() {
     );
     expect(
       StageModifierRules.effectiveClearBonus(
-        campaignAdjustedClearBonus: 38,
+        baseClearBonus: 38,
         stageModifiers: const [StageModifier.enhancedClearBonus],
       ),
       57,
     );
     expect(
       StageModifierRules.effectiveClearBonus(
-        campaignAdjustedClearBonus: 0,
+        baseClearBonus: 0,
         stageModifiers: const [StageModifier.enhancedClearBonus],
       ),
       0,

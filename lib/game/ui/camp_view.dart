@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../models/game_models.dart';
@@ -68,21 +70,30 @@ class _CampViewState extends State<CampView> {
     // A sheet can only be open for an owned member — guard against the roster
     // shrinking underneath an open sheet.
     final sheetLevel = sheet == null ? null : widget.ownedLevels[sheet];
-    return Material(
-      color: uiTheme.voidBlack,
-      child: Stack(
-        children: [
-          const Positioned.fill(child: _CampBackdrop()),
-          SafeArea(
-            child: sheet != null && sheetLevel != null
-                ? _CharacterSheet(
-                    character: sheet,
-                    level: sheetLevel,
-                    onBack: () => setState(() => _sheet = null),
-                  )
-                : _buildRoster(uiTheme),
-          ),
-        ],
+    final sheetOpen = sheet != null && sheetLevel != null;
+    return PopScope(
+      canPop: !sheetOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && mounted) {
+          setState(() => _sheet = null);
+        }
+      },
+      child: Material(
+        color: uiTheme.voidBlack,
+        child: Stack(
+          children: [
+            const Positioned.fill(child: _CampBackdrop()),
+            SafeArea(
+              child: sheetOpen
+                  ? _CharacterSheet(
+                      character: sheet,
+                      level: sheetLevel,
+                      onBack: () => setState(() => _sheet = null),
+                    )
+                  : _buildRoster(uiTheme),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -190,12 +201,16 @@ class _CampViewState extends State<CampView> {
                     ),
                   ) +
                   10;
-              final crossAxis = constraints.maxWidth - 28;
-              final relaxed = (crossAxis / 128).ceil();
-              final fitsPill = ((crossAxis + 10) / (pillWidth + 24))
+              final crossAxis = math.max(0.0, constraints.maxWidth - 28);
+              final relaxed = math.max(1, (crossAxis / 128).ceil());
+              final columns = ((crossAxis + 10) / (pillWidth + 24))
                   .floor()
                   .clamp(1, relaxed);
-              final columns = fitsPill < relaxed ? fitsPill : relaxed;
+              final tileWidth = (crossAxis - (columns - 1) * 10) / columns;
+              final portraitCacheWidth = math.max(
+                1,
+                (tileWidth * MediaQuery.devicePixelRatioOf(context)).round(),
+              );
               return GridView.builder(
                 padding: const EdgeInsets.fromLTRB(14, 10, 14, 18),
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -212,6 +227,7 @@ class _CampViewState extends State<CampView> {
                     character: character,
                     level: level,
                     inSquad: widget.squad.contains(character),
+                    portraitCacheWidth: portraitCacheWidth,
                     onTap: level == null
                         ? null
                         : () => setState(() => _sheet = character),
@@ -235,12 +251,14 @@ class _CharacterCard extends StatelessWidget {
     required this.character,
     required this.level,
     required this.inSquad,
+    required this.portraitCacheWidth,
     required this.onTap,
   });
 
   final Character character;
   final int? level;
   final bool inSquad;
+  final int portraitCacheWidth;
   final VoidCallback? onTap;
 
   @override
@@ -266,11 +284,12 @@ class _CharacterCard extends StatelessWidget {
       ),
     );
     return Semantics(
-      label:
-          '${character.displayName}, rank ${character.rank.label}, '
-          '${owned ? 'level $level' : 'locked'}'
-          '${inSquad ? ', squad member' : ''}',
+      label: owned
+          ? '${character.displayName}, rank ${character.rank.label}, '
+                'level $level${inSquad ? ', squad member' : ''}'
+          : 'Locked character, rank ${character.rank.label}, not recruited',
       button: owned,
+      excludeSemantics: true,
       child: Opacity(
         opacity: owned ? 1 : 0.55,
         child: OrionSurface(
@@ -292,11 +311,13 @@ class _CharacterCard extends StatelessWidget {
                     child: owned
                         ? OrionAtlasSprite(
                             art: OrionArt.characterPortrait(character),
+                            cacheWidth: portraitCacheWidth,
                           )
                         : ColorFiltered(
                             colorFilter: orionLockedPortraitFilter,
                             child: OrionAtlasSprite(
                               art: OrionArt.characterPortrait(character),
+                              cacheWidth: portraitCacheWidth,
                             ),
                           ),
                   ),
@@ -511,6 +532,13 @@ class _CharacterSheet extends StatelessWidget {
                         children: [
                           OrionAtlasSprite(
                             art: OrionArt.characterPortrait(character),
+                            cacheWidth: math.max(
+                              1,
+                              (220 *
+                                      (2 / 3) *
+                                      MediaQuery.devicePixelRatioOf(context))
+                                  .round(),
+                            ),
                           ),
                           Positioned(
                             left: 0,

@@ -1,11 +1,9 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flame/cache.dart';
-import 'package:flame/flame.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/models/game_models.dart';
@@ -20,20 +18,24 @@ import '../support/real_fonts.dart';
 
 const _productViewport = Size(390, 844);
 
-/// An [Images] that serves in-memory stubs for the listed files and leaves
-/// every other load pending (matching the cold-cache behaviour the rest of
-/// this file relies on). Lets a test paint a real [OrionAtlasSprite] frame
-/// without touching real profile art.
-final class _StubImages extends Images {
-  _StubImages(this.stubs);
+/// Test [AssetBundle] that can fail or stub specific asset paths while
+/// delegating everything else to [rootBundle].
+final class _TestAssetBundle extends CachingAssetBundle {
+  _TestAssetBundle({this.failures = const {}, this.stubs = const {}});
 
-  final Map<String, ui.Image> stubs;
+  final Set<String> failures;
+  final Map<String, ByteData> stubs;
 
   @override
-  Future<ui.Image> load(String fileName, {String? key, String? package}) {
-    final stub = stubs[fileName];
-    if (stub != null) return Future.value(stub);
-    return Completer<ui.Image>().future;
+  Future<ByteData> load(String key) {
+    if (failures.contains(key)) {
+      return Future.error(StateError('missing $key'));
+    }
+    final stub = stubs[key];
+    if (stub != null) {
+      return Future.value(stub);
+    }
+    return rootBundle.load(key);
   }
 }
 
@@ -42,7 +44,7 @@ final class _StubImages extends Images {
 /// JPG-derived RGB with no alpha channel, which is exactly what defeated the
 /// old srcIn silhouette — synthetic bands make the rendered luminance
 /// spread, desaturation and midtone crush measurable.
-Future<ui.Image> _bandedPortraitImage(WidgetTester tester) {
+Future<ByteData> _bandedPortraitPng(WidgetTester tester) async {
   const side = 8;
   const bands = [
     [0xF0, 0xF0, 0xF0], // bright neutral
@@ -61,19 +63,20 @@ Future<ui.Image> _bandedPortraitImage(WidgetTester tester) {
       pixels[offset + 3] = 0xFF;
     }
   }
-  return tester
-      .runAsync(() {
-        final decoded = Completer<ui.Image>();
-        ui.decodeImageFromPixels(
-          pixels,
-          side,
-          side,
-          ui.PixelFormat.rgba8888,
-          decoded.complete,
-        );
-        return decoded.future;
-      })
-      .then((image) => image!);
+  return (await tester.runAsync(() async {
+    final decoded = Completer<ui.Image>();
+    ui.decodeImageFromPixels(
+      pixels,
+      side,
+      side,
+      ui.PixelFormat.rgba8888,
+      decoded.complete,
+    );
+    final image = await decoded.future;
+    final png = await image.toByteData(format: ui.ImageByteFormat.png);
+    image.dispose();
+    return png;
+  }))!;
 }
 
 /// Pumps the standalone Camp (with its own header) inside a plain MaterialApp.
@@ -83,11 +86,17 @@ Future<void> _pumpCamp(
   List<Character> squad = CampaignSave.starterSquad,
   Size viewport = _productViewport,
   TextScaler textScaler = TextScaler.noScaling,
+  AssetBundle? assetBundle,
 }) async {
   await loadRealFonts();
   tester.view.physicalSize = viewport;
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
+  addTearDown(PaintingBinding.instance.imageCache.clear);
+  Widget home = CampView(ownedLevels: ownedLevels, squad: squad);
+  if (assetBundle != null) {
+    home = DefaultAssetBundle(bundle: assetBundle, child: home);
+  }
   await tester.pumpWidget(
     MaterialApp(
       theme: orionThemeData,
@@ -95,7 +104,7 @@ Future<void> _pumpCamp(
         data: MediaQuery.of(context).copyWith(textScaler: textScaler),
         child: child!,
       ),
-      home: CampView(ownedLevels: ownedLevels, squad: squad),
+      home: home,
     ),
   );
   await tester.pumpAndSettle();
@@ -118,23 +127,6 @@ Future<void> _showCard(WidgetTester tester, Character character) async {
   // settle so its render box reflects the final scroll offset.
   await tester.ensureVisible(_card(character));
   await tester.pumpAndSettle();
-}
-
-/// Fails `Flame.images.load` for the named files and defers to the real
-/// cache for everything else — the only seam [OrionArtDescriptor] loads
-/// through, so a listed portrait error surfaces exactly like a missing
-/// asset: the shared `sprite` future completes with an error and the
-/// `OrionAtlasSprite` fallback branch renders.
-final class _FailingImages extends Images {
-  final failures = <String>{};
-
-  @override
-  Future<ui.Image> load(String fileName, {String? key, String? package}) {
-    if (failures.contains(fileName)) {
-      return Future.error(StateError('missing $fileName'));
-    }
-    return super.load(fileName, key: key, package: package);
-  }
 }
 
 void main() {
@@ -211,9 +203,10 @@ void main() {
           findsOneWidget,
         );
         expect(
-          find.bySemanticsLabel(RegExp('^Mio, rank E, locked')),
+          find.bySemanticsLabel('Locked character, rank E, not recruited'),
           findsOneWidget,
         );
+        expect(find.bySemanticsLabel(RegExp('Mio')), findsNothing);
       } finally {
         semantics.dispose();
       }
@@ -371,21 +364,11 @@ void main() {
   testWidgets(
     'a failed portrait load renders the roster icon on card and sheet',
     (tester) async {
-      // Force the real descriptor load path to error: Flame.images is the
-      // single seam OrionArtDescriptor._loadSprite reads through. The shared
-      // sprite memo must reset alongside so the new loader (not a prior
-      // generation's pending future) serves these builds.
-      final images = _FailingImages()
-        ..failures.add(OrionArt.characterPortrait(Character.haruto).fileName);
-      final previous = Flame.images;
-      Flame.images = images;
-      OrionArtDescriptor.resetSpriteCache();
-      addTearDown(() {
-        Flame.images = previous;
-        OrionArtDescriptor.resetSpriteCache();
-      });
+      final harutoAsset =
+          'assets/images/${OrionArt.characterPortrait(Character.haruto).fileName}';
+      final bundle = _TestAssetBundle(failures: {harutoAsset});
 
-      await _pumpCamp(tester);
+      await _pumpCamp(tester, assetBundle: bundle);
       await _showCard(tester, Character.haruto);
 
       // The failed card portrait paints the descriptor's fallback icon.
@@ -603,18 +586,30 @@ void main() {
   testWidgets('locked silhouette mutes chroma, crushes midtones, keeps shape', (
     tester,
   ) async {
-    final portrait = await _bandedPortraitImage(tester);
-    final previous = Flame.images;
-    Flame.images = _StubImages({
-      OrionArt.characterPortrait(Character.hikari).fileName: portrait,
-    });
-    OrionArtDescriptor.resetSpriteCache();
-    addTearDown(() {
-      Flame.images = previous;
-      OrionArtDescriptor.resetSpriteCache();
-    });
+    final portraitPng = await _bandedPortraitPng(tester);
+    final hikariAsset =
+        'assets/images/${OrionArt.characterPortrait(Character.hikari).fileName}';
+    final bundle = _TestAssetBundle(stubs: {hikariAsset: portraitPng});
 
-    await _pumpCamp(tester, ownedLevels: const {}, squad: const []);
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {},
+      squad: const [],
+      assetBundle: bundle,
+    );
+    final hikariImage = tester.widget<Image>(
+      find.descendant(
+        of: _card(Character.hikari),
+        matching: find.byType(Image),
+      ),
+    );
+    await tester.runAsync(
+      () => precacheImage(
+        hikariImage.image,
+        tester.element(_card(Character.hikari)),
+      ),
+    );
+    await tester.pumpAndSettle();
 
     // Grid items are repaint-boundary wrapped, so the card's composited
     // pixels (silhouette filter + locked opacity over the card fill) can
@@ -713,5 +708,106 @@ void main() {
           'the treatment must crush midtones, not just dim uniformly',
     );
     expect(amber, greaterThan(dark + 20), reason: 'amber band vanished');
+  });
+
+  testWidgets('camp handles zero-size first frame without crashing', (
+    tester,
+  ) async {
+    await _pumpCamp(tester, viewport: Size.zero);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('system back closes character sheet without popping route', (
+    tester,
+  ) async {
+    await loadRealFonts();
+    tester.view.physicalSize = _productViewport;
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    var routePopped = false;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: orionThemeData,
+        home: Builder(
+          builder: (context) => Scaffold(
+            body: Center(
+              child: ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const CampView(
+                            ownedLevels: CampaignSave.starterOwnedLevels,
+                            squad: CampaignSave.starterSquad,
+                          ),
+                        ),
+                      )
+                      .then((_) => routePopped = true);
+                },
+                child: const Text('Open Camp'),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('Open Camp'));
+    await tester.pumpAndSettle();
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('character-sheet')), findsNothing);
+    expect(_card(Character.haruto), findsOneWidget);
+    expect(routePopped, isFalse);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(routePopped, isTrue);
+  });
+
+  testWidgets(
+    'high-rank and max-level damage bars stay below full on character sheet',
+    (tester) async {
+      const owned = {
+        Character.hikari: 1,
+        Character.akane: 1,
+        Character.haruto: GameBalance.characterMaxLevel,
+      };
+      for (final character in owned.keys) {
+        await _pumpCamp(tester, ownedLevels: owned, squad: [character]);
+        await _showCard(tester, character);
+        await tester.tap(_card(character));
+        await tester.pumpAndSettle();
+
+        final bar = tester.widget<FractionallySizedBox>(
+          find.byKey(const ValueKey('sheet-stat-fill-DAMAGE')),
+        );
+        expect(bar.widthFactor, lessThan(1.0), reason: character.name);
+
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+
+  testWidgets('camp portraits decode at display size via ResizeImage', (
+    tester,
+  ) async {
+    await _pumpCamp(tester);
+    final hikariImage = tester.widget<Image>(
+      find
+          .descendant(of: _card(Character.hikari), matching: find.byType(Image))
+          .first,
+    );
+    expect(hikariImage.image, isA<ResizeImage>());
+    final resized = hikariImage.image as ResizeImage;
+    expect(resized.width, isNotNull);
+    expect(resized.width!, lessThan(400));
   });
 }

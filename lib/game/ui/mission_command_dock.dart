@@ -1117,22 +1117,34 @@ double _largeTextTowerCardHeight(BuildContext context) {
     return height;
   }
 
-  // The compact card's second line is either the readout cost or the
-  // deployed "ON FIELD" micro label — the label's looser line height is the
-  // taller of the two, so the card must size for whichever the member shows.
+  // The compact card has two text lines beside the portrait: line 1 holds
+  // [rank, name] and line 2 holds [cost / 'ON FIELD', LV.n]. Sizing height
+  // from those two lines keeps the rail compact enough to preserve board
+  // space at 3x text scale while preventing badges from overlapping labels.
+  final firstLine = math.max(
+    heightOf('LASER', OrionTypography.microLabel(color: uiTheme.textMuted)),
+    heightOf('S', OrionTypography.readout(size: 10, color: uiTheme.textMuted)),
+  );
   final secondLine = math.max(
-    heightOf(
-      '50',
-      OrionTypography.readout(
-        size: _largeTextTowerCostSize(scaler),
-        color: uiTheme.creditGold,
+    math.max(
+      heightOf(
+        '50',
+        OrionTypography.readout(
+          size: _largeTextTowerCostSize(scaler),
+          color: uiTheme.creditGold,
+        ),
+      ),
+      heightOf(
+        'LV.40',
+        OrionTypography.readout(
+          size: _largeTextTowerCostSize(scaler),
+          color: uiTheme.creditGold,
+        ),
       ),
     ),
     heightOf('ON FIELD', OrionTypography.microLabel(color: uiTheme.textMuted)),
   );
-  final labelsHeight =
-      heightOf('LASER', OrionTypography.microLabel(color: uiTheme.textMuted)) +
-      secondLine;
+  final labelsHeight = firstLine + secondLine;
   return math.max(_TowerBuildCard.compactHeight, labelsHeight + 10);
 }
 
@@ -1235,22 +1247,28 @@ class _TowerBuildCard extends StatelessWidget {
       return width;
     }
 
-    // The compact card's label slot must fit whichever second line it can
-    // show: the readout cost OR the deployed 'ON FIELD' micro label —
-    // which shares nameStyle's metrics and is far wider than any cost, so
-    // it joins the width measurement even before the member deploys. That
-    // keeps every card's width stable when deployment flips the label.
+    final rankStyle = OrionTypography.readout(
+      size: 10,
+      color: character.rank.orionColor(uiTheme),
+    );
+    // Compact cards place [rank, name] on row 1 and [price/'ON FIELD', LV.n]
+    // on row 2 beside the 42px portrait so large text never overlaps badges
+    // and card height stays within the 2-line board-space budget.
+    final compactTopRowWidth =
+        textWidth(character.rank.label, rankStyle) +
+        6 +
+        textWidth(character.displayName.toUpperCase(), nameStyle);
+    final compactBottomRowWidth =
+        math.max(
+          textWidth('ON FIELD', nameStyle),
+          textWidth('${stats.cost}', priceStyle),
+        ) +
+        8 +
+        textWidth('LV.$characterLevel', priceStyle);
     final cardWidth = compact
         ? math.max(
             baseWidth,
-            58.0 +
-                math.max(
-                  math.max(
-                    textWidth(character.displayName.toUpperCase(), nameStyle),
-                    textWidth('ON FIELD', nameStyle),
-                  ),
-                  textWidth('${stats.cost}', priceStyle),
-                ),
+            60.0 + math.max(compactTopRowWidth, compactBottomRowWidth),
           )
         : baseWidth * scaleFactor;
     final art = FittedBox(
@@ -1321,33 +1339,23 @@ class _TowerBuildCard extends StatelessWidget {
       textScaler: textScaler,
       style: nameStyle,
     );
-    // Persistent level is a corner badge so a 3x scale can never squeeze the
-    // member's name or add a third card row.
-    final levelBadge = Positioned(
-      top: 2,
-      right: 4,
-      child: Text(
-        'LV.$characterLevel',
-        maxLines: 1,
-        textScaler: textScaler,
-        style: priceStyle,
-      ),
+    final levelText = Text(
+      'LV.$characterLevel',
+      maxLines: 1,
+      textScaler: textScaler,
+      style: priceStyle,
     );
-    // Rank reads off the Camp color mapping so the same member carries one
-    // identity from roster to dock.
-    final rankBadge = Positioned(
-      top: 2,
-      left: 4,
-      child: Text(
-        character.rank.label,
-        maxLines: 1,
-        textScaler: textScaler,
-        style: OrionTypography.readout(
-          size: 10,
-          color: character.rank.orionColor(uiTheme),
-        ),
-      ),
+    final rankText = Text(
+      character.rank.label,
+      maxLines: 1,
+      textScaler: textScaler,
+      style: rankStyle,
     );
+    // Persistent level and rank live in flow above the compact row so large
+    // text never overlaps the name or portrait; normal cards keep them pinned
+    // in the top corners.
+    final levelBadge = Positioned(top: 2, right: 4, child: levelText);
+    final rankBadge = Positioned(top: 2, left: 4, child: rankText);
 
     final card = Semantics(
       button: true,
@@ -1372,31 +1380,62 @@ class _TowerBuildCard extends StatelessWidget {
               highlightShape: BoxShape.rectangle,
               splashColor: accent.withValues(alpha: 0.18),
               highlightColor: accent.withValues(alpha: 0.10),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Padding(
-                      padding: const EdgeInsets.only(
-                        left: 2,
-                        right: 2,
-                        bottom: 6,
+              child: compact
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 3,
                       ),
-                      child: compact
-                          ? Row(
+                      child: Row(
+                        children: [
+                          SizedBox(width: 42, child: art),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                SizedBox(width: 42, child: art),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [name, price],
-                                  ),
+                                Row(
+                                  children: [
+                                    rankText,
+                                    const SizedBox(width: 6),
+                                    Expanded(
+                                      child: Text(
+                                        character.displayName.toUpperCase(),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        textAlign: TextAlign.start,
+                                        textScaler: textScaler,
+                                        style: nameStyle,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    price,
+                                    const SizedBox(width: 8),
+                                    levelText,
+                                  ],
                                 ),
                               ],
-                            )
-                          : Column(
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : Stack(
+                      children: [
+                        Positioned.fill(
+                          child: Padding(
+                            padding: const EdgeInsets.only(
+                              left: 2,
+                              right: 2,
+                              bottom: 6,
+                            ),
+                            child: Column(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
                                 Flexible(child: art),
@@ -1406,12 +1445,12 @@ class _TowerBuildCard extends StatelessWidget {
                                 name,
                               ],
                             ),
+                          ),
+                        ),
+                        levelBadge,
+                        rankBadge,
+                      ],
                     ),
-                  ),
-                  levelBadge,
-                  rankBadge,
-                ],
-              ),
             ),
           ),
         ),
