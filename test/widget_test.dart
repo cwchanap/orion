@@ -3711,6 +3711,19 @@ void main() {
     expect(store.squad, [Character.mio, Character.kaito]);
     expect(find.text('Could not save campaign progress.'), findsNothing);
 
+    // Committed-profile probe, not just storage: a stale page aggregate
+    // would surface here — the fresh briefing reads its endless best
+    // straight from _committed.
+    await publishLoss(tester, game!);
+    await tester.pump();
+    expect(find.text('Saved.'), findsOneWidget);
+    await tester.tap(find.text('World Map'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Alpha'));
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+    expect(find.text('Endless best: 7 waves'), findsOneWidget);
+
     final reloaded = await store.load();
     expect(reloaded.scrip, 750);
     expect(reloaded.progress.endlessBestFor('outpost-alpha'), 7);
@@ -3769,16 +3782,79 @@ void main() {
     expect(store.squad, [Character.mio, Character.kaito]);
     expect(find.text('Could not save campaign progress.'), findsOneWidget);
 
-    // The run keeps going after a write failure: the next cleared wave
-    // issues a fresh write that composes on the committed aggregate —
-    // best 9 lands with the wallet and roster still intact.
+    // Reload immediately after B's failure — before any later write — so
+    // the outcome B failed into is what's asserted, not a superseding one.
+    final failedReload = await store.load();
+    expect(failedReload.scrip, 750);
+    expect(failedReload.progress.endlessBestFor('outpost-alpha'), 4);
+
+    // Committed-state UI probe: the ended report projects its saved best
+    // straight from _committed — a stale page aggregate would render a
+    // different "kept" best than the one write A committed.
+    await publishLoss(tester, game!);
+    await tester.pump();
+    expect(find.text('Save failed — best 4 waves kept.'), findsOneWidget);
+    expect(reportActionOnPressed(tester, 'Retry Save'), isNotNull);
+
+    final reloaded = await store.load();
+    expect(reloaded.scrip, 750);
+    expect(reloaded.progress.endlessBestFor('outpost-alpha'), 4);
+    expect(reloaded.ownedLevels, store.ownedLevels);
+    expect(reloaded.squad, store.squad);
+  });
+
+  testWidgets('a write issued after a queued write fails recomposes on '
+      'the committed aggregate', (tester) async {
+    // Continuation counterpart to the second-write-failure case: the run
+    // keeps going after a failed write, and the next cleared wave issues
+    // a fresh write that must compose on the committed aggregate — the
+    // failed payload's best never leaks into it.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.mio: 6,
+        Character.kaito: 8,
+      },
+      squad: const [Character.mio, Character.kaito],
+      scrip: 750,
+      delaySaves: true,
+      failOnSaveIndices: {1},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    await publishEndlessWaveClear(tester, game!, 4);
+    await publishEndlessWaveClear(tester, game!, 7);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    store.saveCompletions[0].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+    expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+
     await publishEndlessWaveClear(tester, game!, 9);
     await _pumpUntil(tester, () => store.saveCompletions.length > 2);
     store.saveCompletions[2].complete();
     await tester.pumpAndSettle();
+
     expect(store.saveCalls, 3);
     expect(store.progress.endlessBestFor('outpost-alpha'), 9);
     expect(store.scrip, 750);
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.mio: 6,
+      Character.kaito: 8,
+    });
+    expect(store.squad, [Character.mio, Character.kaito]);
 
     final reloaded = await store.load();
     expect(reloaded.scrip, 750);
