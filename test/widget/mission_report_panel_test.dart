@@ -1639,6 +1639,50 @@ void main() {
         }
       });
 
+      testWidgets('best medal and run Scrip render as separate facts in the '
+          'rewards card', (tester) async {
+        // HPA-923 task 6: the persisted medal record and the run's Scrip
+        // award are distinct entries in the same Rewards card — one row per
+        // fact, sharing the MissionRewardFact styling, with blueprint facts
+        // intact alongside them.
+        await _pumpPanel(
+          tester,
+          _victoryContent(
+            MissionSaveState.saved,
+            rewards: const [
+              MissionRewardFact(
+                title: 'Best medal saved: Gold',
+                detail: '20 base health on record.',
+              ),
+              MissionRewardFact(
+                title: 'Blueprint recovered: Relay Calibration',
+                detail: 'Available in Salvage Module drafts on future runs.',
+              ),
+              MissionRewardFact(
+                title: 'Scrip credited: 1,050',
+                detail: 'Added to your Scrip wallet.',
+              ),
+            ],
+          ),
+        );
+
+        final panel = rewardsCard(tester);
+        for (final text in const [
+          'Best medal saved: Gold',
+          '20 base health on record.',
+          'Blueprint recovered: Relay Calibration',
+          'Available in Salvage Module drafts on future runs.',
+          'Scrip credited: 1,050',
+          'Added to your Scrip wallet.',
+        ]) {
+          expect(
+            find.descendant(of: panel, matching: find.text(text)),
+            findsOneWidget,
+            reason: text,
+          );
+        }
+      });
+
       testWidgets('blueprint and Scrip render as separate facts in the '
           'rewards card', (tester) async {
         // HPA-923 task 3: one Rewards card, one row per fact — blueprint

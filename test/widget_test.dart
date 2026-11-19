@@ -4108,6 +4108,160 @@ void main() {
       },
     );
 
+    // HPA-923 task 6: the report separates the medal it persisted from the
+    // Scrip the run earned — both are their own MissionRewardFact entries,
+    // tracked through pending and credited states alongside the blueprint.
+    testWidgets(
+      'a first-clear report lists the saved best medal and the run Scrip '
+      'as separate rewards',
+      (tester) async {
+        final store = _TestCampaignProgressStore(delaySaves: true);
+        OrionDefenseGame? game;
+
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester);
+
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+        // While the write is in flight both facts are pending — neither
+        // claims to be on record yet.
+        expect(find.text('Best medal pending: Gold'), findsOneWidget);
+        expect(find.text('Scrip pending'), findsOneWidget);
+        expect(find.text('Blueprint recovery pending'), findsOneWidget);
+        expect(find.text('Best medal saved: Gold'), findsNothing);
+
+        store.saveCompletions[0].complete();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Best medal saved: Gold'), findsOneWidget);
+        expect(find.text('20 base health on record.'), findsOneWidget);
+        expect(find.text('Scrip credited: 1050'), findsOneWidget);
+        expect(find.text('Added to your Scrip wallet.'), findsOneWidget);
+        expect(
+          find.text('Blueprint recovered: Relay Calibration'),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'a retained best lists the kept medal and the run Scrip as separate '
+      'rewards',
+      (tester) async {
+        const savedBest = StageResult(
+          medal: StageMedal.gold,
+          bestBaseHealth: 20,
+        );
+        final store = _TestCampaignProgressStore(
+          progress: CampaignProgress(
+            bestResultsByStageId: {'outpost-alpha': savedBest},
+          ),
+          scrip: 500,
+        );
+        OrionDefenseGame? game;
+
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // The kept record is the stored Gold best — not the run's Silver —
+        // while the Scrip fact still credits this run's 125 award. The two
+        // entries must not collapse into one ambiguous row.
+        expect(
+          find.text('Result saved. Best medal unchanged.'),
+          findsOneWidget,
+        );
+        expect(find.text('Best medal saved: Gold'), findsOneWidget);
+        expect(find.text('20 base health on record.'), findsOneWidget);
+        expect(find.text('Best medal saved: Silver'), findsNothing);
+        expect(find.text('Scrip credited: 125'), findsOneWidget);
+        // A replay recovers no blueprint — the list has no third fact.
+        expect(
+          find.text('Blueprint recovered: Relay Calibration'),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'a failed save marks the best medal unsaved beside the uncredited '
+      'Scrip, then retry commits both',
+      (tester) async {
+        const savedBest = StageResult(
+          medal: StageMedal.clear,
+          bestBaseHealth: 1,
+        );
+        final store = _TestCampaignProgressStore(
+          progress: CampaignProgress(
+            bestResultsByStageId: {'outpost-alpha': savedBest},
+          ),
+          scrip: 300,
+          delaySaves: true,
+          failOnSaveIndices: {0},
+        );
+        OrionDefenseGame? game;
+
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+        await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+        await publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+        store.saveCompletions[0].complete();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Best medal not saved'), findsOneWidget);
+        expect(find.text('Scrip not credited'), findsOneWidget);
+        expect(store.scrip, 300);
+        expect(store.progress.resultFor('outpost-alpha'), savedBest);
+
+        store.failOnSaveIndices.clear();
+        await tester.tap(find.byTooltip('Retry Save'));
+        await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+        store.saveCompletions[1].complete();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Best medal saved: Gold'), findsOneWidget);
+        expect(find.text('Scrip credited: 150'), findsOneWidget);
+        expect(store.scrip, 450);
+      },
+    );
+
     testWidgets('a higher-medal replay pays more Scrip', (tester) async {
       // Alpha replay base 100 scales by medal: Clear pays 100, Gold 150.
       final store = _TestCampaignProgressStore(

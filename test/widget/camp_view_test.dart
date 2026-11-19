@@ -658,6 +658,58 @@ void main() {
     expect(presses, 0);
   });
 
+  testWidgets('a pending affordable purchase reads SAVING, not just a '
+      'spinner', (tester) async {
+    // HPA-923 task 6 (deferred task-4 minor): an in-flight level-up must
+    // carry a visible, announced reason — an unlabeled spinner alone leaves
+    // the player guessing whether the press even registered.
+    var presses = 0;
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 3},
+      squad: const [Character.haruto],
+      scrip: 500,
+      isSavingProgress: true,
+      onLevelUp: (_) => presses++,
+    );
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    // The busy button's spinner never settles — pump frames explicitly.
+    await tester.pump();
+    await tester.pump();
+
+    expect(levelUpButton(tester).loading, isTrue);
+    expect(find.text('SAVING…'), findsOneWidget);
+    expect(find.bySemanticsLabel('SAVING…'), findsOneWidget);
+    expect(levelUpButton(tester).onPressed, isNull);
+    await tester.tap(find.byKey(const ValueKey('level-up-button')));
+    await tester.pump();
+    expect(presses, 0);
+  });
+
+  testWidgets('an underfunded wallet keeps its reason over SAVING while a '
+      'write is in flight', (tester) async {
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 3},
+      squad: const [Character.haruto],
+      scrip: 30,
+      isSavingProgress: true,
+      onLevelUp: (_) {},
+    );
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    await tester.pump();
+    await tester.pump();
+
+    // The unaffordable reason is the more useful read while a write runs.
+    expect(
+      find.text('NEEDS ${GameBalance.levelUpCost(3)} SCRIP'),
+      findsOneWidget,
+    );
+    expect(find.text('SAVING…'), findsNothing);
+  });
+
   testWidgets('portrait descriptors declare the roster fallback contract', (
     tester,
   ) async {

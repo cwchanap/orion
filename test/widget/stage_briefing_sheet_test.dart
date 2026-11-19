@@ -2036,6 +2036,202 @@ void main() {
     });
   });
 
+  group('scrip reward projection (HPA-923 task 6)', () {
+    Finder section() => find.byKey(const ValueKey('briefing-scrip-reward'));
+
+    testWidgets(
+      'an uncleared stage projects first clear, replay and gold uplift at '
+      'the Clear-medal floor',
+      (tester) async {
+        await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+
+        expect(section(), findsOneWidget);
+        for (final label in [
+          'SCRIP REWARD',
+          'FIRST CLEAR',
+          'EVERY REPLAY',
+          'GOLD MEDAL',
+        ]) {
+          expect(
+            find.descendant(of: section(), matching: find.text(label)),
+            findsOneWidget,
+            reason: 'the scrip section is missing $label',
+          );
+        }
+        // Alpha: the 900 first-clear bonus plus the 100 replay base read
+        // 1,000 at Clear medal; every replay quotes the 100 base and the
+        // gold uplift quotes the multiplier itself, not a payout.
+        expect(
+          find.descendant(of: section(), matching: find.text('1,000')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: section(), matching: find.text('100')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: section(), matching: find.text('+50%')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets(
+      'the projection never claims a medal the run has not earned yet',
+      (tester) async {
+        await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+
+        // Silver/Gold-scaled totals — 1,025/1,050 first clear and 125/150
+        // replay — would state an exact payout for an unknown medal.
+        for (final amount in ['1,025', '1,050', '125', '150']) {
+          expect(
+            find.descendant(of: section(), matching: find.text(amount)),
+            findsNothing,
+            reason:
+                '$amount claims a Silver/Gold payout before the run earns it',
+          );
+        }
+      },
+    );
+
+    testWidgets('stage two matches the artboard figures', (tester) async {
+      final stage = OrionCampaign.stages.firstWhere(
+        (stage) => stage.id == 'nebula-relay',
+      );
+      await _pumpBriefing(tester, stage: stage);
+
+      // Nebula Relay: 180 + 120 = 300 first clear, 120 replay, +50% gold.
+      for (final figure in ['300', '120', '+50%']) {
+        expect(
+          find.descendant(of: section(), matching: find.text(figure)),
+          findsOneWidget,
+          reason: figure,
+        );
+      }
+      // Its Silver/Gold-scaled totals stay unclaimed: 330/360 first clear.
+      for (final amount in ['330', '360']) {
+        expect(
+          find.descendant(of: section(), matching: find.text(amount)),
+          findsNothing,
+          reason: amount,
+        );
+      }
+    });
+
+    testWidgets('stage one makes the ten-flare guarantee legible', (
+      tester,
+    ) async {
+      await _pumpBriefing(tester, stage: OrionCampaign.stageOne);
+      expect(
+        find.descendant(
+          of: section(),
+          matching: find.textContaining('10 Signal Flares'),
+        ),
+        findsOneWidget,
+      );
+
+      final stageTwo = OrionCampaign.stages.firstWhere(
+        (stage) => stage.id == 'nebula-relay',
+      );
+      await _dismissBriefing(tester);
+      await _pumpBriefing(tester, stage: stageTwo);
+      expect(
+        find.descendant(
+          of: section(),
+          matching: find.textContaining('Signal Flares'),
+        ),
+        findsNothing,
+        reason: 'the guarantee belongs to the stage-one onboarding clear',
+      );
+    });
+
+    testWidgets(
+      'a committed result claims the first-clear tile and keeps the replay '
+      'quote',
+      (tester) async {
+        await _pumpBriefing(
+          tester,
+          stage: OrionCampaign.stageOne,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+
+        expect(
+          find.descendant(of: section(), matching: find.text('CLAIMED')),
+          findsOneWidget,
+        );
+        // The once-only bonus no longer reads as a payout; the replay base
+        // is the honest projection for this run.
+        expect(
+          find.descendant(of: section(), matching: find.text('1,000')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(of: section(), matching: find.text('100')),
+          findsOneWidget,
+        );
+      },
+    );
+
+    testWidgets('a stage without a Scrip payout hides the section', (
+      tester,
+    ) async {
+      // Lightweight fixture stages default both Scrip fields to zero — the
+      // section must not advertise an empty reward. The id mirrors stage
+      // one so the hero descriptor still resolves.
+      final fixture = StageDefinition(
+        id: OrionCampaign.stageOne.id,
+        name: OrionCampaign.stageOne.name,
+        mapLabel: OrionCampaign.stageOne.mapLabel,
+        description: OrionCampaign.stageOne.description,
+        pathCells: OrionCampaign.stageOne.pathCells,
+        waves: OrionCampaign.stageOne.waves,
+        mapColumn: OrionCampaign.stageOne.mapColumn,
+        mapRow: OrionCampaign.stageOne.mapRow,
+      );
+      await _pumpBriefing(tester, stage: fixture);
+      expect(section(), findsNothing);
+      expect(find.text('SCRIP REWARD'), findsNothing);
+    });
+
+    testWidgets('scrip labels stay readable at 320x568 and 2x text', (
+      tester,
+    ) async {
+      await loadRealFonts();
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        viewport: const Size(320, 568),
+        textScaler: const TextScaler.linear(2),
+      );
+
+      await tester.ensureVisible(section());
+      await tester.pumpAndSettle();
+      for (final label in [
+        'SCRIP REWARD',
+        'FIRST CLEAR',
+        'EVERY REPLAY',
+        'GOLD MEDAL',
+      ]) {
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(of: section(), matching: find.text(label)),
+        );
+        expect(
+          paragraph.didExceedMaxLines,
+          isFalse,
+          reason: '$label is truncated',
+        );
+        expect(
+          paragraph.getBoxesForSelection(
+            TextSelection(baseOffset: 0, extentOffset: label.length),
+          ),
+          hasLength(1),
+          reason: '$label must not split mid-word',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+  });
+
   testWidgets('capture scene 1b fixture', (tester) async {
     tester.view.physicalSize = _productViewport;
     tester.view.devicePixelRatio = 1;
