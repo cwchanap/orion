@@ -496,6 +496,27 @@ void main() {
   });
 
   group('CampaignSave transforms', () {
+    test('the constructor rejects a negative Scrip wallet', () {
+      // A negative wallet is never a valid profile: it must fail at
+      // construction, not persist and then silently decode to zero on the
+      // next load.
+      expect(
+        () => CampaignSave(
+          progress: CampaignProgress(),
+          ownedLevels: CampaignSave.starterOwnedLevels,
+          squad: CampaignSave.starterSquad,
+          scrip: -1,
+        ),
+        throwsArgumentError,
+      );
+    });
+
+    test('copyWith rejects a negative Scrip wallet', () {
+      // copyWith is the only write path — routing it through the validating
+      // constructor means no transform can mint a negative save either.
+      expect(() => save(scrip: 300).copyWith(scrip: -1), throwsArgumentError);
+    });
+
     test('copyWith replaces only the given fields and keeps the wallet', () {
       final source = save(
         progress: CampaignProgress(

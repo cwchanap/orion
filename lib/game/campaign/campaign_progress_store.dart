@@ -21,7 +21,14 @@ class CampaignSave {
     required List<Character> squad,
     required this.scrip,
   }) : ownedLevels = Map.unmodifiable(ownedLevels),
-       squad = List.unmodifiable(squad);
+       squad = List.unmodifiable(squad) {
+    // The wallet can never be negative — rejecting at construction means
+    // copyWith and every transform fail fast instead of persisting an
+    // invalid profile that would silently decode to zero on reload.
+    if (scrip < 0) {
+      throw ArgumentError.value(scrip, 'scrip', 'must be nonnegative');
+    }
+  }
 
   final CampaignProgress progress;
 
