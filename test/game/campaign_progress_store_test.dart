@@ -7,6 +7,7 @@ import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/flare_rules.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 void main() {
   CampaignSave save({
@@ -880,6 +881,230 @@ void main() {
 
       expectFreshProfile(await store.load());
     });
+
+    group('failed writes', () {
+      const unrelatedKey = 'test.unrelated';
+
+      // The committed profile durable storage holds before the failed write.
+      CampaignSave committedSave() {
+        return save(
+          scrip: 750,
+          ownedLevels: const {Character.haruto: 1, Character.mio: 6},
+          squad: const [Character.mio],
+          progress: CampaignProgress(
+            endlessBestByStageId: const {'outpost-alpha': 4},
+          ),
+        );
+      }
+
+      // A payload that is never committed — visibly different from the
+      // committed profile so a divergent cache cannot pass unnoticed.
+      CampaignSave attemptedSave() {
+        return save(
+          scrip: 90,
+          ownedLevels: const {Character.haruto: 2},
+          squad: const [Character.haruto],
+          progress: CampaignProgress(
+            endlessBestByStageId: const {'outpost-alpha': 9},
+          ),
+        );
+      }
+
+      void expectCommittedProfile(CampaignSave loaded) {
+        expect(loaded.scrip, 750);
+        expect(loaded.progress.endlessBestFor('outpost-alpha'), 4);
+        expect(loaded.ownedLevels, {Character.haruto: 1, Character.mio: 6});
+        expect(loaded.squad, [Character.mio]);
+      }
+
+      /// Installs a durable fake platform holding [values] (unprefixed keys)
+      /// and resets the SharedPreferences singleton to read from it — the
+      /// platform-store seam the production code already talks through.
+      _UnreliableSharedPreferencesStore installPlatform(
+        Map<String, Object> values,
+      ) {
+        SharedPreferences.setMockInitialValues(<String, Object>{});
+        final platform = _UnreliableSharedPreferencesStore.withData(
+          <String, Object>{
+            for (final entry in values.entries)
+              'flutter.${entry.key}': entry.value,
+          },
+        );
+        SharedPreferencesStorePlatform.instance = platform;
+        addTearDown(() => SharedPreferences.setMockInitialValues({}));
+        return platform;
+      }
+
+      SharedPreferencesCampaignProgressStore buildStore(
+        SharedPreferences preferences,
+      ) {
+        return SharedPreferencesCampaignProgressStore(
+          preferences: preferences,
+          knownStages: OrionCampaign.stages,
+          key: key,
+        );
+      }
+
+      Future<Object?> durableValue(
+        _UnreliableSharedPreferencesStore platform,
+        String preferencesKey,
+      ) async {
+        // `getAll` returns what the platform actually persists — the
+        // 'flutter.'-prefixed keys, unaffected by the wrapper's cache.
+        return (await platform.getAll())['flutter.$preferencesKey'];
+      }
+
+      test('a rejected save reports failure and load() still serves the '
+          'committed profile', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+          unrelatedKey: 'keep-me',
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = buildStore(preferences);
+
+        platform.setValueReturnsFalse = true;
+        await expectLater(
+          store.save(attemptedSave()),
+          throwsA(isA<StateError>()),
+        );
+
+        // The platform never moved — the attempted payload is nowhere in
+        // durable storage and the unrelated preference is intact.
+        expect(
+          await durableValue(platform, key),
+          CampaignProgressCodec.encode(committedSave()),
+        );
+        expect(await durableValue(platform, unrelatedKey), 'keep-me');
+
+        // The failed write must not leak into what the store serves — here
+        // or through a second store built on the same SharedPreferences.
+        expectCommittedProfile(await store.load());
+        expectCommittedProfile(await buildStore(preferences).load());
+
+        // A same-process reload against durable storage confirms the
+        // committed payload survived — and leaves the unrelated preference.
+        await preferences.reload();
+        expect(
+          preferences.getString(key),
+          CampaignProgressCodec.encode(committedSave()),
+        );
+        expect(preferences.getString(unrelatedKey), 'keep-me');
+      });
+
+      test('a save whose platform write throws propagates it and leaves '
+          'load() serving the committed profile', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = buildStore(preferences);
+
+        final writeError = Exception('platform rejected the write');
+        platform.setValueError = writeError;
+        await expectLater(
+          store.save(attemptedSave()),
+          throwsA(same(writeError)),
+        );
+
+        expect(
+          await durableValue(platform, key),
+          CampaignProgressCodec.encode(committedSave()),
+        );
+        expectCommittedProfile(await store.load());
+      });
+
+      test('a rejected reset reports failure and load() still serves the '
+          'committed profile', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = buildStore(preferences);
+
+        platform.removeReturnsFalse = true;
+        await expectLater(store.reset(), throwsA(isA<StateError>()));
+
+        // The removal never reached durable storage.
+        expect(
+          await durableValue(platform, key),
+          CampaignProgressCodec.encode(committedSave()),
+        );
+        expectCommittedProfile(await store.load());
+      });
+
+      test('a reset whose platform removal throws propagates it and leaves '
+          'load() serving the committed profile', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = buildStore(preferences);
+
+        final removeError = Exception('platform rejected the removal');
+        platform.removeError = removeError;
+        await expectLater(store.reset(), throwsA(same(removeError)));
+
+        expect(
+          await durableValue(platform, key),
+          CampaignProgressCodec.encode(committedSave()),
+        );
+        expectCommittedProfile(await store.load());
+      });
+
+      test('when the post-failure cache refresh also fails, load() surfaces '
+          'the refresh error instead of the uncommitted value', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = buildStore(preferences);
+
+        platform.setValueReturnsFalse = true;
+        final refreshError = Exception('platform store unreadable');
+        platform.getAllError = refreshError;
+        await expectLater(
+          store.save(attemptedSave()),
+          throwsA(isA<StateError>()),
+        );
+
+        // The wrapper cache still holds the attempted payload but it cannot
+        // be trusted — load() must surface the refresh failure, not serve
+        // the uncommitted value.
+        await expectLater(store.load(), throwsA(same(refreshError)));
+
+        // Once the platform recovers the next load resyncs and serves the
+        // committed profile again.
+        platform.setValueReturnsFalse = false;
+        platform.getAllError = null;
+        expectCommittedProfile(await store.load());
+      });
+
+      test('a retried save after a failure commits the new payload', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = buildStore(preferences);
+        final attempted = attemptedSave();
+
+        platform.setValueReturnsFalse = true;
+        await expectLater(store.save(attempted), throwsA(isA<StateError>()));
+
+        platform.setValueReturnsFalse = false;
+        await store.save(attempted);
+
+        expect(
+          await durableValue(platform, key),
+          CampaignProgressCodec.encode(attempted),
+        );
+        final loaded = await store.load();
+        expect(loaded.scrip, attempted.scrip);
+        expect(loaded.progress.endlessBestFor('outpost-alpha'), 9);
+        expect(loaded.ownedLevels, {Character.haruto: 2});
+        expect(loaded.squad, [Character.haruto]);
+      });
+    });
   });
 
   group('CampaignModifiers', () {
@@ -925,4 +1150,52 @@ void main() {
       },
     );
   });
+}
+
+/// A durable in-memory platform store whose `setValue`, `remove` and `getAll`
+/// can each be switched to fail the way a real platform reports a rejected
+/// write — `false` or a thrown error. `getAll` backs the refresh
+/// SharedPreferences performs on `reload()`, so failing it models a
+/// platform that cannot be re-read.
+class _UnreliableSharedPreferencesStore extends InMemorySharedPreferencesStore {
+  _UnreliableSharedPreferencesStore.withData(super.data) : super.withData();
+
+  bool setValueReturnsFalse = false;
+  Exception? setValueError;
+  bool removeReturnsFalse = false;
+  Exception? removeError;
+  Exception? getAllError;
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    final error = setValueError;
+    if (error != null) {
+      throw error;
+    }
+    if (setValueReturnsFalse) {
+      return false;
+    }
+    return super.setValue(valueType, key, value);
+  }
+
+  @override
+  Future<bool> remove(String key) async {
+    final error = removeError;
+    if (error != null) {
+      throw error;
+    }
+    if (removeReturnsFalse) {
+      return false;
+    }
+    return super.remove(key);
+  }
+
+  @override
+  Future<Map<String, Object>> getAll() async {
+    final error = getAllError;
+    if (error != null) {
+      throw error;
+    }
+    return super.getAll();
+  }
 }
