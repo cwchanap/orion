@@ -1289,6 +1289,21 @@ class _BriefingStatTile extends StatelessWidget {
   }
 }
 
+/// Width of [data] laid out in [style] under the ambient text scaler — the
+/// same real-font-metrics measurement Camp's SQUAD pill uses, applied to the
+/// reward labels so the column count follows what actually fits.
+double _measureLabel(BuildContext context, String data, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(text: data, style: style),
+    maxLines: 1,
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 /// The SCRIP REWARD projection (HPA-923 task 6, artboard 14): the once-only
 /// first-clear total at the Clear-medal floor beside the standing replay
 /// base and the top-medal multiplier on the variable component.
@@ -1331,9 +1346,10 @@ class _BriefingScripRewards extends StatelessWidget {
       StageMedal.clear,
       firstClear: false,
     );
-    final tiles = [
+    const labels = ['FIRST CLEAR', 'EVERY REPLAY', 'GOLD MEDAL'];
+    List<_BriefingScripTile> tilesFor(bool horizontal) => [
       _BriefingScripTile(
-        label: 'FIRST CLEAR',
+        label: labels[0],
         icon: Icons.check_circle_rounded,
         value: claimed ? 'CLAIMED' : grouped(firstClear),
         color: uiTheme.naniteGreen,
@@ -1341,7 +1357,7 @@ class _BriefingScripRewards extends StatelessWidget {
         horizontal: horizontal,
       ),
       _BriefingScripTile(
-        label: 'EVERY REPLAY',
+        label: labels[1],
         icon: Icons.payments_rounded,
         value: grouped(replay),
         color: uiTheme.creditGold,
@@ -1349,7 +1365,7 @@ class _BriefingScripRewards extends StatelessWidget {
         horizontal: horizontal,
       ),
       _BriefingScripTile(
-        label: 'GOLD MEDAL',
+        label: labels[2],
         icon: medalIcon(StageMedal.gold),
         value: '+${GameBalance.scripMedalPercentGold - 100}%',
         color: uiTheme.creditGold,
@@ -1383,25 +1399,48 @@ class _BriefingScripRewards extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 7),
-        if (horizontal)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              for (final (index, tile) in tiles.indexed) ...[
-                if (index > 0) const SizedBox(height: 8),
-                tile,
+        LayoutBuilder(
+          builder: (context, constraints) {
+            // Three columns only while every label fits at its real
+            // measured width — the same honesty the Camp SQUAD pill uses.
+            // 'FIRST CLEAR' already overflows the ~74px a 320px tile
+            // leaves after padding at 1x, so compact widths and large
+            // text stack the chips as full-width label/value rows instead
+            // of ellipsizing.
+            final labelStyle = OrionTypography.microLabel(
+              color: uiTheme.textMuted,
+            );
+            final widestLabel = labels
+                .map((label) => _measureLabel(context, label, labelStyle))
+                .reduce(math.max);
+            const columns = 3;
+            const gap = 8.0;
+            const tilePadding = 18.0;
+            final columnTextWidth =
+                (constraints.maxWidth - (columns - 1) * gap) / columns -
+                tilePadding;
+            final tiles = tilesFor(horizontal || widestLabel > columnTextWidth);
+            if (horizontal || widestLabel > columnTextWidth) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (final (index, tile) in tiles.indexed) ...[
+                    if (index > 0) const SizedBox(height: 8),
+                    tile,
+                  ],
+                ],
+              );
+            }
+            return Row(
+              children: [
+                for (final (index, tile) in tiles.indexed) ...[
+                  if (index > 0) const SizedBox(width: gap),
+                  Expanded(child: tile),
+                ],
               ],
-            ],
-          )
-        else
-          Row(
-            children: [
-              for (final (index, tile) in tiles.indexed) ...[
-                if (index > 0) const SizedBox(width: 8),
-                Expanded(child: tile),
-              ],
-            ],
-          ),
+            );
+          },
+        ),
         const SizedBox(height: 6),
         Text(
           'The run\u2019s medal lifts the variable award — '
