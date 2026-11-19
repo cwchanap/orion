@@ -595,7 +595,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
         ownedLevels: _ownedLevels,
         squad: _squad,
         scrip: _committed.scrip,
-        isSavingProgress: _isSavingProgress,
+        // Save OR reset in flight — the sheet's single purchase must stay
+        // off the queue for both.
+        isSavingProgress: _isBusy,
         onLevelUp: _levelUpCharacter,
         onBack: null,
         embeddedInMenuShell: true,
@@ -1301,13 +1303,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// debit-and-increment on the committed aggregate. `withLevelUp`
   /// revalidates ownership, cap and funds inside the queue, so an attempt
   /// that went stale under an earlier commit reports instead of writing.
-  /// Single-flight: the sheet disables Level Up on `isSavingProgress` and
-  /// the early return catches a second press landing before that rebuild.
+  /// Single-flight on the whole busy state: the sheet disables Level Up on
+  /// `_isBusy` and this early return catches a press landing before that
+  /// rebuild — including during a campaign reset, which must not queue a
+  /// purchase behind the wipe.
   /// A failure leaves `_committed` untouched, keeps the sheet mounted and
   /// routes the shared breadcrumb to the shell slot so the action stays
   /// retryable without any navigation.
   Future<bool> _levelUpCharacter(Character character) {
-    if (_isSavingProgress) {
+    if (_isBusy) {
       return Future<bool>.value(false);
     }
     return _persistSave(

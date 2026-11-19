@@ -5341,6 +5341,101 @@ void main() {
         expect(store.scrip, 30);
       },
     );
+
+    testWidgets('an in-flight reset holds Level Up off the write path from an '
+        'open sheet', (tester) async {
+      final store = _TestCampaignProgressStore(
+        ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+        squad: const [Character.haruto, Character.mio],
+        scrip: 500,
+        delayResets: true,
+      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+      await openSheet(tester, Character.haruto);
+
+      // Confirming Reset dismisses the dialog and returns to the still-
+      // open sheet while the store write runs.
+      await openResetCampaignDialog(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await _pumpUntil(tester, () => store.resetCompletions.isNotEmpty);
+      await tester.pump();
+
+      expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+      final levelUp = find.byKey(const ValueKey('level-up-button'));
+      expect(tester.widget<OrionPrimaryButton>(levelUp).loading, isTrue);
+      await tester.tap(levelUp);
+      await tester.pump();
+      expect(store.saveCalls, 0);
+
+      store.resetCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      // The sheet republishes the wiped profile — starter level and
+      // wallet, the reset notice intact, and no purchase queued behind
+      // the reset to debit afterward or overwrite the breadcrumb.
+      expect(find.text('Campaign reset.'), findsOneWidget);
+      expect(find.text('Could not save campaign progress.'), findsNothing);
+      expect(find.text('LV 1 / 40'), findsOneWidget);
+      expect(find.bySemanticsLabel('0 Scrip'), findsOneWidget);
+      expect(find.text('NEEDS 60 SCRIP'), findsOneWidget);
+      expect(store.saveCalls, 0);
+      expect(store.ownedLevels[Character.haruto], 1);
+      expect(store.scrip, 0);
+    });
+
+    testWidgets(
+      'a failed reset queues no purchase and leaves Level Up retryable',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+          delayResets: true,
+          resetResults: [StateError('reset failed')],
+        );
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+        await openSheet(tester, Character.haruto);
+
+        await openResetCampaignDialog(tester);
+        await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+        await _pumpUntil(tester, () => store.resetCompletions.isNotEmpty);
+        await tester.pump();
+
+        // Inert while the reset runs — nothing may queue behind it.
+        expect(
+          tester
+              .widget<OrionPrimaryButton>(
+                find.byKey(const ValueKey('level-up-button')),
+              )
+              .loading,
+          isTrue,
+        );
+        await tester.tap(find.byKey(const ValueKey('level-up-button')));
+        await tester.pump();
+        expect(store.saveCalls, 0);
+
+        store.resetCompletions.single.complete();
+        await tester.pumpAndSettle();
+
+        // The failed reset keeps the committed profile; the action is
+        // retryable and a purchase now writes normally.
+        expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+        expect(find.text('LV 4 / 40'), findsOneWidget);
+        expect(find.bySemanticsLabel('500 Scrip'), findsOneWidget);
+        final retryable = tester.widget<OrionPrimaryButton>(
+          find.byKey(const ValueKey('level-up-button')),
+        );
+        expect(retryable.onPressed, isNotNull);
+
+        await tester.tap(find.byKey(const ValueKey('level-up-button')));
+        await tester.pumpAndSettle();
+        expect(store.saveCalls, 1);
+        expect(store.ownedLevels[Character.haruto], 5);
+        expect(store.scrip, 320);
+      },
+    );
   });
 
   testWidgets('world map shows locked, unlocked, and cleared stages', (

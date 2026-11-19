@@ -391,12 +391,22 @@ void main() {
         GameBalance.characterScalingFactor(character.rank, level),
       );
 
+  /// The '→ N' next-value readout the sheet renders for a metric that
+  /// scales with persistent level — formatted exactly like the current
+  /// value, units included.
+  String nextValueText(TowerSecondaryMetric metric, double value) =>
+      switch (metric) {
+        TowerSecondaryMetric.slowDuration => '→ ${number(value)}s',
+        TowerSecondaryMetric.corrosionDamagePerSecond => '→ ${number(value)}/s',
+        _ => '→ ${number(value)}',
+      };
+
   OrionPrimaryButton levelUpButton(WidgetTester tester) =>
       tester.widget<OrionPrimaryButton>(
         find.byKey(const ValueKey('level-up-button')),
       );
 
-  testWidgets('sheet shows wallet, cost and next-level stat deltas', (
+  testWidgets('sheet shows wallet, cost and before→after stat values', (
     tester,
   ) async {
     await _pumpCamp(
@@ -417,25 +427,20 @@ void main() {
     expect(find.text('LEVEL UP · $cost'), findsOneWidget);
     expect(levelUpButton(tester).onPressed, isNotNull);
 
-    // The preview reads the shared scaling path: damage grows, cadence
-    // and range never scale so they carry no next-level delta.
-    final damageDelta =
-        scaledStats(Character.haruto, 5).damage -
-        scaledStats(Character.haruto, 4).damage;
-    final damageDeltaText = find.byKey(
-      const ValueKey('sheet-stat-delta-DAMAGE'),
-    );
-    expect(damageDeltaText, findsOneWidget);
+    // The preview names both sides: the current value plus the value at
+    // level 5. Cadence and range never scale so they carry no next value.
+    final damageNext = find.byKey(const ValueKey('sheet-stat-next-DAMAGE'));
+    expect(damageNext, findsOneWidget);
     expect(
-      tester.widget<Text>(damageDeltaText).data,
-      '+${decimal(damageDelta)}',
+      tester.widget<Text>(damageNext).data,
+      '→ ${number(scaledStats(Character.haruto, 5).damage)}',
     );
-    expect(find.byKey(const ValueKey('sheet-stat-delta-FIRE')), findsNothing);
-    expect(find.byKey(const ValueKey('sheet-stat-delta-RANGE')), findsNothing);
+    expect(find.byKey(const ValueKey('sheet-stat-next-FIRE')), findsNothing);
+    expect(find.byKey(const ValueKey('sheet-stat-next-RANGE')), findsNothing);
   });
 
   testWidgets(
-    'damage-type secondary channels preview a delta; fixed channels do not',
+    'damage-type secondary channels preview a next value; fixed channels do not',
     (tester) async {
       // corrosion/drone ride the damage channel through the character
       // factor; pierce/chain/slow/splash never scale.
@@ -458,15 +463,14 @@ void main() {
 
         final metric = TowerStatScale.forType(character.style).secondaryMetric;
         expect(metric, isNotNull, reason: character.name);
-        final delta =
-            metric!.valueOf(scaledStats(character, 10)) -
-            metric.valueOf(scaledStats(character, 9));
-        final deltaFinder = find.byKey(ValueKey('sheet-stat-delta-$label'));
+        final next = metric!.valueOf(scaledStats(character, 10));
+        final delta = next - metric.valueOf(scaledStats(character, 9));
+        final nextFinder = find.byKey(ValueKey('sheet-stat-next-$label'));
         if (scales) {
-          expect(deltaFinder, findsOneWidget, reason: character.name);
+          expect(nextFinder, findsOneWidget, reason: character.name);
           expect(
-            tester.widget<Text>(deltaFinder).data,
-            '+${decimal(delta)}',
+            tester.widget<Text>(nextFinder).data,
+            nextValueText(metric, next),
             reason: character.name,
           );
         } else {
@@ -475,7 +479,7 @@ void main() {
             0,
             reason: '$label must not scale with persistent level',
           );
-          expect(deltaFinder, findsNothing, reason: character.name);
+          expect(nextFinder, findsNothing, reason: character.name);
         }
 
         await tester.tap(find.byTooltip('Back'));
@@ -549,10 +553,10 @@ void main() {
 
     expect(levelUpButton(tester).onPressed, isNull);
     expect(find.text('MAX LEVEL REACHED'), findsOneWidget);
-    // At the cap no price is offered and no next-level delta renders.
+    // At the cap no price is offered and no next-level value renders.
     expect(find.text('LEVEL UP'), findsOneWidget);
     expect(find.textContaining('LEVEL UP ·'), findsNothing);
-    expect(find.byKey(const ValueKey('sheet-stat-delta-DAMAGE')), findsNothing);
+    expect(find.byKey(const ValueKey('sheet-stat-next-DAMAGE')), findsNothing);
 
     await tester.tap(find.byKey(const ValueKey('level-up-button')));
     await tester.pumpAndSettle();
