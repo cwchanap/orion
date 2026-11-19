@@ -849,11 +849,8 @@ class GameSnapshot {
     required this.stageName,
     required this.stageLabel,
     required List<TowerType> unlockedTowerTypes,
-    List<Character> squad = const [Character.haruto, Character.mio],
-    Map<Character, int> squadLevels = const {
-      Character.haruto: 1,
-      Character.mio: 1,
-    },
+    required List<Character> squad,
+    required Map<Character, int> squadLevels,
     required List<StageModifier> stageModifiers,
     this.nextWavePreview,
     required this.selectedCell,
@@ -1174,6 +1171,15 @@ class GameBalance {
   // Maximum squad size (HPA-922): the saved roster validates against this
   // cap, and Task 6's squad picker enforces it in the UI.
   static const int squadMaxSize = 6;
+
+  /// Fresh-profile starters (HPA-922): every new or discarded profile owns
+  /// Haruto and Mio at level 1, with both selected for the squad. Single
+  /// source of truth shared by `CampaignSave` and `GameSession`.
+  static const Map<Character, int> starterOwnedLevels = {
+    Character.haruto: 1,
+    Character.mio: 1,
+  };
+  static const List<Character> starterSquad = [Character.haruto, Character.mio];
 
   /// Combined rank+level multiplier applied to a character's damage channels
   /// (via [TowerStats.scaleDamageChannels]) before stage modifiers and run

@@ -5,6 +5,7 @@ import 'package:flame/components.dart';
 import '../assets/game_sprite_sheet.dart';
 import '../assets/game_tower_variety_sheet.dart';
 import '../models/game_models.dart';
+import '../ui/orion_ui_theme.dart';
 import 'enemy_component.dart';
 
 typedef TargetAcquirer = EnemyComponent? Function(TowerComponent tower);
@@ -32,7 +33,7 @@ class TowerComponent extends CircleComponent {
          position: center.clone(),
          paint: Paint()..color = _towerColor(tower.type),
        ) {
-    _ringPaint.color = _rankColor(tower.character.rank);
+    _ringPaint.color = tower.character.rank.orionColor(OrionUiTheme.dark);
   }
 
   PlacedTower placedTower;
@@ -71,7 +72,7 @@ class TowerComponent extends CircleComponent {
     placedTower = tower;
     stats = resolveStats(tower);
     paint.color = _towerColor(tower.type);
-    _ringPaint.color = _rankColor(tower.character.rank);
+    _ringPaint.color = tower.character.rank.orionColor(OrionUiTheme.dark);
   }
 
   @override
@@ -149,20 +150,6 @@ class TowerComponent extends CircleComponent {
       return null;
     }
     return spriteSheet.sprite(GameSpriteSheet.spriteForTower(placedTower.type));
-  }
-
-  /// Rank ring colors mirror the Camp roster mapping
-  /// (`camp_view.dart` / `OrionUiTheme.dark`) so a member reads at the same
-  /// tier in battle as on the roster screen.
-  static Color _rankColor(CharacterRank rank) {
-    return switch (rank) {
-      CharacterRank.s => const Color(0xFFFFC857),
-      CharacterRank.a => const Color(0xFFFF8A3D),
-      CharacterRank.b => const Color(0xFFA98BFF),
-      CharacterRank.c => const Color(0xFF46E6FF),
-      CharacterRank.d => const Color(0xFF7BE495),
-      CharacterRank.e => const Color(0xFFCFDBE6),
-    };
   }
 
   static Color _towerColor(TowerType type) {

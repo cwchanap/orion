@@ -1,4 +1,3 @@
-import '../campaign/campaign_progress.dart';
 import '../models/game_models.dart';
 import 'run_module_rules.dart';
 import 'stage_modifier_rules.dart';
@@ -15,7 +14,6 @@ import 'stage_modifier_rules.dart';
 class TowerStatsResolver {
   static TowerStats resolve(
     PlacedTower tower, {
-    CampaignModifiers campaignModifiers = CampaignModifiers.empty,
     Iterable<StageModifier> stageModifiers = const [],
     Iterable<RunModuleId> runModules = const [],
   }) {

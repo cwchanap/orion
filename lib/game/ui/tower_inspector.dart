@@ -586,53 +586,48 @@ class _ProgressionActions extends StatelessWidget {
     }
 
     final resolvedStats = stats;
-    if (tower.canUpgrade) {
-      // Tier 2 → 3 applies the member's fixed signature automatically, so
-      // the shared upgrade preview IS the signature preview.
-      final isSignatureStep = tower.level == 2;
-      final candidate = snapshot.selectedTowerUpgradeStats;
-      final rows = resolvedStats == null || candidate == null
-          ? const <_PreviewRow>[]
-          : _previewRows(resolvedStats, candidate, includeMechanics: true);
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          OrionText.micro(
-            isSignatureStep
-                ? 'SIGNATURE - TIER 3'
-                : 'UPGRADE - TIER ${tower.level + 1}',
-            color: uiTheme.textMuted,
-            size: 11,
+    // Tier 2 → 3 applies the member's fixed signature automatically, so
+    // the shared upgrade preview IS the signature preview.
+    final isSignatureStep = tower.level == 2;
+    final candidate = snapshot.selectedTowerUpgradeStats;
+    final rows = resolvedStats == null || candidate == null
+        ? const <_PreviewRow>[]
+        : _previewRows(resolvedStats, candidate, includeMechanics: true);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        OrionText.micro(
+          isSignatureStep
+              ? 'SIGNATURE - TIER 3'
+              : 'UPGRADE - TIER ${tower.level + 1}',
+          color: uiTheme.textMuted,
+          size: 11,
+        ),
+        if (isSignatureStep) ...[
+          const SizedBox(height: 6),
+          _SignaturePanel(
+            character: character,
+            body: '${character.signature.label} — ${character.signature.role}',
           ),
-          if (isSignatureStep) ...[
-            const SizedBox(height: 6),
-            _SignaturePanel(
-              character: character,
-              body:
-                  '${character.signature.label} — ${character.signature.role}',
-            ),
-          ],
-          if (rows.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Semantics(
-              label:
-                  '${isSignatureStep ? 'Signature' : 'Upgrade'} preview. '
-                  '${_spokenRows(rows)}',
-              readOnly: true,
-              container: true,
-              excludeSemantics: true,
-              child: _StatPreview(
-                key: const ValueKey('tower-upgrade-preview'),
-                rows: rows,
-              ),
-            ),
-          ],
         ],
-      );
-    }
-
-    return const SizedBox.shrink();
+        if (rows.isNotEmpty) ...[
+          const SizedBox(height: 4),
+          Semantics(
+            label:
+                '${isSignatureStep ? 'Signature' : 'Upgrade'} preview. '
+                '${_spokenRows(rows)}',
+            readOnly: true,
+            container: true,
+            excludeSemantics: true,
+            child: _StatPreview(
+              key: const ValueKey('tower-upgrade-preview'),
+              rows: rows,
+            ),
+          ),
+        ],
+      ],
+    );
   }
 }
 

@@ -41,17 +41,9 @@ class GameSession {
       startingBaseHealth: resolvedBaseHealth,
       availableRunModules: availableRunModules ?? RunModuleUnlocks.baseModules,
       offerPicker: offerPicker ?? RandomModuleOfferPicker(),
-      squad: squad ?? _starterSquad,
+      squad: squad ?? GameBalance.starterOwnedLevels,
     );
   }
-
-  /// Fresh-profile default when the caller supplies no squad (HPA-922):
-  /// Haruto and Mio at level 1, mirroring `CampaignSave.starterOwnedLevels`
-  /// without pulling the persistence layer into the rules package.
-  static const Map<Character, int> _starterSquad = {
-    Character.haruto: 1,
-    Character.mio: 1,
-  };
 
   GameSession._({
     required this.stage,
@@ -256,7 +248,6 @@ class GameSession {
   TowerStats resolveTowerStats(PlacedTower tower) {
     return TowerStatsResolver.resolve(
       tower,
-      campaignModifiers: _campaignModifiers,
       stageModifiers: stage.modifiers,
       runModules: _acquiredRunModules,
     );
@@ -469,7 +460,7 @@ class GameSession {
       return 0;
     }
     return StageModifierRules.effectiveClearBonus(
-      campaignAdjustedClearBonus: baseClearBonus,
+      baseClearBonus: baseClearBonus,
       stageModifiers: stage.modifiers,
     );
   }

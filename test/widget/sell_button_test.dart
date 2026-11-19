@@ -438,6 +438,8 @@ Future<OrionDefenseGame?> _pumpStageWithSelectedTower(
     stageName: snapshot.stageName,
     stageLabel: snapshot.stageLabel,
     unlockedTowerTypes: snapshot.unlockedTowerTypes,
+    squad: snapshot.squad,
+    squadLevels: snapshot.squadLevels,
     stageModifiers: const [],
     nextWavePreview: snapshot.nextWavePreview,
     selectedCell: snapshot.selectedCell,

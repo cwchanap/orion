@@ -475,13 +475,41 @@ abstract final class OrionArt {
 }
 
 class OrionAtlasSprite extends StatelessWidget {
-  const OrionAtlasSprite({super.key, required this.art, this.size});
+  const OrionAtlasSprite({
+    super.key,
+    required this.art,
+    this.size,
+    this.cacheWidth,
+  });
 
   final OrionArtDescriptor art;
   final Size? size;
 
+  /// When set for a whole-frame asset (such as roster portraits), decodes at
+  /// display size through Flutter's bounded [ImageCache] instead of retaining
+  /// full-resolution bitmaps forever in `Flame.images`.
+  final int? cacheWidth;
+
   @override
   Widget build(BuildContext context) {
+    if (cacheWidth case final width? when width > 0) {
+      return Semantics(
+        image: true,
+        label: art.semanticLabel,
+        child: ExcludeSemantics(
+          child: Image.asset(
+            'assets/images/${art.fileName}',
+            width: size?.width,
+            height: size?.height,
+            fit: BoxFit.contain,
+            filterQuality: art.filterQuality,
+            cacheWidth: width,
+            errorBuilder: (context, error, stackTrace) =>
+                Icon(art.fallbackIcon, size: size?.shortestSide),
+          ),
+        ),
+      );
+    }
     return Semantics(
       image: true,
       label: art.semanticLabel,

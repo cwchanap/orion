@@ -24,6 +24,8 @@ GameSnapshot _snapshot({
     stageName: 'Nebula Relay',
     stageLabel: 'NR',
     unlockedTowerTypes: const [TowerType.laser],
+    squad: GameBalance.starterSquad,
+    squadLevels: GameBalance.starterOwnedLevels,
     stageModifiers: const [],
     selectedCell: selectedCell,
     selectedCellBuildable: selectedCellBuildable,

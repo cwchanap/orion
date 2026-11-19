@@ -1,5 +1,6 @@
 import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -370,7 +371,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
 
       setState(() {
-        _store = store;
+        // Leave _store null on any load failure so a later Launch or victory
+        // save can never overwrite an unreadable profile with starter defaults.
+        _store = null;
         _progress = CampaignProgress();
         _ownedLevels = CampaignSave.starterOwnedLevels;
         _squad = CampaignSave.starterSquad;
@@ -1126,9 +1129,48 @@ class _OrionGamePageState extends State<OrionGamePage> {
     );
   }
 
+  /// Recovers only the campaign store and committed profile after an initial
+  /// load failure, without touching mid-session onboarding or feedback state.
+  Future<CampaignSave?> _retryCampaignLoad() async {
+    try {
+      CampaignProgressStore? store = widget.progressStore;
+      if (store == null && widget.progressStoreLoader == null) {
+        final preferences = await SharedPreferences.getInstance();
+        store = SharedPreferencesCampaignProgressStore(
+          preferences: preferences,
+          knownStages: OrionCampaign.stages,
+        );
+      }
+      store ??= await widget.progressStoreLoader!();
+      final save = await store.load();
+      if (!mounted) {
+        return null;
+      }
+      setState(() {
+        _store = store;
+        _progress = save.progress;
+        _ownedLevels = save.ownedLevels;
+        _squad = save.squad;
+        _committedProgress = save.progress;
+        _committedOwnedLevels = save.ownedLevels;
+        _committedSquad = save.squad;
+        if (_mapFeedback == 'Could not load campaign progress.') {
+          _mapFeedback = null;
+        }
+      });
+      return save;
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> _showStageBriefing(StageDefinition stage) async {
     // Run inputs derive from the last-known committed disk state, mirroring
     // what a stage launch would actually use; the sheet renders primitives.
+    final openedSquad = _committedSquad;
+    final openedOwnedLevels = _committedOwnedLevels;
+    final openedResult = _committedProgress.resultFor(stage.id);
+    final openedEndlessBest = _committedProgress.endlessBestFor(stage.id);
     final modifiers = _committedCampaignModifiers();
     // The once-only stage-modifier tip lives inside this modal route: a
     // parent setState never rebuilds an open route, so the route's own
@@ -1150,15 +1192,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
       enableDrag: false,
       backgroundColor: Colors.transparent,
       sheetAnimationStyle: orionSheetAnimationStyle(context),
-      builder: (context) => StatefulBuilder(
+      builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) => StageBriefingSheet(
           stage: stage,
           // Aligned with the rest of the committed-state pattern: the briefing
           // sheet's Start/Replay label, reward-earned flag, best-result line,
           // and HPA-528 blueprint-recovered signal are all first-clear facts
           // sourced from disk, not the optimistic `_progress` aggregate.
-          result: _committedProgress.resultFor(stage.id),
-          endlessBest: _committedProgress.endlessBestFor(stage.id),
+          result: openedResult,
+          endlessBest: openedEndlessBest,
           startingGold: modifiers.adjustedStartingGold,
           startingBaseHealth: StageModifierRules.effectiveStartingBaseHealth(
             campaignAdjustedBaseHealth: modifiers.adjustedStartingBaseHealth,
@@ -1176,9 +1218,19 @@ class _OrionGamePageState extends State<OrionGamePage> {
           // The launch draft seeds from committed state — the same values a
           // run would read — while the sheet edits its local copy and hands
           // the draft back through onLaunch.
-          squad: _committedSquad,
-          ownedLevels: _committedOwnedLevels,
-          onLaunch: (mode, draft) => _persistSquadDraft(draft),
+          squad: openedSquad,
+          ownedLevels: openedOwnedLevels,
+          onLaunch: (mode, draft) => _persistSquadDraft(
+            draft,
+            stage: stage,
+            mode: mode,
+            openedSquad: openedSquad,
+            openedOwnedLevels: openedOwnedLevels,
+            openedModifiers: modifiers,
+            openedResult: openedResult,
+            openedEndlessBest: openedEndlessBest,
+            sheetContext: sheetContext,
+          ),
         ),
       ),
     );
@@ -1194,14 +1246,55 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// the queued save's `finally` clears the pending flag, so the sheet pops
   /// — and this page's post-route continuation starts the stage — strictly
   /// after the write lands or is reported lost.
-  Future<bool> _persistSquadDraft(List<Character> draft) async {
-    // A failed initial load leaves _store null and Launch would retry the
-    // write forever: a transient load failure must not permanently disable
-    // stage starts. Launch is the player's explicit retry, so recover the
-    // store — and the committed profile the save is based on — through the
-    // full load path before reporting the write as lost.
+  Future<bool> _persistSquadDraft(
+    List<Character> draft, {
+    required StageDefinition stage,
+    required RunMode mode,
+    required List<Character> openedSquad,
+    required Map<Character, int> openedOwnedLevels,
+    required CampaignModifiers openedModifiers,
+    required StageResult? openedResult,
+    required int? openedEndlessBest,
+    required BuildContext sheetContext,
+  }) async {
+    // A failed initial load leaves _store null and Launch would fail forever:
+    // recover only the campaign store/profile, and abort Launch if the real
+    // saved profile differs from the starter defaults the briefing displayed.
     if (_store == null) {
-      await _loadProgress();
+      final recovered = await _retryCampaignLoad();
+      if (recovered == null) {
+        return false;
+      }
+      final recoveredModifiers = _committedCampaignModifiers();
+      final briefingMatches =
+          listEquals(recovered.squad, openedSquad) &&
+          mapEquals(recovered.ownedLevels, openedOwnedLevels) &&
+          recoveredModifiers.adjustedStartingGold ==
+              openedModifiers.adjustedStartingGold &&
+          recoveredModifiers.adjustedStartingBaseHealth ==
+              openedModifiers.adjustedStartingBaseHealth &&
+          recovered.progress.resultFor(stage.id) == openedResult &&
+          recovered.progress.endlessBestFor(stage.id) == openedEndlessBest &&
+          recovered.progress.isUnlocked(stage) &&
+          (mode != RunMode.endless || recovered.progress.isCleared(stage.id));
+      if (!briefingMatches) {
+        if (mounted) {
+          setState(() {
+            _mapFeedback =
+                'Campaign progress recovered — review squad before launching.';
+          });
+        }
+        if (sheetContext.mounted) {
+          final route = ModalRoute.of(sheetContext);
+          if (route != null && route.isActive && route.isCurrent) {
+            Navigator.of(sheetContext).pop();
+          }
+        }
+        return false;
+      }
+    }
+    if (listEquals(draft, _committedSquad)) {
+      return true;
     }
     return _persistSave(
       buildSave: (committed) => committed.withSquad(draft),

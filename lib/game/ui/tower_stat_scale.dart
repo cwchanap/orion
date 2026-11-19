@@ -51,6 +51,15 @@ final class TowerStatScale {
       for (final specialization in GameBalance.specializationsFor(type))
         GameBalance.towerStats(type, level: 3, specialization: specialization),
     ];
+    final maxCharacterScaling = Character.values
+        .where((character) => character.style == type)
+        .map(
+          (character) => GameBalance.characterScalingFactor(
+            character.rank,
+            GameBalance.characterMaxLevel,
+          ),
+        )
+        .fold<double>(1, math.max);
     final secondaryMetric = switch (type) {
       TowerType.cryo => TowerSecondaryMetric.slowDuration,
       TowerType.rocket => TowerSecondaryMetric.splashRadius,
@@ -60,8 +69,15 @@ final class TowerStatScale {
       TowerType.railgun => TowerSecondaryMetric.pierceCount,
       TowerType.laser || TowerType.gravityWell => null,
     };
+    final secondaryScalesWithDamage = switch (secondaryMetric) {
+      TowerSecondaryMetric.corrosionDamagePerSecond ||
+      TowerSecondaryMetric.droneDamage => true,
+      _ => false,
+    };
     return TowerStatScale(
-      damageMax: candidates.map((stats) => stats.damage).reduce(math.max),
+      damageMax:
+          candidates.map((stats) => stats.damage).reduce(math.max) *
+          maxCharacterScaling,
       shotsPerSecondMax: candidates
           .map((stats) => 1 / stats.fireInterval)
           .reduce(math.max),
@@ -70,8 +86,9 @@ final class TowerStatScale {
       secondaryMax: secondaryMetric == null
           ? null
           : candidates
-                .map((stats) => secondaryMetric.valueOf(stats))
-                .reduce(math.max),
+                    .map((stats) => secondaryMetric.valueOf(stats))
+                    .reduce(math.max) *
+                (secondaryScalesWithDamage ? maxCharacterScaling : 1),
     );
   }
 

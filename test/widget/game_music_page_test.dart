@@ -366,6 +366,8 @@ GameSnapshot _snapshotLike(
   stageName: source.stageName,
   stageLabel: source.stageLabel,
   unlockedTowerTypes: source.unlockedTowerTypes,
+  squad: source.squad,
+  squadLevels: source.squadLevels,
   stageModifiers: source.stageModifiers,
   nextWavePreview: source.nextWavePreview,
   selectedCell: source.selectedCell,

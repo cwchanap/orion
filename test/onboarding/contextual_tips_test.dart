@@ -76,6 +76,7 @@ GameSnapshot _snapshot({
     pendingRunModuleOffer: pendingRunModuleOffer,
     placedTowers: placedTowers,
     squad: squad,
+    squadLevels: {for (final member in squad) member: 1},
   );
 }
 
