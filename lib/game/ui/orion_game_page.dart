@@ -1804,20 +1804,32 @@ class _OrionGamePageState extends State<OrionGamePage> {
     if (result == null || _missionStageId == null) {
       return null;
     }
-    // The record the transaction will keep: the run's result when it
-    // improves on the committed best, otherwise the retained prior —
-    // recordResult() makes the same call inside the queued write.
+    // recordResult() makes the same keep decision inside the queued write:
+    // an improving run replaces the record, a non-improving run retains it.
     final prior = _missionPriorResult;
-    final kept = prior == null || result.isBetterThan(prior) ? result : prior;
-
+    if (prior != null && !result.isBetterThan(prior)) {
+      // Retained best: the stored record is already on file and this write
+      // leaves it alone, so the fact is stable across every save state —
+      // nothing about the medal is pending, unsaved or retryable. The
+      // Scrip fact alone carries the run's pending/credited/failed story.
+      return MissionRewardFact(
+        title: 'Best medal kept: ${prior.medal.label}',
+        detail:
+            '${prior.bestBaseHealth} base health already on record — '
+            'this run did not replace it.',
+      );
+    }
+    // Improving or first clear: the run's own result is the record this
+    // transaction writes, so its medal honestly tracks the save state.
     return switch (_missionSaveState) {
       MissionSaveState.saving => MissionRewardFact(
-        title: 'Best medal pending: ${kept.medal.label}',
-        detail: '${kept.bestBaseHealth} base health — commits with this save.',
+        title: 'Best medal pending: ${result.medal.label}',
+        detail:
+            '${result.bestBaseHealth} base health — commits with this save.',
       ),
       MissionSaveState.saved => MissionRewardFact(
-        title: 'Best medal saved: ${kept.medal.label}',
-        detail: '${kept.bestBaseHealth} base health on record.',
+        title: 'Best medal saved: ${result.medal.label}',
+        detail: '${result.bestBaseHealth} base health on record.',
       ),
       MissionSaveState.failed => const MissionRewardFact(
         title: 'Best medal not saved',
