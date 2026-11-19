@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -1104,6 +1105,83 @@ void main() {
         expect(loaded.ownedLevels, {Character.haruto: 2});
         expect(loaded.squad, [Character.haruto]);
       });
+
+      test('every store sharing the instance refuses the contaminated cache '
+          'while refresh is unavailable', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final storeA = buildStore(preferences);
+        // Constructed before the failure: the contaminated cache is shared
+        // state, not part of A's per-store bookkeeping.
+        final storeB = buildStore(preferences);
+
+        platform.setValueReturnsFalse = true;
+        final refreshError = Exception('platform store unreadable');
+        platform.getAllError = refreshError;
+        await expectLater(
+          storeA.save(attemptedSave()),
+          throwsA(isA<StateError>()),
+        );
+
+        // A stays quarantined — but B shares the same contaminated cache
+        // without sharing A's bookkeeping, and so does a store constructed
+        // after the failure. Both must surface the refresh error instead of
+        // the attempted payload still sitting in the cache.
+        await expectLater(storeA.load(), throwsA(same(refreshError)));
+        await expectLater(storeB.load(), throwsA(same(refreshError)));
+        await expectLater(
+          buildStore(preferences).load(),
+          throwsA(same(refreshError)),
+        );
+
+        // Recovery: once the platform reads again every store serves the
+        // committed profile.
+        platform.setValueReturnsFalse = false;
+        platform.getAllError = null;
+        expectCommittedProfile(await storeB.load());
+        expectCommittedProfile(await storeA.load());
+      });
+
+      test('a pending write completing after a later failed write cannot '
+          'certify the contaminated cache', () async {
+        final platform = installPlatform(<String, Object>{
+          key: CampaignProgressCodec.encode(committedSave()),
+        });
+        final preferences = await SharedPreferences.getInstance();
+        final store = buildStore(preferences);
+
+        // Write A is held in flight at the platform while every other write
+        // and the refresh fail. Write B then replaces the cache entry and is
+        // rejected — the cache holds B's uncommitted payload with durable
+        // storage still at the committed profile.
+        final delayed = Completer<bool>();
+        platform.delayedSetValue = delayed;
+        platform.setValueReturnsFalse = true;
+        final refreshError = Exception('platform store unreadable');
+        platform.getAllError = refreshError;
+
+        final pendingA = store.save(committedSave().copyWith(scrip: 800));
+        await expectLater(
+          store.save(attemptedSave()),
+          throwsA(isA<StateError>()),
+        );
+
+        // A completing successfully must not certify the cache B left
+        // behind: the read still cannot be trusted while refresh fails.
+        delayed.complete(true);
+        await pendingA;
+        await expectLater(store.load(), throwsA(same(refreshError)));
+
+        // Recovery serves A — the write that actually committed — never B.
+        platform.getAllError = null;
+        platform.setValueReturnsFalse = false;
+        final loaded = await store.load();
+        expect(loaded.scrip, 800);
+        expect(loaded.ownedLevels, {Character.haruto: 1, Character.mio: 6});
+        expect(loaded.squad, [Character.mio]);
+      });
     });
   });
 
@@ -1162,6 +1240,11 @@ class _UnreliableSharedPreferencesStore extends InMemorySharedPreferencesStore {
 
   bool setValueReturnsFalse = false;
   Exception? setValueError;
+
+  /// When non-null, the next `setValue` returns this completer's future —
+  /// holding the write in flight at the platform until the test completes
+  /// it — then clears itself so later writes take the normal paths.
+  Completer<bool>? delayedSetValue;
   bool removeReturnsFalse = false;
   Exception? removeError;
   Exception? getAllError;
@@ -1171,6 +1254,16 @@ class _UnreliableSharedPreferencesStore extends InMemorySharedPreferencesStore {
     final error = setValueError;
     if (error != null) {
       throw error;
+    }
+    final delayed = delayedSetValue;
+    if (delayed != null) {
+      delayedSetValue = null;
+      // The write stays in flight at the platform until the completer
+      // resolves; only an accepted result reaches durable storage.
+      if (await delayed.future) {
+        return super.setValue(valueType, key, value);
+      }
+      return false;
     }
     if (setValueReturnsFalse) {
       return false;

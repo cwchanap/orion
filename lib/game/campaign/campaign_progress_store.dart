@@ -389,21 +389,16 @@ class SharedPreferencesCampaignProgressStore implements CampaignProgressStore {
   final List<StageDefinition> _knownStages;
   final String key;
 
-  /// The legacy SharedPreferences write path mutates its in-memory cache
-  /// before the platform store reports the result, so a write the platform
-  /// rejects — `false` or a thrown error — leaves the cache ahead of
-  /// durable storage. While this is set, [load] cannot serve a read until
-  /// a refresh against the platform succeeds: the cache cannot be trusted
-  /// to match what was actually committed.
-  bool _cacheUntrusted = false;
-
   @override
   Future<CampaignSave> load() async {
-    if (_cacheUntrusted) {
-      // A failed refresh surfaces — returning the divergent cache would
-      // hand back an uncommitted profile.
-      await _refreshCache();
-    }
+    // The legacy SharedPreferences write path mutates its in-memory cache
+    // before the platform store reports the result, so a write the platform
+    // rejects — `false` or thrown — leaves the cache ahead of durable
+    // storage for every store sharing the instance. Refresh before every
+    // read: durable storage is the only trustworthy source, and a failed
+    // refresh must surface rather than return data the platform cannot
+    // confirm.
+    await _preferences.reload();
     final String? source;
     try {
       source = _preferences.getString(key);
@@ -415,55 +410,21 @@ class SharedPreferencesCampaignProgressStore implements CampaignProgressStore {
 
   @override
   Future<void> save(CampaignSave save) async {
-    try {
-      final persisted = await _preferences.setString(
-        key,
-        CampaignProgressCodec.encode(save),
-      );
-      if (!persisted) {
-        throw StateError('Failed to save campaign progress.');
-      }
-      // A confirmed write leaves the cache matching durable storage.
-      _cacheUntrusted = false;
-    } catch (_) {
-      await _refreshAfterFailedWrite();
-      rethrow;
+    final persisted = await _preferences.setString(
+      key,
+      CampaignProgressCodec.encode(save),
+    );
+    if (!persisted) {
+      throw StateError('Failed to save campaign progress.');
     }
   }
 
   @override
   Future<void> reset() async {
-    try {
-      final persisted = await _preferences.remove(key);
-      if (!persisted) {
-        throw StateError('Failed to reset campaign progress.');
-      }
-      _cacheUntrusted = false;
-    } catch (_) {
-      await _refreshAfterFailedWrite();
-      rethrow;
+    final persisted = await _preferences.remove(key);
+    if (!persisted) {
+      throw StateError('Failed to reset campaign progress.');
     }
-  }
-
-  /// Resyncs the SharedPreferences cache from durable storage after a write
-  /// the platform rejected. `reload()` re-reads the persisted map —
-  /// committed entries, including unrelated preferences, are untouched —
-  /// discarding the uncommitted value the cache was left holding. If the
-  /// refresh itself fails the cache stays marked untrusted so a later
-  /// [load] retries the refresh instead of serving the uncommitted value;
-  /// the write's own failure is what surfaces here.
-  Future<void> _refreshAfterFailedWrite() async {
-    _cacheUntrusted = true;
-    try {
-      await _refreshCache();
-    } catch (_) {
-      // Still untrusted — the next load() retries the refresh.
-    }
-  }
-
-  Future<void> _refreshCache() async {
-    await _preferences.reload();
-    _cacheUntrusted = false;
   }
 }
 
