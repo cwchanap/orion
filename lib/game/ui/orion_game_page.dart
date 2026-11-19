@@ -98,18 +98,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
   OrionDefenseGame? _game;
   int? _inspectedTowerId;
   final GlobalKey _gameWidgetKey = GlobalKey();
-  CampaignProgress _progress = CampaignProgress();
-  Map<Character, int> _ownedLevels = CampaignSave.starterOwnedLevels;
-  List<Character> _squad = CampaignSave.starterSquad;
-  // Last-known committed disk state. Queued saves compose their payload from
-  // this rather than the shared optimistic `_progress`/profile aggregate, so
-  // a later transaction's mutation cannot be persisted under an earlier save
-  // that subsequently fails (round-4 review P1). Advanced inside the save
-  // queue on each successful write; reset to the fresh profile on a
-  // successful reset.
-  CampaignProgress _committedProgress = CampaignProgress();
-  Map<Character, int> _committedOwnedLevels = CampaignSave.starterOwnedLevels;
-  List<Character> _committedSquad = CampaignSave.starterSquad;
+  // The single profile aggregate (HPA-923): campaign progress, roster
+  // levels, squad and the Scrip wallet in one immutable value. Queued
+  // saves compose their payload from it, so a later transaction's mutation
+  // cannot be persisted under an earlier save that subsequently fails
+  // (round-4 review P1). Advanced inside the save queue only after a
+  // successful write; every view reads through the getters below, so a
+  // commit refreshes all of them at once and a failure advances nothing.
+  CampaignSave _committed = CampaignSave.empty;
+
+  CampaignProgress get _progress => _committed.progress;
+  Map<Character, int> get _ownedLevels => _committed.ownedLevels;
+  List<Character> get _squad => _committed.squad;
   CampaignProgressStore? _store;
   String? _mapFeedback;
   String? _shellFeedback;
@@ -322,12 +322,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
       setState(() {
         _store = store;
-        _progress = save.progress;
-        _ownedLevels = save.ownedLevels;
-        _squad = save.squad;
-        _committedProgress = save.progress;
-        _committedOwnedLevels = save.ownedLevels;
-        _committedSquad = save.squad;
+        _committed = save;
         _firstMissionGuideStore = guideStore;
         // A missing guide record resolves through campaign progress: a
         // committed Alpha result means this player cleared the tutorial's
@@ -374,12 +369,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         // Leave _store null on any load failure so a later Launch or victory
         // save can never overwrite an unreadable profile with starter defaults.
         _store = null;
-        _progress = CampaignProgress();
-        _ownedLevels = CampaignSave.starterOwnedLevels;
-        _squad = CampaignSave.starterSquad;
-        _committedProgress = CampaignProgress();
-        _committedOwnedLevels = CampaignSave.starterOwnedLevels;
-        _committedSquad = CampaignSave.starterSquad;
+        _committed = CampaignSave.empty;
         _firstMissionGuideStore = guideStore;
         _firstMissionGuideCompleted = guideCompleted ?? false;
         _seenTips = seenTips;
@@ -1037,7 +1027,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                             content: projectEndlessReport(
                               snapshot: snapshot,
                               priorBest: _endlessPriorBest,
-                              savedBest: _committedProgress.endlessBestFor(
+                              savedBest: _committed.progress.endlessBestFor(
                                 snapshot.stageId,
                               ),
                               saveState:
@@ -1148,12 +1138,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
       setState(() {
         _store = store;
-        _progress = save.progress;
-        _ownedLevels = save.ownedLevels;
-        _squad = save.squad;
-        _committedProgress = save.progress;
-        _committedOwnedLevels = save.ownedLevels;
-        _committedSquad = save.squad;
+        _committed = save;
         if (_mapFeedback == 'Could not load campaign progress.') {
           _mapFeedback = null;
         }
@@ -1167,10 +1152,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
   Future<void> _showStageBriefing(StageDefinition stage) async {
     // Run inputs derive from the last-known committed disk state, mirroring
     // what a stage launch would actually use; the sheet renders primitives.
-    final openedSquad = _committedSquad;
-    final openedOwnedLevels = _committedOwnedLevels;
-    final openedResult = _committedProgress.resultFor(stage.id);
-    final openedEndlessBest = _committedProgress.endlessBestFor(stage.id);
+    final openedSquad = _committed.squad;
+    final openedOwnedLevels = _committed.ownedLevels;
+    final openedResult = _committed.progress.resultFor(stage.id);
+    final openedEndlessBest = _committed.progress.endlessBestFor(stage.id);
     final modifiers = _committedCampaignModifiers();
     // The once-only stage-modifier tip lives inside this modal route: a
     // parent setState never rebuilds an open route, so the route's own
@@ -1198,7 +1183,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
           // Aligned with the rest of the committed-state pattern: the briefing
           // sheet's Start/Replay label, reward-earned flag, best-result line,
           // and HPA-528 blueprint-recovered signal are all first-clear facts
-          // sourced from disk, not the optimistic `_progress` aggregate.
+          // sourced from the committed aggregate captured at sheet open.
           result: openedResult,
           endlessBest: openedEndlessBest,
           startingGold: modifiers.adjustedStartingGold,
@@ -1268,16 +1253,16 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // lose the guard on retry.
     final committedModifiers = _committedCampaignModifiers();
     final briefingMatches =
-        listEquals(_committedSquad, openedSquad) &&
-        mapEquals(_committedOwnedLevels, openedOwnedLevels) &&
+        listEquals(_committed.squad, openedSquad) &&
+        mapEquals(_committed.ownedLevels, openedOwnedLevels) &&
         committedModifiers.adjustedStartingGold ==
             openedModifiers.adjustedStartingGold &&
         committedModifiers.adjustedStartingBaseHealth ==
             openedModifiers.adjustedStartingBaseHealth &&
-        _committedProgress.resultFor(stage.id) == openedResult &&
-        _committedProgress.endlessBestFor(stage.id) == openedEndlessBest &&
-        _committedProgress.isUnlocked(stage) &&
-        (mode != RunMode.endless || _committedProgress.isCleared(stage.id));
+        _committed.progress.resultFor(stage.id) == openedResult &&
+        _committed.progress.endlessBestFor(stage.id) == openedEndlessBest &&
+        _committed.progress.isUnlocked(stage) &&
+        (mode != RunMode.endless || _committed.progress.isCleared(stage.id));
     if (!briefingMatches) {
       if (mounted) {
         setState(() {
@@ -1293,12 +1278,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
       return false;
     }
-    if (listEquals(draft, _committedSquad)) {
+    if (listEquals(draft, _committed.squad)) {
       return true;
     }
     return _persistSave(
       buildSave: (committed) => committed.withSquad(draft),
-      onCommitted: (payload) => _squad = payload.squad,
       // Failure feedback lives inside the still-mounted sheet (retryable); a
       // map breadcrumb would sit hidden under the modal route.
       onFailed: () {},
@@ -1420,11 +1404,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   // Run inputs (campaign modifiers and module eligibility) are derived from
-  // the last-known committed disk state, not the optimistic `_progress`
-  // aggregate. One attempt freezes committed run inputs; a same-object
-  // Replay refreshes ALL committed run inputs together (HPA-528).
+  // the last-known committed disk state. One attempt freezes committed run
+  // inputs; a same-object Replay refreshes ALL committed run inputs
+  // together (HPA-528).
   CampaignModifiers _committedCampaignModifiers() =>
-      CampaignModifiers.fromProgress(_committedProgress, OrionCampaign.stages);
+      CampaignModifiers.fromProgress(_committed.progress, OrionCampaign.stages);
 
   void _startStage(StageDefinition stage, RunMode mode) {
     if (_isSavingProgress || _isResetting) {
@@ -1441,30 +1425,30 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return;
     }
 
-    if (mode == RunMode.endless && !_committedProgress.isCleared(stage.id)) {
+    if (mode == RunMode.endless && !_committed.progress.isCleared(stage.id)) {
       return;
     }
 
     final campaignModifiers = _committedCampaignModifiers();
     _endlessSaveSequence = 0;
-    _missionPriorResult = _committedProgress.resultFor(stage.id);
+    _missionPriorResult = _committed.progress.resultFor(stage.id);
     _missionVictoryResult = null;
     _missionStageId = stage.id;
     _missionSaveState = mode == RunMode.endless ? MissionSaveState.saved : null;
     _endlessPriorBest = mode == RunMode.endless
-        ? _committedProgress.endlessBestFor(stage.id)
+        ? _committed.progress.endlessBestFor(stage.id)
         : null;
     final game = OrionDefenseGame(
       stage: stage,
       mode: mode,
       campaignModifiers: campaignModifiers,
-      availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
+      availableRunModules: RunModuleUnlocks.availableFor(_committed.progress),
       moduleOfferPicker: widget.moduleOfferPicker,
       // The committed squad goes to battle in selection order, each member
       // carrying their persistent profile level (HPA-922).
       squad: {
-        for (final member in _committedSquad)
-          member: _committedOwnedLevels[member] ?? 1,
+        for (final member in _committed.squad)
+          member: _committed.ownedLevels[member] ?? 1,
       },
       onStageWon: _handleStageWon,
       onEndlessWaveCleared: _saveEndlessBest,
@@ -1518,18 +1502,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // saving-state reconciliation — so the next writer cannot start until
     // this one has committed or reported.
     //
-    // The persisted payload is built from the last-known committed disk state
-    // (_committed*), NOT from the shared optimistic _progress/profile
-    // aggregate. Reading the aggregate let an earlier successful save persist
-    // a later transaction's mutation: if saves A and B were queued
-    // synchronously, save A wrote A+B (the aggregate already held both
-    // optimistic updates), then save B failed and rolled B back in memory
-    // while B remained on disk — reopening the app resurrected a result whose
-    // save reported failure (round-4 review P1). Building from _committed*
-    // scopes each save's payload to its own delta; on success _committed*
-    // advances so the next queued save composes on top of it. A per-call
-    // snapshot would not suffice, because a later snapshot could still carry
-    // an earlier mutation that eventually fails.
+    // The persisted payload is built from the last-known committed disk
+    // state (_committed) — the ONLY profile state this page holds. Queued
+    // saves A and B can never leak B's mutation into A's write: B's payload
+    // is not built until A has committed (or reported), so a failed B
+    // leaves nothing persisted (round-4 review P1). On success _committed
+    // advances to the payload so the next queued save composes on top of
+    // it and every view — reading through the committed getters — refreshes
+    // off the one aggregate. onCommitted handles side effects only; no
+    // projection copies exist to update.
     var committed = false;
     final saveTask = _saveQueue.then((_) async {
       try {
@@ -1537,18 +1518,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
           onFailed?.call();
           return; // a reset invalidated this save; the reset owns wiping
         }
-        final payload = buildSave(
-          CampaignSave(
-            progress: _committedProgress,
-            ownedLevels: _committedOwnedLevels,
-            squad: _committedSquad,
-          ),
-        );
+        final payload = buildSave(_committed);
         await store.save(payload);
         if (saveGeneration == _progressGeneration) {
-          _committedProgress = payload.progress;
-          _committedOwnedLevels = payload.ownedLevels;
-          _committedSquad = payload.squad;
+          _committed = payload;
+          if (mounted) {
+            setState(() {});
+          }
           onCommitted?.call(payload);
           committed = true;
         } else if (onFailed != null) {
@@ -1613,15 +1589,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _setMissionSaveState(MissionSaveState.saving);
 
     await _persistSave(
-      buildSave: (committed) => CampaignSave(
-        progress: committed.progress.recordResult(stageId, result),
-        ownedLevels: committed.ownedLevels,
-        squad: committed.squad,
-      ),
-      onCommitted: (payload) {
-        _progress = payload.progress;
-        _setMissionSaveState(MissionSaveState.saved);
-      },
+      // Award 0 for now: Task 3 captures the stage's Scrip payout beside
+      // the victory result and passes it here.
+      buildSave: (committed) => committed.withMissionWin(stageId, result, 0),
+      onCommitted: (_) => _setMissionSaveState(MissionSaveState.saved),
       onFailed: () => _setMissionSaveState(MissionSaveState.failed),
     );
   }
@@ -1635,13 +1606,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final saveSequence = ++_endlessSaveSequence;
     _setMissionSaveState(MissionSaveState.saving);
     _persistSave(
-      buildSave: (committed) => CampaignSave(
+      buildSave: (committed) => committed.copyWith(
         progress: committed.progress.recordEndlessBest(stageId, wavesCleared),
-        ownedLevels: committed.ownedLevels,
-        squad: committed.squad,
       ),
-      onCommitted: (payload) {
-        _progress = payload.progress;
+      onCommitted: (_) {
         if (saveSequence == _endlessSaveSequence) {
           if (_mapFeedback == _persistenceFailureMessage) {
             _mapFeedback = null;
@@ -1680,7 +1648,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   // The blueprint recovery reward is a first-clear fact: _missionPriorResult
   // was captured from committed progress at attempt start, so a successful
-  // save can advance _committedProgress without changing the first-clear
+  // save can advance _committed without changing the first-clear
   // fact for the completed attempt. Replay recaptures _missionPriorResult
   // from committed progress (now non-null) and suppresses duplicate
   // celebration. The module identity resolves generically from the
@@ -1740,7 +1708,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       if (isEndless) {
         final savedBest = _missionStageId == null
             ? null
-            : _committedProgress.endlessBestFor(_missionStageId!);
+            : _committed.progress.endlessBestFor(_missionStageId!);
         final committedEarlier =
             savedBest != null && savedBest > (_endlessPriorBest ?? 0);
         _mapFeedback = committedEarlier
@@ -1769,11 +1737,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     _inspectedTowerId = null;
     _endlessSaveSequence = 0;
-    _missionPriorResult = _committedProgress.resultFor(_missionStageId!);
+    _missionPriorResult = _committed.progress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
     _missionSaveState = isEndless ? MissionSaveState.saved : null;
     if (isEndless) {
-      _endlessPriorBest = _committedProgress.endlessBestFor(_missionStageId!);
+      _endlessPriorBest = _committed.progress.endlessBestFor(_missionStageId!);
     }
     // _missionStageId represents the currently running stage, not per-attempt
     // terminal state, so it stays valid across restart() of the same stage.
@@ -1782,7 +1750,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     // second retry hit the `_missionStageId!` null check above.
     game.restart(
       campaignModifiers: _committedCampaignModifiers(),
-      availableRunModules: RunModuleUnlocks.availableFor(_committedProgress),
+      availableRunModules: RunModuleUnlocks.availableFor(_committed.progress),
     );
   }
 
@@ -1896,12 +1864,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
 
       setState(() {
-        _progress = CampaignProgress();
-        _ownedLevels = CampaignSave.starterOwnedLevels;
-        _squad = CampaignSave.starterSquad;
-        _committedProgress = CampaignProgress();
-        _committedOwnedLevels = CampaignSave.starterOwnedLevels;
-        _committedSquad = CampaignSave.starterSquad;
+        _committed = CampaignSave.empty;
         _listenToGame(null);
         if (_activeView == _ShellView.stage) {
           _activeView = _ShellView.worldMap;

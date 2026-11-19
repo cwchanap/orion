@@ -5,6 +5,7 @@ import 'package:orion/game/campaign/campaign_progress.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/rules/flare_rules.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -12,15 +13,27 @@ void main() {
     CampaignProgress? progress,
     Map<Character, int>? ownedLevels,
     List<Character>? squad,
+    int scrip = 0,
   }) {
     return CampaignSave(
       progress: progress ?? CampaignProgress(),
       ownedLevels: ownedLevels ?? CampaignSave.starterOwnedLevels,
       squad: squad ?? CampaignSave.starterSquad,
+      scrip: scrip,
     );
   }
 
+  FlareDraw newDraw(Character character) =>
+      FlareDraw(character: character, isNew: true, scripRefund: 0);
+
+  FlareDraw duplicateDraw(Character character) => FlareDraw(
+    character: character,
+    isNew: false,
+    scripRefund: GameBalance.flareDuplicateScripRefund[character.rank]!,
+  );
+
   void expectFreshProfile(CampaignSave decoded) {
+    expect(decoded.scrip, 0);
     expect(decoded.progress.bestResultsByStageId, isEmpty);
     expect(decoded.progress.endlessBestByStageId, isEmpty);
     expect(decoded.ownedLevels, CampaignSave.starterOwnedLevels);
@@ -49,6 +62,7 @@ void main() {
           Character.akane: 1,
         },
         squad: const [Character.akane, Character.haruto, Character.mio],
+        scrip: 650,
       );
 
       final encoded = CampaignProgressCodec.encode(source);
@@ -57,6 +71,7 @@ void main() {
         knownStages: OrionCampaign.stages,
       );
 
+      expect(decoded.scrip, 650);
       expect(
         decoded.progress.resultFor('outpost-alpha'),
         source.progress.resultFor('outpost-alpha'),
@@ -95,6 +110,7 @@ void main() {
             Character.haruto: 3,
           },
           squad: const [Character.akane, Character.mio],
+          scrip: 320,
         ),
       );
 
@@ -105,6 +121,7 @@ void main() {
           decoded['ownedCharacters'] as Map<String, Object?>;
 
       expect(decoded['version'], 4);
+      expect(decoded['scrip'], 320);
       expect(decoded.containsKey('techPurchases'), isFalse);
       expect(stageResults.keys, ['nebula-relay', 'outpost-alpha']);
       expect(endlessBest.keys, ['nebula-relay', 'outpost-alpha']);
@@ -244,6 +261,80 @@ void main() {
       expect(decoded.ownedLevels, CampaignSave.starterOwnedLevels);
       expect(decoded.squad, isEmpty);
     });
+
+    test('a v4 record without scrip decodes to zero and keeps every other '
+        'valid field', () {
+      // Saves written before Scrip existed carry no wallet field: the codec
+      // reads them as a 0-Scrip wallet rather than discarding the profile.
+      const raw =
+          '{"version":4,'
+          '"stageResults":{"outpost-alpha":'
+          '{"medal":"gold","bestBaseHealth":20}},'
+          '"endlessBest":{"outpost-alpha":9},'
+          '"ownedCharacters":{"haruto":4,"mio":2,"sayo":3},'
+          '"squad":["sayo","haruto"]}';
+
+      final decoded = CampaignProgressCodec.decode(
+        raw,
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(decoded.scrip, 0);
+      expect(
+        decoded.progress.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      expect(decoded.progress.endlessBestByStageId, {'outpost-alpha': 9});
+      expect(decoded.ownedLevels, {
+        Character.haruto: 4,
+        Character.mio: 2,
+        Character.sayo: 3,
+      });
+      expect(decoded.squad, [Character.sayo, Character.haruto]);
+    });
+
+    test(
+      'invalid scrip decodes to zero without losing valid roster fields',
+      () {
+        const scripValues = [
+          '"scrip":-50,',
+          '"scrip":"rich",',
+          '"scrip":12.5,',
+          '"scrip":true,',
+          '"scrip":null,',
+          '"scrip":[500],',
+        ];
+
+        for (final scripField in scripValues) {
+          final raw =
+              '{"version":4,$scripField'
+              '"stageResults":{"outpost-alpha":'
+              '{"medal":"silver","bestBaseHealth":14}},'
+              '"ownedCharacters":{"haruto":4,"mio":2},'
+              '"squad":["haruto","mio"]}';
+
+          final decoded = CampaignProgressCodec.decode(
+            raw,
+            knownStages: OrionCampaign.stages,
+          );
+
+          expect(decoded.scrip, 0, reason: scripField);
+          expect(
+            decoded.progress.resultFor('outpost-alpha'),
+            const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+            reason: scripField,
+          );
+          expect(decoded.ownedLevels, {
+            Character.haruto: 4,
+            Character.mio: 2,
+          }, reason: scripField);
+          expect(decoded.squad, [
+            Character.haruto,
+            Character.mio,
+          ], reason: scripField);
+        }
+      },
+    );
 
     test('skips unknown character ids and invalid levels per entry', () {
       const raw =
@@ -387,9 +478,11 @@ void main() {
           ),
           ownedLevels: const {Character.haruto: 5, Character.mio: 1},
           squad: const [Character.mio],
+          scrip: 410,
         ),
       );
       final loaded = await store.load();
+      expect(loaded.scrip, 410);
       expect(
         loaded.progress.resultFor('outpost-alpha'),
         const StageResult(medal: StageMedal.clear, bestBaseHealth: 4),
@@ -399,6 +492,291 @@ void main() {
 
       await store.reset();
       expectFreshProfile(await store.load());
+    });
+  });
+
+  group('CampaignSave transforms', () {
+    test('copyWith replaces only the given fields and keeps the wallet', () {
+      final source = save(
+        progress: CampaignProgress(
+          bestResultsByStageId: const {
+            'outpost-alpha': StageResult(
+              medal: StageMedal.gold,
+              bestBaseHealth: 20,
+            ),
+          },
+        ),
+        ownedLevels: const {Character.haruto: 4, Character.mio: 2},
+        squad: const [Character.mio],
+        scrip: 275,
+      );
+
+      final changed = source.copyWith(squad: const [Character.haruto]);
+
+      expect(changed.scrip, 275);
+      expect(changed.squad, [Character.haruto]);
+      expect(changed.ownedLevels, {Character.haruto: 4, Character.mio: 2});
+      expect(
+        changed.progress.resultFor('outpost-alpha'),
+        const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+      );
+      // Transforms are pure — the source save is never mutated in place.
+      expect(source.squad, [Character.mio]);
+    });
+
+    test('withSquad keeps Scrip and the rest of the profile', () {
+      final changed = save(scrip: 180).withSquad(const [Character.mio]);
+
+      expect(changed.scrip, 180);
+      expect(changed.squad, [Character.mio]);
+      expect(changed.ownedLevels, CampaignSave.starterOwnedLevels);
+      expect(changed.progress.bestResultsByStageId, isEmpty);
+    });
+
+    group('withLevelUp', () {
+      test('spends the level cost and raises the owned level', () {
+        final changed = save(
+          ownedLevels: const {Character.haruto: 1, Character.mio: 2},
+          squad: const [Character.haruto],
+          scrip: 200,
+        ).withLevelUp(Character.haruto);
+
+        // GameBalance.levelUpCost(1) == 60.
+        expect(changed.scrip, 200 - GameBalance.levelUpCost(1)!);
+        expect(changed.ownedLevels, {Character.haruto: 2, Character.mio: 2});
+        expect(changed.squad, [Character.haruto]);
+      });
+
+      test('charges the scaled cost for a mid-band level', () {
+        final changed = save(
+          ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+          scrip: 200,
+        ).withLevelUp(Character.haruto);
+
+        // GameBalance.levelUpCost(4) == 180.
+        expect(changed.scrip, 200 - GameBalance.levelUpCost(4)!);
+        expect(changed.ownedLevels[Character.haruto], 5);
+      });
+
+      test('rejects an unowned character without touching the save', () {
+        final source = save(scrip: 500);
+
+        expect(() => source.withLevelUp(Character.sayo), throwsStateError);
+        expect(source.scrip, 500);
+        expect(source.ownedLevels, CampaignSave.starterOwnedLevels);
+      });
+
+      test('rejects a purchase the wallet cannot cover', () {
+        final source = save(scrip: GameBalance.levelUpCost(1)! - 1);
+
+        expect(() => source.withLevelUp(Character.haruto), throwsStateError);
+        expect(source.scrip, GameBalance.levelUpCost(1)! - 1);
+        expect(source.ownedLevels[Character.haruto], 1);
+      });
+
+      test('rejects a character at the level cap', () {
+        final source = save(
+          ownedLevels: const {Character.haruto: GameBalance.characterMaxLevel},
+          scrip: 9999,
+        );
+
+        expect(() => source.withLevelUp(Character.haruto), throwsStateError);
+        expect(
+          source.ownedLevels[Character.haruto],
+          GameBalance.characterMaxLevel,
+        );
+        expect(source.scrip, 9999);
+      });
+    });
+
+    group('withFlareBatch', () {
+      test('charges the pack and recruits a new character at level 1', () {
+        final changed = save(
+          scrip: 150,
+        ).withFlareBatch(FlareBatch([newDraw(Character.sayo)]));
+
+        expect(changed.scrip, 150 - GameBalance.flareCost);
+        expect(changed.ownedLevels, {
+          ...CampaignSave.starterOwnedLevels,
+          Character.sayo: 1,
+        });
+      });
+
+      test('refunds a duplicate draw at the configured rank rate', () {
+        final changed = save(
+          scrip: 100,
+        ).withFlareBatch(FlareBatch([duplicateDraw(Character.haruto)]));
+
+        // haruto is rank E → 10 Scrip back on the 100-cost single pull.
+        expect(changed.scrip, 10);
+        expect(changed.ownedLevels, CampaignSave.starterOwnedLevels);
+      });
+
+      test('replays a ten-pull: in-batch recruits count as owned', () {
+        // The first sayo recruits; the second sayo is an in-batch duplicate
+        // — the honest classification `FlareRules.roll` would have produced.
+        final batch = FlareBatch([
+          newDraw(Character.sayo),
+          duplicateDraw(Character.sayo),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+        ]);
+
+        final changed = save(scrip: 1000).withFlareBatch(batch);
+
+        expect(changed.scrip, 1000 - batch.cost + batch.totalScripRefund);
+        expect(changed.ownedLevels, {
+          ...CampaignSave.starterOwnedLevels,
+          Character.sayo: 1,
+        });
+      });
+
+      test('rejects pack counts outside the allowed sizes', () {
+        for (final count in [0, 2, 5, 9, 11]) {
+          final batch = FlareBatch([
+            for (var index = 0; index < count; index += 1)
+              duplicateDraw(Character.haruto),
+          ]);
+          expect(
+            () => save(scrip: 100000).withFlareBatch(batch),
+            throwsStateError,
+            reason: 'count $count',
+          );
+        }
+      });
+
+      test('rejects a stale batch even when the wallet can afford it', () {
+        // haruto is already owned — a NEW flag cannot be honest.
+        expect(
+          () => save(
+            scrip: 100,
+          ).withFlareBatch(FlareBatch([newDraw(Character.haruto)])),
+          throwsStateError,
+        );
+        // sayo is unowned — a DUPLICATE flag has nothing to refund against.
+        expect(
+          () => save(
+            scrip: 100,
+          ).withFlareBatch(FlareBatch([duplicateDraw(Character.sayo)])),
+          throwsStateError,
+        );
+      });
+
+      test('rejects a misclassified in-batch duplicate', () {
+        // The second sayo must read DUPLICATE; claiming NEW is stale.
+        final batch = FlareBatch([
+          newDraw(Character.sayo),
+          newDraw(Character.sayo),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+          duplicateDraw(Character.haruto),
+          duplicateDraw(Character.mio),
+        ]);
+
+        expect(() => save(scrip: 2000).withFlareBatch(batch), throwsStateError);
+      });
+
+      test('rejects a refund that does not match the configured rank rate', () {
+        // Duplicate haruto (rank E) must refund 10 — not 999.
+        expect(
+          () => save(scrip: 100).withFlareBatch(
+            FlareBatch([
+              const FlareDraw(
+                character: Character.haruto,
+                isNew: false,
+                scripRefund: 999,
+              ),
+            ]),
+          ),
+          throwsStateError,
+        );
+        // A new recruit declares no refund — a nonzero claim is invalid.
+        expect(
+          () => save(scrip: 100).withFlareBatch(
+            FlareBatch([
+              const FlareDraw(
+                character: Character.sayo,
+                isNew: true,
+                scripRefund: 5,
+              ),
+            ]),
+          ),
+          throwsStateError,
+        );
+      });
+
+      test('rejects a pack the wallet cannot cover', () {
+        final source = save(scrip: GameBalance.flareCost - 1);
+
+        expect(
+          () => source.withFlareBatch(FlareBatch([newDraw(Character.sayo)])),
+          throwsStateError,
+        );
+        expect(source.scrip, GameBalance.flareCost - 1);
+        expect(source.ownedLevels, CampaignSave.starterOwnedLevels);
+      });
+    });
+
+    group('withMissionWin', () {
+      const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+
+      test('records the best result and credits the award', () {
+        final changed = save(
+          ownedLevels: const {Character.haruto: 3, Character.mio: 1},
+          squad: const [Character.mio],
+          scrip: 40,
+        ).withMissionWin('outpost-alpha', result, 1050);
+
+        expect(changed.scrip, 1090);
+        expect(changed.progress.resultFor('outpost-alpha'), result);
+        expect(changed.ownedLevels, {Character.haruto: 3, Character.mio: 1});
+        expect(changed.squad, [Character.mio]);
+      });
+
+      test('a non-improving result still credits the captured award', () {
+        const prior = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+        const worse = StageResult(medal: StageMedal.clear, bestBaseHealth: 3);
+        final changed = save(
+          progress: CampaignProgress(
+            bestResultsByStageId: const {'outpost-alpha': prior},
+          ),
+          scrip: 40,
+        ).withMissionWin('outpost-alpha', worse, 125);
+
+        // Best stays gold/20; the wallet still gains the replay award.
+        expect(changed.progress.resultFor('outpost-alpha'), prior);
+        expect(changed.scrip, 165);
+      });
+
+      test('rejects a negative award without recording anything', () {
+        final source = save(scrip: 40);
+
+        expect(
+          () => source.withMissionWin('outpost-alpha', result, -1),
+          throwsStateError,
+        );
+        expect(source.scrip, 40);
+        expect(source.progress.resultFor('outpost-alpha'), isNull);
+      });
+
+      test('a zero award records the result without touching the wallet', () {
+        final changed = save(
+          scrip: 40,
+        ).withMissionWin('outpost-alpha', result, 0);
+
+        expect(changed.scrip, 40);
+        expect(changed.progress.resultFor('outpost-alpha'), result);
+      });
     });
   });
 

@@ -3,20 +3,23 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/game_models.dart';
+import '../rules/flare_rules.dart';
 import 'campaign_progress.dart';
 import 'stage_definition.dart';
 
 /// Aggregate of everything persisted under one SharedPreferences key.
 ///
-/// `CampaignProgress` (stage results, Endless bests) and the character
-/// profile — `ownedLevels` plus the ordered `squad` — are saved atomically:
-/// splitting them across two keys would invite save-tearing bugs. See the
-/// HPA-922 spec "Profile and persistence" section.
+/// `CampaignProgress` (stage results, Endless bests), the character
+/// profile — `ownedLevels` plus the ordered `squad` — and the Scrip
+/// wallet are saved atomically: splitting them across two keys would
+/// invite save-tearing bugs. See the HPA-922 spec "Profile and
+/// persistence" section and HPA-923 "Scrip economy".
 class CampaignSave {
   CampaignSave({
     required this.progress,
     required Map<Character, int> ownedLevels,
     required List<Character> squad,
+    required this.scrip,
   }) : ownedLevels = Map.unmodifiable(ownedLevels),
        squad = List.unmodifiable(squad);
 
@@ -30,11 +33,132 @@ class CampaignSave {
   /// [GameBalance.squadMaxSize] entries.
   final List<Character> squad;
 
+  /// Persistent Scrip wallet (HPA-923): mission awards and flare duplicate
+  /// refunds add to it; level ups and flare packs spend from it.
+  final int scrip;
+
+  /// A copy of this save with the given fields replaced. Copying — never a
+  /// partial reconstruction — is the only way writes may rebuild the
+  /// aggregate, so no operation can accidentally zero the wallet or drop
+  /// the roster.
+  CampaignSave copyWith({
+    CampaignProgress? progress,
+    Map<Character, int>? ownedLevels,
+    List<Character>? squad,
+    int? scrip,
+  }) {
+    return CampaignSave(
+      progress: progress ?? this.progress,
+      ownedLevels: ownedLevels ?? this.ownedLevels,
+      squad: squad ?? this.squad,
+      scrip: scrip ?? this.scrip,
+    );
+  }
+
   /// A copy of this save with the ordered squad replaced — the single
   /// committed-base write the stage briefing issues on Launch (HPA-922
-  /// task 6). Progress and roster levels ride along untouched.
-  CampaignSave withSquad(List<Character> draft) =>
-      CampaignSave(progress: progress, ownedLevels: ownedLevels, squad: draft);
+  /// task 6). Progress, roster levels and the wallet ride along untouched.
+  CampaignSave withSquad(List<Character> draft) => copyWith(squad: draft);
+
+  /// Raises [character]'s persistent level by one, debiting
+  /// [GameBalance.levelUpCost] from the wallet. Throws [StateError] when
+  /// the character is unowned, already at the level cap, or the wallet
+  /// cannot cover the cost — the save is never left half-mutated.
+  CampaignSave withLevelUp(Character character) {
+    final level = ownedLevels[character];
+    if (level == null) {
+      throw StateError('Cannot level up unowned ${character.name}.');
+    }
+    final cost = GameBalance.levelUpCost(level);
+    if (cost == null) {
+      throw StateError(
+        '${character.name} is already at the level cap '
+        '(${GameBalance.characterMaxLevel}).',
+      );
+    }
+    if (scrip < cost) {
+      throw StateError(
+        'Level up for ${character.name} costs $cost Scrip; only $scrip '
+        'available.',
+      );
+    }
+    return copyWith(
+      scrip: scrip - cost,
+      ownedLevels: {...ownedLevels, character: level + 1},
+    );
+  }
+
+  /// Applies a rolled [FlareBatch]: charges the pack upfront, adds every
+  /// NEW recruit at level 1 and credits every DUPLICATE's Scrip refund.
+  ///
+  /// The batch is replayed against this save's roster — earlier draws in
+  /// the batch count as owned for later ones — so a stale or hand-built
+  /// outcome (wrong NEW/DUPLICATE flag, a refund that does not match
+  /// [GameBalance.flareDuplicateScripRefund] for the draw's rank) throws
+  /// [StateError] even when the wallet could afford the pack.
+  CampaignSave withFlareBatch(FlareBatch batch) {
+    if (!FlareRules.allowedPackCounts.contains(batch.draws.length)) {
+      throw StateError(
+        'Flare pack size ${batch.draws.length} is not one of '
+        '${FlareRules.allowedPackCounts}.',
+      );
+    }
+    if (scrip < batch.cost) {
+      throw StateError(
+        'Flare pack costs ${batch.cost} Scrip; only $scrip available.',
+      );
+    }
+
+    final owned = Set<Character>.of(ownedLevels.keys);
+    final updatedOwnedLevels = Map<Character, int>.of(ownedLevels);
+    for (final draw in batch.draws) {
+      final expectedIsNew = !owned.contains(draw.character);
+      if (draw.isNew != expectedIsNew) {
+        throw StateError(
+          'Flare draw for ${draw.character.name} was classified '
+          '${draw.isNew ? 'NEW' : 'DUPLICATE'} but replays as '
+          '${expectedIsNew ? 'NEW' : 'DUPLICATE'} against the committed '
+          'roster.',
+        );
+      }
+      final expectedRefund = expectedIsNew
+          ? 0
+          : GameBalance.flareDuplicateScripRefund[draw.rank]!;
+      if (draw.scripRefund != expectedRefund) {
+        throw StateError(
+          'Flare draw for ${draw.character.name} declares refund '
+          '${draw.scripRefund}; expected $expectedRefund.',
+        );
+      }
+      if (expectedIsNew) {
+        owned.add(draw.character);
+        updatedOwnedLevels[draw.character] = 1;
+      }
+    }
+
+    return copyWith(
+      scrip: scrip - batch.cost + batch.totalScripRefund,
+      ownedLevels: updatedOwnedLevels,
+    );
+  }
+
+  /// Records a mission victory: [result] competes for the stage's saved
+  /// best via [CampaignProgress.recordResult] and the captured
+  /// [scripAward] is credited — even when the stored best does not
+  /// improve. Throws [StateError] on a negative award.
+  CampaignSave withMissionWin(
+    String stageId,
+    StageResult result,
+    int scripAward,
+  ) {
+    if (scripAward < 0) {
+      throw StateError('Mission Scrip award must be nonnegative.');
+    }
+    return copyWith(
+      progress: progress.recordResult(stageId, result),
+      scrip: scrip + scripAward,
+    );
+  }
 
   /// Fresh-profile starters (HPA-922): aliases [GameBalance]'s single
   /// canonical definition.
@@ -50,6 +174,7 @@ class CampaignSave {
     progress: CampaignProgress(),
     ownedLevels: starterOwnedLevels,
     squad: starterSquad,
+    scrip: 0,
   );
 }
 
@@ -88,6 +213,7 @@ class CampaignProgressCodec {
 
     return jsonEncode({
       'version': _version,
+      'scrip': save.scrip,
       'stageResults': stageResults,
       'endlessBest': endlessBest,
       'ownedCharacters': ownedCharacters,
@@ -122,6 +248,7 @@ class CampaignProgressCodec {
         progress: _decodeProgress(decoded, knownStages: knownStages),
         ownedLevels: ownedLevels,
         squad: _decodeSquad(decoded['squad'], ownedLevels),
+        scrip: _decodeScrip(decoded['scrip']),
       );
     } on FormatException {
       return CampaignSave.empty;
@@ -175,6 +302,13 @@ class CampaignProgressCodec {
       bests[entry.key] = value;
     }
     return bests;
+  }
+
+  /// The wallet tolerates a missing or malformed `scrip` field — v4 saves
+  /// written before Scrip existed and hand-edited values alike read as a
+  /// 0-Scrip wallet while the rest of the record decodes normally.
+  static int _decodeScrip(Object? raw) {
+    return raw is int && raw >= 0 ? raw : 0;
   }
 
   // Character ids are decoded only here, via `Character.values.asNameMap()` —
