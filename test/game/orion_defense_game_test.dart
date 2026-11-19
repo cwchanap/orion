@@ -2483,6 +2483,71 @@ void main() {
     });
 
     test(
+      'sellSelectedTower cancels a drone still queued to mount when the wave ends',
+      () async {
+        final feedback = _RecordingGameFeedback();
+        final game = OrionDefenseGame(
+          squad: testGameSquad,
+          stage: _droneBayUnlockStage(),
+          gameFeedback: feedback,
+        );
+        game.onGameResize(Vector2(800, 1200));
+        await game.onLoad();
+        // setMounted() gives add() the real enqueue-a-mount semantics: an
+        // entity launched during combat is not in children until the next
+        // processLifecycleEvents, so a children-only Recall sweep misses it.
+        // ignore: invalid_use_of_internal_member
+        game.setMounted();
+
+        // Advance 5 empty waves so the drone bay (unlocks at wave 6) is
+        // available.
+        for (var wave = 0; wave < 5; wave += 1) {
+          game.startWave();
+          game.update(0.01);
+          game.processLifecycleEvents();
+          _selectPendingModuleIfNeeded(game);
+        }
+        _tapCell(game, const GridPosition(0, 1));
+        game.placeTower(testCharacterFor(TowerType.droneBay));
+        game.processLifecycleEvents();
+
+        game.startWave(); // wave 6: one durable enemy
+        game.update(0.01); // spawn the enemy
+        game.processLifecycleEvents();
+        final enemy = game.children.whereType<EnemyComponent>().single;
+        // Leave it at 1hp under lethal corrosion so it dies inside the same
+        // update that fires the drone bay — the drone's mount is then still
+        // queued when the wave flips to build phase.
+        enemy.applyDamage(enemy.maxHealth - 1, bypassArmor: true);
+        enemy.applyCorrosion(damagePerSecond: 1000, duration: 1, armorShred: 0);
+        _tapCell(game, const GridPosition(0, 1)); // select the bay mid-wave
+        game.processLifecycleEvents();
+
+        game.update(0.01);
+        expect(feedback.firedTowerTypes, contains(TowerType.droneBay));
+        expect(game.snapshot.phase, GamePhase.build);
+        _selectPendingModuleIfNeeded(game);
+        // The drone add is queued but not yet mounted.
+        expect(game.children.whereType<DroneComponent>(), isEmpty);
+
+        final ownerTowerId = game.snapshot.selectedTower!.id;
+        game.sellSelectedTower();
+        game.processLifecycleEvents();
+        game.update(0.01);
+        game.processLifecycleEvents();
+
+        expect(
+          game.children.whereType<DroneComponent>().where(
+            (d) => d.ownerTowerId == ownerTowerId,
+          ),
+          isEmpty,
+        );
+        expect(game.children.whereType<DroneComponent>(), isEmpty);
+        expect(game.children.whereType<TowerComponent>(), isEmpty);
+      },
+    );
+
+    test(
       'gravity field safely resolves multiple enemies in one tick',
       () async {
         final game = OrionDefenseGame(

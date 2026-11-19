@@ -1258,40 +1258,40 @@ class _OrionGamePageState extends State<OrionGamePage> {
     required BuildContext sheetContext,
   }) async {
     // A failed initial load leaves _store null and Launch would fail forever:
-    // recover only the campaign store/profile, and abort Launch if the real
-    // saved profile differs from the starter defaults the briefing displayed.
-    if (_store == null) {
-      final recovered = await _retryCampaignLoad();
-      if (recovered == null) {
-        return false;
+    // recover only the campaign store/profile before writing anything.
+    if (_store == null && await _retryCampaignLoad() == null) {
+      return false;
+    }
+    // Abort Launch whenever committed state no longer matches what the
+    // briefing displayed — recovery can swap in a different roster, and a
+    // sheet a covering route kept open through the first mismatch must not
+    // lose the guard on retry.
+    final committedModifiers = _committedCampaignModifiers();
+    final briefingMatches =
+        listEquals(_committedSquad, openedSquad) &&
+        mapEquals(_committedOwnedLevels, openedOwnedLevels) &&
+        committedModifiers.adjustedStartingGold ==
+            openedModifiers.adjustedStartingGold &&
+        committedModifiers.adjustedStartingBaseHealth ==
+            openedModifiers.adjustedStartingBaseHealth &&
+        _committedProgress.resultFor(stage.id) == openedResult &&
+        _committedProgress.endlessBestFor(stage.id) == openedEndlessBest &&
+        _committedProgress.isUnlocked(stage) &&
+        (mode != RunMode.endless || _committedProgress.isCleared(stage.id));
+    if (!briefingMatches) {
+      if (mounted) {
+        setState(() {
+          _mapFeedback =
+              'Campaign progress recovered — review squad before launching.';
+        });
       }
-      final recoveredModifiers = _committedCampaignModifiers();
-      final briefingMatches =
-          listEquals(recovered.squad, openedSquad) &&
-          mapEquals(recovered.ownedLevels, openedOwnedLevels) &&
-          recoveredModifiers.adjustedStartingGold ==
-              openedModifiers.adjustedStartingGold &&
-          recoveredModifiers.adjustedStartingBaseHealth ==
-              openedModifiers.adjustedStartingBaseHealth &&
-          recovered.progress.resultFor(stage.id) == openedResult &&
-          recovered.progress.endlessBestFor(stage.id) == openedEndlessBest &&
-          recovered.progress.isUnlocked(stage) &&
-          (mode != RunMode.endless || recovered.progress.isCleared(stage.id));
-      if (!briefingMatches) {
-        if (mounted) {
-          setState(() {
-            _mapFeedback =
-                'Campaign progress recovered — review squad before launching.';
-          });
+      if (sheetContext.mounted) {
+        final route = ModalRoute.of(sheetContext);
+        if (route != null && route.isActive && route.isCurrent) {
+          Navigator.of(sheetContext).pop();
         }
-        if (sheetContext.mounted) {
-          final route = ModalRoute.of(sheetContext);
-          if (route != null && route.isActive && route.isCurrent) {
-            Navigator.of(sheetContext).pop();
-          }
-        }
-        return false;
       }
+      return false;
     }
     if (listEquals(draft, _committedSquad)) {
       return true;
