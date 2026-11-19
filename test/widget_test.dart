@@ -3655,6 +3655,138 @@ void main() {
     expect(reloaded.progress.endlessBestFor('outpost-alpha'), 4);
   });
 
+  testWidgets('a queued second write still commits after the in-flight '
+      'first write fails', (tester) async {
+    // Write B is issued while write A is in flight; A then fails. The
+    // queue must not be poisoned: B still builds on the committed
+    // aggregate and persists its own delta — a queue that dies on the
+    // first failure, or that replays A's payload for B, fails this test.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.mio: 6,
+        Character.kaito: 8,
+      },
+      squad: const [Character.mio, Character.kaito],
+      scrip: 750,
+      delaySaves: true,
+      failOnSaveIndices: {0},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    await publishEndlessWaveClear(tester, game!, 4);
+    await publishEndlessWaveClear(tester, game!, 7);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    // Wave 7's write is already queued behind in-flight write A: only A
+    // has reached the store so far.
+    expect(store.saveCalls, 1);
+
+    // A fails; B runs anyway and commits on the committed aggregate.
+    store.saveCompletions[0].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    // B persisted its own delta (best 7) despite A's failure. A's failure
+    // is superseded by the newer queued write — no failure banner for the
+    // player, and the wallet and roster rode through untouched.
+    expect(store.saveCalls, 2);
+    expect(store.progress.endlessBestFor('outpost-alpha'), 7);
+    expect(store.scrip, 750);
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.mio: 6,
+      Character.kaito: 8,
+    });
+    expect(store.squad, [Character.mio, Character.kaito]);
+    expect(find.text('Could not save campaign progress.'), findsNothing);
+
+    final reloaded = await store.load();
+    expect(reloaded.scrip, 750);
+    expect(reloaded.progress.endlessBestFor('outpost-alpha'), 7);
+    expect(reloaded.ownedLevels, store.ownedLevels);
+    expect(reloaded.squad, store.squad);
+  });
+
+  testWidgets('a queued second write that fails leaves the first write '
+      'committed and reports live', (tester) async {
+    // Write B is issued while write A is in flight; A commits, B fails.
+    // Nothing from B's payload may advance: the committed aggregate keeps
+    // exactly what A wrote, and the live run surfaces the failure.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.mio: 6,
+        Character.kaito: 8,
+      },
+      squad: const [Character.mio, Character.kaito],
+      scrip: 750,
+      delaySaves: true,
+      failOnSaveIndices: {1},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    await publishEndlessWaveClear(tester, game!, 4);
+    await publishEndlessWaveClear(tester, game!, 7);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    expect(store.saveCalls, 1);
+
+    store.saveCompletions[0].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    // Only A's delta is on disk and in the committed aggregate; B's
+    // failure reports on the still-running game.
+    expect(store.saveCalls, 2);
+    expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+    expect(store.scrip, 750);
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.mio: 6,
+      Character.kaito: 8,
+    });
+    expect(store.squad, [Character.mio, Character.kaito]);
+    expect(find.text('Could not save campaign progress.'), findsOneWidget);
+
+    // The run keeps going after a write failure: the next cleared wave
+    // issues a fresh write that composes on the committed aggregate —
+    // best 9 lands with the wallet and roster still intact.
+    await publishEndlessWaveClear(tester, game!, 9);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 2);
+    store.saveCompletions[2].complete();
+    await tester.pumpAndSettle();
+    expect(store.saveCalls, 3);
+    expect(store.progress.endlessBestFor('outpost-alpha'), 9);
+    expect(store.scrip, 750);
+
+    final reloaded = await store.load();
+    expect(reloaded.scrip, 750);
+    expect(reloaded.progress.endlessBestFor('outpost-alpha'), 9);
+    expect(reloaded.ownedLevels, store.ownedLevels);
+    expect(reloaded.squad, store.squad);
+  });
+
   testWidgets('navigation and Settings stay disabled while a campaign '
       'reset is in flight', (tester) async {
     final store = _TestCampaignProgressStore(
