@@ -1683,6 +1683,77 @@ void main() {
         }
       });
 
+      testWidgets(
+        'a three-fact rewards card stays readable and scroll-reachable at '
+        '320x568 and 2x text',
+        (tester) async {
+          // HPA-923 task 6 fix round 1: medal, blueprint and Scrip facts in
+          // one card must remain legible at the compact floor — prior scaled
+          // fixtures carried no rewards, so nothing established this.
+          await tester.runAsync(loadRealFonts);
+          final collect = _collectLayoutErrors();
+          var replayed = false;
+          var returned = false;
+          await _pumpScaledReport(
+            tester,
+            _victoryContent(
+              MissionSaveState.saved,
+              rewards: const [
+                MissionRewardFact(
+                  title: 'Best medal kept: Gold',
+                  detail:
+                      '20 base health already on record — this run did not '
+                      'replace it.',
+                ),
+                MissionRewardFact(
+                  title: 'Blueprint recovered: Relay Calibration',
+                  detail: 'Available in Salvage Module drafts on future runs.',
+                ),
+                MissionRewardFact(
+                  title: 'Scrip credited: 125',
+                  detail: 'Added to your Scrip wallet.',
+                ),
+              ],
+            ),
+            const Size(320, 568),
+            textScale: 2,
+            onReplay: () => replayed = true,
+            onReturnToMap: () => returned = true,
+          );
+          collect.restore();
+          _expectNoOverflow(collect.errors);
+
+          // Every fact scrolls into view whole — words never split mid-glyph
+          // and no row clips the 320-wide viewport.
+          for (final text in const [
+            'Best medal kept: Gold',
+            '20 base health already on record — this run did not replace it.',
+            'Blueprint recovered: Relay Calibration',
+            'Available in Salvage Module drafts on future runs.',
+            'Scrip credited: 125',
+            'Added to your Scrip wallet.',
+          ]) {
+            final finder = find.text(text);
+            await tester.ensureVisible(finder);
+            await tester.pumpAndSettle();
+            _expectWholeWords(tester, text);
+            final rect = tester.getRect(finder);
+            expect(rect.left, greaterThanOrEqualTo(0), reason: text);
+            expect(rect.right, lessThanOrEqualTo(320), reason: text);
+            expect(rect.bottom, lessThanOrEqualTo(568), reason: text);
+          }
+          await _expectAction(
+            tester,
+            const Size(320, 568),
+            'Replay Mission',
+            true,
+          );
+          await _expectAction(tester, const Size(320, 568), 'World Map', true);
+          expect(replayed, isTrue);
+          expect(returned, isTrue);
+        },
+      );
+
       testWidgets('blueprint and Scrip render as separate facts in the '
           'rewards card', (tester) async {
         // HPA-923 task 3: one Rewards card, one row per fact — blueprint

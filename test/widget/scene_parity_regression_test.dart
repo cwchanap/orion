@@ -965,7 +965,7 @@ void main() {
           find.text('Result saved. Best medal unchanged.'),
           findsOneWidget,
         );
-        expect(find.text('Best medal saved: Gold'), findsOneWidget);
+        expect(find.text('Best medal kept: Gold'), findsOneWidget);
         expect(find.text('Scrip credited: 125'), findsOneWidget);
         expect(
           find.text('Blueprint recovered: Relay Calibration'),

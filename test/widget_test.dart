@@ -4191,14 +4191,20 @@ void main() {
         await tester.pumpAndSettle();
 
         // The kept record is the stored Gold best — not the run's Silver —
-        // while the Scrip fact still credits this run's 125 award. The two
-        // entries must not collapse into one ambiguous row.
+        // and it was never this save's doing, so the fact says the medal is
+        // kept rather than newly saved. The Scrip fact still credits this
+        // run's 125 award; the two entries must not collapse into one row.
         expect(
           find.text('Result saved. Best medal unchanged.'),
           findsOneWidget,
         );
-        expect(find.text('Best medal saved: Gold'), findsOneWidget);
-        expect(find.text('20 base health on record.'), findsOneWidget);
+        expect(find.text('Best medal kept: Gold'), findsOneWidget);
+        expect(
+          find.text(
+            '20 base health already on record — this run did not replace it.',
+          ),
+          findsOneWidget,
+        );
         expect(find.text('Best medal saved: Silver'), findsNothing);
         expect(find.text('Scrip credited: 125'), findsOneWidget);
         // A replay recovers no blueprint — the list has no third fact.
@@ -4208,6 +4214,83 @@ void main() {
         );
       },
     );
+
+    // HPA-923 task 6 fix round 1: a non-improving replay must never frame
+    // the committed medal as pending or unsaved — the stored record stays
+    // on file through the failed write, and the retry that credits Scrip
+    // still records no new medal.
+    testWidgets('a retained best stays on record through a failed save and the '
+        'scrip-crediting retry', (tester) async {
+      const savedBest = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+      final store = _TestCampaignProgressStore(
+        progress: CampaignProgress(
+          bestResultsByStageId: {'outpost-alpha': savedBest},
+        ),
+        scrip: 500,
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+      await publishVictory(
+        tester,
+        game!,
+        result: const StageResult(medal: StageMedal.silver, bestBaseHealth: 14),
+      );
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+      // While the write runs the medal is not "pending" — it is already
+      // committed; only the run's Scrip award is.
+      expect(find.text('Best medal kept: Gold'), findsOneWidget);
+      expect(find.text('Best medal pending: Gold'), findsNothing);
+      expect(find.text('Scrip pending'), findsOneWidget);
+      expect(
+        find.text('125 Scrip credits after this result is saved.'),
+        findsOneWidget,
+      );
+
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+
+      // The failed write leaves the stored record exactly where it was —
+      // "not saved" would claim otherwise — while Scrip correctly reports
+      // itself uncredited.
+      expect(find.text('Best medal kept: Gold'), findsOneWidget);
+      expect(find.text('Best medal not saved'), findsNothing);
+      expect(find.text('Scrip not credited'), findsOneWidget);
+      expect(
+        find.text('Retry Save to keep this 125 Scrip award.'),
+        findsOneWidget,
+      );
+      expect(store.scrip, 500);
+      expect(store.progress.resultFor('outpost-alpha'), savedBest);
+
+      store.failOnSaveIndices.clear();
+      await tester.tap(find.byTooltip('Retry Save'));
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      // Retry credits the captured 125 once and still records no new
+      // medal — the kept Gold record outlives every save state.
+      expect(find.text('Best medal kept: Gold'), findsOneWidget);
+      expect(find.text('Result saved. Best medal unchanged.'), findsOneWidget);
+      expect(find.text('Scrip credited: 125'), findsOneWidget);
+      expect(store.scrip, 625);
+      expect(store.progress.resultFor('outpost-alpha'), savedBest);
+      final reloaded = await store.load();
+      expect(reloaded.scrip, 625);
+      expect(reloaded.progress.resultFor('outpost-alpha'), savedBest);
+    });
 
     testWidgets(
       'a failed save marks the best medal unsaved beside the uncredited '
