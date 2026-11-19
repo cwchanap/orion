@@ -60,6 +60,7 @@ Future<InMemoryCampaignProgressStore> _storeWithResults(
       progress: CampaignProgress(bestResultsByStageId: results),
       ownedLevels: CampaignSave.starterOwnedLevels,
       squad: CampaignSave.starterSquad,
+      scrip: 0,
     ),
   );
   return store;

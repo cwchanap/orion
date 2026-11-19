@@ -151,6 +151,7 @@ Future<InMemoryCampaignProgressStore> storeWithResults(
       progress: CampaignProgress(bestResultsByStageId: results),
       ownedLevels: CampaignSave.starterOwnedLevels,
       squad: CampaignSave.starterSquad,
+      scrip: 0,
     ),
   );
   return store;
@@ -1415,6 +1416,7 @@ void main() {
           }),
           ownedLevels: CampaignSave.starterOwnedLevels,
           squad: CampaignSave.starterSquad,
+          scrip: 0,
         ),
       ),
     });
@@ -1446,6 +1448,40 @@ void main() {
       findsOneWidget,
     );
     expect(find.byTooltip('Start Wave'), findsNothing);
+  });
+
+  testWidgets('reset campaign wipes the Scrip wallet with the profile', (
+    tester,
+  ) async {
+    // The reset rebuilds the whole aggregate — wallet included — so the
+    // next load (and any view reading the committed save) sees 0 Scrip.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 5,
+        Character.mio: 3,
+        Character.sayo: 2,
+      },
+      squad: const [Character.sayo],
+      scrip: 900,
+    );
+    await tester.pumpWidget(testGamePage(progressStore: store));
+    await tester.pumpAndSettle();
+
+    await openResetCampaignDialog(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Campaign reset.'), findsOneWidget);
+    expect(store.resetCalls, 1);
+    expect(store.scrip, 0);
+    expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    expect(store.squad, CampaignSave.starterSquad);
+
+    final reloaded = await store.load();
+    expect(reloaded.scrip, 0);
+    expect(reloaded.ownedLevels, CampaignSave.starterOwnedLevels);
+    expect(reloaded.squad, CampaignSave.starterSquad);
   });
 
   testWidgets('reset confirmation uses OrionSurface and keeps behavior', (
@@ -3504,6 +3540,117 @@ void main() {
     expect(store.squad, [Character.sayo, Character.kaito]);
   });
 
+  testWidgets('queued endless saves compose on the committed aggregate and '
+      'keep the Scrip wallet', (tester) async {
+    // Save B is queued while save A is in flight: B's payload builds on A's
+    // committed result, so the wallet and roster ride through both writes
+    // untouched (HPA-923 task 2 — no reconstruction may zero the wallet).
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.mio: 6,
+        Character.kaito: 8,
+      },
+      squad: const [Character.mio, Character.kaito],
+      scrip: 750,
+      delaySaves: true,
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    await publishEndlessWaveClear(tester, game!, 4);
+    await publishEndlessWaveClear(tester, game!, 7);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+    // Save A drains first; save B was queued behind it and now runs.
+    store.saveCompletions[0].complete();
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    expect(store.progress.endlessBestFor('outpost-alpha'), 7);
+    expect(store.scrip, 750);
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.mio: 6,
+      Character.kaito: 8,
+    });
+    expect(store.squad, [Character.mio, Character.kaito]);
+
+    // The same aggregate survives the load path a restarted page would take.
+    final reloaded = await store.load();
+    expect(reloaded.scrip, 750);
+    expect(reloaded.progress.endlessBestFor('outpost-alpha'), 7);
+    expect(reloaded.ownedLevels, store.ownedLevels);
+    expect(reloaded.squad, store.squad);
+  });
+
+  testWidgets('a failed second write keeps the last committed Scrip and '
+      'roster', (tester) async {
+    // Write A commits (best 4); write B fails. The committed aggregate —
+    // not the attempted payload — is what every later view and reload sees.
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+      ownedLevels: const {
+        Character.haruto: 1,
+        Character.mio: 6,
+        Character.sayo: 3,
+      },
+      squad: const [Character.mio, Character.sayo],
+      scrip: 750,
+      delaySaves: true,
+      failOnSaveIndices: {1},
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Endless');
+
+    await publishEndlessWaveClear(tester, game!, 4);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+    store.saveCompletions[0].complete();
+    await tester.pumpAndSettle();
+    expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+
+    await publishEndlessWaveClear(tester, game!, 7);
+    await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+    await publishLoss(tester, game!);
+    await tester.pump();
+    store.saveCompletions[1].complete();
+    await tester.pumpAndSettle();
+
+    // Nothing from the failed payload advanced: committed best stays 4 and
+    // the wallet and roster are exactly what write A committed.
+    expect(find.text('Save failed — best 4 waves kept.'), findsOneWidget);
+    expect(store.progress.endlessBestFor('outpost-alpha'), 4);
+    expect(store.scrip, 750);
+    expect(store.ownedLevels, {
+      Character.haruto: 1,
+      Character.mio: 6,
+      Character.sayo: 3,
+    });
+    expect(store.squad, [Character.mio, Character.sayo]);
+
+    final reloaded = await store.load();
+    expect(reloaded.scrip, 750);
+    expect(reloaded.progress.endlessBestFor('outpost-alpha'), 4);
+  });
+
   testWidgets('navigation and Settings stay disabled while a campaign '
       'reset is in flight', (tester) async {
     final store = _TestCampaignProgressStore(
@@ -4803,6 +4950,7 @@ void main() {
           ),
           ownedLevels: CampaignSave.starterOwnedLevels,
           squad: CampaignSave.starterSquad,
+          scrip: 0,
         ),
       );
 
@@ -4878,6 +5026,7 @@ void main() {
         ),
         ownedLevels: CampaignSave.starterOwnedLevels,
         squad: CampaignSave.starterSquad,
+        scrip: 0,
       ),
     );
 
@@ -4929,6 +5078,7 @@ void main() {
           ),
           ownedLevels: CampaignSave.starterOwnedLevels,
           squad: CampaignSave.starterSquad,
+          scrip: 0,
         ),
       );
 
@@ -5934,6 +6084,7 @@ void main() {
             Character.jin,
             Character.elena,
           ],
+          scrip: 0,
         ),
       );
       final game = await pumpMountedMission(
@@ -7554,6 +7705,182 @@ void main() {
         Character.mio: 1,
       });
     });
+
+    testWidgets(
+      'squad and victory writes compose on the committed aggregate and '
+      'keep the wallet',
+      (tester) async {
+        const victory = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 2,
+            Character.sayo: 3,
+          },
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+          delaySaves: true,
+        );
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Write A: the launch-time squad draft commits through the queue.
+        await openBriefing(tester);
+        await pickSquadMember(tester, Character.sayo);
+        await tester.tap(find.byTooltip('Start Mission'));
+        await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+        store.saveCompletions[0].complete();
+        for (var i = 0; i < 4; i++) {
+          await tester.pump();
+        }
+        expect(game, isNotNull);
+        expect(store.squad, [Character.haruto, Character.mio, Character.sayo]);
+
+        // Write B: the victory result composes on write A's committed
+        // payload — squad and wallet ride through; nothing is rebuilt to
+        // zero (HPA-923 task 2).
+        await publishVictory(tester, game!, result: victory);
+        await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+        store.saveCompletions[1].complete();
+        await tester.pumpAndSettle();
+
+        expect(find.text('Saved.'), findsOneWidget);
+        expect(store.progress.resultFor('outpost-alpha'), victory);
+        expect(store.squad, [Character.haruto, Character.mio, Character.sayo]);
+        expect(store.ownedLevels[Character.sayo], 3);
+        // Task 3 credits the Scrip award; until then the wallet rides
+        // through the victory save untouched.
+        expect(store.scrip, 500);
+
+        // The composed aggregate is what a restarted page would reload.
+        final reloaded = await store.load();
+        expect(reloaded.scrip, 500);
+        expect(reloaded.squad, [
+          Character.haruto,
+          Character.mio,
+          Character.sayo,
+        ]);
+        expect(reloaded.progress.resultFor('outpost-alpha'), victory);
+      },
+    );
+
+    testWidgets(
+      'a failed squad write leaves committed Scrip and roster out of every '
+      'view',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 2,
+            Character.sayo: 3,
+          },
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+          failOnSaveIndices: {0},
+        );
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+
+        await openBriefing(tester);
+        await pickSquadMember(tester, Character.sayo);
+        await launchFromBriefing(tester);
+
+        // Failed write: nothing committed — wallet, roster and squad stay
+        // put and the still-open sheet reports the retryable failure.
+        expect(store.saveCalls, 1);
+        expect(store.scrip, 500);
+        expect(store.squad, [Character.haruto, Character.mio]);
+        expect(
+          find.text(
+            'Could not save squad changes — tap a launch action to retry.',
+          ),
+          findsOneWidget,
+        );
+
+        // Views read the committed aggregate only: Camp still shows sayo
+        // owned at Lv 3 but never tags it SQUAD.
+        await tester.tap(find.byTooltip('Dismiss'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Camp'));
+        await tester.pumpAndSettle();
+
+        final sayoCard = find.byKey(const ValueKey('camp-card-sayo'));
+        expect(sayoCard, findsOneWidget);
+        expect(
+          find.descendant(of: sayoCard, matching: find.text('Lv 3')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: sayoCard, matching: find.text('SQUAD')),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('camp-card-mio')),
+            matching: find.text('SQUAD'),
+          ),
+          findsOneWidget,
+        );
+
+        final reloaded = await store.load();
+        expect(reloaded.scrip, 500);
+        expect(reloaded.squad, [Character.haruto, Character.mio]);
+      },
+    );
+
+    testWidgets(
+      'a committed squad write updates Camp without a separate projection',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 2,
+            Character.sayo: 3,
+          },
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+        );
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await openBriefing(tester);
+        await pickSquadMember(tester, Character.sayo);
+        await launchFromBriefing(tester);
+        expect(game, isNotNull);
+        // The squad-only write carries the wallet through untouched.
+        expect(store.scrip, 500);
+
+        // One aggregate assignment refreshes every view: back on the map,
+        // Camp already tags the newly committed member — no projection
+        // setter ran between the commit and this build.
+        game!.returnToMap();
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('Camp'));
+        await tester.pumpAndSettle();
+
+        final sayoCard = find.byKey(const ValueKey('camp-card-sayo'));
+        expect(
+          find.descendant(of: sayoCard, matching: find.text('SQUAD')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: sayoCard, matching: find.text('Lv 3')),
+          findsOneWidget,
+        );
+      },
+    );
   });
 }
 
@@ -7904,6 +8231,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     CampaignProgress? progress,
     Map<Character, int>? ownedLevels,
     List<Character>? squad,
+    this.scrip = 0,
   }) : progress = progress ?? CampaignProgress(),
        ownedLevels = ownedLevels ?? CampaignSave.starterOwnedLevels,
        squad = squad ?? CampaignSave.starterSquad;
@@ -7919,6 +8247,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
   CampaignProgress progress;
   Map<Character, int> ownedLevels;
   List<Character> squad;
+  int scrip;
   int loadCalls = 0;
   int saveCalls = 0;
   int resetCalls = 0;
@@ -7935,6 +8264,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
       progress: progress,
       ownedLevels: ownedLevels,
       squad: squad,
+      scrip: scrip,
     );
   }
 
@@ -7954,6 +8284,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     progress = save.progress;
     ownedLevels = save.ownedLevels;
     squad = save.squad;
+    scrip = save.scrip;
   }
 
   @override
@@ -7976,6 +8307,7 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     progress = CampaignProgress();
     ownedLevels = CampaignSave.starterOwnedLevels;
     squad = CampaignSave.starterSquad;
+    scrip = 0;
   }
 }
 
