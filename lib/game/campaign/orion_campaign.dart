@@ -19,6 +19,8 @@ class OrionCampaign {
       isMainPath: true,
       mainPathOrder: 1,
       blueprint: RunModuleId.relayCalibration,
+      firstClearScrip: 900,
+      replayScrip: 100,
       mapColumn: 0,
       mapRow: 1,
     ),
@@ -33,6 +35,8 @@ class OrionCampaign {
       isMainPath: true,
       mainPathOrder: 2,
       blueprint: RunModuleId.relayArc,
+      firstClearScrip: 180,
+      replayScrip: 120,
       mapColumn: 1,
       mapRow: 1,
       modifiers: const [StageModifier.shieldRecharge],
@@ -49,6 +53,8 @@ class OrionCampaign {
       mainPathOrder: null,
       reward: CampaignReward.bonusGold,
       blueprint: RunModuleId.salvagedDrones,
+      firstClearScrip: 220,
+      replayScrip: 140,
       mapColumn: 2,
       mapRow: 0,
       modifiers: const [StageModifier.swarmBounty],
@@ -64,6 +70,8 @@ class OrionCampaign {
       isMainPath: true,
       mainPathOrder: 3,
       blueprint: RunModuleId.foundryNanites,
+      firstClearScrip: 240,
+      replayScrip: 160,
       mapColumn: 2,
       mapRow: 1,
       modifiers: const [StageModifier.reinforcedArmor],
@@ -79,6 +87,8 @@ class OrionCampaign {
       isMainPath: true,
       mainPathOrder: 4,
       blueprint: RunModuleId.auroraFocus,
+      firstClearScrip: 300,
+      replayScrip: 200,
       mapColumn: 3,
       mapRow: 1,
       modifiers: const [StageModifier.regenPressurePulses],
@@ -95,6 +105,8 @@ class OrionCampaign {
       mainPathOrder: null,
       reward: CampaignReward.bonusHealth,
       blueprint: RunModuleId.siegeRounds,
+      firstClearScrip: 380,
+      replayScrip: 220,
       mapColumn: 4,
       mapRow: 2,
       modifiers: const [
@@ -113,6 +125,8 @@ class OrionCampaign {
       isMainPath: true,
       mainPathOrder: 5,
       blueprint: RunModuleId.gravityEcho,
+      firstClearScrip: 440,
+      replayScrip: 260,
       mapColumn: 4,
       mapRow: 1,
       modifiers: const [
@@ -194,6 +208,7 @@ class OrionCampaign {
       }
     }
     errors.addAll(_validateRewards(mainStageList, sideStageList));
+    errors.addAll(_validateScrip(stageList));
     final sortedMainPathOrders = mainPathOrders.toList(growable: false)..sort();
     if (!_listEquals(sortedMainPathOrders, const [1, 2, 3, 4, 5])) {
       errors.add('Main path orders must be exactly [1, 2, 3, 4, 5].');
@@ -285,6 +300,33 @@ class OrionCampaign {
         errors.add(
           '${entry.key} reward appears on ${entry.value} stages; expected at most one.',
         );
+      }
+    }
+    return errors;
+  }
+
+  /// Scrip invariants (HPA-923): every validated stage must pay positive
+  /// Scrip, and the first main-path stage's first-clear award at Clear medal
+  /// (`firstClearScrip + replayScrip`) must fund the ten-flare onboarding
+  /// guarantee. Constructor defaults stay at zero for isolated fixtures.
+  static List<String> _validateScrip(List<StageDefinition> stageList) {
+    final errors = <String>[];
+    for (final stage in stageList) {
+      if (stage.firstClearScrip <= 0) {
+        errors.add('${stage.id} firstClearScrip must be positive.');
+      }
+      if (stage.replayScrip <= 0) {
+        errors.add('${stage.id} replayScrip must be positive.');
+      }
+      if (stage.isMainPath && stage.mainPathOrder == 1) {
+        final firstClearAward = stage.firstClearScrip + stage.replayScrip;
+        final tenFlareCost = 10 * GameBalance.flareCost;
+        if (firstClearAward < tenFlareCost) {
+          errors.add(
+            '${stage.id} first-clear award of $firstClearAward Scrip must '
+            'cover ten flares costing $tenFlareCost.',
+          );
+        }
       }
     }
     return errors;
