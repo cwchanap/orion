@@ -357,4 +357,80 @@ void main() {
     await tester.scrollUntilVisible(find.text('8 SPARE DOG TAGS TRADED'), 200);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('compact results reflow into readable tiles and hero cards', (
+    tester,
+  ) async {
+    const viewport = Size(320, 568);
+
+    // At 1x the fixed five-across grid would squeeze tiles to ~52px; the
+    // result must reflow so captions stay readable.
+    await _pumpFlare(
+      tester,
+      scrip: 335,
+      result: _tenDrawBatch(),
+      viewport: viewport,
+    );
+    final tile0 = tester.getRect(find.byKey(const ValueKey('flare-draw-0')));
+    expect(
+      tile0.width,
+      greaterThan(64),
+      reason: 'result tiles must not squeeze below a readable width',
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('flare-draw-4'))).top,
+      greaterThan(tile0.top),
+      reason: 'the grid must wrap to extra rows instead of forcing five across',
+    );
+    // Outcome captions must render at full scale inside their tile — a
+    // FittedBox shrink would paint only ~9px of the ~15px line.
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('flare-draw-0')),
+        matching: find.byType(FittedBox),
+      ),
+      findsNothing,
+      reason: 'outcome captions must wrap, not shrink to fit',
+    );
+    expect(
+      tester.getRect(find.text('+10 SCRIP').first).height,
+      greaterThanOrEqualTo(13),
+      reason: 'the refund caption must paint at full microLabel size',
+    );
+
+    // At 2x text the grid collapses toward a single column and hero cards
+    // stack, keeping every caption at full scale.
+    await _pumpFlare(
+      tester,
+      scrip: 335,
+      result: _tenDrawBatch(),
+      viewport: viewport,
+      textScaler: const TextScaler.linear(2),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('flare-draw-1'))).top,
+      greaterThan(
+        tester.getRect(find.byKey(const ValueKey('flare-draw-0'))).top,
+      ),
+      reason: '2x text must reflow the grid instead of five-across',
+    );
+    expect(
+      tester.getRect(find.text('+10 SCRIP').first).height,
+      greaterThanOrEqualTo(24),
+      reason: 'the refund caption must paint at the doubled scale',
+    );
+    final heroKaito = tester.getRect(
+      find.byKey(const ValueKey('flare-hero-kaito')),
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('flare-hero-tetsuo'))).top,
+      greaterThan(heroKaito.top),
+      reason: 'hero cards must stack at 2x text instead of squeezing',
+    );
+    expect(
+      tester.getRect(find.text('NEW RECRUIT').first).width,
+      lessThanOrEqualTo(heroKaito.width - 16),
+      reason: 'NEW RECRUIT must fit inside its hero card, not clip',
+    );
+  });
 }
