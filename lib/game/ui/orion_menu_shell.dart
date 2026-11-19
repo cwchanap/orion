@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
+import '../util/format.dart';
 import 'orion_typography.dart';
 import 'orion_ui_theme.dart';
 
-enum OrionMenuDestination { sectors, camp, codex }
+enum OrionMenuDestination { sectors, camp, flare, codex }
 
 class OrionMenuShell extends StatelessWidget {
   const OrionMenuShell({
@@ -11,6 +12,7 @@ class OrionMenuShell extends StatelessWidget {
     required this.destination,
     required this.medalEarned,
     required this.medalTotal,
+    required this.scrip,
     required this.onDestinationSelected,
     required this.onOpenSettings,
     required this.child,
@@ -24,6 +26,10 @@ class OrionMenuShell extends StatelessWidget {
   final int medalEarned;
 
   final int medalTotal;
+
+  /// The committed Scrip wallet — every destination carries it in the top
+  /// bar so the player's balance stays visible across Map/Camp/Flare/Codex.
+  final int scrip;
 
   final ValueChanged<OrionMenuDestination> onDestinationSelected;
 
@@ -54,6 +60,7 @@ class OrionMenuShell extends StatelessWidget {
                   destination: destination,
                   medalEarned: medalEarned,
                   medalTotal: medalTotal,
+                  scrip: scrip,
                   onOpenSettings: settingsEnabled ? onOpenSettings : null,
                 )
               else
@@ -65,11 +72,16 @@ class OrionMenuShell extends StatelessWidget {
                 ),
               if (feedback != null) _FeedbackLine(message: feedback!),
               Expanded(
-                child: MediaQuery.removePadding(
-                  context: context,
-                  removeTop: true,
-                  removeBottom: true,
-                  child: child,
+                // Clip at the slot edge: a child that overflows its bounds
+                // (e.g. the Codex chrome under an open keyboard) must not
+                // paint — or hit-test — over the tab bar below.
+                child: ClipRect(
+                  child: MediaQuery.removePadding(
+                    context: context,
+                    removeTop: true,
+                    removeBottom: true,
+                    child: child,
+                  ),
                 ),
               ),
               // The tab bar sits at the bottom of the body — which the
@@ -99,12 +111,14 @@ class _TopBar extends StatelessWidget {
     required this.destination,
     required this.medalEarned,
     required this.medalTotal,
+    required this.scrip,
     required this.onOpenSettings,
   });
 
   final OrionMenuDestination destination;
   final int medalEarned;
   final int medalTotal;
+  final int scrip;
   final VoidCallback? onOpenSettings;
 
   @override
@@ -113,11 +127,14 @@ class _TopBar extends StatelessWidget {
     final (kicker, title) = switch (destination) {
       OrionMenuDestination.sectors => ('ORION CAMPAIGN', 'Sector Map'),
       OrionMenuDestination.camp => ('CHARACTER ROSTER', 'Camp'),
+      OrionMenuDestination.flare => ('RECRUIT SURVIVORS', 'Signal Flare'),
       OrionMenuDestination.codex => ('FIELD MANUAL', 'Codex'),
     };
-    final accent = destination == OrionMenuDestination.camp
-        ? uiTheme.systemViolet
-        : uiTheme.textMuted;
+    final accent = switch (destination) {
+      OrionMenuDestination.camp => uiTheme.systemViolet,
+      OrionMenuDestination.flare => uiTheme.warningOrange,
+      _ => uiTheme.textMuted,
+    };
     final textScaler = MediaQuery.textScalerOf(
       context,
     ).clamp(maxScaleFactor: 1.15);
@@ -163,6 +180,13 @@ class _TopBar extends StatelessWidget {
               iconColor: uiTheme.creditGold,
               count: '$medalEarned/$medalTotal',
               semanticsLabel: '$medalEarned of $medalTotal campaign medals',
+            ),
+            const SizedBox(width: 8),
+            OrionResourceChip(
+              icon: Icons.payments_rounded,
+              iconColor: uiTheme.creditGold,
+              count: grouped(scrip),
+              semanticsLabel: '${grouped(scrip)} Scrip',
             ),
             const SizedBox(width: 8),
             _GhostIconButton(
@@ -313,6 +337,14 @@ class _TabBar extends StatelessWidget {
               onTap: onDestinationSelected,
             ),
             _Tab(
+              destination: OrionMenuDestination.flare,
+              icon: Icons.local_fire_department_rounded,
+              label: 'Flare',
+              selected: destination == OrionMenuDestination.flare,
+              enabled: enabled,
+              onTap: onDestinationSelected,
+            ),
+            _Tab(
               destination: OrionMenuDestination.codex,
               icon: Icons.menu_book_rounded,
               label: 'Codex',
@@ -348,9 +380,11 @@ class _Tab extends StatelessWidget {
   Widget build(BuildContext context) {
     final uiTheme = OrionUiTheme.of(context);
     final active = enabled;
-    final accent = destination == OrionMenuDestination.camp
-        ? uiTheme.systemViolet
-        : uiTheme.systemCyan;
+    final accent = switch (destination) {
+      OrionMenuDestination.camp => uiTheme.systemViolet,
+      OrionMenuDestination.flare => uiTheme.warningOrange,
+      _ => uiTheme.systemCyan,
+    };
     return Expanded(
       child: Semantics(
         button: true,

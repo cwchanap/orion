@@ -46,6 +46,7 @@ void main() {
           destination: OrionMenuDestination.codex,
           medalEarned: 0,
           medalTotal: 21,
+          scrip: 0,
           onDestinationSelected: (_) {},
           onOpenSettings: () {},
           child: CodexView(
@@ -275,6 +276,7 @@ void main() {
           destination: OrionMenuDestination.sectors,
           medalEarned: 0,
           medalTotal: 15,
+          scrip: 0,
           onDestinationSelected: selected.add,
           onOpenSettings: () {},
           child: const SizedBox.expand(),
@@ -1028,6 +1030,7 @@ void main() {
           destination: OrionMenuDestination.codex,
           medalEarned: 0,
           medalTotal: 21,
+          scrip: 0,
           onDestinationSelected: selected.add,
           onOpenSettings: () {},
           child: CodexView(
@@ -1053,7 +1056,11 @@ void main() {
           'the tab bar must remain above the keyboard, not overflow '
           'below it: $tabs',
     );
-    await tester.tap(find.byTooltip('Map'));
+    // The focused field's caret handle can hang over the left edge of the
+    // first tab, so tap inside the tab where nothing transient overlays it.
+    await tester.tapAt(
+      tester.getRect(find.byTooltip('Map')).centerRight - const Offset(30, 0),
+    );
     expect(selected, [OrionMenuDestination.sectors]);
     expect(tester.takeException(), isNull);
   });
@@ -2411,6 +2418,7 @@ void main() {
               destination: OrionMenuDestination.codex,
               medalEarned: 0,
               medalTotal: 21,
+              scrip: 0,
               onDestinationSelected: (_) {},
               onOpenSettings: () {},
               child: CodexView(

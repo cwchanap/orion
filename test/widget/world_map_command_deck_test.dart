@@ -98,6 +98,7 @@ Widget buildMap({
             destination: OrionMenuDestination.sectors,
             medalEarned: progress.totalMedalRank,
             medalTotal: resolvedStages.length * 3,
+            scrip: 0,
             navigationEnabled: !(isSavingProgress || isResetting),
             settingsEnabled: !isSavingFeedback,
             onDestinationSelected: onDestinationSelected ?? (_) {},

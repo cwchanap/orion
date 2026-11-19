@@ -748,6 +748,22 @@ void main() {
         expect(source.scrip, GameBalance.flareCost - 1);
         expect(source.ownedLevels, CampaignSave.starterOwnedLevels);
       });
+
+      test('a duplicate refund cannot cover the upfront shortfall', () {
+        // haruto is a starter — its duplicate would refund 10 Scrip, enough
+        // to leave 5 after a 95-Scrip wallet paid 100. The fee is charged
+        // upfront, so the speculative refund must not finance the pull.
+        final source = save(scrip: GameBalance.flareCost - 5);
+
+        expect(
+          () => source.withFlareBatch(
+            FlareBatch([duplicateDraw(Character.haruto)]),
+          ),
+          throwsStateError,
+        );
+        expect(source.scrip, GameBalance.flareCost - 5);
+        expect(source.ownedLevels, CampaignSave.starterOwnedLevels);
+      });
     });
 
     group('withMissionWin', () {
