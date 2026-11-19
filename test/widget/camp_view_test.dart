@@ -488,6 +488,76 @@ void main() {
     },
   );
 
+  testWidgets(
+    'sheet next values paint in full at the 1.5x accessibility boundary',
+    (tester) async {
+      // Review round 2: at exactly 1.5x the stacked layout is inactive
+      // (it only engages above 1.5) and the fixed value column truncated
+      // '→ 11.8/s' for Shiori's corrosion preview — the 2x coverage above
+      // never exercises the single-line row at this scale.
+      await _pumpCamp(
+        tester,
+        ownedLevels: const {Character.shiori: 9},
+        squad: const [Character.shiori],
+        scrip: 9999,
+        textScaler: const TextScaler.linear(1.5),
+        onLevelUp: (_) {},
+      );
+      await _showCard(tester, Character.shiori);
+      await tester.tap(_card(Character.shiori));
+      await tester.pumpAndSettle();
+
+      final nextFinder = find.byKey(
+        const ValueKey('sheet-stat-next-CORROSION'),
+      );
+      expect(nextFinder, findsOneWidget);
+      final nextText = tester.widget<Text>(nextFinder).data!;
+      expect(nextText, endsWith('/s'));
+
+      // Clip detection, not presence: the rendered paragraph must be at
+      // least as wide as the single-line text laid out without bounds — a
+      // narrower box means the readout wrapped or clipped in the column.
+      final paragraph = tester.renderObject<RenderParagraph>(nextFinder);
+      final unconstrained = TextPainter(
+        text: paragraph.text,
+        textDirection: paragraph.textDirection,
+        textScaler: paragraph.textScaler,
+        maxLines: 1,
+      )..layout();
+      expect(
+        paragraph.size.width,
+        greaterThanOrEqualTo(unconstrained.width - 0.01),
+        reason: "'$nextText' does not fit its value column at 1.5x",
+      );
+
+      // The closing glyph must paint inside the paragraph bounds — a glyph
+      // pushed onto a wrapped, unpainted second line or past the clip edge
+      // reports a box outside them.
+      final lastGlyph = paragraph.getBoxesForSelection(
+        TextSelection(
+          baseOffset: nextText.length - 1,
+          extentOffset: nextText.length,
+        ),
+      );
+      expect(lastGlyph, isNotEmpty, reason: "'$nextText' lost its last glyph");
+      expect(
+        lastGlyph.last.top,
+        lessThan(paragraph.size.height),
+        reason: "'$nextText' wrapped onto an unpainted line",
+      );
+      // Glyph bearings may paint a fraction past the line's advance width;
+      // real truncation is measured in whole pixels, not sub-pixel
+      // overhang, so the bound carries a one-pixel tolerance.
+      expect(
+        lastGlyph.last.right,
+        lessThanOrEqualTo(paragraph.size.width + 1),
+        reason: "'$nextText' clips past the value column",
+      );
+
+      expect(tester.takeException(), isNull);
+    },
+  );
+
   testWidgets('Level Up fires the purchase callback once per press', (
     tester,
   ) async {
