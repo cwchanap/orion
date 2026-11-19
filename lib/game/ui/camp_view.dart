@@ -289,6 +289,7 @@ class _CharacterCard extends StatelessWidget {
                 'level $level${inSquad ? ', squad member' : ''}'
           : 'Locked character, rank ${character.rank.label}, not recruited',
       button: owned,
+      onTap: onTap,
       excludeSemantics: true,
       child: Opacity(
         opacity: owned ? 1 : 0.55,

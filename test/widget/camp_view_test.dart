@@ -233,6 +233,39 @@ void main() {
     }
   });
 
+  testWidgets('an owned card announces a tappable button to screen readers', (
+    tester,
+  ) async {
+    // excludeSemantics strips the InkWell's own action, so the card's
+    // Semantics node must carry the tap itself — otherwise assistive tech
+    // announces a dead button that can never open the character sheet.
+    await _pumpCamp(tester, ownedLevels: const {Character.haruto: 7});
+
+    final semantics = tester.ensureSemantics();
+    try {
+      final ownedNode = tester.getSemantics(
+        find.bySemanticsLabel(RegExp('^Haruto, rank E, level 7')),
+      );
+      final ownedData = ownedNode.getSemanticsData();
+      expect(ownedData.flagsCollection.isButton, isTrue);
+      expect(ownedData.actions & SemanticsAction.tap.index, isNot(0));
+      ownedNode.owner!.performAction(ownedNode.id, SemanticsAction.tap);
+
+      final lockedData = tester
+          .getSemantics(
+            find.bySemanticsLabel('Locked character, rank E, not recruited'),
+          )
+          .getSemanticsData();
+      expect(lockedData.flagsCollection.isButton, isFalse);
+      expect(lockedData.actions & SemanticsAction.tap.index, 0);
+    } finally {
+      semantics.dispose();
+    }
+
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+  });
+
   testWidgets('tapping an owned card opens the read-only character sheet', (
     tester,
   ) async {
