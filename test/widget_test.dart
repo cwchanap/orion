@@ -3571,6 +3571,10 @@ void main() {
     await publishEndlessWaveClear(tester, game!, 7);
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
+    // Wave 7's write is already queued behind the in-flight wave-4 write:
+    // the queue serializes them — only save A has reached the store.
+    expect(store.saveCalls, 1);
+
     // Save A drains first; save B was queued behind it and now runs.
     store.saveCompletions[0].complete();
     await _pumpUntil(tester, () => store.saveCompletions.length > 1);
@@ -7879,6 +7883,163 @@ void main() {
           find.descendant(of: sayoCard, matching: find.text('Lv 3')),
           findsOneWidget,
         );
+      },
+    );
+
+    testWidgets('a failed victory write keeps the uncommitted win out of the '
+        'following squad save and every view', (tester) async {
+      const victory = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+      final store = _TestCampaignProgressStore(
+        ownedLevels: const {
+          Character.haruto: 1,
+          Character.mio: 2,
+          Character.sayo: 3,
+        },
+        squad: const [Character.haruto, Character.mio],
+        scrip: 500,
+        failOnSaveIndices: {0},
+      );
+      OrionDefenseGame? game;
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          onGameCreated: (created) => game = created,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Launch with the committed squad — no squad write — then win:
+      // write index 0 is the victory save, and it fails.
+      await startStageFromBriefing(tester);
+      await publishVictory(tester, game!, result: victory);
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 1);
+      expect(find.text('Save failed — progress unchanged.'), findsOneWidget);
+      expect(store.progress.resultFor('outpost-alpha'), isNull);
+      expect(store.scrip, 500);
+
+      // The failed write offered exit; committed progress still locks
+      // Nebula Relay — the uncommitted win never advanced the aggregate.
+      await tester.tap(find.byTooltip('World Map (Unsaved)'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Relay'));
+      await tester.tap(find.text('Relay'));
+      await tester.pumpAndSettle();
+      expect(find.text('Nebula Relay is locked.'), findsOneWidget);
+
+      // The next write — the launch-time squad draft — must compose on
+      // the committed aggregate: the squad delta lands WITHOUT the failed
+      // victory resurrecting inside its payload.
+      await openBriefing(tester);
+      await pickSquadMember(tester, Character.sayo);
+      await launchFromBriefing(tester);
+
+      expect(store.saveCalls, 2);
+      expect(store.squad, [Character.haruto, Character.mio, Character.sayo]);
+      expect(store.progress.resultFor('outpost-alpha'), isNull);
+      expect(store.ownedLevels, {
+        Character.haruto: 1,
+        Character.mio: 2,
+        Character.sayo: 3,
+      });
+      expect(store.scrip, 500);
+      // The relaunched run deploys the committed roster write 2 committed.
+      expect(game!.snapshot.squadLevels, {
+        Character.haruto: 1,
+        Character.mio: 2,
+        Character.sayo: 3,
+      });
+
+      // Reload sees exactly what the committed aggregate holds.
+      final reloaded = await store.load();
+      expect(reloaded.scrip, 500);
+      expect(reloaded.squad, [Character.haruto, Character.mio, Character.sayo]);
+      expect(reloaded.progress.resultFor('outpost-alpha'), isNull);
+    });
+
+    testWidgets(
+      'a failed squad write after a committed victory keeps the win and '
+      'wallet, and the retry composes on the committed aggregate',
+      (tester) async {
+        const victory = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: 1,
+            Character.mio: 2,
+            Character.sayo: 3,
+          },
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+          failOnSaveIndices: {1},
+        );
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            onGameCreated: (created) => game = created,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await startStageFromBriefing(tester);
+        await publishVictory(tester, game!, result: victory);
+        await tester.pumpAndSettle();
+
+        // Write 1 committed: win, squad and wallet are all on disk.
+        expect(find.text('Saved.'), findsOneWidget);
+        expect(store.saveCalls, 1);
+        expect(store.progress.resultFor('outpost-alpha'), victory);
+        expect(store.scrip, 500);
+
+        await tester.tap(find.byTooltip('World Map').last);
+        await tester.pumpAndSettle();
+
+        // Write 2 — the squad draft — fails: nothing from it may advance.
+        // The committed aggregate still carries write 1's win and wallet.
+        // Alpha is cleared now, so the launch action reads Replay Mission.
+        await openBriefing(tester);
+        await pickSquadMember(tester, Character.sayo);
+        await launchFromBriefing(tester, actionLabel: 'Replay Mission');
+
+        expect(store.saveCalls, 2);
+        expect(
+          find.text(
+            'Could not save squad changes — tap a launch action to retry.',
+          ),
+          findsOneWidget,
+        );
+        expect(store.squad, [Character.haruto, Character.mio]);
+        expect(store.progress.resultFor('outpost-alpha'), victory);
+        expect(store.scrip, 500);
+
+        // The retry builds a fresh payload on the committed aggregate: the
+        // draft squad lands with write 1's result still riding along.
+        await launchFromBriefing(tester, actionLabel: 'Replay Mission');
+
+        expect(store.saveCalls, 3);
+        expect(store.squad, [Character.haruto, Character.mio, Character.sayo]);
+        expect(store.progress.resultFor('outpost-alpha'), victory);
+        expect(store.ownedLevels, {
+          Character.haruto: 1,
+          Character.mio: 2,
+          Character.sayo: 3,
+        });
+        expect(store.scrip, 500);
+        expect(game!.snapshot.squadLevels, {
+          Character.haruto: 1,
+          Character.mio: 2,
+          Character.sayo: 3,
+        });
+
+        // Reload sees exactly the last committed aggregate.
+        final reloaded = await store.load();
+        expect(reloaded.scrip, 500);
+        expect(reloaded.progress.resultFor('outpost-alpha'), victory);
+        expect(reloaded.squad, [
+          Character.haruto,
+          Character.mio,
+          Character.sayo,
+        ]);
       },
     );
   });
