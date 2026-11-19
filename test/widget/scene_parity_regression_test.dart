@@ -8,6 +8,7 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress.dart';
+import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/orion_defense_game.dart';
@@ -834,4 +835,150 @@ void main() {
       );
     });
   }
+
+  group('HPA-923 task 6 economy regression sweep', () {
+    Finder scripSection() =>
+        find.byKey(const ValueKey('briefing-scrip-reward'));
+
+    testWidgets(
+      'the real briefing carries the Scrip projection beside squad draft '
+      'and Launch, and a committed clear claims it on replay',
+      (tester) async {
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          fixtures.testGamePage(onGameCreated: (g) => game = g),
+        );
+        await tester.pumpAndSettle();
+
+        // Open Alpha's briefing through the real map route — the projection
+        // must read at the Clear-medal floor beside the squad editor.
+        await tester.ensureVisible(find.text('Alpha'));
+        await tester.tap(find.text('Alpha'));
+        await tester.pumpAndSettle();
+        expect(scripSection(), findsOneWidget);
+        await tester.ensureVisible(scripSection());
+        await tester.pumpAndSettle();
+        for (final label in [
+          'SCRIP REWARD',
+          'FIRST CLEAR',
+          'EVERY REPLAY',
+          'GOLD MEDAL',
+        ]) {
+          expect(
+            find.descendant(of: scripSection(), matching: find.text(label)),
+            findsOneWidget,
+            reason: label,
+          );
+        }
+        expect(
+          find.descendant(
+            of: scripSection(),
+            matching: find.textContaining('Signal Flares'),
+          ),
+          findsOneWidget,
+          reason: 'the stage-one ten-flare guarantee stays legible',
+        );
+        expect(
+          find.byKey(const ValueKey('briefing-squad-edit')),
+          findsOneWidget,
+        );
+
+        // Launch still works beside the new section.
+        await tester.tap(find.byTooltip('Start Mission'));
+        await tester.pumpAndSettle();
+        expect(game!.snapshot.phase, GamePhase.build);
+
+        await fixtures.publishVictory(
+          tester,
+          game!,
+          result: const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(find.byTooltip('World Map'));
+        await tester.pumpAndSettle();
+
+        // Reopen the briefing: the committed clear claims the first-clear
+        // tile — no stale 1,000 payout projection rides into the replay.
+        await tester.ensureVisible(find.text('Alpha'));
+        await tester.tap(find.text('Alpha'));
+        await tester.pumpAndSettle();
+        expect(scripSection(), findsOneWidget);
+        expect(
+          find.descendant(of: scripSection(), matching: find.text('CLAIMED')),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(of: scripSection(), matching: find.text('1,000')),
+          findsNothing,
+        );
+      },
+    );
+
+    testWidgets(
+      'a retained best credits the run Scrip beside the kept medal in the '
+      'real report',
+      (tester) async {
+        final store = InMemoryCampaignProgressStore(
+          knownStages: OrionCampaign.stages,
+        );
+        await store.save(
+          CampaignSave(
+            progress: CampaignProgress(
+              bestResultsByStageId: {
+                'outpost-alpha': const StageResult(
+                  medal: StageMedal.gold,
+                  bestBaseHealth: 20,
+                ),
+              },
+            ),
+            ownedLevels: const {Character.haruto: 1, Character.mio: 1},
+            squad: const [Character.haruto, Character.mio],
+            scrip: 500,
+          ),
+        );
+        OrionDefenseGame? game;
+        await tester.pumpWidget(
+          fixtures.testGamePage(
+            progressStore: store,
+            onGameCreated: (g) => game = g,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        await fixtures.startStageFromBriefing(
+          tester,
+          actionLabel: 'Replay Mission',
+        );
+        await fixtures.publishVictory(
+          tester,
+          game!,
+          result: const StageResult(
+            medal: StageMedal.silver,
+            bestBaseHealth: 14,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Saved copy, kept medal and credited Scrip are three separate,
+        // honest statements — the retained best never denies the payout.
+        expect(
+          find.text('Result saved. Best medal unchanged.'),
+          findsOneWidget,
+        );
+        expect(find.text('Best medal saved: Gold'), findsOneWidget);
+        expect(find.text('Scrip credited: 125'), findsOneWidget);
+        expect(
+          find.text('Blueprint recovered: Relay Calibration'),
+          findsNothing,
+        );
+
+        final reloaded = await store.load();
+        expect(reloaded.scrip, 625);
+        expect(
+          reloaded.progress.resultFor('outpost-alpha'),
+          const StageResult(medal: StageMedal.gold, bestBaseHealth: 20),
+        );
+      },
+    );
+  });
 }

@@ -8,6 +8,8 @@ import '../campaign/orion_campaign.dart';
 import '../campaign/stage_definition.dart';
 import '../campaign/stage_modifier_metadata.dart';
 import '../models/game_models.dart';
+import '../rules/stage_scrip_rules.dart';
+import '../util/format.dart';
 import '../onboarding/contextual_tips.dart';
 import 'campaign_presentation.dart';
 import 'first_mission_guide_callout.dart';
@@ -634,6 +636,20 @@ class _StageBriefingSheetState extends State<StageBriefingSheet>
                                 ),
                                 const SizedBox(height: 7),
                               ],
+                              // HPA-923 task 6 (artboard 14): the Scrip
+                              // projection closes the intel block ahead of the
+                              // squad editor. It quotes only committed facts —
+                              // the Clear-medal floor and the medal
+                              // multipliers — never a payout for a medal the
+                              // run has not earned yet.
+                              if (stage.firstClearScrip > 0 ||
+                                  stage.replayScrip > 0)
+                                _BriefingScripRewards(
+                                  key: const ValueKey('briefing-scrip-reward'),
+                                  stage: stage,
+                                  claimed: result != null,
+                                  horizontal: largeText,
+                                ),
                               const SizedBox(height: 9),
                               _BriefingSquad(
                                 key: _squadSectionKey,
@@ -1270,6 +1286,218 @@ class _BriefingStatTile extends StatelessWidget {
             ),
     );
     return tile;
+  }
+}
+
+/// The SCRIP REWARD projection (HPA-923 task 6, artboard 14): the once-only
+/// first-clear total at the Clear-medal floor beside the standing replay
+/// base and the top-medal multiplier on the variable component.
+///
+/// No Silver/Gold payout is quoted — the run's medal is unknowable until the
+/// report, so the only honest figures are the floor (what Clear always pays)
+/// and the percentages. Stage one's first clear additionally states its
+/// ten-flare guarantee in text, the onboarding promise the economy tuned
+/// `firstClearScrip` to honour.
+class _BriefingScripRewards extends StatelessWidget {
+  const _BriefingScripRewards({
+    super.key,
+    required this.stage,
+    required this.claimed,
+    required this.horizontal,
+  });
+
+  final StageDefinition stage;
+
+  /// True once a committed result exists — the first-clear bonus was paid,
+  /// so that tile reads CLAIMED and only the replay base projects a payout.
+  final bool claimed;
+
+  /// Layout toggle shared with the fact tiles: above 1.5x text scale each
+  /// chip stretches to a full-width label/value row.
+  final bool horizontal;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    // Both figures come from the same pure rule the save transaction pays:
+    // Clear medal is the floor — every earned medal pays at least this.
+    final firstClear = StageScripRules.award(
+      stage,
+      StageMedal.clear,
+      firstClear: true,
+    );
+    final replay = StageScripRules.award(
+      stage,
+      StageMedal.clear,
+      firstClear: false,
+    );
+    final tiles = [
+      _BriefingScripTile(
+        label: 'FIRST CLEAR',
+        icon: Icons.check_circle_rounded,
+        value: claimed ? 'CLAIMED' : grouped(firstClear),
+        color: uiTheme.naniteGreen,
+        valueColor: uiTheme.creditGold,
+        horizontal: horizontal,
+      ),
+      _BriefingScripTile(
+        label: 'EVERY REPLAY',
+        icon: Icons.payments_rounded,
+        value: grouped(replay),
+        color: uiTheme.creditGold,
+        valueColor: uiTheme.creditGold,
+        horizontal: horizontal,
+      ),
+      _BriefingScripTile(
+        label: 'GOLD MEDAL',
+        icon: medalIcon(StageMedal.gold),
+        value: '+${GameBalance.scripMedalPercentGold - 100}%',
+        color: uiTheme.creditGold,
+        valueColor: uiTheme.creditGold,
+        horizontal: horizontal,
+      ),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 3,
+              height: 12,
+              decoration: BoxDecoration(
+                color: uiTheme.creditGold,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'SCRIP REWARD',
+                style: OrionTypography.microLabel(
+                  size: 11,
+                  color: uiTheme.creditGold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 7),
+        if (horizontal)
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              for (final (index, tile) in tiles.indexed) ...[
+                if (index > 0) const SizedBox(height: 8),
+                tile,
+              ],
+            ],
+          )
+        else
+          Row(
+            children: [
+              for (final (index, tile) in tiles.indexed) ...[
+                if (index > 0) const SizedBox(width: 8),
+                Expanded(child: tile),
+              ],
+            ],
+          ),
+        const SizedBox(height: 6),
+        Text(
+          'The run\u2019s medal lifts the variable award — '
+          'Silver +${GameBalance.scripMedalPercentSilver - 100}%, '
+          'Gold +${GameBalance.scripMedalPercentGold - 100}%.',
+          style: OrionTypography.microLabel(color: uiTheme.textMuted),
+        ),
+        if (!claimed && stage.id == OrionCampaign.stageOne.id) ...[
+          const SizedBox(height: 4),
+          Text(
+            'First clear pays for at least '
+            '${firstClear ~/ GameBalance.flareCost} Signal Flares.',
+            style: OrionTypography.microLabel(color: uiTheme.creditGold),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+/// One SCRIP REWARD chip: label on top, icon plus grouped figure beneath —
+/// the artboard's tile order, inverted from [_BriefingStatTile]'s
+/// figure-over-label so the reward reads as a labelled payout.
+class _BriefingScripTile extends StatelessWidget {
+  const _BriefingScripTile({
+    required this.label,
+    required this.icon,
+    required this.value,
+    required this.color,
+    required this.valueColor,
+    required this.horizontal,
+  });
+
+  final String label;
+  final IconData icon;
+  final String value;
+  final Color color;
+  final Color valueColor;
+  final bool horizontal;
+
+  @override
+  Widget build(BuildContext context) {
+    final uiTheme = OrionUiTheme.of(context);
+    final figure = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: color, size: 15),
+        const SizedBox(width: 5),
+        Flexible(
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: OrionTypography.readout(color: valueColor),
+            ),
+          ),
+        ),
+      ],
+    );
+    return OrionSurface(
+      role: OrionSurfaceRole.card,
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
+      child: horizontal
+          ? Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OrionTypography.microLabel(color: uiTheme.textMuted),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  flex: 2,
+                  child: Align(alignment: Alignment.centerRight, child: figure),
+                ),
+              ],
+            )
+          : Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: OrionTypography.microLabel(color: uiTheme.textMuted),
+                ),
+                const SizedBox(height: 4),
+                figure,
+              ],
+            ),
+    );
   }
 }
 

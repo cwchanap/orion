@@ -543,6 +543,9 @@ class _CharacterSheet extends StatelessWidget {
     final String? disabledReason = switch (cost) {
       null => 'MAX LEVEL REACHED',
       final price when scrip < price => 'NEEDS ${grouped(price)} SCRIP',
+      // An affordable press that is in flight must say so in text — the
+      // button's loading spinner alone never announced the pending write.
+      _ when levelUpBusy => 'SAVING…',
       _ => null,
     };
 
@@ -873,7 +876,9 @@ class _CharacterSheet extends StatelessWidget {
                       maxLines: 2,
                       style: OrionTypography.microLabel(
                         size: 10,
-                        color: cost == null
+                        // A pending write is progress, not a problem — only
+                        // the unaffordable reason takes warning colour.
+                        color: cost == null || disabledReason == 'SAVING…'
                             ? uiTheme.textMuted
                             : uiTheme.warningOrange,
                       ),

@@ -1785,10 +1785,46 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // The Scrip fact follows the same launch-time capture: _missionScripAward
   // is the exact payout _handleStageWon computed once, so pending, credited
   // and failed copy all quote the same amount the save transaction carries.
-  // Both facts share the plain MissionRewardFact type — blueprint first,
-  // Scrip second (HPA-923 task 3).
+  // The best-medal fact records what the save will keep on file — the run's
+  // own result when it improves the prior best, otherwise the retained
+  // prior — so a replay that earns Scrip without advancing the medal still
+  // lists the record and the payout as separate entries (HPA-923 task 6).
+  // All facts share the plain MissionRewardFact type — best medal first,
+  // then blueprint, then Scrip.
   List<MissionRewardFact> _missionRewardFacts() {
-    return [?_missionBlueprintFact(), ?_missionScripFact()];
+    return [
+      ?_missionBestResultFact(),
+      ?_missionBlueprintFact(),
+      ?_missionScripFact(),
+    ];
+  }
+
+  MissionRewardFact? _missionBestResultFact() {
+    final result = _missionVictoryResult;
+    if (result == null || _missionStageId == null) {
+      return null;
+    }
+    // The record the transaction will keep: the run's result when it
+    // improves on the committed best, otherwise the retained prior —
+    // recordResult() makes the same call inside the queued write.
+    final prior = _missionPriorResult;
+    final kept = prior == null || result.isBetterThan(prior) ? result : prior;
+
+    return switch (_missionSaveState) {
+      MissionSaveState.saving => MissionRewardFact(
+        title: 'Best medal pending: ${kept.medal.label}',
+        detail: '${kept.bestBaseHealth} base health — commits with this save.',
+      ),
+      MissionSaveState.saved => MissionRewardFact(
+        title: 'Best medal saved: ${kept.medal.label}',
+        detail: '${kept.bestBaseHealth} base health on record.',
+      ),
+      MissionSaveState.failed => const MissionRewardFact(
+        title: 'Best medal not saved',
+        detail: 'Retry Save to keep this run on record.',
+      ),
+      null => null,
+    };
   }
 
   MissionRewardFact? _missionBlueprintFact() {
