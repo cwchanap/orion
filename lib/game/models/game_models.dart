@@ -1191,6 +1191,50 @@ class GameBalance {
         (1 + (clampedLevel - 1) * characterLevelGrowthPerLevel);
   }
 
+  // --- Scrip economy (HPA-923) ---
+  // Persistent Scrip price of one signal-flare draw; a ten-pull costs
+  // 10 × [flareCost] with no discount.
+  static const int flareCost = 100;
+
+  // Percent of a stage's replay Scrip base paid out per earned medal; the
+  // product is floored to a whole Scrip before paying.
+  static const int scripMedalPercentClear = 100;
+  static const int scripMedalPercentSilver = 125;
+  static const int scripMedalPercentGold = 150;
+
+  // Signal-flare rank odds in 10,000-basis-point weights (must sum to
+  // exactly 10,000). Each draw rolls a rank first, then picks uniformly
+  // among the characters of that rank.
+  static const Map<CharacterRank, int> flareRankWeights = {
+    CharacterRank.e: 6740,
+    CharacterRank.d: 2000,
+    CharacterRank.c: 1000,
+    CharacterRank.b: 200,
+    CharacterRank.a: 50,
+    CharacterRank.s: 10,
+  };
+
+  // Scrip refunded when a flare draw lands an already-owned character.
+  static const Map<CharacterRank, int> flareDuplicateScripRefund = {
+    CharacterRank.e: 10,
+    CharacterRank.d: 25,
+    CharacterRank.c: 60,
+    CharacterRank.b: 200,
+    CharacterRank.a: 600,
+    CharacterRank.s: 2000,
+  };
+
+  /// Scrip price of raising a character from [currentLevel] to the next
+  /// persistent level: `60 + 40 × (level - 1)`. Null once the
+  /// [characterMaxLevel] cap is reached or for out-of-band levels — no
+  /// purchase is possible in either case.
+  static int? levelUpCost(int currentLevel) {
+    if (currentLevel < 1 || currentLevel >= characterMaxLevel) {
+      return null;
+    }
+    return 60 + 40 * (currentLevel - 1);
+  }
+
   static const EnemyStats _basicDrone = EnemyStats(
     health: 36,
     speed: 74,

@@ -1335,6 +1335,66 @@ void main() {
     });
   });
 
+  group('Scrip economy', () {
+    test('levelUpCost follows the approved price curve', () {
+      expect(GameBalance.levelUpCost(1), 60);
+      expect(GameBalance.levelUpCost(2), 100);
+      expect(GameBalance.levelUpCost(4), 180);
+      expect(GameBalance.levelUpCost(39), 60 + 40 * 38);
+    });
+
+    test('levelUpCost stops at the cap and out-of-band levels', () {
+      expect(GameBalance.characterMaxLevel, 40);
+      expect(GameBalance.levelUpCost(GameBalance.characterMaxLevel), isNull);
+      expect(
+        GameBalance.levelUpCost(GameBalance.characterMaxLevel + 1),
+        isNull,
+      );
+      expect(GameBalance.levelUpCost(0), isNull);
+      expect(GameBalance.levelUpCost(-1), isNull);
+    });
+
+    test('flare pull price matches the approved design', () {
+      expect(GameBalance.flareCost, 100);
+      expect(GameBalance.flareCost * 10, 1000);
+    });
+
+    test('flare rank weights match the approved table and sum to 10,000', () {
+      expect(GameBalance.flareRankWeights, {
+        CharacterRank.e: 6740,
+        CharacterRank.d: 2000,
+        CharacterRank.c: 1000,
+        CharacterRank.b: 200,
+        CharacterRank.a: 50,
+        CharacterRank.s: 10,
+      });
+      expect(
+        GameBalance.flareRankWeights.values.fold<int>(
+          0,
+          (sum, weight) => sum + weight,
+        ),
+        10000,
+      );
+    });
+
+    test('flare duplicate refunds match the approved table', () {
+      expect(GameBalance.flareDuplicateScripRefund, {
+        CharacterRank.e: 10,
+        CharacterRank.d: 25,
+        CharacterRank.c: 60,
+        CharacterRank.b: 200,
+        CharacterRank.a: 600,
+        CharacterRank.s: 2000,
+      });
+    });
+
+    test('scrip medal payout percentages match the approved design', () {
+      expect(GameBalance.scripMedalPercentClear, 100);
+      expect(GameBalance.scripMedalPercentSilver, 125);
+      expect(GameBalance.scripMedalPercentGold, 150);
+    });
+  });
+
   group('TowerStats.scaleDamageChannels', () {
     test('scales damage, corrosion and drone channels together', () {
       final base = GameBalance.towerStats(TowerType.nanite, level: 2);

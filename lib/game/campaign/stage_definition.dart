@@ -15,6 +15,8 @@ class StageDefinition {
     this.mainPathOrder,
     this.reward,
     this.blueprint,
+    this.firstClearScrip = 0,
+    this.replayScrip = 0,
     required this.mapColumn,
     required this.mapRow,
     List<StageModifier> modifiers = const [],
@@ -37,6 +39,16 @@ class StageDefinition {
   /// Boss blueprint module recovered from this stage's first committed clear;
   /// null for lightweight test stages with no blueprint reward.
   final RunModuleId? blueprint;
+
+  /// One-time Scrip bonus paid on this stage's first successful mission
+  /// clear (HPA-923); zero for lightweight test fixtures outside campaign
+  /// validation.
+  final int firstClearScrip;
+
+  /// Medal-scaled Scrip base paid on every successful mission clear,
+  /// including the first; zero for lightweight test fixtures outside
+  /// campaign validation.
+  final int replayScrip;
   final int mapColumn;
   final int mapRow;
   final List<StageModifier> modifiers;

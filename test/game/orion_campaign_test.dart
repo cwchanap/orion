@@ -145,6 +145,8 @@ void main() {
           isMainPath: source.isMainPath,
           mainPathOrder: source.mainPathOrder,
           reward: source.reward,
+          firstClearScrip: source.firstClearScrip,
+          replayScrip: source.replayScrip,
           mapColumn: source.mapColumn,
           mapRow: source.mapRow,
           modifiers: const [
@@ -574,6 +576,163 @@ void main() {
         ),
       );
     });
+
+    test('campaign stages carry the approved Scrip payouts', () {
+      const expected = <String, ({int firstClear, int replay})>{
+        'outpost-alpha': (firstClear: 900, replay: 100),
+        'nebula-relay': (firstClear: 180, replay: 120),
+        'salvage-rift': (firstClear: 220, replay: 140),
+        'asteroid-foundry': (firstClear: 240, replay: 160),
+        'aurora-gate': (firstClear: 300, replay: 200),
+        'void-bastion': (firstClear: 380, replay: 220),
+        'singularity-core': (firstClear: 440, replay: 260),
+      };
+
+      for (final stage in OrionCampaign.stages) {
+        final stageExpected = expected[stage.id]!;
+        expect(
+          stage.firstClearScrip,
+          stageExpected.firstClear,
+          reason: '${stage.id} firstClearScrip',
+        );
+        expect(
+          stage.replayScrip,
+          stageExpected.replay,
+          reason: '${stage.id} replayScrip',
+        );
+      }
+    });
+
+    test('standalone test stages default to zero Scrip payouts', () {
+      final stage = StageDefinition(
+        id: 'scrip-less',
+        name: 'Scrip-less',
+        mapLabel: 'Test',
+        description: 'Fixture stage without Scrip fields',
+        pathCells: const [GridPosition(0, 0), GridPosition(1, 0)],
+        waves: const [],
+        mapColumn: 0,
+        mapRow: 0,
+      );
+
+      expect(stage.firstClearScrip, 0);
+      expect(stage.replayScrip, 0);
+    });
+
+    test('validation accepts a fully valid fixture campaign', () {
+      final stages = [
+        _stage(id: 'stage-1', mainPathOrder: 1),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      expect(OrionCampaign.validateStages(stages), isEmpty);
+    });
+
+    test('validation rejects zero or negative Scrip payouts', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1, firstClearScrip: 0),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3, replayScrip: -10),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+          firstClearScrip: -1,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+          replayScrip: 0,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(errors, contains('stage-1 firstClearScrip must be positive.'));
+      expect(errors, contains('stage-3 replayScrip must be positive.'));
+      expect(errors, contains('side-a firstClearScrip must be positive.'));
+      expect(errors, contains('side-b replayScrip must be positive.'));
+    });
+
+    test('validation rejects a stage one that cannot fund ten flares', () {
+      final invalidStages = [
+        _stage(id: 'stage-1', mainPathOrder: 1, firstClearScrip: 899),
+        _stage(id: 'stage-2', mainPathOrder: 2),
+        _stage(id: 'stage-3', mainPathOrder: 3),
+        _stage(id: 'stage-4', mainPathOrder: 4),
+        _stage(id: 'stage-5', mainPathOrder: 5),
+        _stage(
+          id: 'side-a',
+          isMainPath: false,
+          reward: CampaignReward.bonusGold,
+        ),
+        _stage(
+          id: 'side-b',
+          isMainPath: false,
+          reward: CampaignReward.bonusHealth,
+        ),
+      ];
+
+      final errors = OrionCampaign.validateStages(invalidStages);
+
+      expect(
+        errors,
+        contains(
+          'stage-1 first-clear award of 999 Scrip must cover ten flares '
+          'costing ${10 * GameBalance.flareCost}.',
+        ),
+      );
+    });
+
+    test(
+      'validation only applies the ten-flare guarantee to main-path order 1',
+      () {
+        // A low-payout stage is still valid as long as it pays positive
+        // Scrip and is not the first main-path stage.
+        final stages = [
+          _stage(id: 'stage-1', mainPathOrder: 1),
+          _stage(
+            id: 'stage-2',
+            mainPathOrder: 2,
+            firstClearScrip: 5,
+            replayScrip: 5,
+          ),
+          _stage(id: 'stage-3', mainPathOrder: 3),
+          _stage(id: 'stage-4', mainPathOrder: 4),
+          _stage(id: 'stage-5', mainPathOrder: 5),
+          _stage(
+            id: 'side-a',
+            isMainPath: false,
+            reward: CampaignReward.bonusGold,
+            firstClearScrip: 5,
+            replayScrip: 5,
+          ),
+          _stage(
+            id: 'side-b',
+            isMainPath: false,
+            reward: CampaignReward.bonusHealth,
+          ),
+        ];
+
+        expect(OrionCampaign.validateStages(stages), isEmpty);
+      },
+    );
   });
 }
 
@@ -583,6 +742,8 @@ StageDefinition _stage({
   int? mainPathOrder,
   CampaignReward? reward,
   List<WaveDefinition>? waves,
+  int firstClearScrip = 900,
+  int replayScrip = 100,
 }) {
   return StageDefinition(
     id: id,
@@ -594,6 +755,8 @@ StageDefinition _stage({
     isMainPath: isMainPath,
     mainPathOrder: mainPathOrder,
     reward: reward,
+    firstClearScrip: firstClearScrip,
+    replayScrip: replayScrip,
     mapColumn: mainPathOrder ?? 0,
     mapRow: isMainPath ? 1 : 0,
   );
