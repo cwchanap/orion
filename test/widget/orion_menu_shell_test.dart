@@ -10,6 +10,7 @@ Widget buildShell({
   OrionMenuDestination destination = OrionMenuDestination.sectors,
   int medalEarned = 4,
   int medalTotal = 15,
+  int scrip = 0,
   ValueChanged<OrionMenuDestination>? onDestinationSelected,
   VoidCallback? onOpenSettings,
   bool navigationEnabled = true,
@@ -24,6 +25,7 @@ Widget buildShell({
       destination: destination,
       medalEarned: medalEarned,
       medalTotal: medalTotal,
+      scrip: scrip,
       onDestinationSelected: onDestinationSelected ?? (_) {},
       onOpenSettings: onOpenSettings ?? () {},
       navigationEnabled: navigationEnabled,
@@ -44,6 +46,7 @@ void main() {
     for (final (destination, kicker, title) in [
       (OrionMenuDestination.sectors, 'ORION CAMPAIGN', 'SECTOR MAP'),
       (OrionMenuDestination.camp, 'CHARACTER ROSTER', 'CAMP'),
+      (OrionMenuDestination.flare, 'RECRUIT SURVIVORS', 'SIGNAL FLARE'),
       (OrionMenuDestination.codex, 'FIELD MANUAL', 'CODEX'),
     ]) {
       await tester.pumpWidget(buildShell(destination: destination));
@@ -67,6 +70,19 @@ void main() {
     expect(icon.color, OrionUiTheme.dark.systemViolet);
   });
 
+  testWidgets('active flare tab uses the flare accent', (tester) async {
+    await tester.pumpWidget(
+      buildShell(destination: OrionMenuDestination.flare),
+    );
+    final icon = tester.widget<Icon>(
+      find.descendant(
+        of: find.byTooltip('Flare'),
+        matching: find.byIcon(Icons.local_fire_department_rounded),
+      ),
+    );
+    expect(icon.color, OrionUiTheme.dark.warningOrange);
+  });
+
   testWidgets('top bar carries the medal chip and the Settings gear', (
     tester,
   ) async {
@@ -85,6 +101,22 @@ void main() {
 
     await tester.tap(find.byTooltip('Settings'));
     expect(settingsTaps, 1);
+  });
+
+  testWidgets('top bar carries the committed Scrip chip on every '
+      'destination', (tester) async {
+    for (final destination in OrionMenuDestination.values) {
+      await tester.pumpWidget(
+        buildShell(destination: destination, scrip: 1240),
+      );
+
+      expect(
+        find.bySemanticsLabel('1,240 Scrip'),
+        findsOneWidget,
+        reason: 'scrip chip on $destination',
+      );
+      expect(find.text('1,240'), findsOneWidget);
+    }
   });
 
   testWidgets('the Settings gear keeps a 48x48 interaction region that fires '
@@ -172,15 +204,25 @@ void main() {
       ),
     );
 
-    for (final tab in const ['Map', 'Camp', 'Codex']) {
+    for (final tab in const ['Map', 'Camp', 'Flare', 'Codex']) {
       expect(find.byTooltip(tab), findsOneWidget);
     }
 
+    // The approved tab order is Map / Camp / Flare / Codex left to right.
+    var previousLeft = -1.0;
+    for (final tab in const ['Map', 'Camp', 'Flare', 'Codex']) {
+      final left = tester.getRect(find.byTooltip(tab)).left;
+      expect(left, greaterThan(previousLeft), reason: 'tab $tab order');
+      previousLeft = left;
+    }
+
     await tester.tap(find.byTooltip('Codex'));
+    await tester.tap(find.byTooltip('Flare'));
     await tester.tap(find.byTooltip('Camp'));
     await tester.tap(find.byTooltip('Map'));
     expect(selected, [
       OrionMenuDestination.codex,
+      OrionMenuDestination.flare,
       OrionMenuDestination.camp,
       OrionMenuDestination.sectors,
     ]);
@@ -213,7 +255,7 @@ void main() {
       ),
     );
 
-    for (final tab in const ['Map', 'Camp', 'Codex']) {
+    for (final tab in const ['Map', 'Camp', 'Flare', 'Codex']) {
       await tester.tap(find.byTooltip(tab));
       final semantics = tester.widget<Semantics>(
         find.ancestor(
@@ -248,6 +290,31 @@ void main() {
 
     await tester.tap(find.byTooltip('Codex'));
     expect(selected, [OrionMenuDestination.codex]);
+  });
+
+  testWidgets('four tabs and both resource chips stay in bounds at '
+      '320x568', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      buildShell(destination: OrionMenuDestination.flare, scrip: 1240),
+    );
+
+    expect(tester.takeException(), isNull);
+    for (final tab in const ['Map', 'Camp', 'Flare', 'Codex']) {
+      final rect = tester.getRect(find.byTooltip(tab));
+      expect(rect.left, greaterThanOrEqualTo(0), reason: 'tab $tab');
+      expect(rect.right, lessThanOrEqualTo(320), reason: 'tab $tab');
+    }
+    for (final label in ['4 of 15 campaign medals', '1,240 Scrip']) {
+      final chip = find.bySemanticsLabel(label);
+      expect(chip, findsOneWidget, reason: label);
+      final rect = tester.getRect(chip);
+      expect(rect.left, greaterThanOrEqualTo(0), reason: label);
+      expect(rect.right, lessThanOrEqualTo(320), reason: label);
+    }
   });
 
   testWidgets('embedded Camp renders the starter profile through the lazy '

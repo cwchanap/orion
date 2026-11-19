@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flame/flame.dart';
 import 'package:flame/game.dart';
 import 'package:flutter/foundation.dart';
@@ -19,6 +21,7 @@ import '../onboarding/contextual_tips.dart';
 import '../onboarding/first_mission_guide.dart';
 import '../onboarding/first_mission_guide_store.dart';
 import '../orion_defense_game.dart';
+import '../rules/flare_rules.dart';
 import '../rules/module_offer_picker.dart';
 import '../rules/run_module_unlocks.dart';
 import '../rules/stage_modifier_rules.dart';
@@ -26,6 +29,7 @@ import '../rules/stage_scrip_rules.dart';
 import 'camp_view.dart';
 import 'codex_view.dart';
 import 'feedback_settings_sheet.dart';
+import 'flare_view.dart';
 import 'first_mission_guide_callout.dart';
 import 'mission_chrome.dart';
 import 'mission_command_dock.dart';
@@ -41,7 +45,7 @@ import 'stage_briefing_sheet.dart';
 import 'tower_inspector.dart';
 import 'world_map_view.dart';
 
-enum _ShellView { title, worldMap, codex, camp, stage }
+enum _ShellView { title, worldMap, codex, camp, flare, stage }
 
 /// Persistence-failure breadcrumb surfaced on both the active view and the
 /// world map. Hoisted to a top-level constant so retry paths can match and
@@ -61,6 +65,7 @@ class OrionGamePage extends StatefulWidget {
     this.feedbackPreferencesStore,
     this.firstMissionGuideStore,
     this.moduleOfferPicker,
+    this.flareRandom,
     this.gameFeedback,
     this.gameMusicController,
     this.onGameCreated,
@@ -79,6 +84,11 @@ class OrionGamePage extends StatefulWidget {
   /// Optional deterministic seam for run-module draft offers; null keeps the
   /// game's built-in (random) picking.
   final ModuleOfferPicker? moduleOfferPicker;
+
+  /// Optional deterministic seam for signal-flare draws — the same
+  /// injection style as [moduleOfferPicker]; null uses a fresh
+  /// [math.Random].
+  final math.Random? flareRandom;
 
   final GameFeedback? gameFeedback;
 
@@ -157,6 +167,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
   late _ShellView _activeView = widget.startOnWorldMap
       ? _ShellView.worldMap
       : _ShellView.title;
+  // The injected draw seam (HPA-923 task 5): one instance per page so each
+  // roll continues the sequence — a retry is always a fresh batch.
+  late final math.Random _flareRandom = widget.flareRandom ?? math.Random();
+  // The last committed flare batch awaiting reveal on the Flare screen;
+  // cleared by FIRE AGAIN, TO ROSTER or any destination change.
+  FlareBatch? _flareResult;
   bool _isLoading = true;
   int _progressGeneration = 0;
   Future<void> _saveQueue = Future<void>.value();
@@ -552,6 +568,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       case _ShellView.worldMap:
       case _ShellView.camp:
       case _ShellView.codex:
+      case _ShellView.flare:
         return _buildMenuShell();
       case _ShellView.stage:
         return _buildStageScaffold();
@@ -588,6 +605,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final destination = switch (_activeView) {
       _ShellView.camp => OrionMenuDestination.camp,
       _ShellView.codex => OrionMenuDestination.codex,
+      _ShellView.flare => OrionMenuDestination.flare,
       _ => OrionMenuDestination.sectors,
     };
     final body = switch (_activeView) {
@@ -605,6 +623,21 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _ShellView.codex => CodexView(
         progress: _progress,
         onBack: null,
+        embeddedInMenuShell: true,
+      ),
+      _ShellView.flare => FlareView(
+        scrip: _committed.scrip,
+        result: _flareResult,
+        // Save OR reset in flight — the packs must stay off the queue for
+        // both (a purchase queued behind a wipe would debit a wallet the
+        // reset is about to zero).
+        isSavingProgress: _isBusy,
+        onFire: _fireFlare,
+        onResultDone: () => setState(() => _flareResult = null),
+        onOpenRoster: () {
+          setState(() => _flareResult = null);
+          _openMenuDestination(OrionMenuDestination.camp);
+        },
         embeddedInMenuShell: true,
       ),
       _ => WorldMapView(
@@ -626,6 +659,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       destination: destination,
       medalEarned: _progress.totalMedalRank,
       medalTotal: _campaignMedalTotal,
+      scrip: _committed.scrip,
       navigationEnabled: !_isBusy,
       settingsEnabled:
           _feedbackPreferencesLoaded && !_isSavingFeedback && !_isBusy,
@@ -647,6 +681,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     final target = switch (destination) {
       OrionMenuDestination.sectors => _ShellView.worldMap,
       OrionMenuDestination.camp => _ShellView.camp,
+      OrionMenuDestination.flare => _ShellView.flare,
       OrionMenuDestination.codex => _ShellView.codex,
     };
     if (target == _activeView) {
@@ -654,6 +689,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
     setState(() {
       _shellFeedback = null;
+      // A revealed batch belongs to the Flare screen that committed it —
+      // leaving the tab dismisses it.
+      _flareResult = null;
       _activeView = target;
     });
   }
@@ -1320,6 +1358,50 @@ class _OrionGamePageState extends State<OrionGamePage> {
         if (_shellFeedback == _persistenceFailureMessage) {
           _shellFeedback = null;
         }
+      },
+      onFailed: () => _setActiveDestinationFeedback(_persistenceFailureMessage),
+    );
+  }
+
+  /// The Flare screen's purchase (HPA-923 task 5): one atomic queued write
+  /// that charges the full pack upfront, recruits each new draw at level 1
+  /// and pays duplicate refunds — in a single `withFlareBatch` aggregate.
+  /// The roll runs INSIDE the queued closure so it always classifies
+  /// against the latest committed roster, and a retry rolls a fresh batch.
+  /// Single-flight on the whole busy state: the packs disable on `_isBusy`
+  /// and this early return catches a press landing before that rebuild —
+  /// including during a campaign reset, which must not queue a purchase
+  /// behind the wipe.
+  /// The batch is captured and revealed only on commit: a failure leaves
+  /// `_committed`, the wallet and the roster untouched, keeps the Flare
+  /// screen in place and reports on the shell breadcrumb so the pack stays
+  /// retryable without any navigation. `withFlareBatch` re-validates pack
+  /// size, upfront affordability and every declared outcome inside the
+  /// queue — an invalid roll reports through the same failure path.
+  Future<bool> _fireFlare(int count) {
+    if (_isBusy) {
+      return Future<bool>.value(false);
+    }
+    FlareBatch? batch;
+    return _persistSave(
+      buildSave: (committed) {
+        batch = FlareRules.roll(
+          committed.ownedLevels.keys,
+          count,
+          _flareRandom,
+        );
+        return committed.withFlareBatch(batch!);
+      },
+      onCommitted: (_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _flareResult = batch;
+          if (_shellFeedback == _persistenceFailureMessage) {
+            _shellFeedback = null;
+          }
+        });
       },
       onFailed: () => _setActiveDestinationFeedback(_persistenceFailureMessage),
     );
@@ -1992,11 +2074,18 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
+  /// Routes Settings/reset/save-failure feedback to the breadcrumb the
+  /// active view actually shows: the menu-shell destinations share the
+  /// shell line, while title, Map and stage keep their existing paths.
+  /// Exhaustive on [_ShellView] so a new destination can never silently
+  /// fall back to the hidden map breadcrumb — the old `camp || codex`
+  /// branch did exactly that to Flare errors.
   void _setActiveDestinationFeedback(String message) {
-    if (_activeView == _ShellView.camp || _activeView == _ShellView.codex) {
-      _shellFeedback = message;
-    } else {
-      _mapFeedback = message;
+    switch (_activeView) {
+      case _ShellView.camp || _ShellView.codex || _ShellView.flare:
+        _shellFeedback = message;
+      case _ShellView.title || _ShellView.worldMap || _ShellView.stage:
+        _mapFeedback = message;
     }
   }
 

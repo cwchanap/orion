@@ -59,6 +59,7 @@ Widget testGamePage({
   FeedbackPreferencesStore? feedbackPreferencesStore,
   FirstMissionGuideStore? firstMissionGuideStore,
   ModuleOfferPicker? moduleOfferPicker,
+  math.Random? flareRandom,
   ValueChanged<OrionDefenseGame>? onGameCreated,
   GameFeedback gameFeedback = const NoOpGameFeedback(),
   bool startOnWorldMap = true,
@@ -85,6 +86,7 @@ Widget testGamePage({
           firstMissionGuideStore ??
           InMemoryFirstMissionGuideStore(completed: true),
       moduleOfferPicker: moduleOfferPicker,
+      flareRandom: flareRandom,
       onGameCreated: onGameCreated,
       gameFeedback: gameFeedback,
     ),
@@ -5171,7 +5173,15 @@ void main() {
         // balance and the new 5→6 price all read the saved profile.
         expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
         expect(find.text('LV 5 / 40'), findsOneWidget);
-        expect(find.bySemanticsLabel('320 Scrip'), findsOneWidget);
+        // The sheet chip and the shell's top-bar chip both read the
+        // committed wallet; scope this to the sheet's own affordance.
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('character-sheet')),
+            matching: find.bySemanticsLabel('320 Scrip'),
+          ),
+          findsOneWidget,
+        );
         expect(
           find.text('LEVEL UP · ${GameBalance.levelUpCost(5)}'),
           findsOneWidget,
@@ -5226,7 +5236,13 @@ void main() {
         // did not navigate anywhere.
         expect(find.text('Could not save campaign progress.'), findsOneWidget);
         expect(find.text('LV 4 / 40'), findsOneWidget);
-        expect(find.bySemanticsLabel('500 Scrip'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('character-sheet')),
+            matching: find.bySemanticsLabel('500 Scrip'),
+          ),
+          findsOneWidget,
+        );
         expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
         expect(findOrionTitle('Camp'), findsOneWidget);
         expect(store.ownedLevels[Character.haruto], 4);
@@ -5377,7 +5393,13 @@ void main() {
       expect(find.text('Campaign reset.'), findsOneWidget);
       expect(find.text('Could not save campaign progress.'), findsNothing);
       expect(find.text('LV 1 / 40'), findsOneWidget);
-      expect(find.bySemanticsLabel('0 Scrip'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const ValueKey('character-sheet')),
+          matching: find.bySemanticsLabel('0 Scrip'),
+        ),
+        findsOneWidget,
+      );
       expect(find.text('NEEDS 60 SCRIP'), findsOneWidget);
       expect(store.saveCalls, 0);
       expect(store.ownedLevels[Character.haruto], 1);
@@ -5423,7 +5445,13 @@ void main() {
         // retryable and a purchase now writes normally.
         expect(find.text('Could not reset campaign progress.'), findsOneWidget);
         expect(find.text('LV 4 / 40'), findsOneWidget);
-        expect(find.bySemanticsLabel('500 Scrip'), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byKey(const ValueKey('character-sheet')),
+            matching: find.bySemanticsLabel('500 Scrip'),
+          ),
+          findsOneWidget,
+        );
         final retryable = tester.widget<OrionPrimaryButton>(
           find.byKey(const ValueKey('level-up-button')),
         );
@@ -5436,6 +5464,453 @@ void main() {
         expect(store.scrip, 320);
       },
     );
+  });
+
+  group('flare purchases (HPA-923 task 5)', () {
+    /// Opens the Flare tab on the running page.
+    Future<void> openFlare(WidgetTester tester) async {
+      await tester.tap(find.byTooltip('Flare'));
+      await tester.pumpAndSettle();
+      expect(findOrionTitle('Signal Flare'), findsOneWidget);
+    }
+
+    Finder fireButton(int count) => find.byKey(ValueKey('flare-fire-$count'));
+
+    testWidgets('the Flare tab shows the fixed rates, balance and both '
+        'packs', (tester) async {
+      final store = _TestCampaignProgressStore(scrip: 1240);
+      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      // The shell top bar carries the committed wallet next to the medals.
+      expect(find.bySemanticsLabel('1,240 Scrip'), findsOneWidget);
+      expect(find.bySemanticsLabel('0 of 21 campaign medals'), findsOneWidget);
+      expect(find.text('WHO ANSWERS'), findsOneWidget);
+      for (final rate in ['0.1%', '0.5%', '2%', '10%', '20%', '67.4%']) {
+        expect(find.text(rate), findsOneWidget, reason: 'rate $rate');
+      }
+      expect(find.text('FIRE FLARE · 100'), findsOneWidget);
+      expect(find.text('FIRE 10 · 1,000'), findsOneWidget);
+    });
+
+    testWidgets(
+      'a fired flare rolls inside the queued save, commits one atomic '
+      'write and reveals the batch without touching the squad',
+      (tester) async {
+        final store = _TestCampaignProgressStore(scrip: 1240);
+        await tester.pumpWidget(
+          testGamePage(
+            progressStore: store,
+            // D-rank roll, first D pick → sayo, new to the starter roster.
+            flareRandom: _ScriptedRandom([6740, 0]),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await openFlare(tester);
+
+        await tester.tap(fireButton(1));
+        await tester.pumpAndSettle();
+
+        // One write carried fee + recruit + no squad edit in a single
+        // payload — 100 for the pack, sayo joins at level 1, squad stays
+        // the two starters.
+        expect(store.saveCalls, 1);
+        expect(store.scrip, 1140);
+        expect(store.ownedLevels[Character.sayo], 1);
+        expect(store.squad, CampaignSave.starterSquad);
+
+        // The committed result is revealed: kicker, hero card, draw tile,
+        // refund summary and the post-pack balance in shell and summary.
+        expect(find.text('1 FLARE FIRED'), findsOneWidget);
+        expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
+        expect(find.byKey(const ValueKey('flare-draw-0')), findsOneWidget);
+        expect(find.text('0 SPARE DOG TAGS TRADED'), findsOneWidget);
+        expect(find.text('BALANCE'), findsOneWidget);
+        // The balance readout and the shell's Scrip chip both carry 1,140.
+        expect(find.text('1,140'), findsWidgets);
+        expect(find.bySemanticsLabel('1,140 Scrip'), findsOneWidget);
+
+        // TO ROSTER lands on Camp, where the recruit reads owned at
+        // level 1 and the squad count is untouched.
+        await tester.tap(find.byKey(const ValueKey('flare-to-roster')));
+        await tester.pumpAndSettle();
+        expect(findOrionTitle('Camp'), findsOneWidget);
+        expect(find.text('SQUAD 2/6'), findsOneWidget);
+        final sayoCard = find.byKey(const ValueKey('camp-card-sayo'));
+        await tester.scrollUntilVisible(
+          sayoCard,
+          250,
+          scrollable: find.descendant(
+            of: find.byType(GridView),
+            matching: find.byType(Scrollable),
+          ),
+        );
+        expect(
+          find.descendant(of: sayoCard, matching: find.text('Lv 1')),
+          findsOneWidget,
+        );
+
+        // Returning to Flare shows the fire screen again — the revealed
+        // batch does not linger across destinations.
+        await tester.tap(find.byTooltip('Flare'));
+        await tester.pumpAndSettle();
+        expect(find.text('WHO ANSWERS'), findsOneWidget);
+        expect(find.text('1 FLARE FIRED'), findsNothing);
+      },
+    );
+
+    testWidgets('a ten-pull shows every ordered draw, refund totals and the '
+        'resulting balance', (tester) async {
+      final store = _TestCampaignProgressStore(scrip: 1240);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          // Rank roll then same-rank pick per draw:
+          // sayo NEW, haruto dup+10, tetsuo NEW, mio dup+10, hikari NEW,
+          // sayo in-batch dup+25, haruto dup+10, kaito NEW, mio dup+10,
+          // elena NEW → 5 recruits, 65 refunded, balance 305.
+          flareRandom: _ScriptedRandom([
+            6740,
+            0,
+            0,
+            0,
+            6740,
+            1,
+            0,
+            1,
+            9990,
+            0,
+            6740,
+            0,
+            0,
+            0,
+            8740,
+            1,
+            0,
+            1,
+            9740,
+            0,
+          ]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      await tester.tap(fireButton(10));
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 1);
+      expect(store.scrip, 305);
+      for (final recruit in [
+        Character.sayo,
+        Character.tetsuo,
+        Character.hikari,
+        Character.kaito,
+        Character.elena,
+      ]) {
+        expect(store.ownedLevels[recruit], 1, reason: recruit.name);
+      }
+      expect(store.squad, CampaignSave.starterSquad);
+
+      expect(find.text('10 FLARES FIRED'), findsOneWidget);
+      expect(findOrionTitle('5 new recruits'), findsOneWidget);
+      for (var index = 0; index < 10; index += 1) {
+        expect(
+          find.byKey(ValueKey('flare-draw-$index')),
+          findsOneWidget,
+          reason: 'draw $index',
+        );
+      }
+      expect(find.text('5 SPARE DOG TAGS TRADED'), findsOneWidget);
+      expect(find.text('+65 Scrip'), findsOneWidget);
+      // The balance readout and the shell's Scrip chip both carry 305.
+      expect(find.text('305'), findsWidgets);
+
+      // FIRE AGAIN returns to the fire screen for another roll.
+      await tester.tap(find.byKey(const ValueKey('flare-again')));
+      await tester.pumpAndSettle();
+      expect(find.text('WHO ANSWERS'), findsOneWidget);
+      expect(find.text('FIRE FLARE · 100'), findsOneWidget);
+    });
+
+    testWidgets('the batch is revealed only after the save commits', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(scrip: 1240, delaySaves: true);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          flareRandom: _ScriptedRandom([6740, 0]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      await tester.tap(fireButton(1));
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      await tester.pump();
+
+      // The write is still in flight: nothing is revealed and the fired
+      // button holds its spinner while both stay inert.
+      expect(find.text('1 FLARE FIRED'), findsNothing);
+      expect(find.text('SAVING…'), findsOneWidget);
+      expect(find.byKey(const ValueKey('flare-draw-0')), findsNothing);
+      expect(
+        tester.widget<OrionPrimaryButton>(fireButton(1)).onPressed,
+        isNull,
+      );
+
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 FLARE FIRED'), findsOneWidget);
+      expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
+    });
+
+    testWidgets('a failed save keeps balance, roster and place; a retry '
+        'rolls fresh', (tester) async {
+      final store = _TestCampaignProgressStore(
+        scrip: 1240,
+        delaySaves: true,
+        failOnSaveIndices: {0},
+      );
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          // First roll recruits sayo (rejected write); the retry consumes
+          // the next scripted pair and recruits tetsuo instead.
+          flareRandom: _ScriptedRandom([6740, 0, 6740, 1]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      await tester.tap(fireButton(1));
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+
+      // The shell breadcrumb reports on the Flare screen; nothing moved —
+      // no result, no Scrip, no roster change, no navigation.
+      expect(find.text('Could not save campaign progress.'), findsOneWidget);
+      expect(findOrionTitle('Signal Flare'), findsOneWidget);
+      expect(find.text('1 FLARE FIRED'), findsNothing);
+      expect(find.bySemanticsLabel('1,240 Scrip'), findsOneWidget);
+      expect(store.saveCalls, 1);
+      expect(store.scrip, 1240);
+      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+
+      // Retry is a fresh roll — the second scripted pair recruits tetsuo.
+      await tester.tap(fireButton(1));
+      await _pumpUntil(tester, () => store.saveCompletions.length > 1);
+      store.saveCompletions[1].complete();
+      await tester.pumpAndSettle();
+
+      expect(store.saveCalls, 2);
+      expect(store.scrip, 1140);
+      expect(store.ownedLevels[Character.tetsuo], 1);
+      expect(store.ownedLevels.containsKey(Character.sayo), isFalse);
+      expect(find.byKey(const ValueKey('flare-hero-tetsuo')), findsOneWidget);
+      expect(find.text('Could not save campaign progress.'), findsNothing);
+    });
+
+    testWidgets('flare purchases are single-flight on rapid taps', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(scrip: 1240, delaySaves: true);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          flareRandom: _ScriptedRandom([6740, 0]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      // Both presses land before the busy rebuild: the page guard must
+      // collapse them into one queued write.
+      final fire = fireButton(1);
+      await tester.tap(fire);
+      await tester.tap(fire);
+      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+      expect(store.saveCalls, 1);
+      expect(store.saveCompletions, hasLength(1));
+
+      // While the write is in flight a further tap reaches nothing.
+      await tester.tap(fire);
+      await tester.pump();
+      expect(store.saveCalls, 1);
+
+      store.saveCompletions[0].complete();
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 1);
+      expect(store.scrip, 1140);
+      expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
+    });
+
+    testWidgets('insufficient committed funds keep the pack off the write '
+        'path', (tester) async {
+      final store = _TestCampaignProgressStore(scrip: 500);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          // No values scripted: a reached roll would throw out of values.
+          flareRandom: _ScriptedRandom([]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      // Fire 1 is affordable (500 >= 100); Fire 10 is not — the readable
+      // reason rides above the disabled pack.
+      expect(find.text('NEEDS 1,000 SCRIP'), findsOneWidget);
+      expect(
+        tester.widget<OrionPrimaryButton>(fireButton(10)).onPressed,
+        isNull,
+      );
+      await tester.tap(fireButton(10));
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 0);
+    });
+
+    testWidgets('a Flare-route reset failure renders the shell breadcrumb', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(
+        scrip: 1240,
+        resetResults: [StateError('reset failed')],
+      );
+      await tester.pumpWidget(testGamePage(progressStore: store));
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      await openResetCampaignDialog(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+
+      // The failure must land on the visible shell line — not the hidden
+      // map breadcrumb the old camp||codex branch would have used.
+      expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+      expect(findOrionTitle('Signal Flare'), findsOneWidget);
+      expect(find.bySemanticsLabel('1,240 Scrip'), findsOneWidget);
+      expect(store.scrip, 1240);
+      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    });
+
+    testWidgets('a Flare-route feedback-save failure renders the shell '
+        'breadcrumb', (tester) async {
+      final store = _TestCampaignProgressStore(scrip: 1240);
+      final feedbackStore = _FailingFeedbackPreferencesStore(
+        value: const FeedbackPreferences(
+          soundEffectsEnabled: true,
+          hapticsEnabled: true,
+        ),
+      );
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          feedbackPreferencesStore: feedbackStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      await tester.tap(find.byTooltip('Settings'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(SwitchListTile, 'Sound Effects'));
+      await tester.pump();
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Could not save feedback settings.'), findsOneWidget);
+      expect(findOrionTitle('Signal Flare'), findsOneWidget);
+    });
+
+    testWidgets('an in-flight reset holds flare packs off the write path', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(scrip: 1240, delayResets: true);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          flareRandom: _ScriptedRandom([6740, 0]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      await openResetCampaignDialog(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await _pumpUntil(tester, () => store.resetCompletions.isNotEmpty);
+      await tester.pump();
+
+      // While the reset runs both packs are inert with a readable reason —
+      // no purchase may queue behind the wipe.
+      expect(find.text('SAVING…'), findsOneWidget);
+      expect(
+        tester.widget<OrionPrimaryButton>(fireButton(1)).onPressed,
+        isNull,
+      );
+      await tester.tap(fireButton(1));
+      await tester.tap(fireButton(10));
+      await tester.pump();
+      expect(store.saveCalls, 0);
+
+      store.resetCompletions.single.complete();
+      await tester.pumpAndSettle();
+
+      // The wiped profile republishes: 'Campaign reset.' shows, the wallet
+      // is 0 and the packs gate on funds instead of writing.
+      expect(find.text('Campaign reset.'), findsOneWidget);
+      expect(find.bySemanticsLabel('0 Scrip'), findsWidgets);
+      expect(find.text('NEEDS 100 SCRIP'), findsOneWidget);
+      expect(store.saveCalls, 0);
+      expect(store.scrip, 0);
+      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    });
+
+    testWidgets('a newly recruited character is selectable in the briefing '
+        'picker but never squad-edited', (tester) async {
+      final store = _TestCampaignProgressStore(scrip: 1240);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          flareRandom: _ScriptedRandom([6740, 0]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+      await tester.tap(fireButton(1));
+      await tester.pumpAndSettle();
+      expect(store.ownedLevels[Character.sayo], 1);
+      expect(store.squad, CampaignSave.starterSquad);
+
+      // The briefing's squad picker now offers sayo among owned members.
+      await tester.tap(find.byTooltip('Map'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Alpha'));
+      await tester.tap(find.text('Alpha'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.byKey(const ValueKey('briefing-squad-edit')),
+      );
+      await tester.tap(find.byKey(const ValueKey('briefing-squad-edit')));
+      await tester.pumpAndSettle();
+      final sayoPick = find.byKey(const ValueKey('briefing-squad-pick-sayo'));
+      await tester.ensureVisible(sayoPick);
+      expect(sayoPick, findsOneWidget);
+      // And the committed squad is still the two starters — the draft
+      // stayed untouched by the recruitment.
+      expect(
+        find.byKey(const ValueKey('briefing-squad-token-haruto')),
+        findsOneWidget,
+      );
+      expect(
+        find.byKey(const ValueKey('briefing-squad-token-sayo')),
+        findsNothing,
+      );
+    });
   });
 
   testWidgets('world map shows locked, unlocked, and cleared stages', (
@@ -9430,6 +9905,35 @@ class _FlakyFeedbackPreferencesStore implements FeedbackPreferencesStore {
     }
     value = preferences;
   }
+}
+
+/// Deterministic `math.Random` for injected flare rolls: each `nextInt`
+/// returns the next scripted value (which must fit the requested bound), so
+/// a page test can aim FlareRules at exact rank buckets and same-rank picks.
+/// Each draw consumes two values — the rank roll, then the pick.
+class _ScriptedRandom implements math.Random {
+  _ScriptedRandom(List<int> values) : _values = List.of(values);
+
+  final List<int> _values;
+  var _nextIndex = 0;
+
+  @override
+  int nextInt(int max) {
+    if (_nextIndex >= _values.length) {
+      throw StateError('ScriptedRandom ran out of values.');
+    }
+    final value = _values[_nextIndex++];
+    if (value < 0 || value >= max) {
+      throw ArgumentError('Scripted value $value outside [0, $max).');
+    }
+    return value;
+  }
+
+  @override
+  double nextDouble() => throw UnimplementedError('nextDouble is unused');
+
+  @override
+  bool nextBool() => throw UnimplementedError('nextBool is unused');
 }
 
 /// Offers handed out in order by [_ScriptedModuleOfferPicker] so the
