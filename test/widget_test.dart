@@ -5911,6 +5911,74 @@ void main() {
         findsNothing,
       );
     });
+
+    testWidgets('a successful reset clears an open flare result', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(scrip: 1240);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          flareRandom: _ScriptedRandom([6740, 0]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+      await tester.tap(fireButton(1));
+      await tester.pumpAndSettle();
+      expect(find.text('1 FLARE FIRED'), findsOneWidget);
+      expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
+
+      await openResetCampaignDialog(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+
+      // The wiped profile cannot back a stale reveal: the result is
+      // dismissed to the fire screen, the balance reads the reset wallet
+      // and the recruit is gone from the save.
+      expect(find.text('Campaign reset.'), findsOneWidget);
+      expect(findOrionTitle('Signal Flare'), findsOneWidget);
+      expect(find.text('1 FLARE FIRED'), findsNothing);
+      expect(find.byKey(const ValueKey('flare-hero-sayo')), findsNothing);
+      expect(find.text('WHO ANSWERS'), findsOneWidget);
+      expect(find.bySemanticsLabel('0 Scrip'), findsWidgets);
+      expect(find.text('NEEDS 100 SCRIP'), findsOneWidget);
+      expect(store.scrip, 0);
+      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    });
+
+    testWidgets('a failed reset preserves an open flare result', (
+      tester,
+    ) async {
+      final store = _TestCampaignProgressStore(
+        scrip: 1240,
+        resetResults: [StateError('reset failed')],
+      );
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          flareRandom: _ScriptedRandom([6740, 0]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+      await tester.tap(fireButton(1));
+      await tester.pumpAndSettle();
+      expect(find.text('1 FLARE FIRED'), findsOneWidget);
+
+      await openResetCampaignDialog(tester);
+      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+      await tester.pumpAndSettle();
+
+      // The committed batch still matches the committed profile — nothing
+      // about the reveal is dismissed by the rejected wipe.
+      expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+      expect(find.text('1 FLARE FIRED'), findsOneWidget);
+      expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
+      expect(find.bySemanticsLabel('1,140 Scrip'), findsOneWidget);
+      expect(store.scrip, 1140);
+      expect(store.ownedLevels[Character.sayo], 1);
+    });
   });
 
   testWidgets('world map shows locked, unlocked, and cleared stages', (

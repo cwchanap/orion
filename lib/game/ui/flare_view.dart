@@ -460,47 +460,81 @@ class _FlareViewState extends State<FlareView> {
   }
 
   /// The new recruits get hero cards above the grid — up to the first three
-  /// in pull order, matching the artboard's showcase row. A lone recruit
-  /// keeps a card-sized footprint instead of stretching across the row.
+  /// in pull order, matching the artboard's showcase row. The row gives up
+  /// columns rather than shrinking type: each card must stay wide enough
+  /// for its name and NEW RECRUIT line at the user's text scale.
   Widget _buildHeroRow(OrionUiTheme uiTheme, List<FlareDraw> recruits) {
     final shown = recruits.take(3).toList();
-    if (shown.length == 1) {
-      return Center(
-        child: SizedBox(width: 150, child: _HeroCard(draw: shown.single)),
-      );
-    }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        for (final (index, draw) in shown.indexed) ...[
-          if (index > 0) const SizedBox(width: 10),
-          Expanded(child: _HeroCard(draw: draw)),
-        ],
-      ],
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
+        const gap = 10.0;
+        final minCardWidth = 104 * textScale;
+        final maxCardWidth = 150 * textScale;
+        final columns = math
+            .min(
+              shown.length,
+              ((constraints.maxWidth + gap) / (minCardWidth + gap)).floor(),
+            )
+            .clamp(1, 3);
+        final cardWidth = math.min(
+          (constraints.maxWidth - (columns - 1) * gap) / columns,
+          maxCardWidth,
+        );
+        return Wrap(
+          alignment: WrapAlignment.center,
+          spacing: gap,
+          runSpacing: gap,
+          children: [
+            for (final draw in shown)
+              SizedBox(
+                width: cardWidth,
+                child: _HeroCard(draw: draw),
+              ),
+          ],
+        );
+      },
     );
   }
 
-  /// Every draw in pull order: five across for the ten-pull grid, a single
-  /// centred tile for the lone pull.
+  /// Every draw in pull order: up to five across for the ten-pull grid,
+  /// reflowing to fewer columns (or a single column at large text scales)
+  /// so the wrapped outcome caption stays at its full font size. A lone
+  /// pull keeps a centred card-sized tile.
   Widget _buildDrawGrid(OrionUiTheme uiTheme, List<FlareDraw> draws) {
-    if (draws.length == 1) {
-      return Center(
-        child: SizedBox(
-          width: 120,
-          child: AspectRatio(
-            aspectRatio: 0.64,
-            child: _DrawTile(draw: draws.single, index: 0),
-          ),
-        ),
-      );
-    }
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = math.min(5, draws.length);
-        final tileWidth = (constraints.maxWidth - (columns - 1) * 8) / columns;
+        final textScale = MediaQuery.textScalerOf(context).scale(11) / 11;
+        if (draws.length == 1) {
+          return Center(
+            child: SizedBox(
+              width: math.min(120 * textScale, constraints.maxWidth),
+              child: AspectRatio(
+                aspectRatio: 0.64,
+                child: _DrawTile(draw: draws.single, index: 0),
+              ),
+            ),
+          );
+        }
+        const gap = 8.0;
+        // ~72px leaves room for a wrapped "+1,500 SCRIP" caption segment;
+        // the floor scales with the user's text scale.
+        final minTileWidth = 72 * textScale;
+        final maxTileWidth = 130 * textScale;
+        final columns = math
+            .min(
+              math.min(5, draws.length),
+              ((constraints.maxWidth + gap) / (minTileWidth + gap)).floor(),
+            )
+            .clamp(1, 5);
+        final tileWidth = math.min(
+          (constraints.maxWidth - (columns - 1) * gap) / columns,
+          maxTileWidth,
+        );
         return Wrap(
-          spacing: 8,
-          runSpacing: 8,
+          alignment: WrapAlignment.center,
+          spacing: gap,
+          runSpacing: gap,
           children: [
             for (final (index, draw) in draws.indexed)
               SizedBox(
@@ -651,7 +685,10 @@ class _DrawTile extends StatelessWidget {
                   left: 0,
                   right: 0,
                   bottom: 0,
-                  height: 34,
+                  // The scrim covers up to two caption lines so wrapped
+                  // refunds keep their contrast at large text scales.
+                  height:
+                      34 * (MediaQuery.textScalerOf(context).scale(11) / 11),
                   child: IgnorePointer(
                     child: DecoratedBox(
                       decoration: BoxDecoration(
@@ -676,19 +713,17 @@ class _DrawTile extends StatelessWidget {
                   left: 4,
                   right: 4,
                   bottom: 4,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      draw.isNew
-                          ? 'NEW'
-                          : '+${grouped(draw.scripRefund)} SCRIP',
-                      maxLines: 1,
-                      style: OrionTypography.microLabel(
-                        size: 11,
-                        color: draw.isNew
-                            ? uiTheme.naniteGreen
-                            : uiTheme.creditGold,
-                      ),
+                  child: Text(
+                    draw.isNew ? 'NEW' : '+${grouped(draw.scripRefund)} SCRIP',
+                    maxLines: 2,
+                    softWrap: true,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                    style: OrionTypography.microLabel(
+                      size: 11,
+                      color: draw.isNew
+                          ? uiTheme.naniteGreen
+                          : uiTheme.creditGold,
                     ),
                   ),
                 ),
@@ -774,20 +809,22 @@ class _HeroCard extends StatelessWidget {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            character.fullName.split(',').first,
-                            maxLines: 1,
-                            style: OrionTypography.readout(
-                              size: 13,
-                              color: uiTheme.textPrimary,
-                            ),
+                        Text(
+                          character.fullName.split(',').first,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                          style: OrionTypography.readout(
+                            size: 13,
+                            color: uiTheme.textPrimary,
                           ),
                         ),
                         Text(
                           'NEW RECRUIT',
-                          maxLines: 1,
+                          maxLines: 2,
+                          softWrap: true,
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
                           style: OrionTypography.microLabel(
                             size: 10,
                             color: uiTheme.naniteGreen,

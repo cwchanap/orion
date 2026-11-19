@@ -2026,6 +2026,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
       setState(() {
         _committed = CampaignSave.empty;
+        // A revealed batch belongs to the profile that committed it — the
+        // wipe invalidates those recruits, so the result must not linger
+        // against the reset wallet.
+        _flareResult = null;
         _missionScripAward = null;
         _listenToGame(null);
         if (_activeView == _ShellView.stage) {

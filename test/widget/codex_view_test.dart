@@ -1043,11 +1043,33 @@ void main() {
     await tester.pump();
 
     await tester.enterText(find.byType(TextField), 'zzzz');
-    await tester.pump();
+    await tester.pumpAndSettle();
 
     // The ~90dp body leaves no room for a results row, but the field keeps
     // the query and the shell must not error while it is focused.
     expect(queryText(tester), 'zzzz');
+    // Re-tapping the focused field is the real-user path that displays the
+    // collapsed caret handle (SelectionChangedCause.tap); settling lets its
+    // fade-in finish so the overlay is fully displayed.
+    await tester.tap(find.byType(TextField));
+    await tester.pumpAndSettle();
+    final editable = tester.state<EditableTextState>(find.byType(EditableText));
+    expect(editable.selectionOverlay!.handlesAreVisible, isTrue);
+    // Collapsed chrome swaps in handle-less controls: the overlay still
+    // tracks the selection, but every drag-handle gesture target is zero
+    // size, so the root-overlay handle cannot cover the shell's tab bar.
+    final handleTargets = find.descendant(
+      of: find.byType(CompositedTransformFollower),
+      matching: find.byType(RawGestureDetector),
+    );
+    expect(handleTargets, findsWidgets);
+    for (final target in tester.widgetList<RawGestureDetector>(handleTargets)) {
+      expect(
+        tester.getRect(find.byWidget(target)).isEmpty,
+        isTrue,
+        reason: 'a visible selection handle must have no hit target',
+      );
+    }
     final tabs = tester.getRect(find.byTooltip('Map'));
     expect(
       tabs.bottom,
@@ -1056,11 +1078,7 @@ void main() {
           'the tab bar must remain above the keyboard, not overflow '
           'below it: $tabs',
     );
-    // The focused field's caret handle can hang over the left edge of the
-    // first tab, so tap inside the tab where nothing transient overlays it.
-    await tester.tapAt(
-      tester.getRect(find.byTooltip('Map')).centerRight - const Offset(30, 0),
-    );
+    await tester.tap(find.byTooltip('Map'));
     expect(selected, [OrionMenuDestination.sectors]);
     expect(tester.takeException(), isNull);
   });

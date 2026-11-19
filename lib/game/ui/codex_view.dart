@@ -196,6 +196,17 @@ class _CodexViewState extends State<CodexView> {
           SafeArea(
             child: LayoutBuilder(
               builder: (context, layoutConstraints) {
+                // A Material drag handle is a ~48px root-overlay target
+                // anchored just below the caret (~y100 in full chrome). Slots
+                // shorter than ~150px — e.g. a keyboard-reduced landscape
+                // viewport — cannot keep that target inside the shell child
+                // area, where it would cover and steal taps from the tab
+                // bar. Collapsed chrome therefore swaps in handle-less
+                // controls; the caret, keyboard editing, selection and the
+                // clipboard context menu are unaffected.
+                final collapsedChrome =
+                    widget.embeddedInMenuShell &&
+                    layoutConstraints.maxHeight < 150;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -293,6 +304,9 @@ class _CodexViewState extends State<CodexView> {
                                 padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
                                 child: TextField(
                                   controller: _searchController,
+                                  selectionControls: collapsedChrome
+                                      ? _handlelessSelectionControls
+                                      : null,
                                   onChanged: (_) => _applySearchUpdate(),
                                   decoration: InputDecoration(
                                     prefixIcon: const Icon(Icons.search),
@@ -1480,4 +1494,24 @@ class _EnemyTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Selection controls whose drag handles have no size: the zero-size
+/// overlay entries still track the selection (so `handlesAreVisible`
+/// stays meaningful) but paint nothing and hit-test nothing, keeping
+/// them from covering widgets outside the field's own bounds — in the
+/// shell's collapsed chrome, the tab bar below.
+final _handlelessSelectionControls = _HandlelessSelectionControls();
+
+class _HandlelessSelectionControls extends MaterialTextSelectionControls {
+  @override
+  Size getHandleSize(double textLineHeight) => Size.zero;
+
+  @override
+  Widget buildHandle(
+    BuildContext context,
+    TextSelectionHandleType type,
+    double textLineHeight, [
+    VoidCallback? onTap,
+  ]) => const SizedBox.shrink();
 }
