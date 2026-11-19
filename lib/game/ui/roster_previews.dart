@@ -23,6 +23,7 @@ Widget orionRosterPreviewHome(Widget child) =>
 Widget campRosterStarterPreview() => const CampView(
   ownedLevels: CampaignSave.starterOwnedLevels,
   squad: CampaignSave.starterSquad,
+  scrip: 0,
 );
 
 @Preview(
@@ -39,6 +40,7 @@ Widget campRosterVeteranPreview() => const CampView(
     Character.jin: 2,
   },
   squad: [Character.mio, Character.sayo, Character.haruto],
+  scrip: 1240,
 );
 
 @Preview(

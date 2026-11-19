@@ -594,6 +594,9 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _ShellView.camp => CampView(
         ownedLevels: _ownedLevels,
         squad: _squad,
+        scrip: _committed.scrip,
+        isSavingProgress: _isSavingProgress,
+        onLevelUp: _levelUpCharacter,
         onBack: null,
         embeddedInMenuShell: true,
       ),
@@ -1291,6 +1294,30 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // Failure feedback lives inside the still-mounted sheet (retryable); a
       // map breadcrumb would sit hidden under the modal route.
       onFailed: () {},
+    );
+  }
+
+  /// The Camp sheet's one purchase (HPA-923 task 4): queue the atomic
+  /// debit-and-increment on the committed aggregate. `withLevelUp`
+  /// revalidates ownership, cap and funds inside the queue, so an attempt
+  /// that went stale under an earlier commit reports instead of writing.
+  /// Single-flight: the sheet disables Level Up on `isSavingProgress` and
+  /// the early return catches a second press landing before that rebuild.
+  /// A failure leaves `_committed` untouched, keeps the sheet mounted and
+  /// routes the shared breadcrumb to the shell slot so the action stays
+  /// retryable without any navigation.
+  Future<bool> _levelUpCharacter(Character character) {
+    if (_isSavingProgress) {
+      return Future<bool>.value(false);
+    }
+    return _persistSave(
+      buildSave: (committed) => committed.withLevelUp(character),
+      onCommitted: (_) {
+        if (_shellFeedback == _persistenceFailureMessage) {
+          _shellFeedback = null;
+        }
+      },
+      onFailed: () => _setActiveDestinationFeedback(_persistenceFailureMessage),
     );
   }
 

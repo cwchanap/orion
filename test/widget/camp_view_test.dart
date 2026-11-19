@@ -7,8 +7,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/campaign/campaign_progress_store.dart';
 import 'package:orion/game/models/game_models.dart';
+import 'package:orion/game/util/format.dart';
 import 'package:orion/game/ui/camp_view.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
+import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_ui_theme.dart';
 import 'package:orion/game/ui/tower_stat_scale.dart';
@@ -84,6 +86,9 @@ Future<void> _pumpCamp(
   WidgetTester tester, {
   Map<Character, int> ownedLevels = CampaignSave.starterOwnedLevels,
   List<Character> squad = CampaignSave.starterSquad,
+  int scrip = 0,
+  bool isSavingProgress = false,
+  ValueChanged<Character>? onLevelUp,
   Size viewport = _productViewport,
   TextScaler textScaler = TextScaler.noScaling,
   AssetBundle? assetBundle,
@@ -93,7 +98,13 @@ Future<void> _pumpCamp(
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   addTearDown(PaintingBinding.instance.imageCache.clear);
-  Widget home = CampView(ownedLevels: ownedLevels, squad: squad);
+  Widget home = CampView(
+    ownedLevels: ownedLevels,
+    squad: squad,
+    scrip: scrip,
+    isSavingProgress: isSavingProgress,
+    onLevelUp: onLevelUp,
+  );
   if (assetBundle != null) {
     home = DefaultAssetBundle(bundle: assetBundle, child: home);
   }
@@ -266,7 +277,7 @@ void main() {
     expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
   });
 
-  testWidgets('tapping an owned card opens the read-only character sheet', (
+  testWidgets('tapping an owned card opens the character sheet', (
     tester,
   ) async {
     await _pumpCamp(tester);
@@ -294,9 +305,15 @@ void main() {
     expect(find.text('FIRE'), findsOneWidget);
     expect(find.text('RANGE'), findsOneWidget);
 
-    // Read-only: no level-up or currency affordance anywhere.
-    expect(find.textContaining('LEVEL UP'), findsNothing);
-    expect(find.textContaining('Level up'), findsNothing);
+    // The economy strip: committed wallet chip and the Level Up action.
+    // With no purchase callback the action renders disabled — a read-only
+    // host keeps its layout without implying a working purchase.
+    expect(find.bySemanticsLabel('0 Scrip'), findsOneWidget);
+    final levelUp = tester.widget<OrionPrimaryButton>(
+      find.byKey(const ValueKey('level-up-button')),
+    );
+    expect(levelUp.onPressed, isNull);
+
     expect(find.byTooltip('Back'), findsOneWidget);
 
     await tester.tap(find.byTooltip('Back'));
@@ -364,6 +381,208 @@ void main() {
       }
     },
   );
+
+  // --- HPA-923 task 4: the sheet's Level Up economy strip ---
+
+  /// The exact preview pipeline the sheet renders: tier-1 style stats
+  /// scaled by the persistent rank+level factor at [level].
+  TowerStats scaledStats(Character character, int level) =>
+      GameBalance.towerStats(character.style, level: 1).scaleDamageChannels(
+        GameBalance.characterScalingFactor(character.rank, level),
+      );
+
+  OrionPrimaryButton levelUpButton(WidgetTester tester) =>
+      tester.widget<OrionPrimaryButton>(
+        find.byKey(const ValueKey('level-up-button')),
+      );
+
+  testWidgets('sheet shows wallet, cost and next-level stat deltas', (
+    tester,
+  ) async {
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+      squad: const [Character.haruto],
+      scrip: 500,
+      onLevelUp: (_) {},
+    );
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    await tester.pumpAndSettle();
+
+    // The committed balance, the 4→5 price and the LV line.
+    expect(find.bySemanticsLabel('500 Scrip'), findsOneWidget);
+    expect(find.text('LV 4 / 40'), findsOneWidget);
+    final cost = GameBalance.levelUpCost(4)!;
+    expect(find.text('LEVEL UP · $cost'), findsOneWidget);
+    expect(levelUpButton(tester).onPressed, isNotNull);
+
+    // The preview reads the shared scaling path: damage grows, cadence
+    // and range never scale so they carry no next-level delta.
+    final damageDelta =
+        scaledStats(Character.haruto, 5).damage -
+        scaledStats(Character.haruto, 4).damage;
+    final damageDeltaText = find.byKey(
+      const ValueKey('sheet-stat-delta-DAMAGE'),
+    );
+    expect(damageDeltaText, findsOneWidget);
+    expect(
+      tester.widget<Text>(damageDeltaText).data,
+      '+${decimal(damageDelta)}',
+    );
+    expect(find.byKey(const ValueKey('sheet-stat-delta-FIRE')), findsNothing);
+    expect(find.byKey(const ValueKey('sheet-stat-delta-RANGE')), findsNothing);
+  });
+
+  testWidgets(
+    'damage-type secondary channels preview a delta; fixed channels do not',
+    (tester) async {
+      // corrosion/drone ride the damage channel through the character
+      // factor; pierce/chain/slow/splash never scale.
+      for (final (character, label, scales) in [
+        (Character.shiori, 'CORROSION', true),
+        (Character.tetsuo, 'DRONES', true),
+        (Character.sayo, 'PIERCE', false),
+        (Character.kaito, 'CHAIN', false),
+      ]) {
+        await _pumpCamp(
+          tester,
+          ownedLevels: {character: 9},
+          squad: [character],
+          scrip: 9999,
+          onLevelUp: (_) {},
+        );
+        await _showCard(tester, character);
+        await tester.tap(_card(character));
+        await tester.pumpAndSettle();
+
+        final metric = TowerStatScale.forType(character.style).secondaryMetric;
+        expect(metric, isNotNull, reason: character.name);
+        final delta =
+            metric!.valueOf(scaledStats(character, 10)) -
+            metric.valueOf(scaledStats(character, 9));
+        final deltaFinder = find.byKey(ValueKey('sheet-stat-delta-$label'));
+        if (scales) {
+          expect(deltaFinder, findsOneWidget, reason: character.name);
+          expect(
+            tester.widget<Text>(deltaFinder).data,
+            '+${decimal(delta)}',
+            reason: character.name,
+          );
+        } else {
+          expect(
+            delta,
+            0,
+            reason: '$label must not scale with persistent level',
+          );
+          expect(deltaFinder, findsNothing, reason: character.name);
+        }
+
+        await tester.tap(find.byTooltip('Back'));
+        await tester.pumpAndSettle();
+      }
+    },
+  );
+
+  testWidgets('Level Up fires the purchase callback once per press', (
+    tester,
+  ) async {
+    final bought = <Character>[];
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 2, Character.mio: 1},
+      squad: const [Character.haruto],
+      scrip: 200,
+      onLevelUp: bought.add,
+    );
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    await tester.pumpAndSettle();
+
+    expect(levelUpButton(tester).onPressed, isNotNull);
+    await tester.tap(find.byKey(const ValueKey('level-up-button')));
+    await tester.pump();
+    expect(bought, [Character.haruto]);
+  });
+
+  testWidgets('insufficient Scrip disables Level Up with a readable reason', (
+    tester,
+  ) async {
+    var presses = 0;
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 1},
+      squad: const [Character.haruto],
+      scrip: 30,
+      onLevelUp: (_) => presses++,
+    );
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    await tester.pumpAndSettle();
+
+    expect(levelUpButton(tester).onPressed, isNull);
+    expect(
+      find.text('NEEDS ${GameBalance.levelUpCost(1)} SCRIP'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byKey(const ValueKey('level-up-button')));
+    await tester.pumpAndSettle();
+    expect(presses, 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('the level cap disables Level Up with a readable reason', (
+    tester,
+  ) async {
+    var presses = 0;
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: GameBalance.characterMaxLevel},
+      squad: const [Character.haruto],
+      scrip: 99999,
+      onLevelUp: (_) => presses++,
+    );
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    await tester.pumpAndSettle();
+
+    expect(levelUpButton(tester).onPressed, isNull);
+    expect(find.text('MAX LEVEL REACHED'), findsOneWidget);
+    // At the cap no price is offered and no next-level delta renders.
+    expect(find.text('LEVEL UP'), findsOneWidget);
+    expect(find.textContaining('LEVEL UP ·'), findsNothing);
+    expect(find.byKey(const ValueKey('sheet-stat-delta-DAMAGE')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('level-up-button')));
+    await tester.pumpAndSettle();
+    expect(presses, 0);
+  });
+
+  testWidgets('a write in flight holds Level Up busy and single-flight', (
+    tester,
+  ) async {
+    var presses = 0;
+    await _pumpCamp(
+      tester,
+      ownedLevels: const {Character.haruto: 3},
+      squad: const [Character.haruto],
+      scrip: 500,
+      isSavingProgress: true,
+      onLevelUp: (_) => presses++,
+    );
+    await _showCard(tester, Character.haruto);
+    await tester.tap(_card(Character.haruto));
+    // The busy button's spinner never settles — pump frames explicitly.
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+    expect(levelUpButton(tester).loading, isTrue);
+    await tester.tap(find.byKey(const ValueKey('level-up-button')));
+    await tester.pump();
+    expect(presses, 0);
+  });
 
   testWidgets('portrait descriptors declare the roster fallback contract', (
     tester,
@@ -453,6 +672,12 @@ void main() {
     await tester.tap(_card(Character.mio));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey('character-sheet')), findsOneWidget);
+    // The pinned purchase footer stays fully on the compact surface.
+    final footerRect = tester.getRect(
+      find.byKey(const ValueKey('level-up-button')),
+    );
+    expect(footerRect.right, lessThanOrEqualTo(320));
+    expect(footerRect.bottom, lessThanOrEqualTo(568));
     expect(tester.takeException(), isNull);
   });
 
@@ -773,6 +998,7 @@ void main() {
                           builder: (_) => const CampView(
                             ownedLevels: CampaignSave.starterOwnedLevels,
                             squad: CampaignSave.starterSquad,
+                            scrip: 0,
                           ),
                         ),
                       )

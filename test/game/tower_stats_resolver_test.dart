@@ -1,4 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:orion/game/campaign/campaign_progress.dart';
+import 'package:orion/game/campaign/campaign_progress_store.dart';
+import 'package:orion/game/campaign/orion_campaign.dart';
 import 'package:orion/game/models/game_models.dart';
 import 'package:orion/game/rules/tower_stats_resolver.dart';
 
@@ -430,6 +433,69 @@ void main() {
           );
         }
       }
+    });
+
+    test('a committed level-up survives reload and raises resolved stats', () {
+      // The Camp purchase path writes ownedLevels through CampaignSave;
+      // after a store round-trip the raised level resolves strictly
+      // stronger damage channels — corrosion and drone channels included
+      // — while non-damage channels ride at style base.
+      final committed = CampaignSave(
+        progress: CampaignProgress(),
+        ownedLevels: const {Character.shiori: 7, Character.tetsuo: 3},
+        squad: const [Character.shiori],
+        scrip: GameBalance.levelUpCost(7)! + GameBalance.levelUpCost(3)!,
+      ).withLevelUp(Character.shiori).withLevelUp(Character.tetsuo);
+      final reloaded = CampaignProgressCodec.decode(
+        CampaignProgressCodec.encode(committed),
+        knownStages: OrionCampaign.stages,
+      );
+
+      expect(reloaded.ownedLevels[Character.shiori], 8);
+      expect(reloaded.ownedLevels[Character.tetsuo], 4);
+      expect(reloaded.scrip, 0);
+
+      TowerStats resolvedFor(Character character, int level) =>
+          TowerStatsResolver.resolve(characterTower(character, level: level));
+      final shioriBefore = resolvedFor(Character.shiori, 7);
+      final shioriAfter = resolvedFor(
+        Character.shiori,
+        reloaded.ownedLevels[Character.shiori]!,
+      );
+      final tetsuoBefore = resolvedFor(Character.tetsuo, 3);
+      final tetsuoAfter = resolvedFor(
+        Character.tetsuo,
+        reloaded.ownedLevels[Character.tetsuo]!,
+      );
+
+      final shioriGrowth =
+          GameBalance.characterScalingFactor(Character.shiori.rank, 8) /
+          GameBalance.characterScalingFactor(Character.shiori.rank, 7);
+      final tetsuoGrowth =
+          GameBalance.characterScalingFactor(Character.tetsuo.rank, 4) /
+          GameBalance.characterScalingFactor(Character.tetsuo.rank, 3);
+      expect(shioriGrowth, greaterThan(1));
+      expect(tetsuoGrowth, greaterThan(1));
+
+      expect(
+        shioriAfter.damage,
+        closeTo(shioriBefore.damage * shioriGrowth, 1e-9),
+      );
+      expect(
+        shioriAfter.corrosionDamagePerSecond,
+        closeTo(shioriBefore.corrosionDamagePerSecond * shioriGrowth, 1e-9),
+      );
+      expect(
+        tetsuoAfter.droneDamage,
+        closeTo(tetsuoBefore.droneDamage * tetsuoGrowth, 1e-9),
+      );
+
+      // Non-damage channels ride at style base.
+      expect(shioriAfter.range, shioriBefore.range);
+      expect(shioriAfter.fireInterval, shioriBefore.fireInterval);
+      expect(shioriAfter.armorShred, shioriBefore.armorShred);
+      expect(tetsuoAfter.droneCount, tetsuoBefore.droneCount);
+      expect(tetsuoAfter.maxActiveDrones, tetsuoBefore.maxActiveDrones);
     });
 
     test('level input clamps to the 1-40 band', () {

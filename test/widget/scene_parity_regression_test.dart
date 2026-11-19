@@ -258,6 +258,7 @@ void main() {
             content = CampView(
               ownedLevels: const {Character.haruto: 1, Character.mio: 1},
               squad: const [Character.haruto, Character.mio],
+              scrip: 0,
               onBack: () {},
             );
           default:
