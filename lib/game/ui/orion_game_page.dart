@@ -22,6 +22,7 @@ import '../orion_defense_game.dart';
 import '../rules/module_offer_picker.dart';
 import '../rules/run_module_unlocks.dart';
 import '../rules/stage_modifier_rules.dart';
+import '../rules/stage_scrip_rules.dart';
 import 'camp_view.dart';
 import 'codex_view.dart';
 import 'feedback_settings_sheet.dart';
@@ -164,6 +165,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
   bool _isResetting = false;
   StageResult? _missionPriorResult;
   StageResult? _missionVictoryResult;
+  // The exact Scrip payout captured once in _handleStageWon from the
+  // launch-time prior result — the queued win transaction and every Retry
+  // Save reuse this value; it is never recomputed (HPA-923 task 3).
+  int? _missionScripAward;
   String? _missionStageId;
   MissionSaveState? _missionSaveState;
   int _endlessSaveSequence = 0;
@@ -1062,7 +1067,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
                         result: _missionVictoryResult!,
                         priorSavedResult: _missionPriorResult,
                         saveState: _missionSaveState!,
-                        reward: _missionRewardFact(),
+                        rewards: _missionRewardFacts(),
                       ),
                       onReplay: _missionSaveState == MissionSaveState.saved
                           ? _restartFromMissionReport
@@ -1433,6 +1438,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _endlessSaveSequence = 0;
     _missionPriorResult = _committed.progress.resultFor(stage.id);
     _missionVictoryResult = null;
+    _missionScripAward = null;
     _missionStageId = stage.id;
     _missionSaveState = mode == RunMode.endless ? MissionSaveState.saved : null;
     _endlessPriorBest = mode == RunMode.endless
@@ -1564,12 +1570,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     _missionStageId = completion.stage.id;
     _missionVictoryResult = completion.result;
+    // Compute the payout exactly once per attempt: firstClear reads the
+    // committed result captured at stage launch, never the (possibly
+    // already-advanced) aggregate inside the queued save closure.
+    _missionScripAward = StageScripRules.award(
+      completion.stage,
+      completion.result.medal,
+      firstClear: _missionPriorResult == null,
+    );
 
-    if (!completion.result.isBetterThan(_missionPriorResult)) {
-      _setMissionSaveState(MissionSaveState.saved);
-      return;
-    }
-
+    // A retained best is still a wallet event (HPA-923): every successful
+    // clear queues exactly one win transaction.
     _saveMissionResult();
   }
 
@@ -1581,7 +1592,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
     final stageId = _missionStageId;
     final result = _missionVictoryResult;
-    if (stageId == null || result == null) {
+    final scripAward = _missionScripAward;
+    if (stageId == null || result == null || scripAward == null) {
       _setMissionSaveState(MissionSaveState.failed);
       return;
     }
@@ -1589,9 +1601,11 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _setMissionSaveState(MissionSaveState.saving);
 
     await _persistSave(
-      // Award 0 for now: Task 3 captures the stage's Scrip payout beside
-      // the victory result and passes it here.
-      buildSave: (committed) => committed.withMissionWin(stageId, result, 0),
+      // The captured award: withMissionWin credits it even when the
+      // stored best stays unchanged, and a Retry Save replays this exact
+      // amount — never a recomputation.
+      buildSave: (committed) =>
+          committed.withMissionWin(stageId, result, scripAward),
       onCommitted: (_) => _setMissionSaveState(MissionSaveState.saved),
       onFailed: () => _setMissionSaveState(MissionSaveState.failed),
     );
@@ -1654,7 +1668,17 @@ class _OrionGamePageState extends State<OrionGamePage> {
   // celebration. The module identity resolves generically from the
   // mission's own stage (HPA-415); Alpha's strings are the Relay
   // Calibration instance of the same pattern.
-  MissionRewardFact? _missionRewardFact() {
+  //
+  // The Scrip fact follows the same launch-time capture: _missionScripAward
+  // is the exact payout _handleStageWon computed once, so pending, credited
+  // and failed copy all quote the same amount the save transaction carries.
+  // Both facts share the plain MissionRewardFact type — blueprint first,
+  // Scrip second (HPA-923 task 3).
+  List<MissionRewardFact> _missionRewardFacts() {
+    return [?_missionBlueprintFact(), ?_missionScripFact()];
+  }
+
+  MissionRewardFact? _missionBlueprintFact() {
     final stageId = _missionStageId;
     if (stageId == null || _missionPriorResult != null) {
       return null;
@@ -1678,6 +1702,29 @@ class _OrionGamePageState extends State<OrionGamePage> {
       MissionSaveState.failed => const MissionRewardFact(
         title: 'Blueprint not recovered',
         detail: 'Retry Save to keep this first-clear reward.',
+      ),
+      null => null,
+    };
+  }
+
+  MissionRewardFact? _missionScripFact() {
+    final award = _missionScripAward;
+    if (award == null) {
+      return null;
+    }
+
+    return switch (_missionSaveState) {
+      MissionSaveState.saving => MissionRewardFact(
+        title: 'Scrip pending',
+        detail: '$award Scrip credits after this result is saved.',
+      ),
+      MissionSaveState.saved => MissionRewardFact(
+        title: 'Scrip credited: $award',
+        detail: 'Added to your Scrip wallet.',
+      ),
+      MissionSaveState.failed => MissionRewardFact(
+        title: 'Scrip not credited',
+        detail: 'Retry Save to keep this $award Scrip award.',
       ),
       null => null,
     };
@@ -1739,6 +1786,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     _endlessSaveSequence = 0;
     _missionPriorResult = _committed.progress.resultFor(_missionStageId!);
     _missionVictoryResult = null;
+    _missionScripAward = null;
     _missionSaveState = isEndless ? MissionSaveState.saved : null;
     if (isEndless) {
       _endlessPriorBest = _committed.progress.endlessBestFor(_missionStageId!);
@@ -1865,6 +1913,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
       setState(() {
         _committed = CampaignSave.empty;
+        _missionScripAward = null;
         _listenToGame(null);
         if (_activeView == _ShellView.stage) {
           _activeView = _ShellView.worldMap;
