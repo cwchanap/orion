@@ -870,17 +870,24 @@ class _CharacterSheet extends StatelessWidget {
                 if (disabledReason != null)
                   Padding(
                     padding: const EdgeInsets.only(bottom: 6),
-                    child: Text(
-                      disabledReason,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      style: OrionTypography.microLabel(
-                        size: 10,
-                        // A pending write is progress, not a problem — only
-                        // the unaffordable reason takes warning colour.
-                        color: cost == null || disabledReason == 'SAVING…'
-                            ? uiTheme.textMuted
-                            : uiTheme.warningOrange,
+                    child: Semantics(
+                      // A pending write is an in-flight debit, not static
+                      // copy — announce its arrival while focus sits on the
+                      // now-disabled button.
+                      liveRegion: disabledReason == 'SAVING…',
+                      child: Text(
+                        disabledReason,
+                        textAlign: TextAlign.center,
+                        maxLines: 2,
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          // A pending write is progress, not a problem —
+                          // only the unaffordable reason takes warning
+                          // colour.
+                          color: cost == null || disabledReason == 'SAVING…'
+                              ? uiTheme.textMuted
+                              : uiTheme.warningOrange,
+                        ),
                       ),
                     ),
                   ),

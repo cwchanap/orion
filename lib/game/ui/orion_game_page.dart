@@ -36,6 +36,7 @@ import 'mission_command_dock.dart';
 import 'mission_report_content.dart';
 import 'mission_report_panel.dart';
 import 'orion_menu_shell.dart';
+import 'orion_primary_button.dart';
 import 'orion_surface.dart';
 import 'orion_title_view.dart';
 import 'orion_typography.dart';
@@ -179,6 +180,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   int _pendingSaves = 0;
   bool _isSavingProgress = false;
   bool _isResetting = false;
+  bool _isRetryingCampaign = false;
   StageResult? _missionPriorResult;
   StageResult? _missionVictoryResult;
   // The exact Scrip payout captured once in _handleStageWon from the
@@ -608,53 +610,61 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _ShellView.flare => OrionMenuDestination.flare,
       _ => OrionMenuDestination.sectors,
     };
-    final body = switch (_activeView) {
-      _ShellView.camp => CampView(
-        ownedLevels: _ownedLevels,
-        squad: _squad,
-        scrip: _committed.scrip,
-        // Save OR reset in flight — the sheet's single purchase must stay
-        // off the queue for both.
-        isSavingProgress: _isBusy,
-        onLevelUp: _levelUpCharacter,
-        onBack: null,
-        embeddedInMenuShell: true,
-      ),
-      _ShellView.codex => CodexView(
-        progress: _progress,
-        onBack: null,
-        embeddedInMenuShell: true,
-      ),
-      _ShellView.flare => FlareView(
-        scrip: _committed.scrip,
-        result: _flareResult,
-        // Save OR reset in flight — the packs must stay off the queue for
-        // both (a purchase queued behind a wipe would debit a wallet the
-        // reset is about to zero).
-        isSavingProgress: _isBusy,
-        onFire: _fireFlare,
-        onResultDone: () => setState(() => _flareResult = null),
-        onOpenRoster: () {
-          setState(() => _flareResult = null);
-          _openMenuDestination(OrionMenuDestination.camp);
-        },
-        embeddedInMenuShell: true,
-      ),
-      _ => WorldMapView(
-        stages: OrionCampaign.stages,
-        progress: _progress,
-        embeddedInMenuShell: true,
-        campaignModifiers: CampaignModifiers.fromProgress(
-          _progress,
-          OrionCampaign.stages,
-        ),
-        feedback: _mapFeedback,
-        isSavingProgress: _isSavingProgress,
-        isResetting: _isResetting,
-        onStageSelected: _showStageBriefing,
-        onLockedStageSelected: _showLockedStageFeedback,
-      ),
-    };
+    // A failed campaign load leaves _store null: the economy tabs read an
+    // empty profile as 0 Scrip with every purchase dead and no way back.
+    // Show an unavailable state with a retry instead of dead controls.
+    final profileMissing =
+        _store == null &&
+        (_activeView == _ShellView.camp || _activeView == _ShellView.flare);
+    final body = profileMissing
+        ? _buildUnavailableProfile()
+        : switch (_activeView) {
+            _ShellView.camp => CampView(
+              ownedLevels: _ownedLevels,
+              squad: _squad,
+              scrip: _committed.scrip,
+              // Save OR reset in flight — the sheet's single purchase must stay
+              // off the queue for both.
+              isSavingProgress: _isBusy,
+              onLevelUp: _levelUpCharacter,
+              onBack: null,
+              embeddedInMenuShell: true,
+            ),
+            _ShellView.codex => CodexView(
+              progress: _progress,
+              onBack: null,
+              embeddedInMenuShell: true,
+            ),
+            _ShellView.flare => FlareView(
+              scrip: _committed.scrip,
+              result: _flareResult,
+              // Save OR reset in flight — the packs must stay off the queue for
+              // both (a purchase queued behind a wipe would debit a wallet the
+              // reset is about to zero).
+              isSavingProgress: _isBusy,
+              onFire: _fireFlare,
+              onResultDone: () => setState(() => _flareResult = null),
+              onOpenRoster: () {
+                setState(() => _flareResult = null);
+                _openMenuDestination(OrionMenuDestination.camp);
+              },
+              embeddedInMenuShell: true,
+            ),
+            _ => WorldMapView(
+              stages: OrionCampaign.stages,
+              progress: _progress,
+              embeddedInMenuShell: true,
+              campaignModifiers: CampaignModifiers.fromProgress(
+                _progress,
+                OrionCampaign.stages,
+              ),
+              feedback: _mapFeedback,
+              isSavingProgress: _isSavingProgress,
+              isResetting: _isResetting,
+              onStageSelected: _showStageBriefing,
+              onLockedStageSelected: _showLockedStageFeedback,
+            ),
+          };
     return OrionMenuShell(
       destination: destination,
       medalEarned: _progress.totalMedalRank,
@@ -667,6 +677,52 @@ class _OrionGamePageState extends State<OrionGamePage> {
       onOpenSettings: _feedbackPreferencesLoaded ? _openFeedbackSettings : null,
       feedback: _activeView == _ShellView.worldMap ? null : _shellFeedback,
       child: body,
+    );
+  }
+
+  /// The economy tabs' stand-in while the campaign profile is unreadable:
+  /// purchases stay off entirely and RETRY re-runs the same load path
+  /// Launch uses. A successful retry restores [_store] and [_committed],
+  /// so the real view returns on the next frame.
+  Widget _buildUnavailableProfile() {
+    final uiTheme = OrionUiTheme.of(context);
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'CAMPAIGN PROGRESS UNAVAILABLE',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: OrionTypography.microLabel(
+                size: 10,
+                color: uiTheme.warningOrange,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Purchases stay off until the profile loads.',
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              style: OrionTypography.microLabel(
+                size: 11,
+                color: uiTheme.textMuted,
+              ),
+            ),
+            const SizedBox(height: 14),
+            OrionPrimaryButton(
+              key: const ValueKey('campaign-load-retry'),
+              label: 'RETRY',
+              icon: Icons.refresh_rounded,
+              onPressed: _isRetryingCampaign ? null : _retryCampaignFromShell,
+              loading: _isRetryingCampaign,
+              height: 52,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1194,6 +1250,24 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return save;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// The menu shell's retry affordance after a failed campaign load:
+  /// single-flight on [_isRetryingCampaign], and a failure keeps the
+  /// unavailable state — the action stays retryable instead of reporting
+  /// a second breadcrumb the panel already replaces.
+  Future<void> _retryCampaignFromShell() async {
+    if (_isRetryingCampaign) {
+      return;
+    }
+    setState(() => _isRetryingCampaign = true);
+    try {
+      await _retryCampaignLoad();
+    } finally {
+      if (mounted) {
+        setState(() => _isRetryingCampaign = false);
+      }
     }
   }
 

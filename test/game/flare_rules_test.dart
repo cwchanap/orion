@@ -61,17 +61,20 @@ void main() {
     });
 
     test('picks uniformly among the characters of the rolled rank', () {
-      final firstPick = FlareRules.roll(
-        const {},
-        1,
-        _ScriptedRandom([9990, 0]),
-      );
-      final secondPick = FlareRules.roll(
-        const {},
-        1,
-        _ScriptedRandom([9990, 1]),
-      );
+      final sRankCount = Character.values
+          .where((character) => character.rank == CharacterRank.s)
+          .length;
+      final firstRandom = _ScriptedRandom([9990, 0]);
+      final secondRandom = _ScriptedRandom([9990, 1]);
 
+      final firstPick = FlareRules.roll(const {}, 1, firstRandom);
+      final secondPick = FlareRules.roll(const {}, 1, secondRandom);
+
+      // The pick must request exactly one ticket per candidate — a wider
+      // bound could still script both characters while weighting them
+      // unevenly.
+      expect(firstRandom.requestedBounds, [10000, sRankCount]);
+      expect(secondRandom.requestedBounds, [10000, sRankCount]);
       expect(firstPick.draws.single.character, Character.hikari);
       expect(secondPick.draws.single.character, Character.jin);
     });
@@ -221,10 +224,16 @@ class _ScriptedRandom implements math.Random {
   _ScriptedRandom(List<int> values) : _values = List.of(values);
 
   final List<int> _values;
+
+  /// Every bound passed to `nextInt`, in call order — lets a test prove a
+  /// pick draws one ticket per candidate, not just that scripted tickets
+  /// resolve to the expected characters.
+  final requestedBounds = <int>[];
   var _nextIndex = 0;
 
   @override
   int nextInt(int max) {
+    requestedBounds.add(max);
     if (_nextIndex >= _values.length) {
       throw StateError('ScriptedRandom ran out of values.');
     }
