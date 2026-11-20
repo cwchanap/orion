@@ -708,7 +708,31 @@ void main() {
       findsOneWidget,
     );
     expect(find.text('SAVING…'), findsNothing);
+    expect(levelUpButton(tester).loading, isFalse);
   });
+
+  testWidgets(
+    'level 40 keeps MAX LEVEL REACHED and no spinner while a write is in '
+    'flight',
+    (tester) async {
+      await _pumpCamp(
+        tester,
+        ownedLevels: const {Character.haruto: GameBalance.characterMaxLevel},
+        squad: const [Character.haruto],
+        scrip: 99999,
+        isSavingProgress: true,
+        onLevelUp: (_) {},
+      );
+      await _showCard(tester, Character.haruto);
+      await tester.tap(_card(Character.haruto));
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('MAX LEVEL REACHED'), findsOneWidget);
+      expect(find.text('SAVING…'), findsNothing);
+      expect(levelUpButton(tester).loading, isFalse);
+    },
+  );
 
   testWidgets('portrait descriptors declare the roster fallback contract', (
     tester,

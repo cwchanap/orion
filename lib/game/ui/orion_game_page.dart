@@ -26,6 +26,7 @@ import '../rules/module_offer_picker.dart';
 import '../rules/run_module_unlocks.dart';
 import '../rules/stage_modifier_rules.dart';
 import '../rules/stage_scrip_rules.dart';
+import '../util/format.dart';
 import 'camp_view.dart';
 import 'codex_view.dart';
 import 'feedback_settings_sheet.dart';
@@ -130,6 +131,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
   bool _feedbackPreferencesLoaded = false;
   FirstMissionGuideStore? _firstMissionGuideStore;
   bool _firstMissionGuideCompleted = false;
+  // True only when initial load failed before campaign progress could resolve a
+  // missing (null) guide record — never set when Replay Tutorial or an explicit
+  // stored bool already settled the flag.
+  bool _firstMissionGuideNeedsInference = false;
   // Typed seen set for the HPA-413 contextual tips, loaded alongside the
   // guide flag before the loading gate clears; acknowledged in memory first,
   // then written through best-effort.
@@ -181,6 +186,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   bool _isSavingProgress = false;
   bool _isResetting = false;
   bool _isRetryingCampaign = false;
+  bool _campaignRetryFailed = false;
   StageResult? _missionPriorResult;
   StageResult? _missionVictoryResult;
   // The exact Scrip payout captured once in _handleStageWon from the
@@ -355,6 +361,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _firstMissionGuideCompleted =
             guideCompleted ??
             (save.progress.resultFor(OrionCampaign.stageOneId) != null);
+        _firstMissionGuideNeedsInference = false;
         _seenTips = seenTips;
         _isLoading = false;
       });
@@ -395,6 +402,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committed = CampaignSave.empty;
         _firstMissionGuideStore = guideStore;
         _firstMissionGuideCompleted = guideCompleted ?? false;
+        _firstMissionGuideNeedsInference = guideCompleted == null;
         _seenTips = seenTips;
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
@@ -514,6 +522,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// In-memory state wins immediately; the store write-through is best-effort
   /// and a failure never touches campaign or feedback breadcrumbs.
   void _setFirstMissionGuideCompleted(bool completed) {
+    _firstMissionGuideNeedsInference = false;
     if (_firstMissionGuideCompleted == completed) {
       return;
     }
@@ -720,6 +729,21 @@ class _OrionGamePageState extends State<OrionGamePage> {
               loading: _isRetryingCampaign,
               height: 52,
             ),
+            if (_campaignRetryFailed) ...[
+              const SizedBox(height: 12),
+              Semantics(
+                liveRegion: true,
+                child: Text(
+                  'Retry failed — could not load campaign progress.',
+                  key: const ValueKey('campaign-load-retry-error'),
+                  textAlign: TextAlign.center,
+                  style: OrionTypography.microLabel(
+                    size: 11,
+                    color: uiTheme.warningOrange,
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -728,7 +752,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
 
   int get _campaignMedalTotal => OrionCampaign.stages.length * 3;
 
-  bool get _isBusy => _isSavingProgress || _isResetting;
+  bool get _isBusy => _isSavingProgress || _isResetting || _isRetryingCampaign;
 
   void _openMenuDestination(OrionMenuDestination destination) {
     if (_isBusy) {
@@ -745,6 +769,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
     setState(() {
       _shellFeedback = null;
+      _campaignRetryFailed = false;
       // A revealed batch belongs to the Flare screen that committed it —
       // leaving the tab dismisses it.
       _flareResult = null;
@@ -1224,8 +1249,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   /// Recovers only the campaign store and committed profile after an initial
-  /// load failure, without touching mid-session onboarding or feedback state.
+  /// load failure, without touching mid-session onboarding or feedback state
+  /// unless the first-mission guide flag still waited on campaign progress.
   Future<CampaignSave?> _retryCampaignLoad() async {
+    if (_store != null) {
+      return _committed;
+    }
+    final generation = _progressGeneration;
     try {
       CampaignProgressStore? store = widget.progressStore;
       if (store == null && widget.progressStoreLoader == null) {
@@ -1237,16 +1267,34 @@ class _OrionGamePageState extends State<OrionGamePage> {
       }
       store ??= await widget.progressStoreLoader!();
       final save = await store.load();
-      if (!mounted) {
+      if (!mounted || generation != _progressGeneration) {
         return null;
       }
+      // Another retry may have finished first and committed newer writes while
+      // this load was in flight; never reset _committed backward.
+      if (_store != null) {
+        return _committed;
+      }
+      final freezeInferredCompletion =
+          _firstMissionGuideNeedsInference &&
+          save.progress.resultFor(OrionCampaign.stageOneId) != null;
       setState(() {
         _store = store;
         _committed = save;
+        _campaignRetryFailed = false;
+        if (_firstMissionGuideNeedsInference) {
+          _firstMissionGuideNeedsInference = false;
+          if (freezeInferredCompletion) {
+            _firstMissionGuideCompleted = true;
+          }
+        }
         if (_mapFeedback == 'Could not load campaign progress.') {
           _mapFeedback = null;
         }
       });
+      if (freezeInferredCompletion) {
+        _firstMissionGuideStore?.setCompleted(true).catchError((_) {});
+      }
       return save;
     } catch (_) {
       return null;
@@ -1254,16 +1302,22 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   /// The menu shell's retry affordance after a failed campaign load:
-  /// single-flight on [_isRetryingCampaign], and a failure keeps the
-  /// unavailable state — the action stays retryable instead of reporting
-  /// a second breadcrumb the panel already replaces.
+  /// single-flight on [_isRetryingCampaign]; a failure keeps the unavailable
+  /// state and surfaces an inline live-region message so the user and screen
+  /// readers know the retry failed.
   Future<void> _retryCampaignFromShell() async {
     if (_isRetryingCampaign) {
       return;
     }
-    setState(() => _isRetryingCampaign = true);
+    setState(() {
+      _isRetryingCampaign = true;
+      _campaignRetryFailed = false;
+    });
     try {
-      await _retryCampaignLoad();
+      final recovered = await _retryCampaignLoad();
+      if (mounted && recovered == null) {
+        setState(() => _campaignRetryFailed = true);
+      }
     } finally {
       if (mounted) {
         setState(() => _isRetryingCampaign = false);
@@ -1429,13 +1483,49 @@ class _OrionGamePageState extends State<OrionGamePage> {
     return _persistSave(
       buildSave: (committed) => committed.withLevelUp(character),
       onCommitted: (_) {
-        if (_shellFeedback == _persistenceFailureMessage) {
+        if (_isPurchaseFeedbackMessage(_shellFeedback)) {
           _shellFeedback = null;
         }
+      },
+      onRejected: (_) {
+        if (!mounted) return;
+        setState(() {
+          _setActiveDestinationFeedback(_levelUpRejectionMessage(character));
+        });
       },
       onFailed: () => _setActiveDestinationFeedback(_persistenceFailureMessage),
     );
   }
+
+  String _levelUpRejectionMessage(Character character) {
+    final level = _committed.ownedLevels[character];
+    if (level == null) {
+      return 'Could not complete level up.';
+    }
+    final cost = GameBalance.levelUpCost(level);
+    if (cost == null) {
+      return 'Already at max level.';
+    }
+    if (_committed.scrip < cost) {
+      return 'Not enough Scrip.';
+    }
+    return 'Could not complete level up.';
+  }
+
+  String _flareRejectionMessage(int count) {
+    if (FlareRules.allowedPackCounts.contains(count) &&
+        _committed.scrip < count * GameBalance.flareCost) {
+      return 'Not enough Scrip.';
+    }
+    return 'Could not fire flare.';
+  }
+
+  static bool _isPurchaseFeedbackMessage(String? message) =>
+      message == _persistenceFailureMessage ||
+      message == 'Not enough Scrip.' ||
+      message == 'Already at max level.' ||
+      message == 'Could not complete level up.' ||
+      message == 'Could not fire flare.';
 
   /// The Flare screen's purchase (HPA-923 task 5): one atomic queued write
   /// that charges the full pack upfront, recruits each new draw at level 1
@@ -1472,9 +1562,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
         }
         setState(() {
           _flareResult = batch;
-          if (_shellFeedback == _persistenceFailureMessage) {
+          if (_isPurchaseFeedbackMessage(_shellFeedback)) {
             _shellFeedback = null;
           }
+        });
+      },
+      onRejected: (_) {
+        if (!mounted) return;
+        setState(() {
+          _setActiveDestinationFeedback(_flareRejectionMessage(count));
         });
       },
       onFailed: () => _setActiveDestinationFeedback(_persistenceFailureMessage),
@@ -1519,6 +1615,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
             setState(() {
               _seenTips = const {};
               _firstMissionGuideCompleted = false;
+              _firstMissionGuideNeedsInference = false;
             });
           }
         },
@@ -1675,6 +1772,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   Future<bool> _persistSave({
     required CampaignSave Function(CampaignSave committed) buildSave,
     ValueChanged<CampaignSave>? onCommitted,
+    ValueChanged<Object>? onRejected,
     VoidCallback? onFailed,
   }) async {
     final store = _store;
@@ -1711,7 +1809,23 @@ class _OrionGamePageState extends State<OrionGamePage> {
           onFailed?.call();
           return; // a reset invalidated this save; the reset owns wiping
         }
-        final payload = buildSave(_committed);
+        final CampaignSave payload;
+        try {
+          payload = buildSave(_committed);
+        } catch (error) {
+          if (saveGeneration == _progressGeneration) {
+            if (onRejected != null) {
+              onRejected(error);
+            } else if (onFailed != null) {
+              onFailed();
+            } else if (mounted) {
+              _showCampaignPersistenceFailure();
+            }
+          } else {
+            onFailed?.call();
+          }
+          return;
+        }
         await store.save(payload);
         if (saveGeneration == _progressGeneration) {
           _committed = payload;
@@ -1951,15 +2065,15 @@ class _OrionGamePageState extends State<OrionGamePage> {
     return switch (_missionSaveState) {
       MissionSaveState.saving => MissionRewardFact(
         title: 'Scrip pending',
-        detail: '$award Scrip credits after this result is saved.',
+        detail: '${grouped(award)} Scrip credits after this result is saved.',
       ),
       MissionSaveState.saved => MissionRewardFact(
-        title: 'Scrip credited: $award',
+        title: 'Scrip credited: ${grouped(award)}',
         detail: 'Added to your Scrip wallet.',
       ),
       MissionSaveState.failed => MissionRewardFact(
         title: 'Scrip not credited',
-        detail: 'Retry Save to keep this $award Scrip award.',
+        detail: 'Retry Save to keep this ${grouped(award)} Scrip award.',
       ),
       null => null,
     };
@@ -1997,7 +2111,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
             ? 'Endless save failed — best $savedBest ${savedBest == 1 ? 'wave' : 'waves'} kept.'
             : 'Endless best was not saved.';
       } else {
-        _mapFeedback = 'Mission result was not saved.';
+        final scripAward = _missionScripAward;
+        _mapFeedback = scripAward != null && scripAward > 0
+            ? 'Mission result and ${grouped(scripAward)} Scrip were not saved.'
+            : 'Mission result was not saved.';
       }
     }
     _returnToMap();

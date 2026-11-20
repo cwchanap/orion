@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../util/format.dart';
@@ -146,55 +148,76 @@ class _TopBar extends StatelessWidget {
           border: Border(bottom: BorderSide(color: orionPanelEdge)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    kicker,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textScaler: textScaler,
-                    style: OrionTypography.microLabel(
-                      size: 10,
-                      color: accent,
-                    ).copyWith(letterSpacing: 0.8),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final chipsMaxWidth = math.max(
+              0.0,
+              constraints.maxWidth - 48 - 16 - 80,
+            );
+            return Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        kicker,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textScaler: textScaler,
+                        style: OrionTypography.microLabel(
+                          size: 10,
+                          color: accent,
+                        ).copyWith(letterSpacing: 0.8),
+                      ),
+                      OrionTitle(
+                        title,
+                        size: 15,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textScaler: textScaler,
+                        color: uiTheme.textPrimary,
+                      ),
+                    ],
                   ),
-                  OrionTitle(
-                    title,
-                    size: 15,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textScaler: textScaler,
-                    color: uiTheme.textPrimary,
+                ),
+                const SizedBox(width: 8),
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: chipsMaxWidth),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerRight,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        OrionResourceChip(
+                          icon: Icons.emoji_events,
+                          iconColor: uiTheme.creditGold,
+                          count: '$medalEarned/$medalTotal',
+                          semanticsLabel:
+                              '$medalEarned of $medalTotal campaign medals',
+                        ),
+                        const SizedBox(width: 8),
+                        OrionResourceChip(
+                          icon: Icons.payments_rounded,
+                          iconColor: uiTheme.creditGold,
+                          count: grouped(scrip),
+                          semanticsLabel: '${grouped(scrip)} Scrip',
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            OrionResourceChip(
-              icon: Icons.emoji_events,
-              iconColor: uiTheme.creditGold,
-              count: '$medalEarned/$medalTotal',
-              semanticsLabel: '$medalEarned of $medalTotal campaign medals',
-            ),
-            const SizedBox(width: 8),
-            OrionResourceChip(
-              icon: Icons.payments_rounded,
-              iconColor: uiTheme.creditGold,
-              count: grouped(scrip),
-              semanticsLabel: '${grouped(scrip)} Scrip',
-            ),
-            const SizedBox(width: 8),
-            _GhostIconButton(
-              tooltip: 'Settings',
-              icon: Icons.settings_rounded,
-              onPressed: onOpenSettings,
-            ),
-          ],
+                ),
+                const SizedBox(width: 8),
+                _GhostIconButton(
+                  tooltip: 'Settings',
+                  icon: Icons.settings_rounded,
+                  onPressed: onOpenSettings,
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -233,12 +256,18 @@ class OrionResourceChip extends StatelessWidget {
             children: [
               Icon(icon, size: 14, color: iconColor),
               const SizedBox(width: 6),
-              Text(
-                count,
-                textScaler: MediaQuery.textScalerOf(
-                  context,
-                ).clamp(maxScaleFactor: 1.3),
-                style: OrionTypography.readout(size: 14, color: iconColor),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    count,
+                    maxLines: 1,
+                    textScaler: MediaQuery.textScalerOf(
+                      context,
+                    ).clamp(maxScaleFactor: 1.3),
+                    style: OrionTypography.readout(size: 14, color: iconColor),
+                  ),
+                ),
               ),
             ],
           ),

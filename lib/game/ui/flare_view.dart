@@ -249,6 +249,7 @@ class _FlareViewState extends State<FlareView> {
     return Semantics(
       label:
           'Drop rates: ${_rarenessOrder.map((rank) => '${rank.label} ${_rateLabel(rank)}').join(', ')}',
+      excludeSemantics: true,
       child: OrionSurface(
         role: OrionSurfaceRole.sheet,
         padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),

@@ -1346,7 +1346,7 @@ class _BriefingScripRewards extends StatelessWidget {
       StageMedal.clear,
       firstClear: false,
     );
-    const labels = ['FIRST CLEAR', 'EVERY REPLAY', 'GOLD MEDAL'];
+    const labels = ['FIRST CLEAR', 'REPLAY CLEAR', 'GOLD MEDAL'];
     List<_BriefingScripTile> tilesFor(bool horizontal) => [
       _BriefingScripTile(
         label: labels[0],
@@ -1428,7 +1428,7 @@ class _BriefingScripRewards extends StatelessWidget {
             // same inset, the 20px icon, a 10px icon gap and an 8px value
             // gap; a label wider than that share ellipsizes, so it drops
             // to the label-above-figure placement that grants the full
-            // tile width (e.g. EVERY REPLAY at 3-4x text).
+            // tile width (e.g. REPLAY CLEAR at 3-4x text).
             final rowLabelShare =
                 (constraints.maxWidth - tileTextInset - 20 - 10 - gap) * 3 / 5;
             final tiles = tilesFor(fullWidth && widestLabel <= rowLabelShare);
@@ -1455,9 +1455,14 @@ class _BriefingScripRewards extends StatelessWidget {
         ),
         const SizedBox(height: 6),
         Text(
-          'The run\u2019s medal lifts the variable award — '
-          'Silver +${GameBalance.scripMedalPercentSilver - 100}%, '
-          'Gold +${GameBalance.scripMedalPercentGold - 100}%.',
+          claimed
+              ? 'Mission replays only — Endless runs pay no Scrip. '
+                    'The run\u2019s medal lifts the variable award — '
+                    'Silver +${GameBalance.scripMedalPercentSilver - 100}%, '
+                    'Gold +${GameBalance.scripMedalPercentGold - 100}%.'
+              : 'The run\u2019s medal lifts the variable award — '
+                    'Silver +${GameBalance.scripMedalPercentSilver - 100}%, '
+                    'Gold +${GameBalance.scripMedalPercentGold - 100}%.',
           style: OrionTypography.microLabel(color: uiTheme.textMuted),
         ),
         if (!claimed && stage.id == OrionCampaign.stageOne.id) ...[

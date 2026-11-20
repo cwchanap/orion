@@ -898,7 +898,7 @@ class _CharacterSheet extends StatelessWidget {
                       : 'LEVEL UP · ${grouped(cost)}',
                   icon: Icons.upgrade_rounded,
                   onPressed: canBuy ? onLevelUp : null,
-                  loading: levelUpBusy,
+                  loading: levelUpBusy && cost != null && scrip >= cost,
                   height: 52,
                 ),
               ],

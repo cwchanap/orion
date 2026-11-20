@@ -455,4 +455,35 @@ void main() {
     expect(feedbackRect.top, greaterThanOrEqualTo(44));
     expect(childRect.top, greaterThanOrEqualTo(feedbackRect.bottom));
   });
+
+  testWidgets('top bar fits a 7+ digit Scrip chip at 320px and 1.3x text scale '
+      'without overflow', (tester) async {
+    tester.view.physicalSize = const Size(320, 568);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(
+          size: Size(320, 568),
+          textScaler: TextScaler.linear(1.3),
+        ),
+        child: buildShell(
+          destination: OrionMenuDestination.sectors,
+          medalEarned: 24,
+          medalTotal: 24,
+          scrip: 12345678,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('12,345,678'), findsOneWidget);
+    expect(find.bySemanticsLabel('12,345,678 Scrip'), findsOneWidget);
+    final chipRect = tester.getRect(find.bySemanticsLabel('12,345,678 Scrip'));
+    final gearRect = tester.getRect(find.byTooltip('Settings'));
+    expect(chipRect.right, lessThanOrEqualTo(gearRect.left));
+    expect(gearRect.right, lessThanOrEqualTo(320));
+  });
 }
