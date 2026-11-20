@@ -1423,8 +1423,16 @@ class _BriefingScripRewards extends StatelessWidget {
             final columnTextWidth =
                 (constraints.maxWidth - (columns - 1) * gap) / columns -
                 tileTextInset;
-            final tiles = tilesFor(horizontal || widestLabel > columnTextWidth);
-            if (horizontal || widestLabel > columnTextWidth) {
+            final fullWidth = horizontal || widestLabel > columnTextWidth;
+            // In a full-width row the label owns flex 3 of five after the
+            // same inset, the 20px icon, a 10px icon gap and an 8px value
+            // gap; a label wider than that share ellipsizes, so it drops
+            // to the label-above-figure placement that grants the full
+            // tile width (e.g. EVERY REPLAY at 3-4x text).
+            final rowLabelShare =
+                (constraints.maxWidth - tileTextInset - 20 - 10 - gap) * 3 / 5;
+            final tiles = tilesFor(fullWidth && widestLabel <= rowLabelShare);
+            if (fullWidth) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

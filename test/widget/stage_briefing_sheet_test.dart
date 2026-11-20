@@ -2319,6 +2319,52 @@ void main() {
       }
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('scrip labels paint fully when stacked above their figures', (
+      tester,
+    ) async {
+      // In a full-width row the label owns only the 3/5 flex share beside
+      // the icon and figure — 'EVERY REPLAY' at 2x (~166px) exceeds the
+      // ~125px share a 320px sheet leaves and used to ellipsize silently
+      // (didExceedMaxLines stays false on a single line). The tile must
+      // drop to the label-above-figure placement with the full tile
+      // width, so every label paints its complete extent.
+      await loadRealFonts();
+      await _pumpBriefing(
+        tester,
+        stage: OrionCampaign.stageOne,
+        viewport: const Size(320, 568),
+        textScaler: const TextScaler.linear(2),
+      );
+
+      await tester.ensureVisible(section());
+      await tester.pumpAndSettle();
+      for (final label in ['FIRST CLEAR', 'EVERY REPLAY', 'GOLD MEDAL']) {
+        final paragraph = tester.renderObject<RenderParagraph>(
+          find.descendant(of: section(), matching: find.text(label)),
+        );
+        final painted = paragraph
+            .getBoxesForSelection(
+              TextSelection(baseOffset: 0, extentOffset: label.length),
+            )
+            .fold<double>(0, (width, box) => width + (box.right - box.left));
+        final natural = TextPainter(
+          text: TextSpan(text: label, style: paragraph.text.style),
+          textDirection: TextDirection.ltr,
+          maxLines: 1,
+          textScaler: paragraph.textScaler,
+        )..layout();
+        expect(
+          painted,
+          greaterThanOrEqualTo(natural.width - 1),
+          reason:
+              '$label painted ${painted}px of ${natural.width}px — '
+              'ellipsized inside its share',
+        );
+        natural.dispose();
+      }
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('capture scene 1b fixture', (tester) async {

@@ -4602,61 +4602,72 @@ void main() {
     });
   });
 
-  testWidgets(
-    'failed reset retains progress after a pending save drains (serialized)',
-    (tester) async {
-      // Round-3 review P1/P2: the reset is serialized behind the save queue.
-      // The pending save completes first (persisting its result), then the
-      // reset runs and fails. Progress — including the just-saved result —
-      // is retained. The generation bump is monotonic and never rolled back.
-      const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
-      final store = _TestCampaignProgressStore(
-        progress: _progressWithResults({
-          'outpost-alpha',
-          'nebula-relay',
-          'asteroid-foundry',
-        }),
-        delaySaves: true,
-        resetResults: [StateError('reset failed')],
-      );
-      OrionDefenseGame? game;
-
-      await tester.pumpWidget(
-        testGamePage(
-          progressStore: store,
-          onGameCreated: (created) => game = created,
-        ),
-      );
-      await tester.pumpAndSettle();
-      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
-
-      await publishVictory(tester, game!, result: result);
-      await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
-
-      // The Reset button is disabled while the save is in flight. Drain the
-      // pending save first, then return to the map and trigger the reset.
-      store.saveCompletions[0].complete();
-      await tester.pumpAndSettle();
-      await tester.tap(find.byTooltip('World Map').last);
-      await tester.pumpAndSettle();
-
-      await openResetCampaignDialog(tester);
-      await tester.tap(find.widgetWithText(TextButton, 'Reset'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Could not reset campaign progress.'), findsOneWidget);
-      expect(store.resetCalls, 1);
-      expect(store.progress.bestResultsByStageId.keys, {
+  testWidgets('failed reset retains a result committed before the reset runs', (
+    tester,
+  ) async {
+    // The reset path is unreachable while a save is in flight — the
+    // report's exit and the shell Settings entry are both busy-gated, so
+    // the ordering can never be exercised. This test covers what the
+    // sequence actually reaches: a save commits, then a reset runs and
+    // fails. Progress — including the just-saved result — is retained.
+    const result = StageResult(medal: StageMedal.gold, bestBaseHealth: 20);
+    final store = _TestCampaignProgressStore(
+      progress: _progressWithResults({
         'outpost-alpha',
         'nebula-relay',
         'asteroid-foundry',
-      });
-      // The saved result and the profile survive the failed reset.
-      expect(store.progress.resultFor('outpost-alpha'), result);
-      expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
-      expect(store.squad, CampaignSave.starterSquad);
-    },
-  );
+      }),
+      delaySaves: true,
+      resetResults: [StateError('reset failed')],
+    );
+    OrionDefenseGame? game;
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStore: store,
+        onGameCreated: (created) => game = created,
+      ),
+    );
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+    await publishVictory(tester, game!, result: result);
+    await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
+
+    // While the write is in flight the report's exit is disabled — Reset
+    // cannot be reached from here or from the shell it leads back to.
+    expect(
+      tester
+          .widget<OrionPrimaryButton>(
+            find.widgetWithText(OrionPrimaryButton, 'World Map'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    // Drain the pending save, then return to the map and trigger the
+    // reset.
+    store.saveCompletions[0].complete();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('World Map').last);
+    await tester.pumpAndSettle();
+
+    await openResetCampaignDialog(tester);
+    await tester.tap(find.widgetWithText(TextButton, 'Reset'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Could not reset campaign progress.'), findsOneWidget);
+    expect(store.resetCalls, 1);
+    expect(store.progress.bestResultsByStageId.keys, {
+      'outpost-alpha',
+      'nebula-relay',
+      'asteroid-foundry',
+    });
+    // The saved result and the profile survive the failed reset.
+    expect(store.progress.resultFor('outpost-alpha'), result);
+    expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
+    expect(store.squad, CampaignSave.starterSquad);
+  });
 
   testWidgets('a failed reset from the Codex keeps the Codex and reports the '
       'error through the shell', (tester) async {
@@ -4735,13 +4746,14 @@ void main() {
     expect(store.resetCalls, 1);
   });
 
-  testWidgets('successful reset after a pending save drains wipes the store', (
+  testWidgets('successful reset wipes a result committed before it runs', (
     tester,
   ) async {
-    // Round-3 review P1/P2: the reset is serialized behind the save queue.
-    // The pending save completes first (writing its data), then the reset
-    // runs and wipes the store. No post-stale-save cleanup is needed
-    // because the reset runs after — not racing with — the save.
+    // The reset path is unreachable while a save is in flight — the
+    // report's exit and the shell Settings entry are both busy-gated, so
+    // the ordering can never be exercised. This test covers what the
+    // sequence actually reaches: a save commits, then a reset runs and
+    // wipes the store.
     final store = _TestCampaignProgressStore(
       progress: _progressWithResults({
         'outpost-alpha',
@@ -4768,8 +4780,18 @@ void main() {
     );
     await _pumpUntil(tester, () => store.saveCompletions.isNotEmpty);
 
-    // Drain the pending save first; the Reset button is disabled while
-    // the save is in flight.
+    // While the write is in flight the report's exit is disabled — Reset
+    // cannot be reached from here or from the shell it leads back to.
+    expect(
+      tester
+          .widget<OrionPrimaryButton>(
+            find.widgetWithText(OrionPrimaryButton, 'World Map'),
+          )
+          .onPressed,
+      isNull,
+    );
+
+    // Drain the pending save first.
     store.saveCompletions[0].complete();
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('World Map').last);
@@ -5045,6 +5067,41 @@ void main() {
     expect(recoveredStore.saveCalls, 0);
     expect(recoveredStore.squad, CampaignSave.starterSquad);
     expect(game?.stage.id, 'outpost-alpha');
+  });
+
+  testWidgets('the economy tabs offer retry after a failed campaign load', (
+    tester,
+  ) async {
+    var loadAttempts = 0;
+    final recoveredStore = _TestCampaignProgressStore(scrip: 1240);
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStoreLoader: () async {
+          loadAttempts += 1;
+          if (loadAttempts == 1) {
+            throw StateError('no store');
+          }
+          return recoveredStore;
+        },
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The economy tabs would otherwise read the empty profile as dead
+    // packs — the unavailable state carries the retry instead.
+    await tester.tap(find.byTooltip('Flare'));
+    await tester.pumpAndSettle();
+    expect(find.text('CAMPAIGN PROGRESS UNAVAILABLE'), findsOneWidget);
+    expect(find.byKey(const ValueKey('flare-fire-1')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('campaign-load-retry')));
+    await tester.pumpAndSettle();
+
+    expect(loadAttempts, 2);
+    expect(findOrionTitle('Signal Flare'), findsOneWidget);
+    expect(find.byKey(const ValueKey('flare-fire-1')), findsOneWidget);
+    expect(find.text('Could not load campaign progress.'), findsNothing);
   });
 
   testWidgets(
@@ -5536,6 +5593,21 @@ void main() {
       await tester.pump();
       final busy = tester.widget<OrionPrimaryButton>(levelUp);
       expect(busy.loading, isTrue);
+      // The pending reason announces itself to assistive tech as a live
+      // region, not just visible copy.
+      final semanticsHandle = tester.ensureSemantics();
+      try {
+        expect(
+          tester
+              .getSemantics(find.text('SAVING…'))
+              .getSemanticsData()
+              .flagsCollection
+              .isLiveRegion,
+          isTrue,
+        );
+      } finally {
+        semanticsHandle.dispose();
+      }
       await tester.tap(levelUp);
       await tester.pump();
       expect(store.saveCalls, 1);
@@ -5959,7 +6031,9 @@ void main() {
       await tester.pumpWidget(
         testGamePage(
           progressStore: store,
-          flareRandom: _ScriptedRandom([6740, 0]),
+          // A second queued purchase could still roll and commit — the
+          // script must survive long enough for that to be observable.
+          flareRandom: _ScriptedRandom([6740, 0, 6740, 1]),
         ),
       );
       await tester.pumpAndSettle();
@@ -5983,6 +6057,9 @@ void main() {
       await tester.pumpAndSettle();
       expect(store.saveCalls, 1);
       expect(store.scrip, 1140);
+      // Rejected, not silently failed: no second write and no failure
+      // breadcrumb from an exhausted or refused second roll.
+      expect(find.text('Could not save campaign progress.'), findsNothing);
       expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
     });
 
