@@ -481,4 +481,21 @@ void main() {
       reason: 'NEW RECRUIT must fit inside its hero card, not clip',
     );
   });
+
+  testWidgets('drop-rate panel exposes a single summary semantics node without '
+      'duplicating rows', (tester) async {
+    final semantics = tester.ensureSemantics();
+    try {
+      await _pumpFlare(tester, scrip: 1240, onFire: (_) {});
+
+      expect(
+        find.bySemanticsLabel(RegExp(r'^Drop rates: S 0\.1%')),
+        findsOneWidget,
+      );
+      expect(find.bySemanticsLabel('WHO ANSWERS'), findsNothing);
+      expect(find.bySemanticsLabel('0.1%'), findsNothing);
+    } finally {
+      semantics.dispose();
+    }
+  });
 }

@@ -30,13 +30,16 @@ import 'package:orion/game/rules/enemy_overlay_state.dart';
 import 'package:orion/game/rules/game_session.dart';
 import 'package:orion/game/rules/module_offer_picker.dart';
 import 'package:orion/game/ui/acquired_run_module_control.dart';
+import 'package:orion/game/ui/camp_view.dart';
 import 'package:orion/game/ui/first_mission_guide_callout.dart';
+import 'package:orion/game/ui/flare_view.dart';
 import 'package:orion/game/ui/mission_chrome.dart';
 import 'package:orion/game/ui/mission_command_dock.dart';
 import 'package:orion/game/ui/mission_report_panel.dart';
 import 'package:orion/game/ui/next_wave_scanner.dart';
 import 'package:orion/game/ui/orion_atlas_sprite.dart';
 import 'package:orion/game/ui/orion_game_page.dart';
+import 'package:orion/game/ui/orion_menu_shell.dart';
 import 'package:orion/game/ui/orion_primary_button.dart';
 import 'package:orion/game/ui/orion_theme_data.dart';
 import 'package:orion/game/ui/orion_surface.dart';
@@ -2388,7 +2391,13 @@ void main() {
     expect(store.saveCalls, 0);
     // A loss is never a Scrip event: the wallet stays exactly as committed.
     expect(store.scrip, 500);
-    expect(find.textContaining('Scrip'), findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(MissionReportPanel),
+        matching: find.textContaining('Scrip'),
+      ),
+      findsNothing,
+    );
   });
 
   testWidgets('Mission Retry survives consecutive losses', (tester) async {
@@ -2670,7 +2679,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('SECTOR MAP'), findsOneWidget);
-    expect(find.text('Mission result was not saved.'), findsOneWidget);
+    expect(
+      find.text('Mission result and 150 Scrip were not saved.'),
+      findsOneWidget,
+    );
     expect(
       store.progress.resultFor('outpost-alpha'),
       const StageResult(medal: StageMedal.clear, bestBaseHealth: 1),
@@ -4083,7 +4095,7 @@ void main() {
         // exact pending copy before the write commits — never "credited".
         expect(find.text('Scrip pending'), findsOneWidget);
         expect(
-          find.text('1050 Scrip credits after this result is saved.'),
+          find.text('1,050 Scrip credits after this result is saved.'),
           findsOneWidget,
         );
         expect(find.textContaining('credited'), findsNothing);
@@ -4093,7 +4105,7 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(store.scrip, 1050);
-        expect(find.text('Scrip credited: 1050'), findsOneWidget);
+        expect(find.text('Scrip credited: 1,050'), findsOneWidget);
         expect(
           find.text('Blueprint recovered: Relay Calibration'),
           findsOneWidget,
@@ -4146,7 +4158,7 @@ void main() {
 
         expect(find.text('Best medal saved: Gold'), findsOneWidget);
         expect(find.text('20 base health on record.'), findsOneWidget);
-        expect(find.text('Scrip credited: 1050'), findsOneWidget);
+        expect(find.text('Scrip credited: 1,050'), findsOneWidget);
         expect(find.text('Added to your Scrip wallet.'), findsOneWidget);
         expect(
           find.text('Blueprint recovered: Relay Calibration'),
@@ -4926,7 +4938,10 @@ void main() {
       await tester.tap(find.byTooltip('World Map (Unsaved)'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Mission result was not saved.'), findsOneWidget);
+      expect(
+        find.text('Mission result and 150 Scrip were not saved.'),
+        findsOneWidget,
+      );
       expect(find.text('SECTOR MAP'), findsOneWidget);
     },
   );
@@ -5103,6 +5118,112 @@ void main() {
     expect(find.byKey(const ValueKey('flare-fire-1')), findsOneWidget);
     expect(find.text('Could not load campaign progress.'), findsNothing);
   });
+
+  testWidgets(
+    'shell retry locks navigation while in flight and announces failure to '
+    'screen readers',
+    (tester) async {
+      var loadAttempts = 0;
+      final retryCompleter = Completer<CampaignProgressStore>();
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStoreLoader: () async {
+            loadAttempts += 1;
+            if (loadAttempts == 1) {
+              throw StateError('no store');
+            }
+            return retryCompleter.future;
+          },
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Flare'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const ValueKey('campaign-load-retry')));
+      await tester.pump();
+
+      // While retrying, navigation stays disabled so another route cannot
+      // start a competing retry.
+      expect(
+        tester
+            .widget<OrionMenuShell>(find.byType(OrionMenuShell))
+            .navigationEnabled,
+        isFalse,
+      );
+      await tester.tap(find.byTooltip('Map'));
+      await tester.pump();
+      expect(findOrionTitle('Signal Flare'), findsOneWidget);
+
+      final semantics = tester.ensureSemantics();
+      try {
+        retryCompleter.completeError(StateError('still unavailable'));
+        await tester.pumpAndSettle();
+
+        expect(
+          find.byKey(const ValueKey('campaign-load-retry-error')),
+          findsOneWidget,
+        );
+        expect(
+          find.text('Retry failed — could not load campaign progress.'),
+          findsOneWidget,
+        );
+        final errorSemantics = tester.getSemantics(
+          find.byKey(const ValueKey('campaign-load-retry-error')),
+        );
+        expect(errorSemantics.flagsCollection.isLiveRegion, isTrue);
+        expect(
+          tester
+              .widget<OrionMenuShell>(find.byType(OrionMenuShell))
+              .navigationEnabled,
+          isTrue,
+        );
+      } finally {
+        semantics.dispose();
+      }
+    },
+  );
+
+  testWidgets(
+    'retrying campaign load infers first-mission guide completion for '
+    'experienced players with no stored flag',
+    (tester) async {
+      var loadAttempts = 0;
+      final recoveredStore = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+      );
+      final guideStore = InMemoryFirstMissionGuideStore(completed: null);
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStoreLoader: () async {
+            loadAttempts += 1;
+            if (loadAttempts == 1) {
+              throw StateError('no store');
+            }
+            return recoveredStore;
+          },
+          firstMissionGuideStore: guideStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Flare'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('campaign-load-retry')));
+      await tester.pumpAndSettle();
+
+      expect(guideStore.completed, isTrue);
+
+      await tester.tap(find.byTooltip('Map'));
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+
+      expect(find.text('Tap an empty cell to build here.'), findsNothing);
+    },
+  );
 
   testWidgets(
     'failed store.load() leaves no writable store so Launch cannot wipe saved campaign',
@@ -6111,6 +6232,47 @@ void main() {
       expect(store.scrip, 1240);
       expect(store.ownedLevels, CampaignSave.starterOwnedLevels);
     });
+
+    testWidgets(
+      'rejected purchases report domain reasons instead of save failure',
+      (tester) async {
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {
+            Character.haruto: GameBalance.characterMaxLevel,
+            Character.mio: 1,
+          },
+          squad: const [Character.haruto, Character.mio],
+          scrip: 10,
+        );
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+
+        // Camp: unaffordable level-up reports "Not enough Scrip.".
+        await tester.tap(find.byTooltip('Camp'));
+        await tester.pumpAndSettle();
+        final campView = tester.widget<CampView>(find.byType(CampView));
+        campView.onLevelUp!(Character.mio);
+        await tester.pumpAndSettle();
+        expect(find.text('Not enough Scrip.'), findsOneWidget);
+        expect(find.text('Could not save campaign progress.'), findsNothing);
+
+        // Camp: max-level character reports "Already at max level.".
+        campView.onLevelUp!(Character.haruto);
+        await tester.pumpAndSettle();
+        expect(find.text('Already at max level.'), findsOneWidget);
+        expect(find.text('Could not save campaign progress.'), findsNothing);
+
+        // Flare: unaffordable pack reports "Not enough Scrip.".
+        await tester.tap(find.byTooltip('Flare'));
+        await tester.pumpAndSettle();
+        final flareView = tester.widget<FlareView>(find.byType(FlareView));
+        flareView.onFire!(1);
+        await tester.pumpAndSettle();
+        expect(find.text('Not enough Scrip.'), findsOneWidget);
+        expect(find.text('Could not save campaign progress.'), findsNothing);
+        expect(store.saveCalls, 0);
+      },
+    );
 
     testWidgets('a Flare-route feedback-save failure renders the shell '
         'breadcrumb', (tester) async {

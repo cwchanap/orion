@@ -2049,7 +2049,7 @@ void main() {
         for (final label in [
           'SCRIP REWARD',
           'FIRST CLEAR',
-          'EVERY REPLAY',
+          'REPLAY CLEAR',
           'GOLD MEDAL',
         ]) {
           expect(
@@ -2072,6 +2072,13 @@ void main() {
         expect(
           find.descendant(of: section(), matching: find.text('+50%')),
           findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: section(),
+            matching: find.textContaining('Endless runs pay no Scrip.'),
+          ),
+          findsNothing,
         );
       },
     );
@@ -2169,6 +2176,13 @@ void main() {
           find.descendant(of: section(), matching: find.text('100')),
           findsOneWidget,
         );
+        expect(
+          find.descendant(
+            of: section(),
+            matching: find.textContaining('Endless runs pay no Scrip.'),
+          ),
+          findsOneWidget,
+        );
       },
     );
 
@@ -2210,7 +2224,7 @@ void main() {
         for (final label in [
           'SCRIP REWARD',
           'FIRST CLEAR',
-          'EVERY REPLAY',
+          'REPLAY CLEAR',
           'GOLD MEDAL',
         ]) {
           final paragraph = tester.renderObject<RenderParagraph>(
@@ -2251,7 +2265,7 @@ void main() {
 
       await tester.ensureVisible(section());
       await tester.pumpAndSettle();
-      for (final label in ['FIRST CLEAR', 'EVERY REPLAY', 'GOLD MEDAL']) {
+      for (final label in ['FIRST CLEAR', 'REPLAY CLEAR', 'GOLD MEDAL']) {
         final paragraph = tester.renderObject<RenderParagraph>(
           find.descendant(of: section(), matching: find.text(label)),
         );
@@ -2277,8 +2291,8 @@ void main() {
       );
       // Column-collapse is a compact-width fallback only: at 390px the
       // three chips still share one row.
-      expect(topOf('FIRST CLEAR').dy, topOf('EVERY REPLAY').dy);
-      expect(topOf('EVERY REPLAY').dy, topOf('GOLD MEDAL').dy);
+      expect(topOf('FIRST CLEAR').dy, topOf('REPLAY CLEAR').dy);
+      expect(topOf('REPLAY CLEAR').dy, topOf('GOLD MEDAL').dy);
       expect(tester.takeException(), isNull);
     });
 
@@ -2298,7 +2312,7 @@ void main() {
       for (final label in [
         'SCRIP REWARD',
         'FIRST CLEAR',
-        'EVERY REPLAY',
+        'REPLAY CLEAR',
         'GOLD MEDAL',
       ]) {
         final paragraph = tester.renderObject<RenderParagraph>(
@@ -2339,7 +2353,7 @@ void main() {
 
       await tester.ensureVisible(section());
       await tester.pumpAndSettle();
-      for (final label in ['FIRST CLEAR', 'EVERY REPLAY', 'GOLD MEDAL']) {
+      for (final label in ['FIRST CLEAR', 'REPLAY CLEAR', 'GOLD MEDAL']) {
         final paragraph = tester.renderObject<RenderParagraph>(
           find.descendant(of: section(), matching: find.text(label)),
         );

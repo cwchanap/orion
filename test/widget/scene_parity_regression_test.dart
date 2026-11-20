@@ -861,7 +861,7 @@ void main() {
         for (final label in [
           'SCRIP REWARD',
           'FIRST CLEAR',
-          'EVERY REPLAY',
+          'REPLAY CLEAR',
           'GOLD MEDAL',
         ]) {
           expect(
