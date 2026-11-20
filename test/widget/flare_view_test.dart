@@ -265,6 +265,13 @@ void main() {
     expect(find.text('+${grouped(80)} Scrip'), findsOneWidget);
     expect(find.text('335'), findsOneWidget);
     expect(find.text('BALANCE'), findsOneWidget);
+    // At normal width the strip stays side-by-side: the balance column
+    // sits beside the caption, not stacked beneath the refund row.
+    expect(
+      tester.getRect(find.text('BALANCE')).top,
+      lessThan(tester.getRect(find.text('+${grouped(80)} Scrip')).top),
+      reason: 'the broad layout keeps the balance beside the details',
+    );
   });
 
   testWidgets('a single-pull duplicate fits the same result layout', (
@@ -355,6 +362,47 @@ void main() {
       expect(rect.bottom, lessThanOrEqualTo(568));
     }
     await tester.scrollUntilVisible(find.text('8 SPARE DOG TAGS TRADED'), 200);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('compact result summary shows the complete refund and '
+      'balance', (tester) async {
+    const viewport = Size(320, 568);
+    await _pumpFlare(
+      tester,
+      scrip: 335,
+      result: _tenDrawBatch(),
+      viewport: viewport,
+      textScaler: const TextScaler.linear(2),
+    );
+    await tester.scrollUntilVisible(find.text('BALANCE'), 120);
+
+    // Every summary string must paint its full content inside the width it
+    // was given — replaying the widget's own style at its measured width
+    // flags any line that ellipsis-truncated (didExceedMaxLines).
+    for (final label in [
+      '8 SPARE DOG TAGS TRADED',
+      '+${grouped(80)} Scrip',
+      'BALANCE',
+      '335',
+    ]) {
+      final finder = find.text(label);
+      final widget = tester.widget<Text>(finder);
+      final width = tester.getSize(finder).width;
+      final painter = TextPainter(
+        text: TextSpan(text: widget.data, style: widget.style),
+        maxLines: widget.maxLines,
+        textDirection: TextDirection.ltr,
+        textScaler: const TextScaler.linear(2),
+      )..layout(maxWidth: width);
+      expect(
+        painter.didExceedMaxLines,
+        isFalse,
+        reason:
+            '"$label" must render completely inside its ${width}px slot, '
+            'not ellipsize',
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 
