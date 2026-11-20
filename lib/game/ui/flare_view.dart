@@ -551,7 +551,10 @@ class _FlareViewState extends State<FlareView> {
   }
 
   /// The gold-rimmed trade-in strip: how many duplicates converted, the
-  /// aggregate refund, and the committed post-pack balance.
+  /// aggregate refund, and the committed post-pack balance. When the strip
+  /// is too narrow (or the text scale too large) for the side-by-side
+  /// layout, the balance drops beneath the refund details instead of
+  /// letting either block ellipsize.
   Widget _buildSummary(OrionUiTheme uiTheme, FlareBatch batch, int duplicates) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -560,51 +563,54 @@ class _FlareViewState extends State<FlareView> {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: uiTheme.creditGold, width: 1.5),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  '$duplicates SPARE DOG TAG${duplicates == 1 ? '' : 'S'} '
-                  'TRADED',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: OrionTypography.microLabel(
-                    size: 10,
-                    color: uiTheme.textMuted,
-                  ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // ~240px at 1x covers a wrapped caption, the "+N Scrip" refund
+          // and the balance readout; anything less stacks vertically.
+          final textScale = MediaQuery.textScalerOf(context).scale(10) / 10;
+          final stacked = constraints.maxWidth < 240 * textScale;
+          final details = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$duplicates SPARE DOG TAG${duplicates == 1 ? '' : 'S'} '
+                'TRADED',
+                maxLines: 2,
+                softWrap: true,
+                overflow: TextOverflow.ellipsis,
+                style: OrionTypography.microLabel(
+                  size: 10,
+                  color: uiTheme.textMuted,
                 ),
-                const SizedBox(height: 4),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.payments_rounded,
-                      size: 18,
-                      color: uiTheme.creditGold,
-                    ),
-                    const SizedBox(width: 6),
-                    Flexible(
-                      child: Text(
-                        '+${grouped(batch.totalScripRefund)} Scrip',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: OrionTypography.readout(
-                          size: 17,
-                          color: uiTheme.creditGold,
-                        ),
+              ),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.payments_rounded,
+                    size: 18,
+                    color: uiTheme.creditGold,
+                  ),
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      '+${grouped(batch.totalScripRefund)} Scrip',
+                      maxLines: 2,
+                      softWrap: true,
+                      overflow: TextOverflow.ellipsis,
+                      style: OrionTypography.readout(
+                        size: 17,
+                        color: uiTheme.creditGold,
                       ),
                     ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 12),
-          Column(
+                  ),
+                ],
+              ),
+            ],
+          );
+          final balance = Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -626,8 +632,22 @@ class _FlareViewState extends State<FlareView> {
                 ),
               ),
             ],
-          ),
-        ],
+          );
+          if (stacked) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisSize: MainAxisSize.min,
+              children: [details, const SizedBox(height: 8), balance],
+            );
+          }
+          return Row(
+            children: [
+              Expanded(child: details),
+              const SizedBox(width: 12),
+              balance,
+            ],
+          );
+        },
       ),
     );
   }
