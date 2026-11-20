@@ -5225,6 +5225,51 @@ void main() {
     },
   );
 
+  testWidgets('campaign retry honors a recovered guide flag before inferring '
+      'completion from the Alpha result', (tester) async {
+    var loadAttempts = 0;
+    final recoveredStore = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+    );
+    // A persisted Replay Tutorial flag whose startup read threw once:
+    // inference is pending, and the retry must read the store again
+    // instead of letting the recovered Alpha result mark the guide done.
+    final guideStore = _FlakyLoadFirstMissionGuideStore(
+      InMemoryFirstMissionGuideStore(completed: false),
+    );
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStoreLoader: () async {
+          loadAttempts += 1;
+          if (loadAttempts == 1) {
+            throw StateError('no store');
+          }
+          return recoveredStore;
+        },
+        firstMissionGuideStore: guideStore,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Flare'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('campaign-load-retry')));
+    await tester.pumpAndSettle();
+
+    // The recovered false is honored: nothing inferred, nothing written.
+    expect(guideStore.completed, isFalse);
+
+    await tester.tap(find.byTooltip('Map'));
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'failed store.load() leaves no writable store so Launch cannot wipe saved campaign',
     (tester) async {
@@ -6182,6 +6227,46 @@ void main() {
       // breadcrumb from an exhausted or refused second roll.
       expect(find.text('Could not save campaign progress.'), findsNothing);
       expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
+    });
+
+    testWidgets('a committed result awaiting its frame rejects a second '
+        'fire dispatched by the stale button', (tester) async {
+      // Immediate (undelayed) saves: the queued write drains on the tap's
+      // own microtask flush, so _flareResult commits and _isBusy clears
+      // before any rebuild — the previously rendered enabled Fire button
+      // is what a second tap still dispatches against.
+      final store = _TestCampaignProgressStore(scrip: 1240);
+      await tester.pumpWidget(
+        testGamePage(
+          progressStore: store,
+          flareRandom: _ScriptedRandom([6740, 0, 6740, 1]),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await openFlare(tester);
+
+      // Both presses land on the same stale fire screen — no pump between.
+      final fire = fireButton(1);
+      await tester.tap(fire);
+      await tester.tap(fire);
+      await tester.pumpAndSettle();
+
+      // One write, one debit, and the FIRST batch revealed — a second
+      // purchase must not have replaced the unseen result.
+      expect(store.saveCalls, 1);
+      expect(store.scrip, 1140);
+      expect(find.byKey(const ValueKey('flare-hero-sayo')), findsOneWidget);
+      expect(find.byKey(const ValueKey('flare-hero-tetsuo')), findsNothing);
+
+      // FIRE AGAIN clears the committed batch and re-arms the packs: the
+      // intended repeat-purchase path rolls the second scripted pair.
+      await tester.tap(find.byKey(const ValueKey('flare-again')));
+      await tester.pumpAndSettle();
+      await tester.tap(fire);
+      await tester.pumpAndSettle();
+      expect(store.saveCalls, 2);
+      expect(store.scrip, 1040);
+      expect(find.byKey(const ValueKey('flare-hero-tetsuo')), findsOneWidget);
     });
 
     testWidgets('insufficient committed funds keep the pack off the write '
@@ -10363,6 +10448,40 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
     squad = CampaignSave.starterSquad;
     scrip = 0;
   }
+}
+
+/// A guide store whose first [loadCompleted] throws before delegating to
+/// the wrapped store — a transient startup read failure that recovers by
+/// the campaign Retry, so the retry must re-read the flag instead of
+/// inferring completion from progress alone.
+class _FlakyLoadFirstMissionGuideStore implements FirstMissionGuideStore {
+  _FlakyLoadFirstMissionGuideStore(this._inner);
+
+  final InMemoryFirstMissionGuideStore _inner;
+  bool _failNextLoad = true;
+
+  bool? get completed => _inner.completed;
+
+  @override
+  Future<bool?> loadCompleted() async {
+    if (_failNextLoad) {
+      _failNextLoad = false;
+      throw StateError('guide read failed');
+    }
+    return _inner.loadCompleted();
+  }
+
+  @override
+  Future<void> setCompleted(bool completed) => _inner.setCompleted(completed);
+
+  @override
+  Future<Set<ContextualTip>> loadSeenTips() => _inner.loadSeenTips();
+
+  @override
+  Future<void> setSeenTips(Set<ContextualTip> tips) => _inner.setSeenTips(tips);
+
+  @override
+  Future<void> resetForReplay() => _inner.resetForReplay();
 }
 
 /// A guide store whose writes always fail — Replay Tutorial must surface

@@ -1275,18 +1275,38 @@ class _OrionGamePageState extends State<OrionGamePage> {
       if (_store != null) {
         return _committed;
       }
+      // A pending inference means the guide flag never read at startup —
+      // the store may be reachable now (as on Replay Tutorial, which also
+      // lazily builds it). A recovered explicit record — the stored false a
+      // replay persists — always outranks the Alpha-result inference;
+      // only a still-missing record falls through to campaign progress.
+      // An already-settled flag (explicit load or this session's Skip,
+      // Got it or replay choice) never re-reads.
+      var guideStore = _firstMissionGuideStore;
+      bool? guideCompleted;
+      if (_firstMissionGuideNeedsInference) {
+        guideStore ??= await _defaultFirstMissionGuideStore(null);
+        if (!mounted || generation != _progressGeneration) {
+          return null;
+        }
+        guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
+        if (!mounted || generation != _progressGeneration) {
+          return null;
+        }
+      }
       final freezeInferredCompletion =
           _firstMissionGuideNeedsInference &&
+          guideCompleted == null &&
           save.progress.resultFor(OrionCampaign.stageOneId) != null;
       setState(() {
         _store = store;
         _committed = save;
         _campaignRetryFailed = false;
+        _firstMissionGuideStore ??= guideStore;
         if (_firstMissionGuideNeedsInference) {
           _firstMissionGuideNeedsInference = false;
-          if (freezeInferredCompletion) {
-            _firstMissionGuideCompleted = true;
-          }
+          _firstMissionGuideCompleted =
+              guideCompleted ?? freezeInferredCompletion;
         }
         if (_mapFeedback == 'Could not load campaign progress.') {
           _mapFeedback = null;
@@ -1532,10 +1552,13 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// and pays duplicate refunds — in a single `withFlareBatch` aggregate.
   /// The roll runs INSIDE the queued closure so it always classifies
   /// against the latest committed roster, and a retry rolls a fresh batch.
-  /// Single-flight on the whole busy state: the packs disable on `_isBusy`
-  /// and this early return catches a press landing before that rebuild —
-  /// including during a campaign reset, which must not queue a purchase
-  /// behind the wipe.
+  /// Single-flight on the whole busy state and a committed batch awaiting
+  /// reveal: the packs disable on `_isBusy` and this early return catches a
+  /// press landing before that rebuild — including during a campaign reset,
+  /// which must not queue a purchase behind the wipe. A batch that commits
+  /// and drains the queue between two frames leaves the last rendered
+  /// enabled button able to dispatch once more; the `_flareResult` gate is
+  /// what rejects that stale press — FIRE AGAIN clears it to re-arm.
   /// The batch is captured and revealed only on commit: a failure leaves
   /// `_committed`, the wallet and the roster untouched, keeps the Flare
   /// screen in place and reports on the shell breadcrumb so the pack stays
@@ -1543,7 +1566,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
   /// size, upfront affordability and every declared outcome inside the
   /// queue — an invalid roll reports through the same failure path.
   Future<bool> _fireFlare(int count) {
-    if (_isBusy) {
+    if (_isBusy || _flareResult != null) {
       return Future<bool>.value(false);
     }
     FlareBatch? batch;
