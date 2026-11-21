@@ -200,6 +200,61 @@ void main() {
       );
     });
 
+    test('every face entry names its source portrait and crop rectangle', () {
+      final decoded =
+          jsonDecode(File('$_artRoot/provenance.json').readAsStringSync())
+              as Map<String, dynamic>;
+      for (final character in Character.values) {
+        final key = '${character.name}/face.png';
+        final entry = decoded[key];
+        expect(entry, isA<Map<String, dynamic>>(), reason: key);
+        final record = entry as Map<String, dynamic>;
+        expect(
+          record['method'],
+          'cropped',
+          reason: '$key is produced by cropping the final portrait',
+        );
+        expect(
+          record['source'],
+          '${character.name}/portrait.png',
+          reason: '$key must name the final portrait it was cropped from',
+        );
+        final crop = record['crop'];
+        expect(
+          crop,
+          isA<Map<String, dynamic>>(),
+          reason:
+              '$key must record the source crop rectangle so a later '
+              'portrait edit can be re-cropped deliberately',
+        );
+        final rect = crop as Map<String, dynamic>;
+        final x = rect['x'], y = rect['y'], side = rect['side'];
+        for (final (field, value) in [
+          ('x', x),
+          ('y', y),
+          ('side', side),
+        ]) {
+          expect(
+            value,
+            isA<int>(),
+            reason: '$key crop.$field must be an int',
+          );
+        }
+        expect(
+          (x as int) >= 0 && (y as int) >= 0 && (side as int) > 0,
+          isTrue,
+          reason: '$key crop must be a non-empty source rectangle',
+        );
+        expect(
+          x + side <= 1024 && y + side <= 1536,
+          isTrue,
+          reason:
+              '$key crop ($x, $y, ${side}px) must fit inside the '
+              '1024x1536 source portrait',
+        );
+      }
+    });
+
     test(
       'the asset bundle ships all 36 art files but not provenance.json',
       () async {
