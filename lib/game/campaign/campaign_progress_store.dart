@@ -71,10 +71,21 @@ class CampaignSave {
   /// [GameBalance.levelUpCost] from the wallet. Throws [StateError] when
   /// the character is unowned, already at the level cap, or the wallet
   /// cannot cover the cost — the save is never left half-mutated.
-  CampaignSave withLevelUp(Character character) {
+  ///
+  /// [expectedLevel] is the level the caller priced the purchase at; when
+  /// it no longer matches the committed level the request went stale under
+  /// an earlier write and rejects without a debit rather than charging the
+  /// next level's cost.
+  CampaignSave withLevelUp(Character character, {int? expectedLevel}) {
     final level = ownedLevels[character];
     if (level == null) {
       throw StateError('Cannot level up unowned ${character.name}.');
+    }
+    if (expectedLevel != null && level != expectedLevel) {
+      throw StateError(
+        'Level up for ${character.name} was priced at level '
+        '$expectedLevel; committed level is $level.',
+      );
     }
     final cost = GameBalance.levelUpCost(level);
     if (cost == null) {

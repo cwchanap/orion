@@ -5271,6 +5271,57 @@ void main() {
   });
 
   testWidgets(
+    'a failed guide read on campaign retry writes nothing over a stored '
+    'Replay Tutorial flag',
+    (tester) async {
+      var loadAttempts = 0;
+      final recoveredStore = _TestCampaignProgressStore(
+        progress: _progressWithResults({'outpost-alpha'}),
+      );
+      // The startup read throws AND the retry's re-read throws: the record
+      // was never seen, so recovery must not write an inferred completion
+      // over the stored false — inference stays pending for a later read.
+      final guideStore = _FlakyLoadFirstMissionGuideStore(
+        InMemoryFirstMissionGuideStore(completed: false),
+        failLoadCount: 2,
+      );
+
+      await tester.pumpWidget(
+        testGamePage(
+          progressStoreLoader: () async {
+            loadAttempts += 1;
+            if (loadAttempts == 1) {
+              throw StateError('no store');
+            }
+            return recoveredStore;
+          },
+          firstMissionGuideStore: guideStore,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Flare'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey('campaign-load-retry')));
+      await tester.pumpAndSettle();
+
+      // The unread record survives: no inferred true was persisted over
+      // it, and the callout still re-arms on the next Alpha mount rather
+      // than staying suppressed by a flag nobody could read.
+      expect(guideStore.completed, isFalse);
+
+      await tester.tap(find.byTooltip('Map'));
+      await tester.pumpAndSettle();
+      await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.text('Tap an empty cell to build here.'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    },
+  );
+
+  testWidgets(
     'failed store.load() leaves no writable store so Launch cannot wipe saved campaign',
     (tester) async {
       final store = _TestCampaignProgressStore(
@@ -5785,6 +5836,53 @@ void main() {
       expect(store.scrip, 320);
       expect(find.text('LV 5 / 40'), findsOneWidget);
     });
+
+    testWidgets(
+      'a committed purchase awaiting its frame rejects a stale-button '
+      'press priced at the old level',
+      (tester) async {
+        // Immediate (undelayed) saves: the queued write drains on the
+        // tap's own microtask flush, so _committed advances and _isBusy
+        // clears before any rebuild — the previously rendered enabled
+        // button still dispatches, carrying the OLD displayed level.
+        final store = _TestCampaignProgressStore(
+          ownedLevels: const {Character.haruto: 4, Character.mio: 1},
+          squad: const [Character.haruto, Character.mio],
+          scrip: 500,
+        );
+        await tester.pumpWidget(testGamePage(progressStore: store));
+        await tester.pumpAndSettle();
+        await openSheet(tester, Character.haruto);
+
+        // Both presses land on the same stale sheet — no pump between.
+        final levelUp = find.byKey(const ValueKey('level-up-button'));
+        await tester.tap(levelUp);
+        await tester.tap(levelUp);
+        await tester.pumpAndSettle();
+
+        // One write, one debit at the displayed 180: the stale second
+        // press rejects instead of charging the 5→6 price, and nothing
+        // reports a phantom failure over the committed purchase.
+        expect(store.saveCalls, 1);
+        expect(store.ownedLevels[Character.haruto], 5);
+        expect(store.scrip, 320);
+        expect(find.text('Could not complete level up.'), findsNothing);
+        expect(find.text('Could not save campaign progress.'), findsNothing);
+        expect(find.text('LV 5 / 40'), findsOneWidget);
+
+        // The republished price is live: a new press buys 5→6 for 220.
+        expect(
+          find.text('LEVEL UP · ${GameBalance.levelUpCost(5)}'),
+          findsOneWidget,
+        );
+        await tester.tap(levelUp);
+        await tester.pumpAndSettle();
+        expect(store.saveCalls, 2);
+        expect(store.ownedLevels[Character.haruto], 6);
+        expect(store.scrip, 100);
+        expect(find.text('LV 6 / 40'), findsOneWidget);
+      },
+    );
 
     testWidgets(
       'insufficient funds and the cap keep the button off the write path',
@@ -6336,13 +6434,13 @@ void main() {
         await tester.tap(find.byTooltip('Camp'));
         await tester.pumpAndSettle();
         final campView = tester.widget<CampView>(find.byType(CampView));
-        campView.onLevelUp!(Character.mio);
+        campView.onLevelUp!(Character.mio, 1);
         await tester.pumpAndSettle();
         expect(find.text('Not enough Scrip.'), findsOneWidget);
         expect(find.text('Could not save campaign progress.'), findsNothing);
 
         // Camp: max-level character reports "Already at max level.".
-        campView.onLevelUp!(Character.haruto);
+        campView.onLevelUp!(Character.haruto, GameBalance.characterMaxLevel);
         await tester.pumpAndSettle();
         expect(find.text('Already at max level.'), findsOneWidget);
         expect(find.text('Could not save campaign progress.'), findsNothing);
@@ -10450,22 +10548,24 @@ class _TestCampaignProgressStore implements CampaignProgressStore {
   }
 }
 
-/// A guide store whose first [loadCompleted] throws before delegating to
-/// the wrapped store — a transient startup read failure that recovers by
-/// the campaign Retry, so the retry must re-read the flag instead of
-/// inferring completion from progress alone.
+/// A guide store whose first [loadCompleted] calls throw before delegating
+/// to the wrapped store — a transient startup read failure that recovers
+/// by the campaign Retry, so the retry must re-read the flag instead of
+/// inferring completion from progress alone. [failLoadCount] models a
+/// read that is still failing when the retry reaches it.
 class _FlakyLoadFirstMissionGuideStore implements FirstMissionGuideStore {
-  _FlakyLoadFirstMissionGuideStore(this._inner);
+  _FlakyLoadFirstMissionGuideStore(this._inner, {int failLoadCount = 1})
+    : _failLoadsRemaining = failLoadCount;
 
   final InMemoryFirstMissionGuideStore _inner;
-  bool _failNextLoad = true;
+  int _failLoadsRemaining;
 
   bool? get completed => _inner.completed;
 
   @override
   Future<bool?> loadCompleted() async {
-    if (_failNextLoad) {
-      _failNextLoad = false;
+    if (_failLoadsRemaining > 0) {
+      _failLoadsRemaining -= 1;
       throw StateError('guide read failed');
     }
     return _inner.loadCompleted();

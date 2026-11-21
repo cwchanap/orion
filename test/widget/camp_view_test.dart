@@ -88,7 +88,7 @@ Future<void> _pumpCamp(
   List<Character> squad = CampaignSave.starterSquad,
   int scrip = 0,
   bool isSavingProgress = false,
-  ValueChanged<Character>? onLevelUp,
+  void Function(Character character, int displayedLevel)? onLevelUp,
   Size viewport = _productViewport,
   TextScaler textScaler = TextScaler.noScaling,
   AssetBundle? assetBundle,
@@ -414,7 +414,7 @@ void main() {
       ownedLevels: const {Character.haruto: 4, Character.mio: 1},
       squad: const [Character.haruto],
       scrip: 500,
-      onLevelUp: (_) {},
+      onLevelUp: (_, _) {},
     );
     await _showCard(tester, Character.haruto);
     await tester.tap(_card(Character.haruto));
@@ -455,7 +455,7 @@ void main() {
           ownedLevels: {character: 9},
           squad: [character],
           scrip: 9999,
-          onLevelUp: (_) {},
+          onLevelUp: (_, _) {},
         );
         await _showCard(tester, character);
         await tester.tap(_card(character));
@@ -501,7 +501,7 @@ void main() {
         squad: const [Character.shiori],
         scrip: 9999,
         textScaler: const TextScaler.linear(1.5),
-        onLevelUp: (_) {},
+        onLevelUp: (_, _) {},
       );
       await _showCard(tester, Character.shiori);
       await tester.tap(_card(Character.shiori));
@@ -561,13 +561,13 @@ void main() {
   testWidgets('Level Up fires the purchase callback once per press', (
     tester,
   ) async {
-    final bought = <Character>[];
+    final bought = <(Character, int)>[];
     await _pumpCamp(
       tester,
       ownedLevels: const {Character.haruto: 2, Character.mio: 1},
       squad: const [Character.haruto],
       scrip: 200,
-      onLevelUp: bought.add,
+      onLevelUp: (c, l) => bought.add((c, l)),
     );
     await _showCard(tester, Character.haruto);
     await tester.tap(_card(Character.haruto));
@@ -576,7 +576,7 @@ void main() {
     expect(levelUpButton(tester).onPressed, isNotNull);
     await tester.tap(find.byKey(const ValueKey('level-up-button')));
     await tester.pump();
-    expect(bought, [Character.haruto]);
+    expect(bought, [(Character.haruto, 2)]);
   });
 
   testWidgets('insufficient Scrip disables Level Up with a readable reason', (
@@ -588,7 +588,7 @@ void main() {
       ownedLevels: const {Character.haruto: 1},
       squad: const [Character.haruto],
       scrip: 30,
-      onLevelUp: (_) => presses++,
+      onLevelUp: (_, _) => presses++,
     );
     await _showCard(tester, Character.haruto);
     await tester.tap(_card(Character.haruto));
@@ -615,7 +615,7 @@ void main() {
       ownedLevels: const {Character.haruto: GameBalance.characterMaxLevel},
       squad: const [Character.haruto],
       scrip: 99999,
-      onLevelUp: (_) => presses++,
+      onLevelUp: (_, _) => presses++,
     );
     await _showCard(tester, Character.haruto);
     await tester.tap(_card(Character.haruto));
@@ -643,7 +643,7 @@ void main() {
       squad: const [Character.haruto],
       scrip: 500,
       isSavingProgress: true,
-      onLevelUp: (_) => presses++,
+      onLevelUp: (_, _) => presses++,
     );
     await _showCard(tester, Character.haruto);
     await tester.tap(_card(Character.haruto));
@@ -670,7 +670,7 @@ void main() {
       squad: const [Character.haruto],
       scrip: 500,
       isSavingProgress: true,
-      onLevelUp: (_) => presses++,
+      onLevelUp: (_, _) => presses++,
     );
     await _showCard(tester, Character.haruto);
     await tester.tap(_card(Character.haruto));
@@ -695,7 +695,7 @@ void main() {
       squad: const [Character.haruto],
       scrip: 30,
       isSavingProgress: true,
-      onLevelUp: (_) {},
+      onLevelUp: (_, _) {},
     );
     await _showCard(tester, Character.haruto);
     await tester.tap(_card(Character.haruto));
@@ -721,7 +721,7 @@ void main() {
         squad: const [Character.haruto],
         scrip: 99999,
         isSavingProgress: true,
-        onLevelUp: (_) {},
+        onLevelUp: (_, _) {},
       );
       await _showCard(tester, Character.haruto);
       await tester.tap(_card(Character.haruto));
