@@ -229,16 +229,8 @@ void main() {
         );
         final rect = crop as Map<String, dynamic>;
         final x = rect['x'], y = rect['y'], side = rect['side'];
-        for (final (field, value) in [
-          ('x', x),
-          ('y', y),
-          ('side', side),
-        ]) {
-          expect(
-            value,
-            isA<int>(),
-            reason: '$key crop.$field must be an int',
-          );
+        for (final (field, value) in [('x', x), ('y', y), ('side', side)]) {
+          expect(value, isA<int>(), reason: '$key crop.$field must be an int');
         }
         expect(
           (x as int) >= 0 && (y as int) >= 0 && (side as int) > 0,
