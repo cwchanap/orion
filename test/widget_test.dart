@@ -5321,6 +5321,54 @@ void main() {
     },
   );
 
+  testWidgets('a still-pending guide flag re-reads on Alpha mount and honors a '
+      'recovered completion record', (tester) async {
+    var loadAttempts = 0;
+    final recoveredStore = _TestCampaignProgressStore(
+      progress: _progressWithResults({'outpost-alpha'}),
+    );
+    // The startup read throws AND the retry's re-read throws, leaving
+    // inference pending after _store already recovered — neither Retry
+    // nor Launch consults it again, so only the Alpha mount's deferred
+    // settle re-reads and finds the stored true.
+    final guideStore = _FlakyLoadFirstMissionGuideStore(
+      InMemoryFirstMissionGuideStore(completed: true),
+      failLoadCount: 2,
+    );
+
+    await tester.pumpWidget(
+      testGamePage(
+        progressStoreLoader: () async {
+          loadAttempts += 1;
+          if (loadAttempts == 1) {
+            throw StateError('no store');
+          }
+          return recoveredStore;
+        },
+        firstMissionGuideStore: guideStore,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Flare'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('campaign-load-retry')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Map'));
+    await tester.pumpAndSettle();
+    await startStageFromBriefing(tester, actionLabel: 'Replay Mission');
+    await tester.pump();
+    await tester.pump();
+    await tester.pump();
+
+    // The healed read recovered the stored true: the callout stays
+    // suppressed instead of re-arming against a completed flag.
+    expect(find.text('Tap an empty cell to build here.'), findsNothing);
+    expect(guideStore.completed, isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'failed store.load() leaves no writable store so Launch cannot wipe saved campaign',
     (tester) async {
