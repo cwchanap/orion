@@ -105,7 +105,7 @@ Accepted all six findings in [design review #6003901530](https://github.com/cwch
 
 1. Extend existing test in CI instead of running a one-off Pillow audit; test-only Dart is consistent with an art-only production change.
 2. Preserve RGBA chibi type 6; palette/indexed optimization only for portraits, with decoded-pixel equality logs.
-3. Finalize portraits first, then circle-safe opaque faces; record final portrait SHA/crop rectangle.
+3. Finalize portraits first, then circle-safe opaque faces; record source crop rectangles. Round two subsequently removes the unenforced portrait SHA field.
 4. Use Codex to see all 12 characters and add asset-specific checks for changed pixels; HPA-922 has no Codex/320px baseline, so compare to approved art and matching real HPA-923 shell evidence. **Project acceptance still requires one minimal MCP E2E**, even if no existing pixels change.
 5. Produce a static contact-sheet PNG, not a page and an extra MCP screenshot.
 6. Hash-compare against the approved ZIP before manual identity work; remove the redundant, stale-prone final output hash field.
