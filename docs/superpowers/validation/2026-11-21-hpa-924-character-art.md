@@ -4,7 +4,7 @@
 - **Plan:** [character art pack plan](../plans/2026-11-21-hpa-924-character-art-pack.md) · **Design:** [character art pack design](../specs/2026-11-21-hpa-924-character-art-pack-design.md)
 - **PR:** [#52](https://github.com/cwchanap/orion/pull/52)
 
-This note validates the 24 character PNGs that already exist under `assets/images/characters/{id}/`. It records the source audit, the chibi border retouch and the portrait optimization experiment. Later checkpoints append their own sections.
+This note validates the Last Hearth character art pack under `assets/images/characters/{id}/`: the source audit and chibi border retouch of the 24 pre-existing PNGs, the portrait optimization experiment, the 12 new face thumbnails, the provenance file and contact sheet, and the automated checks plus the MCP Chrome Codex run.
 
 ## 1. Scope and approved source
 
@@ -86,7 +86,7 @@ Every original portrait carries `eXIf` and `sRGB` chunks, and the Pillow re-save
 
 **Documented exception: soft size goal not met.** The ~200 KB-per-card goal is soft. Portraits stay at 1.0–2.2 MiB (1,053,927–2,268,780 bytes) and are left byte-unchanged, for these reasons:
 
-1. Lossless re-encoding saves only 5–14 %, far short of the goal.
+1. Pillow lossless re-encoding (`optimize=True`) saves only 5–14 % (oxipng and zopfli were not tried), far short of the goal.
 2. Reaching ~200 KB would need palette or indexed reduction, which changes pixel values. It was rejected to preserve fidelity to the approved art and was not tried.
 3. The Pillow re-save drops the `eXIf` and `sRGB` chunks.
 4. Rewriting all 12 portraits would add about 16.1 MiB of new blobs (16,905,600 bytes) and would require re-checking Camp portrait rendering (Checkpoint 5) for each changed portrait.
@@ -160,7 +160,7 @@ Before commit, a scratch check confirmed that the JSON parses, the 36 keys equal
 
 ## 8. Contact sheet
 
-`docs/superpowers/validation/hpa-924-evidence/contact-sheet.png` is the only file in its folder. It is a 2024×1638 px RGB PNG of 1,950,521 bytes (1.86 MiB) with no text metadata.
+`docs/superpowers/validation/hpa-924-evidence/contact-sheet.png` is the only contact sheet in its folder (the folder also holds the four Codex captures from section 9). It is a 2024×1638 px RGB PNG of 1,950,521 bytes (1.86 MiB) with no text metadata.
 
 Layout: a 4 columns × 3 rows of per-ID cells in rank order (E to S), each labelled with its id.
 - Larger renders: portrait at 180×270; face square at 128; face circle at 128 (circle-clipped, on dark); chibi at 128 on dark and on light.
@@ -180,7 +180,7 @@ These judgments are visual, from the 2x view; I did not measure contrast. Identi
 
 ## 9. Automated checks and MCP Chrome E2E
 
-Automated checks were run locally on `735beb5` (the head before the evidence screenshots were added; `lib/`, `test/`, `pubspec.yaml` and every bundled asset are identical between that commit and the final head). A first full pass at `9928729` was repeated on `735beb5` because a wording-only commit landed while it ran; the only difference between them is `assets/images/characters/provenance.json`, which is not a bundled asset.
+Automated checks were run locally on `735beb5` (the head before the evidence screenshots were added; `lib/`, `test/`, `pubspec.yaml` and every bundled asset are identical between that commit and the final head). A first full pass at `9928729` was repeated on `735beb5` because a wording-only commit landed while it ran; the only non-documentation difference between them is `assets/images/characters/provenance.json`, which is not a bundled asset.
 
 ### Part A: automated checks (final head `735beb5`)
 
@@ -192,7 +192,7 @@ Automated checks were run locally on `735beb5` (the head before the evidence scr
 | `flutter test` (whole suite) | `+1845 -133` (1,978 tests), exit 1 | All 133 failures are in widget tests (see below). `test/game/`, components, feedback and the contract test all pass. |
 | `flutter build web --release` | `✓ Built build/web`, exit 0, 1m25s | Default build (CanvasKit from the gstatic CDN). `build/` is git-ignored. |
 
-Full-suite failures (133): `widget/mission_chrome_test.dart` 33, `widget/camp_view_test.dart` 27, `widget/stage_briefing_sheet_test.dart` 21, `widget/codex_view_test.dart` 19, `widget/flare_view_test.dart` 14, `widget/tower_inspector_test.dart` 7, `widget/mission_command_dock_test.dart` 5, `widget/scene_parity_regression_test.dart` 3, `widget/orion_typography_test.dart` 3, `widget/world_map_command_deck_test.dart` 1. Every failure has the same message: `An animation is still running even after the widget tree was disposed.`, with a pending `RelayoutWhenSystemFontsChangeMixin` frame callback. The same 133 test names fail on a `git archive main` snapshot run with the same resolved packages (`+333 -133` for those ten files), and they also failed on the earlier full pass, which started at `9928729` and overlapped the 19:00 commit. They therefore predate this change and were not touched here. The remote unit job on the design-only head `38c44eb` passes, which points to a host-specific difference (this host re-resolves `clock`, `test_api` and `stack_trace` to newer versions than `pubspec.lock` pins, i.e. a newer Flutter SDK than CI). The authoritative run of the whole suite on the final head is the PR's CI (`gh pr checks 52`).
+Full-suite failures (133): `widget/mission_chrome_test.dart` 33, `widget/camp_view_test.dart` 27, `widget/stage_briefing_sheet_test.dart` 21, `widget/codex_view_test.dart` 19, `widget/flare_view_test.dart` 14, `widget/tower_inspector_test.dart` 7, `widget/mission_command_dock_test.dart` 5, `widget/scene_parity_regression_test.dart` 3, `widget/orion_typography_test.dart` 3, `widget/world_map_command_deck_test.dart` 1. Every failure has the same message: `An animation is still running even after the widget tree was disposed.`, with a pending `RelayoutWhenSystemFontsChangeMixin` frame callback. The same 133 test names fail on a `git archive main` snapshot run with the same resolved packages (`+333 -133` for those ten files), and they also failed on the earlier full pass, which started at `9928729` and overlapped the `735beb5` commit. They therefore predate this change and were not touched here. The remote unit job on the design-only head `38c44eb` passes, which points to a host-specific difference (this host re-resolves `clock`, `test_api` and `stack_trace` to newer versions than `pubspec.lock` pins, this host runs Flutter 3.50.0 while CI pins 3.47.9). The authoritative run of the whole suite on the final head is the PR's CI (`gh pr checks 52`).
 
 Remote PR checks on the earlier design-only head `38c44eb` (before any art commit): Build & lint, Unit test, Integration test (Android), Android and iOS debug builds, and Audio asset contract all passed. Results for the final head are shown by the PR's checks.
 
@@ -224,7 +224,7 @@ Approved references are `character-concepts-v3/chibi/*.png`. "Identical" means t
 | Haruto (E) | OK | OK | 390 OK | Matches: brown hair, orange scarf, rifle | No, identical |
 | Mio (E) | OK | OK | 390 OK, 320 OK | Matches: orange ponytail, red and white outfit, flame staff | Yes, 45 px (33 alpha 1→0, 12 alpha 2→0, bottom row). No visible change. |
 
-For the five retouched chibis, every pixel with alpha above zero in the approved file has identical RGB in the repo file. The only changes are alpha 1 or 2 going to 0, on the outermost image row or column, outside each subject's bounding box. At alpha 1 or 2 the pixels are essentially invisible. Tile chibi size (46 px) comes from the code (`Size.square(46)`), not from pixel measurement. The detail chibi measures 56×56 CSS px in the semantics tree.
+For the five retouched chibis, every pixel off the outermost 1-px border is identical to the approved file. The only changes are border pixels with alpha 1 or 2 (some carried non-zero RGB) set to `(0,0,0,0)`, on the outermost image row or column, outside each subject's bounding box. At alpha 1 or 2 the pixels are essentially invisible. Tile chibi size (46 px) comes from the code (`Size.square(46)`), not from pixel measurement. The detail chibi measures 56×56 CSS px in the semantics tree.
 
 ### Captures (native pixels, no annotations)
 
@@ -242,7 +242,7 @@ For the five retouched chibis, every pixel with alpha above zero in the approved
 ### Deviations and known gaps
 
 - **Full suite (local):** 133 failures in 10 widget test files, identical on a `main` snapshot run on the same host; not fixed here (see above).
-- **Lock file:** `pubspec.lock` was modified locally by the host's Flutter re-resolution and is NOT part of the PR (restored before the final commit). Flutter re-resolves transitive packages on each `flutter test`: `clock` 1.1.2→1.1.3, `stack_trace` 1.12.1→1.12.2, `test_api` 0.7.12→0.7.14, a new `listen` 1.0.1, and a changed `vector_math` hash. The `main` snapshot re-resolved to the same versions, so the comparison is fair.
+- **Lock file:** `pubspec.lock` was modified locally by the host's Flutter re-resolution and is NOT part of the PR (never committed; restored before the push). Flutter re-resolves transitive packages on each `flutter test`: `clock` 1.1.2→1.1.3, `stack_trace` 1.12.1→1.12.2, `test_api` 0.7.12→0.7.14, a new `listen` 1.0.1, and a changed `vector_math` hash. The `main` snapshot re-resolved to the same versions, so the comparison is fair.
 - **Two web builds:** the default build (1m25s, gstatic CanvasKit) and the local-CanvasKit build used for E2E (1m30s).
 - **Head moved during the run:** `735beb5` landed during the first pass, so Part A was repeated on it. The E2E build was made from the same bundled inputs.
 - **Detail composite format:** JPEG q85. The PNG version was 688 KB, above the ~600 KB budget.
