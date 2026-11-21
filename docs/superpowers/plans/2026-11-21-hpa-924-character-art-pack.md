@@ -95,7 +95,7 @@ Do not commit the source ZIP, prompt archive, source images, generator scripts o
 - [x] Audit against the approved ZIP, lossless decoded-pixel checks and before/after size changes are recorded; no redundant art generation or unapproved wardrobe changes.
 - [x] Final portraits precede face crops; accurate crop rectangles (no unenforced hash fields) are recorded; 40px face thumbnails remain circle-safe (with documented overflow/keep decisions) and readable; 48px chibi samples are readable on dark/light backgrounds.
 - [x] One static **contact-sheet PNG** demonstrates all 36 final images and matches approved Linear identity/wardrobe references.
-- [x] `flutter analyze`, `flutter test`, `flutter build web --release` and final PR CI are green without production Dart changes.
+- [x] `flutter analyze`, `flutter test`, `flutter build web --release` and final PR CI are green without production Dart changes (final-head CI evidence in the [validation note](../validation/2026-11-21-hpa-924-character-art.md#9-automated-checks-and-mcp-chrome-e2e)).
 - [x] **MCP-driven real-game E2E** reaches the Codex four-column grid with all 12 characters, captures 390×844/320×568 and compares art against the approved character references (no invented HPA-922 Codex/320px baseline). Any changed portrait **file bytes** trigger a Camp `Image.asset` smoke, and Jin/Hikari/Akane portrait changes use the existing Flare marquee. Pixel-changed chibis receive targeted Codex visual checks. No browser reload or eight-wave replay.
 - [x] Deliverable and evidence are committed only to **this HPA-924 draft PR**; HPA-925/926/927 stay separate. No human-acceptance criterion.
 
