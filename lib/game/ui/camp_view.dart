@@ -67,9 +67,11 @@ class CampView extends StatefulWidget {
   final bool isSavingProgress;
 
   /// Asks the owner to buy one persistent level for the character whose
-  /// sheet is open; the game page routes it through the committed save
-  /// queue. Null renders the action disabled (previews, read-only hosts).
-  final ValueChanged<Character>? onLevelUp;
+  /// sheet is open, carrying the level this build displayed so the page can
+  /// reject a request whose price went stale under a just-committed write;
+  /// the game page routes it through the committed save queue. Null
+  /// renders the action disabled (previews, read-only hosts).
+  final void Function(Character character, int displayedLevel)? onLevelUp;
 
   final VoidCallback? onBack;
   final bool embeddedInMenuShell;
@@ -110,7 +112,9 @@ class _CampViewState extends State<CampView> {
                       level: sheetLevel,
                       scrip: widget.scrip,
                       levelUpBusy: widget.isSavingProgress,
-                      onLevelUp: levelUp == null ? null : () => levelUp(sheet),
+                      onLevelUp: levelUp == null
+                          ? null
+                          : () => levelUp(sheet, sheetLevel),
                       onBack: () => setState(() => _sheet = null),
                     )
                   : _buildRoster(uiTheme),

@@ -107,6 +107,14 @@ class OrionGamePage extends StatefulWidget {
   State<OrionGamePage> createState() => _OrionGamePageState();
 }
 
+/// The result of reading the first-mission guide completion flag: [value]
+/// is the stored record — null only when a working store confirmed the
+/// record missing — and [failed] marks an unreadable or absent store. The
+/// inference paths must keep that distinction: a failed read is not a
+/// missing record, so it may neither infer completion nor freeze-write
+/// over a stored flag it could not see.
+typedef _FirstMissionGuideRead = ({bool? value, bool failed});
+
 class _OrionGamePageState extends State<OrionGamePage> {
   OrionDefenseGame? _game;
   int? _inspectedTowerId;
@@ -333,7 +341,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // The default path reuses the already-acquired SharedPreferences; a
       // custom campaign store fetches an instance solely for the guide.
       guideStore ??= await _defaultFirstMissionGuideStore(preferences);
-      final guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
+      final guideRead = await _loadFirstMissionGuideCompleted(guideStore);
       final seenTips = await _loadSeenTips(guideStore);
 
       final save = await store.load();
@@ -342,11 +350,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return;
       }
 
-      // A missing guide record resolves through campaign progress: a
-      // committed Alpha result means this player cleared the tutorial's
-      // mission before the flag existed.
+      // A confirmed-missing guide record resolves through campaign
+      // progress: a committed Alpha result means this player cleared the
+      // tutorial's mission before the flag existed. A failed read is not a
+      // missing record — it neither infers nor freeze-writes over a flag
+      // it could not see.
       final freezeInferredCompletion =
-          guideCompleted == null &&
+          !guideRead.failed &&
+          guideRead.value == null &&
           save.progress.resultFor(OrionCampaign.stageOneId) != null;
 
       setState(() {
@@ -357,10 +368,10 @@ class _OrionGamePageState extends State<OrionGamePage> {
         // committed Alpha result means this player cleared the tutorial's
         // mission before the flag existed, so the guide counts as done.
         // An explicit stored false — Replay Tutorial — is always honored,
-        // so replay survives restarts.
+        // so replay survives restarts. A failed read settles as not-done:
+        // the callout simply re-arms on the next Alpha mount.
         _firstMissionGuideCompleted =
-            guideCompleted ??
-            (save.progress.resultFor(OrionCampaign.stageOneId) != null);
+            guideRead.value ?? freezeInferredCompletion;
         _firstMissionGuideNeedsInference = false;
         _seenTips = seenTips;
         _isLoading = false;
@@ -386,7 +397,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         return;
       }
 
-      final guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
+      final guideRead = await _loadFirstMissionGuideCompleted(guideStore);
       if (!mounted) {
         return;
       }
@@ -401,8 +412,8 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _store = null;
         _committed = CampaignSave.empty;
         _firstMissionGuideStore = guideStore;
-        _firstMissionGuideCompleted = guideCompleted ?? false;
-        _firstMissionGuideNeedsInference = guideCompleted == null;
+        _firstMissionGuideCompleted = guideRead.value ?? false;
+        _firstMissionGuideNeedsInference = guideRead.value == null;
         _seenTips = seenTips;
         _mapFeedback = 'Could not load campaign progress.';
         _isLoading = false;
@@ -490,18 +501,20 @@ class _OrionGamePageState extends State<OrionGamePage> {
     }
   }
 
-  /// Store failures never block the guide flag; they read as no record,
-  /// which the callsite resolves through campaign progress.
-  Future<bool?> _loadFirstMissionGuideCompleted(
+  /// Store failures never block the guide flag, but they must not read as
+  /// a missing record either: a throw or an absent store reports `failed`
+  /// so callers skip inference instead of overwriting a flag they could
+  /// not see.
+  Future<_FirstMissionGuideRead> _loadFirstMissionGuideCompleted(
     FirstMissionGuideStore? store,
   ) async {
     if (store == null) {
-      return null;
+      return (value: null, failed: true);
     }
     try {
-      return await store.loadCompleted();
+      return (value: await store.loadCompleted(), failed: false);
     } catch (_) {
-      return null;
+      return (value: null, failed: true);
     }
   }
 
@@ -1284,18 +1297,26 @@ class _OrionGamePageState extends State<OrionGamePage> {
       // Got it or replay choice) never re-reads.
       var guideStore = _firstMissionGuideStore;
       bool? guideCompleted;
+      var guideReadFailed = false;
       if (_firstMissionGuideNeedsInference) {
         guideStore ??= await _defaultFirstMissionGuideStore(null);
         if (!mounted || generation != _progressGeneration) {
           return null;
         }
-        guideCompleted = await _loadFirstMissionGuideCompleted(guideStore);
+        final guideRead = await _loadFirstMissionGuideCompleted(guideStore);
+        guideCompleted = guideRead.value;
+        guideReadFailed = guideRead.failed;
         if (!mounted || generation != _progressGeneration) {
           return null;
         }
       }
+      // Only a completed read may settle the flag: a failed or impossible
+      // read leaves inference pending for a later retry — it must neither
+      // infer nor freeze-write an unseen record, or a stored Replay
+      // Tutorial false could still be overwritten with true.
+      final guideSettled = _firstMissionGuideNeedsInference && !guideReadFailed;
       final freezeInferredCompletion =
-          _firstMissionGuideNeedsInference &&
+          guideSettled &&
           guideCompleted == null &&
           save.progress.resultFor(OrionCampaign.stageOneId) != null;
       setState(() {
@@ -1303,7 +1324,7 @@ class _OrionGamePageState extends State<OrionGamePage> {
         _committed = save;
         _campaignRetryFailed = false;
         _firstMissionGuideStore ??= guideStore;
-        if (_firstMissionGuideNeedsInference) {
+        if (guideSettled) {
           _firstMissionGuideNeedsInference = false;
           _firstMissionGuideCompleted =
               guideCompleted ?? freezeInferredCompletion;
@@ -1486,29 +1507,42 @@ class _OrionGamePageState extends State<OrionGamePage> {
   }
 
   /// The Camp sheet's one purchase (HPA-923 task 4): queue the atomic
-  /// debit-and-increment on the committed aggregate. `withLevelUp`
-  /// revalidates ownership, cap and funds inside the queue, so an attempt
-  /// that went stale under an earlier commit reports instead of writing.
+  /// debit-and-increment on the committed aggregate. The request carries
+  /// the level the sheet displayed when pressed; `withLevelUp` revalidates
+  /// it — plus ownership, cap and funds — inside the queue, so a press
+  /// whose price went stale under a just-committed write rejects without
+  /// a debit instead of charging the next level's cost. That stale window
+  /// is real: a save that commits and drains between two frames leaves the
+  /// last rendered enabled button able to dispatch once more, at the OLD
+  /// price. A new press after the republished sheet shows the updated
+  /// price commits normally.
   /// Single-flight on the whole busy state: the sheet disables Level Up on
   /// `_isBusy` and this early return catches a press landing before that
   /// rebuild — including during a campaign reset, which must not queue a
   /// purchase behind the wipe.
   /// A failure leaves `_committed` untouched, keeps the sheet mounted and
   /// routes the shared breadcrumb to the shell slot so the action stays
-  /// retryable without any navigation.
-  Future<bool> _levelUpCharacter(Character character) {
+  /// retryable without any navigation. A stale rejection reports nothing:
+  /// the earlier purchase already committed and the republished price
+  /// explains the state, so a phantom error would misreport a success.
+  Future<bool> _levelUpCharacter(Character character, int displayedLevel) {
     if (_isBusy) {
       return Future<bool>.value(false);
     }
     return _persistSave(
-      buildSave: (committed) => committed.withLevelUp(character),
+      buildSave: (committed) =>
+          committed.withLevelUp(character, expectedLevel: displayedLevel),
       onCommitted: (_) {
         if (_isPurchaseFeedbackMessage(_shellFeedback)) {
           _shellFeedback = null;
         }
       },
       onRejected: (_) {
-        if (!mounted) return;
+        // The committed level moved past what the sheet displayed — the
+        // stale press already got its purchase and needs no message.
+        if (!mounted || _committed.ownedLevels[character] != displayedLevel) {
+          return;
+        }
         setState(() {
           _setActiveDestinationFeedback(_levelUpRejectionMessage(character));
         });
