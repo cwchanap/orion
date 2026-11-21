@@ -50,7 +50,7 @@ No production Dart or gameplay changes, navigation/renderer/loader edits, new me
 
 Extend `test/game/character_art_contract_test.dart` **in the same asset PR**. No new production dependencies or separate Python package/CI job.
 
-1. Continue looping over `Character.values`. Assert exactly three files in every per-ID directory, `portrait.png` 1024×1536, `face.png` 512×512, `chibi.png` 512×512 RGBA (color type 6), all valid PNGs. No stray file is allowed in a registered directory because Flutter bundles it.
+1. Continue looping over `Character.values`. Assert exactly three files in every per-ID directory, `portrait.png` 1024×1536, `face.png` 512×512 with fully opaque decoded alpha, `chibi.png` 512×512 RGBA (color type 6), all valid PNGs. No stray file is allowed in a registered directory because Flutter bundles it.
 2. Decode chibi pixels in the existing Flutter test with `dart:ui` (for example `instantiateImageCodec` and `toByteData(format: ImageByteFormat.rawRgba)`); require the 1-pixel border's alpha to be zero on all four edges. This is a persistent transparent-edge and gross-clipping guard; the contact sheet still checks the actual silhouette and detail.
 3. Load provenance JSON and assert that its key set equals exactly `Character.values × {portrait.png,face.png,chibi.png}`. Do not hard-code a parallel 12-ID table or bring in Pillow to CI.
 4. Preserve existing `OrionArt` descriptor/path, chibi color-type and manifest assertions. The new `face.png` is intentionally not required to have a UI descriptor until HPA-926.
