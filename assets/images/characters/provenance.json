@@ -1,0 +1,426 @@
+{
+  "haruto/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/e1-haruto-sakaki.jpg",
+    "reference": "e1-haruto-sakaki",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "haruto/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "haruto/portrait.png",
+    "reference": "e1-haruto-sakaki",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 332,
+      "y": 0,
+      "side": 288,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "haruto/chibi.png": {
+    "role": "chibi",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/e1-haruto-sakaki.png",
+    "reference": "e1-haruto-sakaki",
+    "model": null,
+    "prompt": null,
+    "note": "byte-identical to the approved chibi entry"
+  },
+  "mio/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/e2-mio-tachibana.jpg",
+    "reference": "e2-mio-tachibana",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "mio/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "mio/portrait.png",
+    "reference": "e2-mio-tachibana",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 310,
+      "y": 0,
+      "side": 460,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "mio/chibi.png": {
+    "role": "chibi",
+    "method": "retouched",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/e2-mio-tachibana.png",
+    "reference": "e2-mio-tachibana",
+    "model": null,
+    "prompt": null,
+    "note": "border alpha cleared on 45 pixels (set to fully transparent); all other pixels identical to the approved entry"
+  },
+  "sayo/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/d1-sayo-kitami.jpg",
+    "reference": "d1-sayo-kitami",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "sayo/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "sayo/portrait.png",
+    "reference": "d1-sayo-kitami",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 199,
+      "y": 22,
+      "side": 352,
+      "resize": "LANCZOS to 512x512"
+    },
+    "note": "long side braid runs past the bottom rim; bow hand and arrow cross the rim (props)"
+  },
+  "sayo/chibi.png": {
+    "role": "chibi",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/d1-sayo-kitami.png",
+    "reference": "d1-sayo-kitami",
+    "model": null,
+    "prompt": null,
+    "note": "byte-identical to the approved chibi entry"
+  },
+  "tetsuo/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/d2-tetsuo-kanda.jpg",
+    "reference": "d2-tetsuo-kanda",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "tetsuo/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "tetsuo/portrait.png",
+    "reference": "d2-tetsuo-kanda",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 374,
+      "y": 0,
+      "side": 288,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "tetsuo/chibi.png": {
+    "role": "chibi",
+    "method": "retouched",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/d2-tetsuo-kanda.png",
+    "reference": "d2-tetsuo-kanda",
+    "model": null,
+    "prompt": null,
+    "note": "border alpha cleared on 49 pixels (set to fully transparent); all other pixels identical to the approved entry"
+  },
+  "rin/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/c1-rin-fuyutsuki.jpg",
+    "reference": "c1-rin-fuyutsuki",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "rin/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "rin/portrait.png",
+    "reference": "c1-rin-fuyutsuki",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 302,
+      "y": 0,
+      "side": 380,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "rin/chibi.png": {
+    "role": "chibi",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/c1-rin-fuyutsuki.png",
+    "reference": "c1-rin-fuyutsuki",
+    "model": null,
+    "prompt": null,
+    "note": "byte-identical to the approved chibi entry"
+  },
+  "kaito/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/c2-kaito-narumi.jpg",
+    "reference": "c2-kaito-narumi",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "kaito/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "kaito/portrait.png",
+    "reference": "c2-kaito-narumi",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 371,
+      "y": 0,
+      "side": 304,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "kaito/chibi.png": {
+    "role": "chibi",
+    "method": "retouched",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/c2-kaito-narumi.png",
+    "reference": "c2-kaito-narumi",
+    "model": null,
+    "prompt": null,
+    "note": "border alpha cleared on 23 pixels (set to fully transparent); all other pixels identical to the approved entry"
+  },
+  "elena/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/b1-elena-volkova.jpg",
+    "reference": "b1-elena-volkova",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "elena/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "elena/portrait.png",
+    "reference": "b1-elena-volkova",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 355,
+      "y": 0,
+      "side": 320,
+      "resize": "LANCZOS to 512x512"
+    },
+    "note": "cap rim corners extend past the inscribed circle (headwear)"
+  },
+  "elena/chibi.png": {
+    "role": "chibi",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/b1-elena-volkova.png",
+    "reference": "b1-elena-volkova",
+    "model": null,
+    "prompt": null,
+    "note": "byte-identical to the approved chibi entry"
+  },
+  "shiori/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/b2-shiori-kusanagi.jpg",
+    "reference": "b2-shiori-kusanagi",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "shiori/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "shiori/portrait.png",
+    "reference": "b2-shiori-kusanagi",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 274,
+      "y": 0,
+      "side": 420,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "shiori/chibi.png": {
+    "role": "chibi",
+    "method": "retouched",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/b2-shiori-kusanagi.png",
+    "reference": "b2-shiori-kusanagi",
+    "model": null,
+    "prompt": null,
+    "note": "border alpha cleared on 10 pixels (set to fully transparent); all other pixels identical to the approved entry"
+  },
+  "akane/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/a1-akane-hinomori.jpg",
+    "reference": "a1-akane-hinomori",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "akane/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "akane/portrait.png",
+    "reference": "a1-akane-hinomori",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 323,
+      "y": 38,
+      "side": 368,
+      "resize": "LANCZOS to 512x512"
+    },
+    "note": "long ponytail tips extend past the right rim"
+  },
+  "akane/chibi.png": {
+    "role": "chibi",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/a1-akane-hinomori.png",
+    "reference": "a1-akane-hinomori",
+    "model": null,
+    "prompt": null,
+    "note": "byte-identical to the approved chibi entry"
+  },
+  "ren/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/a2-ren-kurosawa.jpg",
+    "reference": "a2-ren-kurosawa",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "ren/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "ren/portrait.png",
+    "reference": "a2-ren-kurosawa",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 393,
+      "y": 10,
+      "side": 288,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "ren/chibi.png": {
+    "role": "chibi",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/a2-ren-kurosawa.png",
+    "reference": "a2-ren-kurosawa",
+    "model": null,
+    "prompt": null,
+    "note": "byte-identical to the approved chibi entry"
+  },
+  "hikari/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/s1-hikari-amatsu.jpg",
+    "reference": "s1-hikari-amatsu",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "hikari/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "hikari/portrait.png",
+    "reference": "s1-hikari-amatsu",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 336,
+      "y": 40,
+      "side": 288,
+      "resize": "LANCZOS to 512x512"
+    },
+    "note": "long hair tails extend past the rim at lower left and right"
+  },
+  "hikari/chibi.png": {
+    "role": "chibi",
+    "method": "retouched",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/s1-hikari-amatsu.png",
+    "reference": "s1-hikari-amatsu",
+    "model": null,
+    "prompt": null,
+    "note": "border alpha cleared on 6 pixels (set to fully transparent); all other pixels identical to the approved entry"
+  },
+  "jin/portrait.png": {
+    "role": "card",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/s2-jin-kamishiro.jpg",
+    "reference": "s2-jin-kamishiro",
+    "model": null,
+    "prompt": null,
+    "note": "kept byte-unchanged; lossless master of the approved JPG export"
+  },
+  "jin/face.png": {
+    "role": "face",
+    "method": "cropped",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "jin/portrait.png",
+    "reference": "s2-jin-kamishiro",
+    "model": null,
+    "prompt": null,
+    "crop": {
+      "x": 415,
+      "y": 0,
+      "side": 288,
+      "resize": "LANCZOS to 512x512"
+    }
+  },
+  "jin/chibi.png": {
+    "role": "chibi",
+    "method": "reused",
+    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "source": "character-concepts-v3/chibi/s2-jin-kamishiro.png",
+    "reference": "s2-jin-kamishiro",
+    "model": null,
+    "prompt": null,
+    "note": "byte-identical to the approved chibi entry"
+  }
+}
