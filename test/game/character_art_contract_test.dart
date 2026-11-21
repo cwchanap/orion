@@ -11,9 +11,9 @@ import 'package:orion/game/ui/orion_atlas_sprite.dart';
 
 /// HPA-922 Task 5 asset contract, extended for HPA-924: every Last Hearth
 /// roster member ships exactly three images under
-/// `assets/images/characters/{id}/`, addressable through the shared
-/// `OrionArtDescriptor` registry — never through mockup screenshot crops, a
-/// parallel path table, or a second image cache.
+/// `assets/images/characters/{id}/`. Portrait and chibi are addressable through
+/// the shared `OrionArtDescriptor` registry — never through mockup screenshot
+/// crops, a parallel path table, or a second image cache.
 ///
 /// * `portrait.png`: 1024x1536 full-size card art, un-cropped.
 /// * `face.png`: 512x512 fully opaque square face thumbnail. It has no runtime
@@ -180,9 +180,13 @@ void main() {
     test('provenance.json has exactly one entry per art file', () {
       final file = File('$_artRoot/provenance.json');
       expect(file.existsSync(), isTrue, reason: '${file.path} is missing');
-      final provenance =
-          jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
-      final recorded = provenance.keys.toSet();
+      final decoded = jsonDecode(file.readAsStringSync());
+      expect(
+        decoded,
+        isA<Map<String, dynamic>>(),
+        reason: 'provenance.json must be a JSON object keyed by "{id}/{file}"',
+      );
+      final recorded = (decoded as Map<String, dynamic>).keys.toSet();
       final expected = _artKeys();
       expect(
         expected.difference(recorded),
@@ -207,8 +211,8 @@ void main() {
           reason: 'these art files are missing from the Flutter asset bundle',
         );
         expect(
-          bundled,
-          isNot(contains('$_artRoot/provenance.json')),
+          bundled.contains('$_artRoot/provenance.json'),
+          isFalse,
           reason: 'provenance.json is metadata and must not ship in the app',
         );
       },
