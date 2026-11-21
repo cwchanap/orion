@@ -114,6 +114,70 @@ Bounding box: pixels with alpha greater than 16, as (left, top, right, bottom) w
 
 **Flagged chibis: 0.** The tightest margins are mio (bottom 3 px), shiori (top 3 px), tetsuo (bottom 4 px); no sprite comes within 2 px of the canvas edge, so none is clipped.
 
+## 6. Face thumbnails
+
+Method: each `face.png` is a square crop of the committed `portrait.png` at the rectangle in the table (final-portrait pixels, top-left origin, `side` × `side`). The crop is resized to 512×512 with Pillow `LANCZOS` and saved as an 8-bit RGB PNG with `optimize=True`, so every face is fully opaque (color type 2). Method `cropped`. Each crop is circle-safe: the inscribed circle has diameter `side` and the same centre as the crop. No production screen draws `face.png` until HPA-926.
+
+| ID | Crop x | Crop y | Side | Upscale (512 / side) | face.png bytes | Fit |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| haruto | 332 | 0 | 288 | 1.778 | 311,896 | Hair and face inside. Scarf and jacket collar outside (clothing). |
+| mio | 310 | 0 | 460 | 1.113 | 355,781 | Largest crop. Hair crown and ribbon inside (closeup checked at checkpoint 3). |
+| sayo | 199 | 22 | 352 | 1.455 | 306,856 | Hood, goggles and face inside. Long side braid runs past the bottom rim; bow hand and arrow cross the rim (props). |
+| tetsuo | 374 | 0 | 288 | 1.778 | 325,983 | Spiky hair, goggles and beard inside. Background props in the upper-left corner outside. |
+| rin | 302 | 0 | 380 | 1.347 | 356,775 | Bob hair, snowflake ornament and blue highlights inside. Cape and hood outside (clothing). |
+| kaito | 371 | 0 | 304 | 1.684 | 330,012 | Spiky hair and face inside, tips close to the top rim. Goggles and collar outside (clothing). |
+| elena | 355 | 0 | 320 | 1.600 | 379,019 | Face, silver hair and braid top inside. Cap rim corners extend past the circle (headwear). |
+| shiori | 274 | 0 | 420 | 1.219 | 333,096 | Bun, hair pins, glasses and right-side hair inside. Coat lapels outside (clothing). Recropped after review. |
+| akane | 323 | 38 | 368 | 1.391 | 431,351 | Tiara, bangs and face inside. Long ponytail tips extend past the right rim; fire and tassel props outside. Recropped after review. |
+| ren | 393 | 10 | 288 | 1.778 | 323,046 | Head and hair fully inside. Background rock props in the upper corners outside. |
+| hikari | 336 | 40 | 288 | 1.778 | 404,684 | Head and upper hair ornament inside. Long hair tails extend past the rim at lower left and right; halo outside. |
+| jin | 415 | 0 | 288 | 1.778 | 369,477 | Hair inside, top strands near the rim. The head is small (about 160 px wide in the portrait), so the 288 minimum applies. Fur collar and chain props outside. |
+
+Two crops changed after review in commit `e3d087a`: shiori moved from `245,0,430` to `274,0,420` to drop a clipped prop sliver at the left edge, and akane moved from `323,0,368` to `323,38,368` to centre the head with less empty headroom.
+
+Fit was re-checked for this note on 256 px circle overlays of all 12 faces and on a 512 px overlay of sayo. Hair or headwear that extends past the rim: elena (cap rim), sayo (braid), akane (ponytail tips) and hikari (hair tails). Everything else outside the rim is clothing, props, effects or background.
+
+Verification: each face.png was reproduced from the committed portrait and its rectangle with mean abs diff 0 (max 0 in every channel): 12 of 12. The pre-recrop rectangles do not reproduce the committed shiori or akane files (mean abs diff 42.3 and 52.9), so the table is the record.
+
+Size: the 12 faces total 4,227,976 bytes (4.03 MiB). They are full-detail RGB PNG with no palette or indexed reduction, and no soft size goal is claimed for them.
+
+## 7. Provenance file
+
+`assets/images/characters/provenance.json` (new) has one record per art file: 36 keys `{id}/{filename}` in rank order, following the record-by-asset layout of `assets/audio/music_provenance.json`. Every record has `role` (`card`, `face` or `chibi`), `method`, `approval` (the fixed phrase "HPA-924 approved concept set; HPA-922 repo copy"), `source`, `reference` (the `character-prompts.json` key), `model` and `prompt`. Both are `null` because nothing was generated. Faces also carry `crop` (`x`, `y`, `side` and `resize`), and a short `note` appears only where it adds information.
+
+| Method | Records | Files |
+| --- | ---: | --- |
+| reused | 19 | 12 portraits (the approved JPG is the reference; the repo PNG is kept as the lossless master) and 7 chibis (byte-identical to the approved PNG) |
+| retouched | 5 | chibis for mio, tetsuo, kaito, shiori and hikari; border alpha cleared on 45, 49, 23, 10 and 6 pixels |
+| cropped | 12 | every `face.png`, cut from the committed portrait at the section 6 rectangle |
+| **Total** | **36** | |
+
+The file has no hash fields. Git pins the final files, and the review rounds dropped unenforced hashes, so the ZIP entry, the reference key and the crop rectangle are the only source identifiers.
+
+The file sits in the parent folder, outside the 12 per-ID directories that `pubspec.yaml` registers, so Flutter does not bundle it. The contract test asserts that `provenance.json` is absent from the `AssetManifest`.
+
+Before commit, a scratch check confirmed that the JSON parses, the 36 keys equal the 12 directory listings × 3 files, each crop lies inside 1024×1536, each ZIP entry exists, and no value contains a local path, URL, signature or hash.
+
+## 8. Contact sheet
+
+`docs/superpowers/validation/hpa-924-evidence/contact-sheet.png` is the only file in its folder. It is a 2024×1638 px RGB PNG of 1,950,521 bytes (1.86 MiB) with no text metadata.
+
+Layout: a 4×3 grid of per-ID cells in rank order (E to S), each labelled with its id.
+- Larger renders: portrait at 180×270; face square at 128; face circle at 128 (circle-clipped, on dark); chibi at 128 on dark and on light.
+- True-size samples on 64 px swatches, dark `#14171c` and light `#f2f2f2`, with each sample centred: face circle 40 px, face square 40 px and chibi 48 px.
+
+Rendering: Pillow 13.0.0 from the committed `assets/images/characters/{id}/` files, saved with `optimize=True`. Every downscale is Pillow `LANCZOS`. That is a smooth approximation of the app's `FilterQuality.medium`, not a pixel match. The circle clip is an antialiased mask, and the sheet uses no nearest-neighbour. The renderer is not committed, as in sections 1–5. The sheet is static: there is no browser page and no MCP capture.
+
+Visual inspection (my own viewing of every cell at native size, plus a 2x enlargement of the 40 px and 48 px samples as a scratch viewing aid that is not part of the sheet):
+- Read well at 40 px on dark: akane (red hair), jin (silver hair and blue eye), kaito, haruto (brown hair and orange scarf), mio, elena (white cap and rifle) and hikari.
+- Weakest at 40 px: shiori and rin. Dark hair dominates the chip and the face detail is minimal. ren is readable as dark hair on a lilac disc but has little facial detail.
+- On light, the pale backgrounds of rin, jin and hikari lose much of their edge against `#f2f2f2`, for both the circle and the square. The dark swatch is the clearer view for them.
+- Chibi 48 on dark: all twelve read as distinct characters. The dimmest are sayo, shiori and ren, whose dark hood, coat and outfit sit close to `#14171c`.
+- Chibi 48 on light: all twelve read. hikari (cream and gold dress) and rin (lilac and white) are the faintest and rely on the halo, staff and hair accents.
+- No clipping or overlap appeared in any cell or in the header at native size.
+
+These judgments are visual, from the 2x view; I did not measure contrast. Identity, outfit and effects were judged on the sheet itself. A side-by-side against the approved JPG exports was not done in this checkpoint.
+
 ## Status
 
-- Checkpoints 1–2 complete
+- Checkpoints 1–4 complete. Checkpoint 5 (final-head CI, MCP Chrome E2E at 390×844 and 320×568, Codex/Camp checks of the five retouched chibis) is NOT yet done.
