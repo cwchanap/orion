@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flame/flame.dart';
@@ -139,10 +140,14 @@ class _OrionGamePageState extends State<OrionGamePage> {
   bool _feedbackPreferencesLoaded = false;
   FirstMissionGuideStore? _firstMissionGuideStore;
   bool _firstMissionGuideCompleted = false;
-  // True only when initial load failed before campaign progress could resolve a
-  // missing (null) guide record — never set when Replay Tutorial or an explicit
-  // stored bool already settled the flag.
+  // True while the completion flag still owes an inference pass: the initial
+  // read failed or ran before campaign progress could resolve a missing
+  // (null) record — never set when Replay Tutorial or an explicit stored
+  // bool already settled the flag. A pending flag gets one settle attempt
+  // per Alpha mount, the only place its value is observed.
   bool _firstMissionGuideNeedsInference = false;
+  // Single-flight guard for the deferred settle attempt above.
+  bool _firstMissionGuideSettleInFlight = false;
   // Typed seen set for the HPA-413 contextual tips, loaded alongside the
   // guide flag before the loading gate clears; acknowledged in memory first,
   // then written through best-effort.
@@ -368,11 +373,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
         // committed Alpha result means this player cleared the tutorial's
         // mission before the flag existed, so the guide counts as done.
         // An explicit stored false — Replay Tutorial — is always honored,
-        // so replay survives restarts. A failed read settles as not-done:
-        // the callout simply re-arms on the next Alpha mount.
+        // so replay survives restarts. A failed read stays pending instead
+        // of settling: the callout re-arms and the deferred settle retries
+        // the read on the next Alpha mount.
         _firstMissionGuideCompleted =
             guideRead.value ?? freezeInferredCompletion;
-        _firstMissionGuideNeedsInference = false;
+        _firstMissionGuideNeedsInference = guideRead.failed;
         _seenTips = seenTips;
         _isLoading = false;
       });
@@ -515,6 +521,41 @@ class _OrionGamePageState extends State<OrionGamePage> {
       return (value: await store.loadCompleted(), failed: false);
     } catch (_) {
       return (value: null, failed: true);
+    }
+  }
+
+  /// The deferred settle for a still-pending inference, attempted once per
+  /// Alpha mount (the only place the flag is read). Runs the same pass the
+  /// startup and campaign-retry paths run: an explicit stored value wins, a
+  /// confirmed-missing record falls through to the Alpha-result inference
+  /// and freezes it, and a failed read leaves the flag pending for the next
+  /// mount. A Skip, Got it or replay choice landing mid-read already
+  /// cleared the pending flag, so the stale result is discarded.
+  Future<void> _settleFirstMissionGuideInference() async {
+    if (!_firstMissionGuideNeedsInference || _firstMissionGuideSettleInFlight) {
+      return;
+    }
+    _firstMissionGuideSettleInFlight = true;
+    try {
+      var store = _firstMissionGuideStore;
+      store ??= await _defaultFirstMissionGuideStore(null);
+      final guideRead = await _loadFirstMissionGuideCompleted(store);
+      if (!mounted || !_firstMissionGuideNeedsInference || guideRead.failed) {
+        return;
+      }
+      final inferred =
+          guideRead.value ??
+          (_committed.progress.resultFor(OrionCampaign.stageOneId) != null);
+      setState(() {
+        _firstMissionGuideStore ??= store;
+        _firstMissionGuideNeedsInference = false;
+        _firstMissionGuideCompleted = inferred;
+      });
+      if (guideRead.value == null && inferred) {
+        store?.setCompleted(true).catchError((_) {});
+      }
+    } finally {
+      _firstMissionGuideSettleInFlight = false;
     }
   }
 
@@ -1812,6 +1853,12 @@ class _OrionGamePageState extends State<OrionGamePage> {
       _boardViewport = null;
       _activeView = _ShellView.stage;
     });
+
+    // The guide flag is observed only on an eligible Alpha run, so a
+    // still-pending inference settles here rather than polling.
+    if (stage.id == OrionCampaign.stageOneId && mode != RunMode.endless) {
+      unawaited(_settleFirstMissionGuideInference());
+    }
   }
 
   void _showLockedStageFeedback(StageDefinition stage) {
