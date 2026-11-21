@@ -162,7 +162,7 @@ Before commit, a scratch check confirmed that the JSON parses, the 36 keys equal
 
 `docs/superpowers/validation/hpa-924-evidence/contact-sheet.png` is the only file in its folder. It is a 2024×1638 px RGB PNG of 1,950,521 bytes (1.86 MiB) with no text metadata.
 
-Layout: a 4×3 grid of per-ID cells in rank order (E to S), each labelled with its id.
+Layout: a 4 columns × 3 rows of per-ID cells in rank order (E to S), each labelled with its id.
 - Larger renders: portrait at 180×270; face square at 128; face circle at 128 (circle-clipped, on dark); chibi at 128 on dark and on light.
 - True-size samples on 64 px swatches, dark `#14171c` and light `#f2f2f2`, with each sample centred: face circle 40 px, face square 40 px and chibi 48 px.
 
