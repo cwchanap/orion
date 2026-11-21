@@ -177,7 +177,7 @@ void main() {
       }
     });
 
-    test('provenance.json has exactly one entry per art file', () {
+    test('provenance.json has a valid schema record for every art file', () {
       final file = File('$_artRoot/provenance.json');
       expect(file.existsSync(), isTrue, reason: '${file.path} is missing');
       final decoded = jsonDecode(file.readAsStringSync());
@@ -186,7 +186,8 @@ void main() {
         isA<Map<String, dynamic>>(),
         reason: 'provenance.json must be a JSON object keyed by "{id}/{file}"',
       );
-      final recorded = (decoded as Map<String, dynamic>).keys.toSet();
+      final map = decoded as Map<String, dynamic>;
+      final recorded = map.keys.toSet();
       final expected = _artKeys();
       expect(
         expected.difference(recorded),
@@ -198,6 +199,71 @@ void main() {
         isEmpty,
         reason: 'provenance.json has entries for files outside the contract',
       );
+
+      for (final character in Character.values) {
+        for (final (fileName, expectedRole) in [
+          ('portrait.png', 'card'),
+          ('face.png', 'face'),
+          ('chibi.png', 'chibi'),
+        ]) {
+          final key = '${character.name}/$fileName';
+          final entry = map[key];
+          expect(entry, isA<Map<String, dynamic>>(), reason: key);
+          final record = entry as Map<String, dynamic>;
+          expect(
+            record['role'],
+            expectedRole,
+            reason: '$key role must be "$expectedRole"',
+          );
+          final method = record['method'];
+          expect(
+            method,
+            isIn(_allowedProvenanceMethods),
+            reason:
+                '$key method must be one of $_allowedProvenanceMethods '
+                '(got $method)',
+          );
+          for (final field in ['approval', 'source', 'reference']) {
+            final value = record[field];
+            expect(
+              value,
+              isA<String>(),
+              reason: '$key $field must be a String',
+            );
+            expect(
+              (value as String).trim(),
+              isNotEmpty,
+              reason: '$key $field must not be empty',
+            );
+          }
+          if (method == 'generated') {
+            for (final field in ['model', 'prompt']) {
+              final value = record[field];
+              expect(
+                value,
+                isA<String>(),
+                reason: '$key $field must be recorded when method is generated',
+              );
+              expect(
+                (value as String).trim(),
+                isNotEmpty,
+                reason: '$key $field must not be empty when generated',
+              );
+            }
+          } else {
+            expect(
+              record['model'],
+              isNull,
+              reason: '$key model must be null when method is $method',
+            );
+            expect(
+              record['prompt'],
+              isNull,
+              reason: '$key prompt must be null when method is $method',
+            );
+          }
+        }
+      }
     });
 
     test('every face entry names its source portrait and crop rectangle', () {
@@ -369,6 +435,15 @@ void main() {
 /// The three files every roster member ships, in the order the contract names
 /// them.
 const _artFiles = ['portrait.png', 'face.png', 'chibi.png'];
+
+/// The five provenance methods allowed by the HPA-924 design spec.
+const _allowedProvenanceMethods = {
+  'reused',
+  'optimized',
+  'cropped',
+  'retouched',
+  'generated',
+};
 
 const _artRoot = 'assets/images/characters';
 
