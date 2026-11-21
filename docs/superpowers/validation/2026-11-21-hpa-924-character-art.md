@@ -178,6 +178,80 @@ Visual inspection (my own viewing of every cell at native size, plus a 2x enlarg
 
 These judgments are visual, from the 2x view; I did not measure contrast. Identity, outfit and effects were judged on the sheet itself. A side-by-side against the approved JPG exports was not done in this checkpoint.
 
+## 9. Automated checks and MCP Chrome E2E
+
+Automated checks were run locally on `735beb5` (the head before the evidence screenshots were added; `lib/`, `test/`, `pubspec.yaml` and every bundled asset are identical between that commit and the final head). A first full pass at `9928729` was repeated on `735beb5` because a wording-only commit landed while it ran; the only difference between them is `assets/images/characters/provenance.json`, which is not a bundled asset.
+
+### Part A: automated checks (final head `735beb5`)
+
+| Command | Result | Notes |
+|---|---|---|
+| `flutter test test/game/character_art_contract_test.dart` | `+14: All tests passed!`, exit 0 | Contract test for all 36 PNGs, provenance keys and `AssetManifest` membership |
+| `dart format --output=none --set-exit-if-changed test/game/character_art_contract_test.dart` | exit 0, `Formatted 1 file (0 changed)` | |
+| `flutter analyze` | exit 1: `67 issues found`, 0 warnings, 0 errors | All 67 are info-level `deprecated_member_use` on `package:flutter/material.dart`. The contract test's import at line 6 is the same import on `main`. |
+| `flutter test` (whole suite) | `+1845 -133` (1,978 tests), exit 1 | All 133 failures are in widget tests (see below). `test/game/`, components, feedback and the contract test all pass. |
+| `flutter build web --release` | `✓ Built build/web`, exit 0, 1m25s | Default build (CanvasKit from the gstatic CDN). `build/` is git-ignored. |
+
+Full-suite failures (133): `widget/mission_chrome_test.dart` 33, `widget/camp_view_test.dart` 27, `widget/stage_briefing_sheet_test.dart` 21, `widget/codex_view_test.dart` 19, `widget/flare_view_test.dart` 14, `widget/tower_inspector_test.dart` 7, `widget/mission_command_dock_test.dart` 5, `widget/scene_parity_regression_test.dart` 3, `widget/orion_typography_test.dart` 3, `widget/world_map_command_deck_test.dart` 1. Every failure has the same message: `An animation is still running even after the widget tree was disposed.`, with a pending `RelayoutWhenSystemFontsChangeMixin` frame callback. The same 133 test names fail on a `git archive main` snapshot run with the same resolved packages (`+333 -133` for those ten files), and they also failed on the earlier full pass, which started at `9928729` and overlapped the 19:00 commit. They therefore predate this change and were not touched here. The remote unit job on the design-only head `38c44eb` passes, which points to a host-specific difference (this host re-resolves `clock`, `test_api` and `stack_trace` to newer versions than `pubspec.lock` pins, i.e. a newer Flutter SDK than CI). The authoritative run of the whole suite on the final head is the PR's CI, recorded in section 10.
+
+Remote PR checks on the earlier design-only head `38c44eb` (before any art commit): Build & lint, Unit test, Integration test (Android), Android and iOS debug builds, and Audio asset contract all passed. Results for the final head are in section 10.
+
+### E2E method (MCP Chrome)
+
+- **Browser:** browser-use MCP `browser_exec` in local mode. The tool drove its own Chromium on a temp profile, not a user Chrome. No cloud browser, no login, and no site other than the local app was opened.
+- **Build:** `flutter build web --release --no-web-resources-cdn` (1m30s), so CanvasKit is served locally. Resource-timing shows 64 requests, all to `127.0.0.1`.
+- **Server:** `python3 -m http.server 8917 --bind 127.0.0.1 --directory build/web`, stopped after the captures.
+- **Viewports:** 390×844 and 320×568, device scale 2, mobile emulation with touch on. The viewport changed through CDP without a reload.
+- **Path:** Title → Codex. The Codex button was located through Flutter's semantics tree. No stage, no wave, no reload.
+- **Checks:** every tile at 390 and 320 was compared side by side with its approved chibi. The six inspected details (Hikari, Kaito, Mio, Shiori, Tetsuo, Haruto) were checked at 390, and Mio at 320.
+
+### Per-character comparison
+
+Approved references are `character-concepts-v3/chibi/*.png`. "Identical" means the repo chibi is byte-identical to `main` and its decoded RGBA equals the approved file.
+
+| Character (rank) | Tile 390 | Tile 320 | Detail (56 px) | Versus approved chibi | Retouched? |
+|---|---|---|---|---|---|
+| Hikari (S) | OK | OK | 390 OK | Matches: white and gold robe, golden sun staff | Yes, 6 px (alpha 1→0, left edge x=0, y 86–93). No visible change. |
+| Jin (S) | OK | OK | not opened | Matches: silver hair, navy coat, blue flame | No, identical |
+| Akane (A) | OK | OK | not opened | Matches: red hair, red and gold outfit, flame staff | No, identical |
+| Ren (A) | OK | OK | not opened | Matches: purple hair and dark coat | No, identical |
+| Elena (B) | OK | OK | not opened | Matches: white cap, white coat, rifle | No, identical |
+| Shiori (B) | OK | OK | 390 OK | Matches: dark hair, white coat, green magic | Yes, 10 px (alpha 1→0, top row y=0, x 194–203). No visible change. |
+| Rin (C) | OK | OK | not opened | Matches: lavender hair and robe | No, identical |
+| Kaito (C) | OK | OK | 390 OK | Matches: blond spiky hair, gold and black outfit, staff | Yes, 23 px (alpha 1→0, bottom row y=511). No visible change. |
+| Sayo (D) | OK | OK | not opened | Matches: dark hair, green hat, bow | No, identical |
+| Tetsuo (D) | OK | OK | 390 OK | Matches: brown outfit, rifle, drones | Yes, 49 px (43 alpha 1→0, 6 alpha 2→0, bottom row). No visible change. |
+| Haruto (E) | OK | OK | 390 OK | Matches: brown hair, orange scarf, rifle | No, identical |
+| Mio (E) | OK | OK | 390 OK, 320 OK | Matches: orange ponytail, red and white outfit, flame staff | Yes, 45 px (33 alpha 1→0, 12 alpha 2→0, bottom row). No visible change. |
+
+For the five retouched chibis, every pixel with alpha above zero in the approved file has identical RGB in the repo file. The only changes are alpha 1 or 2 going to 0, on the outermost image row or column, outside each subject's bounding box. At alpha 1 or 2 the pixels are essentially invisible. Tile chibi size (46 px) comes from the code (`Size.square(46)`), not from pixel measurement. The detail chibi measures 56×56 CSS px in the semantics tree.
+
+### Captures (native pixels, no annotations)
+
+- [`hpa-924-evidence/codex-grid-390x844.png`](hpa-924-evidence/codex-grid-390x844.png): 780×1688, 532,335 bytes. Full 390×844 viewport, Characters tab, Hikari selected. All 12 tiles visible.
+- [`hpa-924-evidence/codex-grid-320x568.png`](hpa-924-evidence/codex-grid-320x568.png): 640×1136, 371,192 bytes. Full 320×568 viewport, Haruto selected. All 12 tiles visible without scrolling.
+- [`hpa-924-evidence/codex-detail-retouched-390x844.jpg`](hpa-924-evidence/codex-detail-retouched-390x844.jpg): 2372×1084, 289,917 bytes, JPEG q85. Six native crops of the 390 detail card (CSS y 505–772), in a 3×2 layout: Hikari, Kaito, Mio, then Shiori, Tetsuo, Haruto.
+- [`hpa-924-evidence/codex-detail-320x568.png`](hpa-924-evidence/codex-detail-320x568.png): 640×490, 112,434 bytes. Native crop of the Mio detail card at 320×568 (CSS y 251.5–496).
+
+### Asset requests and manifest
+
+- Server log: 53 requests, all HTTP 200, zero 404s. The page requested all 12 `chibi.png` files (`haruto` twice, when its tile was rebuilt, still 200) and `AssetManifest.bin.json` (200).
+- `face.png`, `portrait.png` and `provenance.json` were never requested by the page.
+- `AssetManifest.bin` (identical to the decoded `AssetManifest.bin.json`) contains all 36 character keys (12 folders × chibi, face, portrait). The string `provenance` does not occur in it.
+
+### Deviations and known gaps
+
+- **Full suite (local):** 133 failures in 10 widget test files, identical on a `main` snapshot run on the same host; not fixed here (see above).
+- **Lock file:** `pubspec.lock` was modified locally by the host's Flutter re-resolution and is NOT part of the PR (restored before the final commit). Flutter re-resolves transitive packages on each `flutter test`: `clock` 1.1.2→1.1.3, `stack_trace` 1.12.1→1.12.2, `test_api` 0.7.12→0.7.14, a new `listen` 1.0.1, and a changed `vector_math` hash. The `main` snapshot re-resolved to the same versions, so the comparison is fair.
+- **Two web builds:** the default build (1m25s, gstatic CanvasKit) and the local-CanvasKit build used for E2E (1m30s).
+- **Head moved during the run:** `735beb5` landed during the first pass, so Part A was repeated on it. The E2E build was made from the same bundled inputs.
+- **Detail composite format:** JPEG q85. The PNG version was 688 KB, above the ~600 KB budget.
+- **Detail crop limits:** the Signature card sits below the fold and the bottom nav at both sizes, so the crops stop above it.
+- **Grid selection:** the grid captures show different selected tiles (Hikari at 390, Haruto at 320). The selection highlight is the only non-art difference.
+- **Visual judgement:** comparisons were made by eye on side-by-side crops at reduced size. There is no automated image diff, and no HPA-922 Codex or 320px baseline exists.
+- **No Camp portrait smoke:** no `portrait.png` bytes changed on this branch (zero files in `git diff main..HEAD`), so the Camp `Image.asset` check is not required.
+- **Faces:** the 12 `face.png` files are bundled but not requested, which is by design until HPA-926. They are validated through the contact sheet only.
+
 ## Status
 
-- Checkpoints 1–4 complete. Checkpoint 5 (final-head CI, MCP Chrome E2E at 390×844 and 320×568, Codex/Camp checks of the five retouched chibis) is NOT yet done.
+- Checkpoints 1–5 complete locally; the final-head CI result is recorded in section 10 after the push.
