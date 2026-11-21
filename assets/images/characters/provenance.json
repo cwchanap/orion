@@ -7,12 +7,12 @@
     "reference": "e1-haruto-sakaki",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "haruto/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "haruto/portrait.png",
     "reference": "e1-haruto-sakaki",
     "model": null,
@@ -42,12 +42,12 @@
     "reference": "e2-mio-tachibana",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "mio/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "mio/portrait.png",
     "reference": "e2-mio-tachibana",
     "model": null,
@@ -62,7 +62,7 @@
   "mio/chibi.png": {
     "role": "chibi",
     "method": "retouched",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; 1px border retouched in HPA-924",
     "source": "character-concepts-v3/chibi/e2-mio-tachibana.png",
     "reference": "e2-mio-tachibana",
     "model": null,
@@ -77,12 +77,12 @@
     "reference": "d1-sayo-kitami",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "sayo/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "sayo/portrait.png",
     "reference": "d1-sayo-kitami",
     "model": null,
@@ -93,7 +93,7 @@
       "side": 352,
       "resize": "LANCZOS to 512x512"
     },
-    "note": "long side braid runs past the bottom rim; bow hand and arrow cross the rim (props)"
+    "note": "accepted circle-rim overflow: long side braid runs past the bottom rim; bow hand and arrow cross the rim (props)"
   },
   "sayo/chibi.png": {
     "role": "chibi",
@@ -113,12 +113,12 @@
     "reference": "d2-tetsuo-kanda",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "tetsuo/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "tetsuo/portrait.png",
     "reference": "d2-tetsuo-kanda",
     "model": null,
@@ -133,7 +133,7 @@
   "tetsuo/chibi.png": {
     "role": "chibi",
     "method": "retouched",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; 1px border retouched in HPA-924",
     "source": "character-concepts-v3/chibi/d2-tetsuo-kanda.png",
     "reference": "d2-tetsuo-kanda",
     "model": null,
@@ -148,22 +148,23 @@
     "reference": "c1-rin-fuyutsuki",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "rin/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "rin/portrait.png",
     "reference": "c1-rin-fuyutsuki",
     "model": null,
     "prompt": null,
     "crop": {
-      "x": 302,
+      "x": 342,
       "y": 0,
-      "side": 380,
+      "side": 304,
       "resize": "LANCZOS to 512x512"
-    }
+    },
+    "note": "tightened from 302,0,380 to 342,0,304 so facial features, snowflake ornament and blue hair highlights read at 40 px"
   },
   "rin/chibi.png": {
     "role": "chibi",
@@ -183,12 +184,12 @@
     "reference": "c2-kaito-narumi",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "kaito/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "kaito/portrait.png",
     "reference": "c2-kaito-narumi",
     "model": null,
@@ -203,7 +204,7 @@
   "kaito/chibi.png": {
     "role": "chibi",
     "method": "retouched",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; 1px border retouched in HPA-924",
     "source": "character-concepts-v3/chibi/c2-kaito-narumi.png",
     "reference": "c2-kaito-narumi",
     "model": null,
@@ -218,12 +219,12 @@
     "reference": "b1-elena-volkova",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "elena/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "elena/portrait.png",
     "reference": "b1-elena-volkova",
     "model": null,
@@ -234,7 +235,7 @@
       "side": 320,
       "resize": "LANCZOS to 512x512"
     },
-    "note": "cap rim corners extend past the inscribed circle (headwear)"
+    "note": "accepted circle-rim overflow: cap rim corners extend past the inscribed circle (headwear); y=0 is already at the top portrait edge"
   },
   "elena/chibi.png": {
     "role": "chibi",
@@ -254,27 +255,28 @@
     "reference": "b2-shiori-kusanagi",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "shiori/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "shiori/portrait.png",
     "reference": "b2-shiori-kusanagi",
     "model": null,
     "prompt": null,
     "crop": {
-      "x": 274,
+      "x": 328,
       "y": 0,
-      "side": 420,
+      "side": 320,
       "resize": "LANCZOS to 512x512"
-    }
+    },
+    "note": "tightened from 274,0,420 to 328,0,320 so glasses and facial features read at 40 px; accepted circle-rim overflow on outer left hair-pin tips"
   },
   "shiori/chibi.png": {
     "role": "chibi",
     "method": "retouched",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; 1px border retouched in HPA-924",
     "source": "character-concepts-v3/chibi/b2-shiori-kusanagi.png",
     "reference": "b2-shiori-kusanagi",
     "model": null,
@@ -289,12 +291,12 @@
     "reference": "a1-akane-hinomori",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "akane/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "akane/portrait.png",
     "reference": "a1-akane-hinomori",
     "model": null,
@@ -305,7 +307,7 @@
       "side": 368,
       "resize": "LANCZOS to 512x512"
     },
-    "note": "long ponytail tips extend past the right rim"
+    "note": "accepted circle-rim overflow: long ponytail tips extend past the right rim; full tail reaches the portrait edge"
   },
   "akane/chibi.png": {
     "role": "chibi",
@@ -325,12 +327,12 @@
     "reference": "a2-ren-kurosawa",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "ren/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "ren/portrait.png",
     "reference": "a2-ren-kurosawa",
     "model": null,
@@ -340,7 +342,8 @@
       "y": 10,
       "side": 288,
       "resize": "LANCZOS to 512x512"
-    }
+    },
+    "note": "kept at minimum 288 px crop: head and crown hair fill the inscribed circle; dark hair over lilac background is inherent to the approved portrait"
   },
   "ren/chibi.png": {
     "role": "chibi",
@@ -360,12 +363,12 @@
     "reference": "s1-hikari-amatsu",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "hikari/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "hikari/portrait.png",
     "reference": "s1-hikari-amatsu",
     "model": null,
@@ -376,12 +379,12 @@
       "side": 288,
       "resize": "LANCZOS to 512x512"
     },
-    "note": "long hair tails extend past the rim at lower left and right"
+    "note": "kept at minimum 288 px crop (reads clearly on dark UI chrome); accepted circle-rim overflow on long lower hair tails"
   },
   "hikari/chibi.png": {
     "role": "chibi",
     "method": "retouched",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; 1px border retouched in HPA-924",
     "source": "character-concepts-v3/chibi/s1-hikari-amatsu.png",
     "reference": "s1-hikari-amatsu",
     "model": null,
@@ -396,12 +399,12 @@
     "reference": "s2-jin-kamishiro",
     "model": null,
     "prompt": null,
-    "note": "kept byte-unchanged from the HPA-922 repo copy; lossless master of the approved JPG export"
+    "note": "reused byte-unchanged from the HPA-922 repo PNG; decoded RGB matches the approved JPG within JPEG tolerance"
   },
   "jin/face.png": {
     "role": "face",
     "method": "cropped",
-    "approval": "HPA-924 approved concept set; HPA-922 repo copy",
+    "approval": "HPA-924 approved concept set; cropped in HPA-924 from HPA-922 portrait.png",
     "source": "jin/portrait.png",
     "reference": "s2-jin-kamishiro",
     "model": null,
@@ -411,7 +414,8 @@
       "y": 0,
       "side": 288,
       "resize": "LANCZOS to 512x512"
-    }
+    },
+    "note": "kept at minimum 288 px crop (head is ~160 px wide in the portrait and top hair strands sit near the rim; reads clearly on dark UI chrome)"
   },
   "jin/chibi.png": {
     "role": "chibi",

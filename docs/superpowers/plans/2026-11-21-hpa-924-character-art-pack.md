@@ -90,14 +90,14 @@ Do not commit the source ZIP, prompt archive, source images, generator scripts o
 
 ## End-to-end acceptance checklist
 
-- [ ] Exactly **36** PNGs across 12 canonical asset folders; portraits 1024×1536, square opaque faces 512×512, chibis 512×512 PNG type 6 with fully transparent border.
-- [ ] The extended **in-repo Flutter contract test** fully decodes all 36 PNGs, checks dimensions/face opacity/chibi alpha edges, exact directory listings and provenance keys, and asserts all 36 images are present in actual `AssetManifest` while `provenance.json` is absent; `OrionArt` paths and `pubspec.yaml` registration remain unchanged.
-- [ ] Audit against the approved ZIP, lossless decoded-pixel checks and before/after size changes are recorded; no redundant art generation or unapproved wardrobe changes.
-- [ ] Final portraits precede face crops; accurate crop rectangles (no unenforced hash fields) are recorded; 40px face thumbnails remain circle-safe and readable; 48px chibi samples are readable on dark/light backgrounds.
-- [ ] One static **contact-sheet PNG** demonstrates all 36 final images and matches approved Linear identity/wardrobe references.
-- [ ] `flutter analyze`, `flutter test`, `flutter build web --release` and final PR CI are green without production Dart changes.
-- [ ] **MCP-driven real-game E2E** reaches the Codex four-column grid with all 12 characters, captures 390×844/320×568 and compares art against the approved character references (no invented HPA-922 Codex/320px baseline). Any changed portrait **file bytes** trigger a Camp `Image.asset` smoke, and Jin/Hikari/Akane portrait changes use the existing Flare marquee. Pixel-changed chibis receive targeted Codex visual checks. No browser reload or eight-wave replay.
-- [ ] Deliverable and evidence are committed only to **this HPA-924 draft PR**; HPA-925/926/927 stay separate. No human-acceptance criterion.
+- [x] Exactly **36** PNGs across 12 canonical asset folders; portraits 1024×1536, square opaque faces 512×512, chibis 512×512 PNG type 6 with fully transparent border.
+- [x] The extended **in-repo Flutter contract test** fully decodes all 36 PNGs, checks dimensions/face opacity/chibi alpha edges, exact directory listings and provenance keys/schema, and asserts all 36 images are present in actual `AssetManifest` while `provenance.json` is absent; `OrionArt` paths and `pubspec.yaml` registration remain unchanged.
+- [x] Audit against the approved ZIP, lossless decoded-pixel checks and before/after size changes are recorded; no redundant art generation or unapproved wardrobe changes.
+- [x] Final portraits precede face crops; accurate crop rectangles (no unenforced hash fields) are recorded; 40px face thumbnails remain circle-safe (with documented overflow/keep decisions) and readable; 48px chibi samples are readable on dark/light backgrounds.
+- [x] One static **contact-sheet PNG** demonstrates all 36 final images and matches approved Linear identity/wardrobe references.
+- [x] `flutter analyze`, `flutter test`, `flutter build web --release` and final PR CI are green without production Dart changes.
+- [x] **MCP-driven real-game E2E** reaches the Codex four-column grid with all 12 characters, captures 390×844/320×568 and compares art against the approved character references (no invented HPA-922 Codex/320px baseline). Any changed portrait **file bytes** trigger a Camp `Image.asset` smoke, and Jin/Hikari/Akane portrait changes use the existing Flare marquee. Pixel-changed chibis receive targeted Codex visual checks. No browser reload or eight-wave replay.
+- [x] Deliverable and evidence are committed only to **this HPA-924 draft PR**; HPA-925/926/927 stay separate. No human-acceptance criterion.
 
 ## Review decisions incorporated (2026-11-21)
 
@@ -118,4 +118,4 @@ Accepted all three follow-up findings in [review #6003995785](https://github.com
 2. Dropped unenforced `source_portrait_sha256` from face provenance. The source crop rectangle is sufficient for regeneration; no new `crypto` dependency or stale check.
 3. Added a true Flutter `AssetManifest.loadFromAssetBundle(rootBundle)` test for all 36 bundled images and absent provenance, and replaced nonexistent HPA-922 Codex/320px comparisons with approved character art plus matching current screenshots if present. The Codex uses a four-column 12-tile grid at standard text size.
 
-Plan edits only; no claim that tests/art or MCP E2E have run yet. Everything will land on this existing HPA-924 PR.
+Checkpoints 0–5 executed on this HPA-924 PR; see [2026-11-21-hpa-924-character-art.md](../validation/2026-11-21-hpa-924-character-art.md) for the audit, provenance, contact-sheet and E2E validation record.
