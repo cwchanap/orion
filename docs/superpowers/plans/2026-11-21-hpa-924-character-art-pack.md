@@ -1,90 +1,110 @@
 # HPA-924 — Last Hearth character art pack (Implementation Plan)
 
 Date: 2026-11-21  
-Ticket: https://linear.app/cwchanap/issue/HPA-924/orion-produce-the-last-hearth-character-art-pack  
+Linear: https://linear.app/cwchanap/issue/HPA-924/orion-produce-the-last-hearth-character-art-pack  
 Design: [HPA-924 character art pack](../specs/2026-11-21-hpa-924-character-art-pack-design.md)  
-Baseline: `main` @ `3616b232425bf340ea63d1e0a609b25ba3ac66b2` (HPA-922 and HPA-923 merged)
+Baseline: `main` @ `3616b232425bf340ea63d1e0a609b25ba3ac66b2` (HPA-922 and HPA-923 merged)  
+Review: https://github.com/cwchanap/orion/pull/52#pullrequestreview-6003901530
 
-**PR policy: one PR for this one art ticket.** This draft starts with design and plan only. Produce the art, contact sheet, validation evidence and any design-review fixes on this same branch/PR; never create a separate implementation PR. Steps below are working checkpoints, not PR boundaries.
+**One ticket → one PR.** This draft begins with design and plan. Add the final art, minimal CI contract extension, provenance and validation notes **to this same PR**. Checkpoints are work slices, not new PRs. Keep the plan YAGNI: use existing paths and tests; no production Dart, new art registry, separate Python audit, CI job, asset format change, or new Flutter dependency.
 
-## Scope guard
+## Existing baseline and contract
 
-HPA-924 is an **asset-production** task, not an art + coding task. There is no Dart or game-UI implementation in this PR. HPA-925 owns enemy/board art, HPA-927 sound, HPA-926 final character-asset wiring/retheme. Do not regenerate existing approved art gratuitously. The existing 12 per-ID folder manifest entries, 24 `portrait.png`/`chibi.png` files and `OrionArt` paths are already in main: implement the ticket as **reuse/retouch/optimize 24 existing images + add 12 missing face images**, with replacements only when needed.
+All 12 `assets/images/characters/{Character.name}/` directories already have `portrait.png` at **1024×1536** and `chibi.png` at **512×512**; the 24 files total **~21.14 MiB**. All directories are already registered in `pubspec.yaml`. The existing `OrionArt` descriptors and `test/game/character_art_contract_test.dart` use those exact paths and enforce RGBA (PNG type 6) for chibis.
 
-The HPA-924 ticket uses the names “card / face / chibi”; this repository uses **`portrait.png` for the card**. Final convention: `portrait.png` 1024 × 1536, `face.png` 512 × 512, `chibi.png` 512 × 512 RGBA, under `assets/images/characters/{Character.name}/`. Do not add `card.png` or change Flutter paths. Every image remains PNG because the existing contract and loader require those extensions. Do not change `pubspec.yaml` unless the current directory entries disappear.
+Deliver **exactly 36 images** after this ticket: **`portrait.png` = ticket “card”, `face.png` = new opaque square image, `chibi.png` = existing full-body RGBA battle sprite** in each directory. No `card.png`, path/manifest changes or face widget yet; HPA-926 owns face UI integration and the winter retheme. HPA-925 owns enemies/boards; HPA-927 SFX.
 
-## Checkpoint 1 — Input audit and keep/redo decisions
+## Checkpoint 0 — Extend the existing test, first
 
-Inputs: HPA-924's attached **approved concepts + chibi + prompts ZIP**, HPA-921's approved lineup/chibi sheet and the files on `main`. The approved ZIP is a production source, **not** something to add verbatim to the repository.
+Modify **only** `test/game/character_art_contract_test.dart` (not `lib/`):
 
-1. Inspect the two existing files for every ID: `haruto`, `mio`, `sayo`, `tetsuo`, `rin`, `kaito`, `elena`, `shiori`, `akane`, `ren`, `hikari`, `jin`.
-2. Verify real dimensions, alpha transparency and visual identity against the matching source concept (not just that the PNG opens). Pay special attention to transparent chibi exterior, uncropped limbs, hair/outfit consistency and detail at 48px. Check C/B/A/S effect hierarchy without changing the approved designs.
-3. Record **keep / optimize / retouch / regenerate** for each current portrait and chibi, with specific failure reasons. The existing **24 images total ~21.14 MiB**, so record each asset's bytes for before/after comparison.
-4. Confirm the HPA-924 ZIP is accessible locally and identify per-character prompt keys (`e1-haruto-sakaki`, etc.) by name; map them to the canonical `Character.name` IDs. Keep the image references local/private, and do not print, export or commit credentials.
+1. Keep looping over the existing `Character.values` and existing descriptor/manifest assertions. For each directory, assert the **exact set** `{portrait.png,face.png,chibi.png}` to prevent extra bundled variants, and assert image dimensions: portrait 1024×1536; face 512×512; chibi 512×512 + IHDR PNG type 6. Do not hand-maintain another 12-ID list.
+2. Add a bounded async pixel check through `dart:ui` (`instantiateImageCodec` → `getNextFrame` → `toByteData(format: ui.ImageByteFormat.rawRgba)` → dispose frame/codec): every chibi has **fully transparent alpha on its 1px four-edge border**. A transparent border is a useful anti-clipping guard but does **not** replace small-size visual inspection.
+3. Decode/read `assets/images/characters/provenance.json` and assert its JSON object key set equals `Character.values` cross `{portrait.png,face.png,chibi.png}` (**36 unique entries**); optionally assert that each record has a method and source reference. The parent provenance file is not bundled by the already registered subdirectories.
+4. A test change is **allowed** in an otherwise asset-only PR. No additional Python/Pillow runtime checks are necessary; this is durable in existing Flutter CI. Test-first means it will initially fail on missing faces/provenance; complete those assets **on the same PR** before requesting green final CI/merge.
 
-**Gate:** a 12-character audit table has no unresolved identity or source mapping. **Do not** start a new batch of API generation when approved files already pass.
+**Gate:** the new checks have failed as expected for missing faces/provenance and are committed in this draft; subsequent checkpoints bring them green. Do not merge a red PR.
 
-## Checkpoint 2 — Deliver 12 square face portraits
+## Checkpoint 1 — Audit approved source ZIP versus existing 24 files
 
-Paths: `assets/images/characters/{id}/face.png` (new).
+Inputs: approved HPA-924 character concepts/chibis/prompts ZIP, HPA-921 approved lineup/chibi sheet, and current repo PNGs. The ZIP stays local/private.
 
-1. Use the approved `portrait.png`/source concept to crop or reframe a **512 × 512** view with readable eyes, hair silhouette and shoulders. Keep a little space around hair and avoid a crop of the existing chibi. Use local image tooling; no production dependency required.
-2. At **40 logical px** on dark and light UI mock backgrounds, compare to the lineup for recognizable identity and clean contrast. If the existing source cannot produce a legible crop, generate a **reference-conditioned** face variant using the approved image and the character's prompt; use the image model named in HPA-924 when it is available. Do not invent a new outfit.
-3. Keep PNG extensions, final size and filenames deterministic. No additional `face_alt` or unused export variants in the app's asset directories.
+1. Match each existing `{id}/portrait.png` and `{id}/chibi.png` to its source ZIP entry using **SHA-256 byte comparison** first (these assets were originally copied from that source during HPA-922). A byte-identical approved original needs **no second identity review**; inspect only 48px readability if chibi, or visual fit for its role.
+2. For nonidentical files, compare decoded pixels and approved design details; make a concrete **keep / lossless-optimize / retouch / regenerate** decision with reason. Check rank effect hierarchy and hair/outfit continuity; four summer outfits remain Hikari, Akane, Mio and Kaito.
+3. Capture the current per-file sizes and source ZIP entry references in a small validation table. Do not print credentials, add source ZIP contents to Git, invent new source IDs, or regenerate approved matches by default. Use the existing per-character `Character.name` mapping.
 
-**Gate:** all 12 `face.png` files decode at 512 × 512 and are visually distinct at 40px on the contact-sheet preview. These files will be **unreferenced by today's game UI** until HPA-926; that is intentional.
+**Gate:** each of 24 existing assets has a documented provenance source and an explicit keep/redo outcome.
 
-## Checkpoint 3 — Finalize and optimize the 24 currently bundled assets
+## Checkpoint 2 — Finalize portraits and chibis **before** cropping faces
 
-Paths: `assets/images/characters/{id}/portrait.png` and `chibi.png` (in place).
+Paths: the existing `assets/images/characters/{id}/portrait.png` and `chibi.png`.
 
-1. **Keep** image data unchanged when the approved portrait/chibi already meets the spec. For failing images, retouch or generate an approved-reference-conditioned replacement; preserve the approved stylish outfits. Hikari, Akane, Mio and Kaito retain summer designs.
-2. Keep portraits exactly **1024 × 1536 PNG**, full-frame, and chibis exactly **512 × 512 RGBA PNG**, with non-opaque exterior. Character/effects must be fully in frame and visibly legible at 48px. The current `OrionArtDescriptor` takes the whole sprite image; **do not rely on a source-rect crop or new code**.
-3. Optimize PNG bytes (lossless first, optional palette reduction only after same-size visual inspection). HPA-924's **~200 KB card** is a soft target; current portraits are ~1–2.2 MiB. Do not lower resolution, change to WebP or produce perceptibly degraded images just to satisfy a nominal limit. Report sizes and trade-offs.
-4. Re-run the exact HPA-922 character-art contract after replacements, especially 12 directory registration, path names, 1024 × 1536/512 × 512 dimensions and RGBA chibis. Existing Camp and battle rendering must continue using the same paths.
+1. Reuse already approved matches unchanged. Retouch/regenerate **only** files that fail approved identity, shape, transparency, scale or visual legibility, using reference-conditioned generation when needed. Preserve approved 12-character roster, adult styling and summer/v2 outfits.
+2. Keep dimensions/paths fixed: **1024×1536 portraits**, **512×512 RGBA type-6 chibis**. No new loader, Dart production changes, SVG, WebP or atlas; no cropped sprite reference rectangles. Use current tests to reject accidental format changes.
+3. **Portraits:** lossless optimize first; optionally use palette/indexed PNG reduction **only for portraits**, after comparing the visible result to the approved artwork. **Chibis:** lossless optimization only, with RGBA type-6 preserved and color-type conversion off (e.g. `oxipng --nc`); or leave the file unchanged. Do not use indexed `pngquant` output for chibis.
+4. For every file claimed “losslessly optimized”, compare **decoded RGBA pixels** before/after, not just byte hashes. Record a pixel-equal yes/no outcome and before/after bytes. If the pixels are equal, do not spend an extra browser visual test on that file. If they differ, treat as changed art with a visual check.
+5. The card-size suggestion (~200 KB) is a **soft** optimization goal, not a reason to shrink dimensions, change format or damage fidelity. Document exceptions.
 
-**Gate:** all 24 current-path images are final or intentionally retained approved originals, contracts pass, no Dart diffs.
+**Gate:** the 24 final-path runtime assets are fixed; the old 24-file test assertions pass; the new 36-file check still waits for faces and provenance. No production Dart diff.
 
-## Checkpoint 4 — Provenance, asset inventory and contact sheet
+## Checkpoint 3 — Create 12 opaque, circle-safe face thumbnails **from finalized portraits**
 
-Create:
-- `assets/images/characters/provenance.json` (36 records, keyed by ID/role/path; source reference, approved/reused/cropped/generated method, source hash/identifier, exact generation prompt and model when applicable, output hash).
-- `docs/superpowers/validation/2026-11-21-hpa-924-character-art.md` (audit table, before/after sizes, validation commands/results, browser screenshot links, and deviations).
-- A **single contact-sheet image** linked by the validation note, with all 36 finals plus representative 40px face and 48px chibi checks on dark/light backgrounds. Store a suitably sized artifact under `docs/superpowers/validation/hpa-924-evidence/`, without embedding full source concepts.
+Paths: `assets/images/characters/{id}/face.png`.
 
-For unchanged or locally cropped images, record **no model generation** rather than guessing a model name. Reference the approval source through the stable Linear ticket and attachment title, not expiring signed URLs. Do not commit the ZIP, staging files, private keys, disposable candidates or local source-path secrets. If generation was used, preserve prompt text/model with provenance for reproducibility.
+1. Use the **final** 1024×1536 approved portrait as the crop/reframe source, not a draft portrait and **never** the 512px chibi. Save **512×512 opaque PNG** with portrait-derived background; preserve hairstyle, face and upper shoulders.
+2. Compose essential hair and face **inside the centered inscribed circle**, even though output stays a square image. This allows HPA-926 to choose a circular squad chip without clipping the character's defining features. Do not pre-mask into a circle; retain a complete square.
+3. Record the source crop rectangle (coordinates relative to the final portrait), its source portrait **SHA-256** and transform in provenance. If a finalized portrait later changes, check the source SHA and re-crop its face before concluding the art is complete.
+4. At 40 logical px, compare each face against the approved lineup on dark and light mock backgrounds. If the final portrait cannot yield a recognizable crop, make a **reference-conditioned face generation** using the same approved character concept; record prompt/model, preserve outfit/hair/identity. Keep only the final `face.png` in each registered directory.
 
-**Gate:** there are exactly 36 final playable image files; one provenance entry per file; contact sheet demonstrates all 12 identities and visual size checks.
+**Gate:** all 12 faces are distinct, readable, 512×512 and opaque, with circle-safe framing and accurate crop provenance.
 
-## Checkpoint 5 — Automated acceptance, then MCP browser E2E
+## Checkpoint 4 — Final provenance and a **single static** contact sheet
 
-**Local checks on the final asset tree:**
+Files to commit:
+- `assets/images/characters/provenance.json`: JSON object with **36 keys**, one for each `{id}/{filename}`. Include role/source approval, method (`reused`/`optimized`/`cropped`/`retouched`/`generated`), stable source ZIP entry or art reference, source portrait SHA/crop rect **for cropped faces**, generation model and actual prompt **only if generated**. Follow the clear record-by-asset style of `assets/audio/music_provenance.json`. **No output hash** field: Git already pins final outputs.
+- `docs/superpowers/validation/2026-11-21-hpa-924-character-art.md`: keep/redo audit, source ZIP compare results, decoded-pixel equality for lossless optimization, before/after bytes, test/CI evidence, MCP screenshot references and justified deviations.
+- `docs/superpowers/validation/hpa-924-evidence/contact-sheet.png`: exactly one composed PNG showing all 12 IDs × three variants, 40px faces and 48px chibis on both dark and light backgrounds. Render locally with Pillow/comparable tool via ignored `tmp/`, using smooth downscale that approximates current `FilterQuality.medium`. **No temporary web page** or MCP capture of the contact sheet.
 
-1. Run a one-off image audit (local Python/Pillow or equivalent; no new production library) enumerating `Character`'s 12 IDs and exactly the three required image filenames per directory. Assert PNG decode, precise dimensions, chibi RGBA **and actual transparent pixels**, and the existence/uniqueness of all 36 provenance entries. Print sizes and total bytes. Keep the audit result in the validation note. The existing repository test covers only 24 images, so this independent face/provenance audit is necessary.
-2. Run `flutter test test/game/character_art_contract_test.dart`, `flutter analyze`, `flutter test`, and `flutter build web --release`. Existing `pubspec.yaml` registration must bundle the new face PNGs without a manifest edit; confirm their paths appear in the built asset manifest. No Dart change or native platform-specific code.
-3. Check the branch diff: only final image replacements/additions, provenance, documentation/contact-sheet evidence. No game code, no source ZIP.
+Do not commit the source ZIP, prompt archive, source images, generator scripts or experimental output folders. Do not place temporary working files in any registered per-ID directory.
 
-**MCP-driven end-to-end visual acceptance (required):**
+**Gate:** all 36 provenance keys match the final files, all image/crop identities are traceable, and static small-size contact sheet exists.
 
-1. In an isolated Chrome/Flutter-web session via MCP, run the real game: **title → Camp → Haruto sheet → Map/Stage 1 briefing → deploy Haruto and Mio**. Inspect the in-game portrait and chibi source, confirm no broken/fallback images, and reload to verify asset loading again. The MVP flow need not force a campaign victory since mechanics and saves are unchanged.
-2. Capture **390 × 844** (standard portrait) and **320 × 568** (compact) screenshots of Camp, sheet and battle; capture the contact-sheet page with 40px faces and 48px chibis on dark/light backgrounds through MCP as well.
-3. Compare screenshots with **HPA-921/HPA-924 approved concepts** and **HPA-922 mockups 10/11/14/15**, checking identity, 2.5-head chibi silhouette, hairstyle/outfits (including summer four), rank effects, facial recognizability, clipping, layout and readable contrast. Write observed discrepancies and fixes in the validation note; do not claim visual parity on the basis of passing image-header tests alone.
-4. Use **one browser platform**, as this is an asset-only cross-platform change. Do not add a native acceptance gate. No manual/human approval criterion.
+## Checkpoint 5 — CI and **minimal MCP Chrome** end-to-end visual acceptance
 
-**Final gate:** automated checks and the MCP browser flow pass on the final PR head, and screenshots/contact sheet are discoverable in the PR.
+**Durable automated checks**
 
-## Acceptance checklist (end to end)
+1. Run `flutter test test/game/character_art_contract_test.dart`: expected all 36 files, dimensions, border transparency, directory cleanliness and provenance keys. Check new `face.png` files appear in Flutter's built asset manifest via existing per-ID entries.
+2. Run `dart format --output=none --set-exit-if-changed test/game/character_art_contract_test.dart`, `flutter analyze`, `flutter test` and `flutter build web --release` on final head. Verify PR checks. No new Python package, CI workflow, production Dart, or platform-specific code.
+3. Review the diff: only image files, the existing test file, provenance, design/plan, and validation/contact-sheet evidence. No separate ticket's art/audio.
 
-- [ ] 12 IDs × (`portrait.png`, `face.png`, `chibi.png`) = **36** final valid PNGs; 24 existing runtime paths/dimensions remain stable; all chibis transparent and full-body.
-- [ ] Visual sheet at full/tiny size demonstrates all 36 and preserves approved identities, rank cues and summer/v2 outfits.
-- [ ] Per-file provenance, final hashes, source/prompt references and before/after sizes are recorded without exposing credentials or committing original source ZIP.
-- [ ] All existing Flutter art/asset tests, analyzer, full tests and web build pass; no Dart/gameplay diff.
-- [ ] **MCP E2E** checks real Camp, sheet and battle after reload; screenshot visual check at both viewports is compared to Linear references and documented. Face art (not yet in UI) is checked on the contact-sheet page.
-- [ ] All subsequent implementation assets/evidence land in **this same HPA-924 draft PR**. HPA-925/926/927 stay separate.
+**MCP end-to-end and visual check (not a manual gate)**
 
-## Review focus
+1. **Always run one small MCP-driven Chrome E2E** against the actual web game: title → Codex → character list/detail. The Codex is readable for **all 12 characters regardless of ownership** and renders their chibis at ~56px; assert that all relevant images load rather than fallback, without starting a stage or restarting the app.
+2. Capture Codex screen evidence at **390×844** and **320×568**; scroll/search to see all 12 entries if needed. Use the approved HPA-921/HPA-924 art and HPA-922 mockups to judge character identity/scale, while comparing *unchanged UI chrome* to committed **HPA-922 screenshot baselines** (`docs/superpowers/validation/hpa-922-evidence/`). Ignore known winter-scene differences deferred to HPA-926.
+3. Focus additional browser steps **only on files with changed decoded pixels**: changed chibis via their Codex entries (and battle when cheaply reachable); changed starter portraits through Camp/sheet; changed non-starter portraits via an isolated test profile with seeded ownership when practical. If the latter is impractical, document that the contact sheet supplies direct full-colour visual evidence instead of falsely claiming to have viewed a locked portrait in game. Do **not** replay the full HPA-922 battle, test cache reload, repeat pixel-identical screenshot comparisons, or build a face-asset browser preview page.
+4. The **12 new `face.png`** files are not wired to the production UI until HPA-926, so their complete visual acceptance is via the static contact sheet; do not invent a temporary production UI or browser page. Screenshot checks and any art-specific deviations are recorded in the committed validation note.
+5. **One web platform is enough** (no platform-specific change); no native tests or human sign-off criteria.
 
-1. Accept mapping `card` → existing runtime `portrait.png`, avoiding a fourth image or new Dart loader.
-2. Accept reuse/optimization of already-approved HPA-922 files, regenerating **only** demonstrated failures.
-3. Accept preserving required PNG dimensions/paths over forcing a 200 KB card cap, with transparent recorded size exceptions.
-4. Confirm HPA-926 alone will wire `face.png` into the UI; HPA-924 adds it as an independent art asset and validates it visually via contact sheet.
+**Final gate:** final-head tests/build/CI pass, a minimal **MCP Chrome E2E** with two viewport screenshot sets is documented, and changed artwork is validated against approved reference art. All evidence lives in **this same PR**.
+
+## End-to-end acceptance checklist
+
+- [ ] Exactly **36** PNGs across 12 canonical asset folders; portraits 1024×1536, square opaque faces 512×512, chibis 512×512 PNG type 6 with fully transparent border.
+- [ ] The extended **in-repo Flutter contract test** (not one-off Python) pins all 36 assets, clean directory listings, alpha border, provenance and unchanged `OrionArt` paths/manifest.
+- [ ] Audit against the approved ZIP, lossless decoded-pixel checks and before/after size changes are recorded; no redundant art generation or unapproved wardrobe changes.
+- [ ] Final portraits precede face crops; crop rectangles and final source portrait SHAs are recorded; 40px face thumbnails remain circle-safe and readable; 48px chibi samples readable on dark/light backgrounds.
+- [ ] One static **contact-sheet PNG** demonstrates all 36 final images and matches approved Linear identity/wardrobe references.
+- [ ] `flutter analyze`, `flutter test`, `flutter build web --release` and final PR CI are green without production Dart changes.
+- [ ] **MCP-driven real-game E2E** reaches the Codex and renders the 12 characters, with 390×844/320×568 screenshot comparisons against relevant mockup art and HPA-922 baseline. Any newly pixel-changed runtime art receives targeted visual checking; no browser reload or eight-wave replay requirement.
+- [ ] Deliverable and evidence are committed only to **this HPA-924 draft PR**; HPA-925/926/927 stay separate. No human-acceptance criterion.
+
+## Review decisions incorporated (2026-11-21)
+
+Accepted all six findings in [design review #6003901530](https://github.com/cwchanap/orion/pull/52#pullrequestreview-6003901530):
+
+1. Extend existing test in CI instead of running a one-off Pillow audit; test-only Dart is consistent with an art-only production change.
+2. Preserve RGBA chibi type 6; palette/indexed optimization only for portraits, with decoded-pixel equality logs.
+3. Finalize portraits first, then circle-safe opaque faces; record final portrait SHA/crop rectangle.
+4. Use Codex to see all 12 characters, only add asset-specific UI checks for changed pixels, and compare unchanged chrome with HPA-922 evidence. **Project acceptance still requires one minimal MCP E2E**, even if no existing image pixels change.
+5. Produce a static contact-sheet PNG, not a page and an extra MCP screenshot.
+6. Hash-compare against the approved ZIP before manual identity work; remove the redundant, stale-prone final output hash field.
