@@ -251,16 +251,19 @@ void main() {
               );
             }
           } else {
-            expect(
-              record['model'],
-              isNull,
-              reason: '$key model must be null when method is $method',
-            );
-            expect(
-              record['prompt'],
-              isNull,
-              reason: '$key prompt must be null when method is $method',
-            );
+            for (final field in ['model', 'prompt']) {
+              expect(
+                record.containsKey(field),
+                isTrue,
+                reason:
+                    '$key $field must be present (null) when method is $method',
+              );
+              expect(
+                record[field],
+                isNull,
+                reason: '$key $field must be null when method is $method',
+              );
+            }
           }
         }
       }
