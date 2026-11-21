@@ -8,7 +8,7 @@ This note validates the 24 character PNGs that already exist under `assets/image
 
 ## 1. Scope and approved source
 
-- **Approved source:** Linear HPA-924 attachment "Approved character concepts and chibi sprites, full size, with prompts (zip)", approved 2026-11-17. The ZIP is **not committed**; it stays local and private.
+- **Approved source:** Linear HPA-924 attachment "Approved character concepts and chibi sprites, full size, with prompts (zip)" (approved concept set; lineup approved 2026-11-17). The ZIP is **not committed**; it stays local and private.
 - **ZIP SHA-256:** `7bd5791d230ef8103aa85b9350745f63a1bb74a052c1331a7b5a8952abd8f8e5` (6,317,337 bytes, 25 files).
 - **Entry naming:** `character-concepts-v3/{rank}{n}-{given}-{family}.jpg` (12 concept portraits), `character-concepts-v3/chibi/{rank}{n}-{given}-{family}.png` (12 chibis) and `character-concepts-v3/character-prompts.json`. Each repo ID maps to exactly one JPG and one PNG by the given-name segment, for example `e1-haruto-sakaki` → `haruto`.
 - **Comparison:** SHA-256 of each repo file against the SHA-256 of its ZIP entry bytes. The portrait source is JPEG and the repo copy is PNG, so portraits are also compared by decoding both to RGB at 1024×1536. Chibi border and bounding-box checks use decoded RGBA. Tooling: Python 3 with Pillow 13.0.0 (no numpy); scripts are not committed.
@@ -46,7 +46,7 @@ Rows are in rank order (E to S). Repo bytes are sizes before this change. 12 of 
 
 **Portrait finding.** All 12 repo portraits are 1024×1536 RGB PNG (color type 2). None is byte-identical to its approved JPG, which is expected for JPG versus PNG. Decoded pixels agree closely: the mean absolute difference is at most 2.07 per channel and the largest single-channel difference is 63 (kaito, blue). At most 0.6 % of channel values differ by more than 16. A 32×32-cell difference map (largest cell mean 13, hikari) shows the residual along figure outlines and textured detail, with no uniform patch, which matches JPEG compression on the approved export. The repo PNGs are kept as the lossless masters of the approved art, byte-unchanged. Outfit, hair and effect continuity follow from the pixel agreement, and no portrait needed retouching.
 
-**Chibi finding.** All 12 repo chibis are byte-identical to their approved ZIP entries. Seven are clean. Five (mio, tetsuo, kaito, shiori, hikari) carry stray alpha of 1–2 on one border line, so they are retouched. A 48 px preview of all 12 chibis, downscaled smoothly on dark and light backgrounds, shows distinct, unclipped silhouettes.
+**Chibi finding.** Before this change, all 12 repo chibis were byte-identical to their approved ZIP entries. Seven are clean. Five (mio, tetsuo, kaito, shiori, hikari) carry stray alpha of 1–2 on one border line, so they are retouched. A 48 px preview of all 12 chibis, downscaled smoothly on dark and light backgrounds, shows distinct, unclipped silhouettes.
 
 ## 3. Chibi border retouch
 
@@ -60,7 +60,7 @@ Method: each pixel on the 512×512 border (corners counted once) with alpha grea
 | `shiori/chibi.png` | 263,445 | 263,949 | +504 | 10 | 10 (0) | 0/0/0/0 | 6, 512×512 |
 | `hikari/chibi.png` | 392,926 | 393,382 | +456 | 6 | 6 (0) | 0/0/0/0 | 6, 512×512 |
 
-Every retouched file grew by 358–504 bytes (0.12–0.19 %). Pillow's `optimize=True` encode is slightly larger than the approved encoding for these files. The increase is recorded, not optimized away, and no size benefit is claimed. Neither chibi carried ancillary chunks before or after (only IHDR, IDAT and IEND), so no metadata was lost.
+Every retouched file grew by 358–504 bytes (0.12–0.19 %). Pillow's `optimize=True` encode is slightly larger than the approved encoding for these files. The increase is recorded, not optimized away, and no size benefit is claimed. None of the chibis carried ancillary chunks before or after (only IHDR, IDAT and IEND), so no metadata was lost.
 
 ## 4. Portrait lossless-optimization experiment (not applied)
 
