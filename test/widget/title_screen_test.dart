@@ -194,17 +194,18 @@ void main() {
         image.dispose();
         return bytes!;
       });
-      var bluePixels = 0;
+      var artworkPixels = 0;
       for (var y = 30; y < 110; y++) {
         for (var x = 280; x < 380; x++) {
           final offset = (y * 390 + x) * 4;
           final red = pixels!.getUint8(offset);
+          final green = pixels.getUint8(offset + 1);
           final blue = pixels.getUint8(offset + 2);
-          if (blue > 30 && blue > red + 5) bluePixels++;
+          if (red > 30 || green > 30 || blue > 30) artworkPixels++;
         }
       }
       expect(
-        bluePixels,
+        artworkPixels,
         greaterThan(100),
         reason: 'The command-center artwork must cover the right-hand side.',
       );

@@ -31,6 +31,14 @@ Future<Image> _rasterize(
   return image;
 }
 
+Future<Image> _asymmetricMarkerSheet() => _rasterize(400, 300, (canvas) {
+  final paint = Paint()..color = const Color(0xffffffff);
+  // The markers occupy atlas cells 8 and 9. Their unequal padding makes the
+  // direction of each shadow measurable without relying on shipped artwork.
+  canvas.drawRect(const Rect.fromLTRB(15, 201, 85, 270), paint);
+  canvas.drawRect(const Rect.fromLTRB(115, 215, 198, 270), paint);
+});
+
 Future<List<int>> _rgbaAt(Image image, int x, int y) async {
   final data = await image.toByteData(format: ImageByteFormat.rawRgba);
   final index = (y * image.width + x) * 4;
@@ -920,9 +928,9 @@ void main() {
 
     test('the spawn shadow is the sprite alpha silhouette, not its padded '
         'cell disc', () async {
-      final sheet = GameSpriteSheet.fromImage(
-        await Flame.images.load(GameSpriteSheet.fileName),
-      );
+      final source = await _asymmetricMarkerSheet();
+      addTearDown(source.dispose);
+      final sheet = GameSpriteSheet.fromImage(source);
       final image = await renderKitBoard(spriteSheet: sheet);
       final data = await image.toByteData(format: ImageByteFormat.rawRgba);
       int alphaAt(int x, int y) =>
@@ -957,11 +965,9 @@ void main() {
         bottomCyan,
         lessThanOrEqualTo(25),
         reason:
-            'the spawn alpha ends 26% above the cell bottom edge — '
-            '~16px plus 10px off-rect is ~2.2 sigma from the real '
-            'silhouette, so almost no cyan may reach the symmetric '
-            'bottom probe; a blurred disc lights it as strongly as '
-            'the top probe',
+            'the synthetic spawn alpha ends above the cell bottom edge — '
+            'almost no cyan may reach the symmetric bottom probe; '
+            'a blurred disc lights it as strongly as the top probe',
       );
       expect(
         topCyan,
@@ -974,9 +980,9 @@ void main() {
 
     test('the core shadow is the sprite alpha silhouette, not its padded '
         'cell disc', () async {
-      final sheet = GameSpriteSheet.fromImage(
-        await Flame.images.load(GameSpriteSheet.fileName),
-      );
+      final source = await _asymmetricMarkerSheet();
+      addTearDown(source.dispose);
+      final sheet = GameSpriteSheet.fromImage(source);
       const pad = 44.0;
       final image = await renderKitBoard(spriteSheet: sheet, pad: pad);
       final data = await image.toByteData(format: ImageByteFormat.rawRgba);
@@ -1019,7 +1025,7 @@ void main() {
         rightAmber,
         greaterThanOrEqualTo(20),
         reason:
-            'the core alpha ends ~9px inside the rect right edge, so its '
+            'the synthetic core alpha reaches near the rect right edge, so its '
             'drop-shadow(0 0 16px rgba(255,200,87,.95)) must bloom amber '
             'visibly just off that edge — nothing outside the sprite '
             'clip at all means the shadow is not the sprite silhouette',
@@ -1028,8 +1034,7 @@ void main() {
         bottomAmber,
         lessThanOrEqualTo(15),
         reason:
-            'the core alpha ends ~18px inside the rect bottom — plus '
-            '10px off-rect is ~1.75 sigma from the real silhouette, so '
+            'the synthetic core alpha ends inside the rect bottom, so '
             'the tail must already be faint here; a blurred rect-edge '
             'shape lights it as strongly as the right probe',
       );
