@@ -4,75 +4,78 @@ Date: 2026-11-21
 Linear: https://linear.app/cwchanap/issue/HPA-925/orion-produce-frostbitten-enemy-boss-and-winter-board-art  
 Design: [HPA-925 design spec](../specs/2026-11-21-hpa-925-frostbitten-winter-art-design.md)  
 Parent: HPA-921 · Follow-on: HPA-926 · Parallel: HPA-927  
-Baseline: main @ b3ae929ea56f1be266c5219a1bd218b7197a595c
+Baseline: main @ b3ae929ea56f1be266c5219a1bd218b7197a595c  
+Review: https://github.com/cwchanap/orion/pull/53#pullrequestreview-6009518738
 
-**One ticket → one PR.** This draft PR contains the spec and plan first. The later agent commits all asset replacements, validation and screenshots **to this same PR**; checkpoints are not separate tickets or PRs. No Dart implementation, asset registry, new Flutter dependency or generated source bundles.
+**One ticket → one PR (#53).** This draft begins with design and plan; add art, a small **test-only** contract, selected screenshots and evidence to this same PR. No production Dart, pubspec, gameplay, sound or character art changes. No new asset registry, runtime dependency, CI job or generator script. Checkpoints are work slices, not extra PRs.
 
+## Review decisions fixed before art production
+
+- **Signature cells 14/15:** `OrionArt._specializations` uses `clusterBurst` for index 0 and `prismSplit` for index 1 **across all combat styles**. Neither is a Mio/Hikari-exclusive combat effect. Generate style-neutral **Signature A/B** inspector glyphs. A future per-character mapping, if desired, belongs in HPA-926.
+- **Permanent Flutter test:** existing loader tests use synthetic/blank bitmaps, so add `test/game/scene_art_contract_test.dart` and extract only reusable PNG helpers from HPA-924's `test/game/character_art_contract_test.dart` into `test/support/`. Validate the **real 26 assets**, not only a local Pillow audit.
+- **Path atlas:** existing 1774×887 / (4×2) gives fractional **443.5px** tiles. Save it at **1776×888** for integer **444px** cells. This is the **sole dimension exception**; the other 25 PNGs retain original sizes. `GamePathTiles` uses image-derived geometry and needs no Dart change.
+- **Visual evidence:** use existing `ORION_CAPTURE_DIR` / `captureReactorRimFixture` screenshots for real UI before/after instead of a hand-built 22-image UI contact sheet or extra browser route. Keep a compact atlas + stage-crop contact sheet.
+- **Real scale:** walkers/brutes ≈38.5px, bosses ≈70px, chibi size computed as `towerRadius * 4.2` (roughly 57px when an eight-column board occupies 390px). Do not apply one 36px target to all enemies.
+- **Correct source paths/crops:** old tower cells are still brief sprite fallbacks and must remain pixel-identical; `OrionSceneArt` has 4 typed backdrops and `map-room.png` is direct in Codex; `world-map.png` is 640×640 RGB versus four 512×1110 RGBA tall backdrops; stage images are 1024×1024 and the centered wide crop uses **y=192…832**.
 ## Checkpoint 0 — Audit the 26 original assets, approved references and tests
 
-1. Sync with latest main and read the design spec, HPA-925/921/926 and HPA-924 final assets. Collect the approved HPA-921 lineup/chibi/mockup attachments as style reference; work in ignored **tmp/**.
-2. Inventory **4 sprite atlases + 22 Reactor Rim PNGs** by exact repository path. For each original PNG, record pixel dimensions, mode/alpha, bytes and intended placement/crops. Save an original-contact-sheet snapshot. Do not assume sample dimensions in tests are actual original metadata.
-3. Enumerate cell geometry using **GameSpriteSheet (4×3)**, **GameTowerVarietySheet (4×4)**, **GameBossSheet (4×2)** and **GamePathTiles (4×2)**. Save exact baseline pixels for unused tower cells (core slots 0–2, variety slots 0–4) and the empty boss slot 7. Validate the existing board skin's 8:12 aspect and the center-square/center-wide stage crop.
-4. Locate the existing test coverage: **test/game/game_sprite_sheet_test.dart**, **game_boss_sheet_test.dart**, **game_path_tiles_test.dart**, **game_board_skin_test.dart**, **test/widget/orion_art_test.dart**, and the scene parity fixtures. No changes to those tests or lib are part of this ticket.
+1. Sync to the PR branch/latest `main`; inspect HPA-925/921/926, approved HPA-921 lineup/mockup, final HPA-924 chibis, and the existing sprite loaders, stages and screenshot fixtures.
+2. Inventory **26 existing image paths** and their actual sizes/color type/alpha/bytes, including fixed 25 and the path-atlas exception. Record baseline pixels for core tower cells 0–2, variety tower cells 0–4 and boss empty slot 7. Preserve original previews in ignored `tmp/`.
+3. **Before art changes and before adding the new red-first contract**, capture baseline UI fixtures on main with `ORION_CAPTURE_DIR=tmp/hpa-925/before flutter test`. Use existing title, briefing, Codex-enemies, mounted-radial and report captures that are actually emitted by tests. Do not invent extra navigation scripts.
+4. Move only reusable test helpers (PNG IHDR, sequential `dart:ui` image decode with disposal, transparent-border check) from `test/game/character_art_contract_test.dart` into `test/support/scene_art_test_helpers.dart`. Keep the character art test green by importing the helper; avoid a new runtime dependency.
+5. Add `test/game/scene_art_contract_test.dart` enumerating **all 26 paths** from fixed atlas/UI paths and `OrionCampaign.stages`. Verify file existence, Flutter `AssetManifest` registration, full engine-codec decode, per-role dimensions/color/alpha (world-map stays RGB), atlas width/height divisibility by the **existing loader constants**, boss cell 7 transparent and a **1px alpha gutter on newly generated sprite slots**. Legacy fallback tower cells remain pixel-identical, not forcibly retouched. Use pixel inspection, not IHDR-only assertions.
+6. **Red-first exception:** pre-art path atlas 1774×887 fails integer-cell contract; record this expected red and any pre-existing gutter failures. Do not claim baseline tests green when known failures exist. Other checks should remain green; final full test must pass once replacement files are ready.
 
-**Gate:** inventory of all 26 paths and reference set complete; before images and baseline image metadata captured.
+**Gate:** 26-path inventory, baseline UI captures, reusable test contract and documented initial failures. These edits all stay in PR #53.
 
 ## Checkpoint 1 — Produce isolated Frostbitten sprites and combat effects
 
-1. Reference-condition generation on approved HPA-921 art and final HPA-924 chibis. Make distinct three-quarter-view Frostbitten walker and brute; generate seven bosses with role-specific silhouettes in the fixed **BossSprite** order (Gatebreaker, Rime Matriarch, Brood Mother, Scrap Colossus, Thawless Warden, Corpse Hauler, Frost Heart). Avoid gore, text, and generic indistinguishable snow monsters.
-2. Generate shared projectiles/effects for both combat atlases according to the **index-by-index design table**, not loosely named sheet positions. Check that Haruto/Hikari, Mio/Akane, Rin/Jin and Sayo/Elena can share their indicated cells.
-3. Crop, clean alpha and composite each individual sprite to its **original atlas cell**, not a different global grid. Retain the pixel-exact original unused tower cells and transparent boss slot 7; leave enough inner padding so animation sampling never catches a neighbor.
-4. Replace in place **orion_sprite_sheet.png**, **orion_tower_variety_sheet.png**, **orion_boss_sheet.png**. Verify full PNG decode, exact original width/height, cell bounds, transparent padding, and 36px/48px side-by-side comparisons against Haruto/Mio chibis.
+1. Reference-condition generation on the HPA-921 approvals and final HPA-924 sprites. Make Frostbitten walker/brute and seven distinct chibi-proportioned bosses in current `BossSprite` index order (Gatebreaker, Rime Matriarch, Brood Mother, Scrap Colossus, Thawless Warden, Corpse Hauler, Frost Heart). Avoid gore/text.
+2. Create shared projectiles/effects for core/variety sheet slots using the design's exact enum-index table; **index 14 `clusterBurst` and index 15 `prismSplit` are neutral Signature A/B glyphs**, not Mio embers and Hikari sunlight.
+3. Composite each generated transparent cell to the existing **4×3, 4×4, 4×2** atlas coordinates; preserve original tower-fallback cells pixel-identically and boss cell 7 fully transparent. Do not trust the image model's sheet order. Prevent alpha bleed into neighboring cells.
+4. Replace `orion_sprite_sheet.png` (1448×1086), `orion_tower_variety_sheet.png` (1024×1024) and `orion_boss_sheet.png` (1024×512). Check 38.5px walker/brute, 70px boss and board-sized chibi previews; run the relevant new contract assertions and compare real `fixture-codex-enemies`/`mounted-radial` captures. The path-atlas test may stay red until Checkpoint 2.
 
-**Gate:** three gameplay atlases display the correct new visuals with their original grids and no incorrect or reused slot.
+**Gate:** three atlas updates satisfy their contract and show correct boss identity/size in existing Codex and battle renderer captures.
 
 ## Checkpoint 2 — Produce snow paths and the 22 UI illustrations
 
-1. For **orion_path_tiles.png**, design eight snow-road variants in **GamePathTile** order. Composite at existing cell positions; keep current lane connectors, continuous width, edges and path directions. Validate a local montage of horizontal/vertical/corner/end-cap joins.
-2. Replace the five existing **reactor_rim_ui/backdrops/** files in place: title/command center, world map, Camp interior (file still **tech-tree-rnd-bay.png**), mission report and Codex map-room. Leave negative space where current widgets overlay them; no text/branding baked into PNGs.
-3. Replace **reactor_rim_ui/boards/nebula.png** with a winter board at its original resolution and 8:12 ratio. Keep paths, placement highlights and characters readable, including the central board area.
-4. For each existing stage ID (**outpost-alpha**, **nebula-relay**, **salvage-rift**, **asteroid-foundry**, **aurora-gate**, **void-bastion**, **singularity-core**), replace its **stages/{id}.png** and **crests/{id}.png**. Use HPA-926's proposed place themes but do not rename any path or add visible labels. Preview both center-wide briefing and center-square world-map crop for every stage.
-5. Replace **reactor_rim_ui/results/victory.png** and **defeat.png** with warm survival/fading Hearth compositions. Keep original sizing and overlay-safe negative space.
-6. Avoid regeneration of already acceptable candidates; prioritize correction of demonstrable crop, alpha, readability or style mismatches. Keep source intermediates in ignored **tmp/**.
+1. Replace `orion_path_tiles.png` as an eight-cell snow-road atlas at **1776×888** (4×2 integer cells). Keep GamePathTile index order, edge connectors and lane width; verify a temporary seam montage, engine decode and the permanent atlas divisibility assertion.
+2. Replace all five `reactor_rim_ui/backdrops/` PNGs in place: **`world-map.png` square 640×640 RGB**, and `command-center.png`, `tech-tree-rnd-bay.png`, `mission-report-debrief.png`, `map-room.png` each 512×1110 RGBA. Existing 4 typed scene descriptors plus the direct Codex map-room path remain unchanged. Leave overlay-safe negative space; no painted text.
+3. Replace `reactor_rim_ui/boards/nebula.png` at original 8:12 / 512×768, keeping paths, placement/targeting markers and chibi-versus-enemy contrast readable.
+4. Replace seven `reactor_rim_ui/stages/{id}.png` + seven `crests/{id}.png` using existing stage IDs. Stage images remain 1024×1024; keep focal action in the centered **1024×640** wide-briefing band (**y=192…832**) and also readable at full-square map scale. No renamed file IDs or baked labels.
+5. Replace `reactor_rim_ui/results/victory.png`/`defeat.png` at original sizes; preserve text-overlay space. Do not regenerate acceptable candidate art repeatedly.
+6. Run appropriate permanent contract tests plus existing title, map, briefing, Codex and mission-report fixture captures after each affected group. Once all 26 files exist, the **entire new contract must be green**, including the previous fractional-path failure.
 
-**Gate:** all 26 existing PNG target paths updated; 22 UI images fit current dimensions and UI crops; no changes to source code or asset registration.
+**Gate:** exactly 26 images replaced, 25 original dimensions retained and sole path atlas resized; real asset tests green; UI fixture surfaces readable.
 
 ## Checkpoint 3 — Automated local asset audit and evidence
 
-1. Use **temporary local Pillow/graphics tooling** (not a new committed app dependency) to enumerate the 26 final files and compare against baseline metadata: same filenames, PNG dimensions, grid size, decodability, alpha and expected image variants. Assert unused atlas cell pixel equality and empty final boss cell. Inspect nearby pixel borders for bleed and path tile joins.
-2. Compose **two before/after contact sheets**, one for the four sprite atlases (including a 36px enemy vs 48px chibi row) and one for the 22 UI images (show stage square/wide crops). Use current approved references, not invented screenshots. Record model, prompt, reference asset and retouch method per changed group in a short provenance section.
-3. Save a concise validation report at **docs/superpowers/validation/2026-11-21-hpa-925-winter-art.md**, and small contact sheets under **docs/superpowers/validation/hpa-925-evidence/**. Do not commit source ZIPs, prompts with secrets, API responses, candidate batches, private absolute paths or a generator script.
+1. Use throwaway local graphics tooling only for generation/compositing, **unused-cell pixel equality**, a path seam montage and a compact **four-atlas + stage-center-crop contact sheet**. The **committed Flutter scene-art contract** owns final pass/fail on real image size, decode, alpha, manifests and grid correctness; no extra Pillow CI system.
+2. Capture matching **before/after UI fixture pairs** from the existing harness: baseline `ORION_CAPTURE_DIR=tmp/hpa-925/before flutter test`, final `ORION_CAPTURE_DIR=tmp/hpa-925/after flutter test`. Include `title-shell-390x844`, `briefing-live-390x844`, `fixture-codex-enemies` (+ compact), `mounted-radial` and mission report only where existing tests emit them. The Codex capture verifies the riskiest boss-index-to-identity mapping in the real renderer.
+3. Commit **selected pairs** and the small contact sheet into `docs/superpowers/validation/hpa-925-evidence/`, with `docs/superpowers/validation/2026-11-21-hpa-925-winter-art.md` recording 26 asset sources/model/prompt, old/new dimensions, unused-cell equality, contract results, screenshot references and concrete comparisons to approved HPA-921/HPA-924 art. Keep API secrets, source bundles, many candidates and temp scripts ignored.
+4. Do not judge current sci-fi UI labels as art failures; text renaming belongs in HPA-926.
 
-**Gate:** mechanical checks of file/slot stability pass and the contact sheets demonstrate visual consistency and small-scale legibility.
+**Gate:** real UI before/after evidence, traceable art provenance and new Flutter asset contract green. No extra browser route.
 
 ## Checkpoint 4 — Final-head test, MCP end-to-end, and screenshot acceptance
 
-1. Run on the **final art head**:
-   ~~~bash
-   flutter pub get
-   flutter analyze
-   flutter test
-   flutter build web --release
-   ~~~
-   Verify CI green. Existing loader, widget and campaign tests should pass unchanged. This is not a backend change, so no backend E2E is needed.
-2. Run **one MCP-controlled Chrome/browser E2E** against the real game on a single platform: navigate **Title → World Map → Stage Briefing → Stage 1 battle**, deploy the starter Haruto and Mio, and start a wave. Screenshot the actual winter board with both friendly chibi and Frostbitten enemy sprites rendered. Do not count a static mockup alone as the E2E.
-3. Capture at **390×844** and (for layout legibility) **320×568**. Compare the art to the approved six-screen mockup on HPA-921 and the HPA-924 final chibi set. Check warm/cold separation, 36px enemy visibility, board contrast, correctly placed Hearth/breach, seamless paths, legible crests and no fallback/broken assets.
-4. Use existing deterministic screenshot fixtures or a short additional automated browser route for hard-to-reach bosses, result screens and the remaining backdrops. Compare matching surfaces only: **do not claim HPA-926's future UI/copy retheme has shipped**. Record screenshot filenames, references, observed discrepancies and resolutions in the validation note.
-5. Re-check diff and base: only **26 PNG paths**, this spec/plan and scoped validation/evidence files should change. No changes to production Dart, test Dart, pubspec, characters, audio, mechanics, balance or labels. One PR only.
+1. On the final head of **PR #53** run `flutter pub get`, `flutter analyze`, `flutter test test/game/scene_art_contract_test.dart`, `flutter test test/game/character_art_contract_test.dart`, `flutter test`, and `flutter build web --release`. Check GitHub CI. This is art/test-only; no backend E2E is relevant.
+2. Run **one MCP-controlled Chrome/browser E2E**, not a manual walkthrough: **Title → World Map → Stage Briefing → Stage 1 battle**, deploy starter Haruto and Mio, start wave 1, and capture actual Frostbitten next to real chibis. Take **390×844** and **320×568** screenshots. A static mockup/contact sheet does not satisfy this E2E.
+3. Compare the real screenshots to the approved HPA-921 six-screen mockup and final HPA-924 chibis. Check enemy sizes (ordinary ~38.5px, bosses ~70px through fixtures), path and marker placement, warmth/cold separation, readable board and no broken/fallback art. Use the **existing** deterministic fixture screenshots for boss identity, remaining backdrops and result panels; do not add a new browser route.
+4. Confirm diff contains **26 PNGs**, these two docs, one **scene art contract test**, minimal `test/support/` helper and adapted HPA-924 test, plus scoped validation/screenshots. No production Dart, pubspec, stage copy, sound, character art, balance or separate PR. Record required CI checks and MCP screenshot paths in validation note.
 
-**Gate:** green analyze/test/web build; screenshot-backed MCP E2E at one browser platform; image/cell and mockup comparison documented with no unexplained visual mismatches.
+**Final gate:** green automated tests/build/CI, documented real MCP E2E and screenshot comparisons on one browser platform, no native or human acceptance criterion.
 
-## End-to-end acceptance criteria (all machine/verifiable; no human approval gate)
+## End-to-end acceptance criteria (machine-verifiable, no human gate)
 
-- [ ] **26 existing PNG files** replaced in place (4 gameplay atlases, 5 backdrops, 1 board, 7 crests, 7 stages, 2 results), retaining exact original filenames and pixel dimensions. No extra runtime art files.
-- [ ] Core **4×3**, variety **4×4**, boss **4×2**, path **4×2** atlas contracts unchanged. Original unused tower cells are byte/pixel identical; eighth boss cell remains empty; no cross-cell bleed; all images fully decode.
-- [ ] Walker/brute/boss art looks Frostbitten and distinct at **~36px**, visually consistent alongside actual **~48px** HPA-924 chibis. Shared projectile slots serve both related characters; no gore or baked text.
-- [ ] Eight snow road tiles join seamlessly. Board keeps units, paths, placements readable. All seven stage illustrations survive both square map and wide briefing crops; five backdrops, seven crests and two results are legible behind current UI.
-- [ ] Contact sheets show the **before/after** of every changed asset and an enemy/chibi comparison, with generator/source provenance and objective artifact checks in the committed validation note.
-- [ ] **flutter analyze**, **flutter test**, **flutter build web --release** and PR CI succeed on final head with **no Dart or pubspec changes**.
-- [ ] MCP browser E2E succeeds from title through stage 1 combat, deploying Haruto/Mio and rendering a Frostbitten enemy; **real screenshots** compared against HPA-921's approved mockup (390×844 plus compact screenshot). Boss/results/remaining scene art is evidenced with deterministic screenshots/contact sheets; no native manual acceptance.
-- [ ] All actual implementation/evidence commits go onto **this same HPA-925 PR**; SFX stays in HPA-927 and content/copy integration stays in HPA-926.
-
+- [ ] Exactly **26 existing PNGs** replaced in place (4 atlases, 5 backdrops, board, 7 crests, 7 stages, 2 results). Original paths and grids unchanged; **25 same-size files** and a single `orion_path_tiles.png` resize **1774×887 → 1776×888**.
+- [ ] New `scene_art_contract_test.dart` verifies all 26 image paths and Flutter manifest entries, complete `dart:ui` decoding, dimension/mode/alpha checks, integer atlas cells, 1px gutters for new sprite cells and empty boss slot 7. Unused tower fallbacks remain pixel-identical; HPA-924 character art contract still passes after shared-helper extraction.
+- [ ] `clusterBurst`/`prismSplit` show two **generic Signature A/B glyphs**, not character-specific effects. Distinct walkers/brutes visible at ~38.5px and seven bosses at ~70px beside final board-sized chibis, without gore/baked text.
+- [ ] Eight snow-road tiles join cleanly. Seven stage key images have focal subjects in the centered 1024×640 band; square world-map RGB and four tall RGBA backdrops render correctly. Board, crests and results remain legible behind existing UI.
+- [ ] Existing `ORION_CAPTURE_DIR` fixture pairs provide before/after evidence of title/briefing/Codex/battle/report as available; small atlas + stage-crop contact sheet and validation provenance cover all assets, including correct boss identity next to its existing Codex name.
+- [ ] Final `flutter analyze`, `flutter test`, `flutter build web --release` and GitHub CI all pass. Production Dart and pubspec untouched; only test-only Dart updates allowed.
+- [ ] **MCP-controlled Chrome E2E** runs title → map → briefing → stage 1 wave with Haruto/Mio and visible Frostbitten; real **390×844** and **320×568** screenshots compared to approved HPA-921 mockup and HPA-924 chibis. No manual or native acceptance.
+- [ ] All changes/evidence remain in **this PR #53**. HPA-927 owns new SFX; HPA-926 owns all game integration/copy and any future per-character signature art mapping.
 ## Stop conditions / non-goals
 
 If the ticket-specified generator/model is unavailable or input reference access fails, do not substitute an unapproved generator or fake evidence; record the blocker and retain the draft. Do not update player-visible strings or rename legacy file paths as part of this asset replacement. Human sign-off may occur outside the acceptance process but is **not** a merge/acceptance criterion.
