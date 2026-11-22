@@ -105,7 +105,10 @@ void main() {
     test('every per-ID PNG has the approved size and color type', () {
       for (final character in Character.values) {
         final name = character.name;
-        final portrait = pngInfo(_artFile('$name/portrait.png'));
+        final portrait = pngInfo(
+          _artBytes('$name/portrait.png'),
+          name: '$_artRoot/$name/portrait.png',
+        );
         expect(
           (portrait.width, portrait.height),
           (1024, 1536),
@@ -114,14 +117,20 @@ void main() {
               'not a crop',
         );
 
-        final face = pngInfo(_artFile('$name/face.png'));
+        final face = pngInfo(
+          _artBytes('$name/face.png'),
+          name: '$_artRoot/$name/face.png',
+        );
         expect(
           (face.width, face.height),
           (512, 512),
           reason: '$name/face.png must be the 512px square face thumbnail',
         );
 
-        final chibi = pngInfo(_artFile('$name/chibi.png'));
+        final chibi = pngInfo(
+          _artBytes('$name/chibi.png'),
+          name: '$_artRoot/$name/chibi.png',
+        );
         expect(
           (chibi.width, chibi.height),
           (512, 512),
@@ -459,11 +468,11 @@ Set<String> _artKeys() => {
     for (final file in _artFiles) '${character.name}/$file',
 };
 
-/// The art file for [key] (`{id}/{file}`); it must exist on disk.
-File _artFile(String key) {
+/// The art bytes for [key] (`{id}/{file}`); the file must exist on disk.
+ByteData _artBytes(String key) {
   final file = File('$_artRoot/$key');
   expect(file.existsSync(), isTrue, reason: '$key is missing');
-  return file;
+  return ByteData.sublistView(file.readAsBytesSync());
 }
 
 Future<void> _decodeFrame(
@@ -472,7 +481,8 @@ Future<void> _decodeFrame(
   required int height,
   void Function(ByteData rgba)? checkPixels,
 }) => decodePngFrame(
-  _artFile(key),
+  _artBytes(key),
+  name: '$_artRoot/$key',
   width: width,
   height: height,
   checkPixels: checkPixels,

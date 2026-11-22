@@ -1,10 +1,10 @@
-import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:orion/game/assets/game_boss_sheet.dart';
 import 'package:orion/game/assets/game_path_tiles.dart';
 import 'package:orion/game/assets/game_sprite_sheet.dart';
 import 'package:orion/game/assets/game_tower_variety_sheet.dart';
+import 'package:orion/game/models/game_models.dart';
 
 import '../support/image_contract_helpers.dart';
 
@@ -49,6 +49,13 @@ void main() {
     'orion_boss_sheet.png': (GameBossSheet.columns, GameBossSheet.rows),
     'orion_path_tiles.png': (GamePathTiles.columns, GamePathTiles.rows),
   };
+  // Cells index < this count map to a sprite enum value and must contain art;
+  // any later cell must stay fully transparent (the boss sheet's 8th cell).
+  final occupiedCells = <String, int>{
+    'orion_sprite_sheet.png': GameSprite.values.length,
+    'orion_tower_variety_sheet.png': GameTowerVarietySprite.values.length,
+    'orion_boss_sheet.png': BossSprite.values.length,
+  };
 
   test(
     'all 26 scene images are registered and decode at the required sizes',
@@ -59,9 +66,8 @@ void main() {
       for (final entry in sizes.entries) {
         final path = '$root${entry.key}';
         expect(registered, contains(path));
-        final file = File(path);
-        expect(file.existsSync(), isTrue, reason: path);
-        final info = pngInfo(file);
+        final bytes = await rootBundle.load(path);
+        final info = pngInfo(bytes, name: path);
         expect((info.width, info.height), entry.value, reason: path);
         final grid = atlases[entry.key];
         if (grid != null) {
@@ -74,7 +80,8 @@ void main() {
             entry.key.startsWith('reactor_rim_ui/') &&
             !entry.key.contains('/crests/');
         await decodePngFrame(
-          file,
+          bytes,
+          name: path,
           width: entry.value.$1,
           height: entry.value.$2,
           checkPixels: (rgba) {
@@ -94,24 +101,50 @@ void main() {
                 grid.$2,
                 path,
               );
-              if (entry.key == 'orion_boss_sheet.png') {
-                final w = entry.value.$1;
-                for (var y = entry.value.$2 ~/ 2; y < entry.value.$2; y++) {
-                  for (var x = 3 * w ~/ 4; x < w; x++) {
-                    expect(
-                      rgba.getUint8((y * w + x) * 4 + 3),
-                      0,
-                      reason: '$path empty cell',
-                    );
-                  }
-                }
-              }
+              _checkCellContent(
+                rgba,
+                entry.value.$1,
+                entry.value.$2,
+                grid.$1,
+                grid.$2,
+                occupiedCells[entry.key]!,
+                path,
+              );
             }
           },
         );
       }
     },
   );
+}
+
+/// Asserts cells `0..occupied-1` each hold at least one visible pixel and
+/// cells `occupied..columns*rows-1` are fully transparent, so a blank sprite
+/// frame cannot pass as valid art and reserved cells stay empty.
+void _checkCellContent(
+  ByteData rgba,
+  int width,
+  int height,
+  int columns,
+  int rows,
+  int occupied,
+  String path,
+) {
+  final cellW = width ~/ columns;
+  final cellH = height ~/ rows;
+  for (var cell = 0; cell < columns * rows; cell++) {
+    final left = (cell % columns) * cellW, top = (cell ~/ columns) * cellH;
+    var hasPixel = false;
+    for (var y = top; y < top + cellH && !hasPixel; y++) {
+      for (var x = left; x < left + cellW; x++) {
+        if (rgba.getUint8((y * width + x) * 4 + 3) != 0) {
+          hasPixel = true;
+          break;
+        }
+      }
+    }
+    expect(hasPixel, cell < occupied, reason: '$path cell $cell');
+  }
 }
 
 void _checkCellBorders(

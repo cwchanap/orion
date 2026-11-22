@@ -1,20 +1,23 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter_test/flutter_test.dart';
 
-/// Decodes [file] through the engine's codec and asserts its frame
-/// size. [checkPixels] gets the frame's rawRgba bytes (RGBA8, row-major) while
-/// the image is still alive; the image and codec are disposed on every path,
-/// including a failed assertion.
+/// Decodes PNG [data] through the engine's codec and asserts its frame
+/// size. [name] is only used in failure messages. [checkPixels] gets the
+/// frame's rawRgba bytes (RGBA8, row-major) while the image is still alive;
+/// the image and codec are disposed on every path, including a failed
+/// assertion.
 Future<void> decodePngFrame(
-  File file, {
+  ByteData data, {
+  required String name,
   required int width,
   required int height,
   void Function(ByteData rgba)? checkPixels,
 }) async {
-  final codec = await ui.instantiateImageCodec(file.readAsBytesSync());
+  final codec = await ui.instantiateImageCodec(
+    data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes),
+  );
   try {
     final frame = await codec.getNextFrame();
     try {
@@ -22,15 +25,15 @@ Future<void> decodePngFrame(
       expect(
         (image.width, image.height),
         (width, height),
-        reason: '${file.path} must decode to ${width}x$height',
+        reason: '$name must decode to ${width}x$height',
       );
       if (checkPixels != null) {
         final rgba = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-        expect(rgba, isNotNull, reason: '${file.path} has no rawRgba pixels');
+        expect(rgba, isNotNull, reason: '$name has no rawRgba pixels');
         expect(
           rgba!.lengthInBytes,
           width * height * 4,
-          reason: '${file.path} rawRgba must be 4 bytes per pixel',
+          reason: '$name rawRgba must be 4 bytes per pixel',
         );
         checkPixels(rgba);
       }
@@ -71,10 +74,14 @@ String? firstVisibleBorderPixel(ByteData rgba, int width, int height) {
   return null;
 }
 
-/// Reads the PNG signature and IHDR chunk for width/height/color type.
+/// Reads the PNG signature and IHDR chunk of [data] for
+/// width/height/color type. [name] is only used in failure messages.
 /// Color type 6 is RGBA.
-({int width, int height, int colorType}) pngInfo(File file) {
-  final bytes = file.readAsBytesSync();
+({int width, int height, int colorType}) pngInfo(
+  ByteData data, {
+  required String name,
+}) {
+  final bytes = data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
   expect(bytes.sublist(0, 8), const [
     0x89,
     0x50,
@@ -84,13 +91,12 @@ String? firstVisibleBorderPixel(ByteData rgba, int width, int height) {
     0x0A,
     0x1A,
     0x0A,
-  ], reason: '${file.path} must be a PNG file');
+  ], reason: '$name must be a PNG file');
   expect(
     String.fromCharCodes(bytes.sublist(12, 16)),
     'IHDR',
-    reason: '${file.path} must start with an IHDR chunk',
+    reason: '$name must start with an IHDR chunk',
   );
-  final data = ByteData.sublistView(bytes);
   return (
     width: data.getUint32(16),
     height: data.getUint32(20),
