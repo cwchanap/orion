@@ -1,5 +1,7 @@
 # HPA-924 — Last Hearth character art validation
 
+Evidence retention: representative captures remain alongside this note. Other linked captures refer to the pinned historical revision; the recorded verification is unchanged.
+
 - **Date:** 2026-11-21
 - **Plan:** [character art pack plan](../plans/2026-11-21-hpa-924-character-art-pack.md) · **Design:** [character art pack design](../specs/2026-11-21-hpa-924-character-art-pack-design.md)
 - **PR:** [#52](https://github.com/cwchanap/orion/pull/52)
@@ -232,8 +234,8 @@ For the five retouched chibis, every pixel off the outermost 1-px border is iden
 
 - [`hpa-924-evidence/codex-grid-390x844.png`](hpa-924-evidence/codex-grid-390x844.png): 780×1688, 532,335 bytes. Full 390×844 viewport, Characters tab, Hikari selected. All 12 tiles visible.
 - [`hpa-924-evidence/codex-grid-320x568.png`](hpa-924-evidence/codex-grid-320x568.png): 640×1136, 371,192 bytes. Full 320×568 viewport, Haruto selected. All 12 tiles visible without scrolling.
-- [`hpa-924-evidence/codex-detail-retouched-390x844.jpg`](hpa-924-evidence/codex-detail-retouched-390x844.jpg): 2372×1084, 289,917 bytes, JPEG q85. Six native crops of the 390 detail card (CSS y 505–772), in a 3×2 layout: Hikari, Kaito, Mio, then Shiori, Tetsuo, Haruto.
-- [`hpa-924-evidence/codex-detail-320x568.png`](hpa-924-evidence/codex-detail-320x568.png): 640×490, 112,434 bytes. Native crop of the Mio detail card at 320×568 (CSS y 251.5–496).
+- [`hpa-924-evidence/codex-detail-retouched-390x844.jpg`](https://github.com/cwchanap/orion/blob/b3ae929ea56f1be266c5219a1bd218b7197a595c/docs/superpowers/validation/hpa-924-evidence/codex-detail-retouched-390x844.jpg): 2372×1084, 289,917 bytes, JPEG q85. Six native crops of the 390 detail card (CSS y 505–772), in a 3×2 layout: Hikari, Kaito, Mio, then Shiori, Tetsuo, Haruto.
+- [`hpa-924-evidence/codex-detail-320x568.png`](https://github.com/cwchanap/orion/blob/b3ae929ea56f1be266c5219a1bd218b7197a595c/docs/superpowers/validation/hpa-924-evidence/codex-detail-320x568.png): 640×490, 112,434 bytes. Native crop of the Mio detail card at 320×568 (CSS y 251.5–496).
 
 ### Asset requests and manifest
 
