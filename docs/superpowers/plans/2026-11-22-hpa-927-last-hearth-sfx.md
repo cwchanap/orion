@@ -7,84 +7,76 @@
 
 ## Delivery approach
 
-**One Linear issue → one draft PR → one eventual merged PR.** Add the generated masters, script changes, asset declarations, tests, provenance documentation and objective E2E evidence **on this same PR branch**. No code/art splitting, no companion audio PR, no `lib/` production changes and no new external runtime dependency.
+**One Linear issue → this same draft PR → one final merged PR.** HPA-927 owns only the sound assets, reproducible mastering, tracked metadata, Python contracts and manifest. HPA-926 owns runtime playback wiring and Last Hearth UI/copy. No new engine, lib/ code changes, companion PR or new runtime dependency.
 
-This PR concerns **SFX assets**; HPA-926 is the separate *coding* ticket for playback integration and Last Hearth UI retheme. Existing HPA-924/925 image assets are not modified. Use ElevenLabs MCP sound-effects generation on the owner's available generating account; do not put generation into CI or expect exact stochastic re-generation.
+Baseline is `main`; the current code already pins `confirm`/`clear` hashes, prevalidates every existing source before writes and checks corruption atomicity. **Do not rebuild those capabilities or repeat a baseline inventory task.** At final verification, confirm `confirm.wav`, `clear.wav` and four music WAVs match main (git diff/byte check).
 
-## Task 1 — Freeze the current audio baseline
+## Task 1 — Generate and select 24 source takes
 
-- Verify `main` is current before production work. Enumerate the 21 non-music filenames already in `assets/audio/`, their durations/ceilings, registered `pubspec.yaml` entries and source/provenance availability.
-- Record SHA-256 for `confirm.wav`, `clear.wav` and the four `music_*.wav` so preservation is independently checkable; also record 17 current combat filename mappings.
-- Treat `assets/audio/README.md`, `scripts/generate_feedback_audio.py`, `scripts/test_generate_feedback_audio.py` and `test/feedback/audio_asset_contract_test.dart` as the existing contract. Never create dummy WAVs.
+- Use ElevenLabs MCP Sound Effects to produce **19 replacement** sounds and **five new** sounds with the exact textures/filenames in the [design spec](../specs/2026-11-22-hpa-927-last-hearth-sfx-design.md). Prioritize short dry attacks that coexist with the existing 3× combat limiter; avoid spending extra generation credits on an unneeded high-polish pass.
+- Save the 24 selected takes as decoded 44,100 Hz/16-bit mono source WAVs in **gitignored** `assets/audio/sources/`; privately back them up. No old source bundle is needed, and previous masters remain in Git history.
+- Create tracked **`assets/audio/sfx_provenance.json`** (same pattern as existing `music_provenance.json`) with 24 exact named records: authored prompt, model, generation ID/session when available, original/download and decoded source hashes, chosen `duration`, chosen `peak_db`; add final output SHA-256 after mastering. Never commit raw generated takes, credentials or a private source bundle.
+- Use the spec's per-family peak **ceilings** and duration tiers as constraints; the tracked JSON is the **single source of selected mastering values**.
 
-**Done:** one consolidated 24-sound change list (19 replacements and five additions), no missing filenames, and baseline bytes for unchanged cues pinned.
+**Done:** exactly 24 project-authored selected takes, private source backups, and one reviewable 24-entry tracked metadata file without audio bytes.
 
-## Task 2 — Generate and curate the Last Hearth takes (asset production only)
-
-- Create 19 replacement sounds and five new sounds according to the spec's exact filename/texture table, using project-authored ElevenLabs prompts. Keep high-frequency attacks dry and short for the existing 3× limiter.
-- Save original downloaded takes in gitignored `assets/audio/sources/` plus a private durable backup. Record prompts, model, generation IDs, chosen takes, initial download and decoded-source hashes, and any FFmpeg source conversion.
-- Avoid third-party sound samples, reuse of copyrighted recordings, and uploading private takes to GitHub. Preserve the 17 originals in the private backup if needed to revert.
-- Keep `confirm` and `clear` exactly untouched. Leave four music loops untouched.
-
-**Done:** exactly 24 selected source takes with verifiable private provenance, converted to 44.1 kHz/16-bit mono PCM ready for offline mastering.
-
-## Task 3 — Extend the existing mastering script, minimally
+## Task 2 — Update the stdlib generator, only where needed
 
 File: `scripts/generate_feedback_audio.py`.
 
-- Keep the existing stdlib WAV/mastering path; read a 24-entry private generated-source provenance inventory rather than creating another audio pipeline.
-- Remove the procedural `victory`/`defeat` entries from `CUES`; keep only `confirm`/`clear`, preserving their original output bytes.
-- Update filename validation and duration checks: ≤250 ms for 8 fire + 3 impact + death; ≤500 ms for the other five combat cues and both replaced stingers; ≤1500 ms only for the five newly added UI cues.
-- Apply documented individual peak ceilings, endpoint fades, and silence checks. Validate all 24 source checksums and mastering arguments before writing any of the 26 non-music final WAVs. No fallback to the previous sci-fi sounds on error.
+- Load `assets/audio/sfx_provenance.json` rather than private `assets/audio/sources/provenance.json`; the metadata itself must be tracked and available to CI/reviewers. Private source files are looked up by the existing cue basenames.
+- Remove `victory` and `defeat` from the procedural `CUES` dictionary. Keep only `confirm` and `clear`, preserving their original bytes. The former stingers now use generated takes.
+- Add a small shared `max_duration_for(filename)` rule: ≤250 ms (`fire_*`, `impact_*`, `enemy_destroyed`), ≤500 ms (other combat + two generated legacy stingers), ≤1500 ms (exactly five new deferred UI cues). Do not put a second numeric tier table in the test.
+- Keep the existing SHA/PCM validation, low-pass, DC correction, attack/release, peak normalization and **all-source prevalidation before first write**; extend the inventory, not the architecture.
 
-**Done:** offline replay with the authorized private source bundle recreates every selected master identically; corrupt/missing source aborts before output replacement.
+**Done:** script rebuilds the 26 non-music WAVs byte-for-byte from selected private takes and tracked metadata. Corrupt source input still aborts without modifying any outputs.
 
-## Task 4 — Ship masters, manifest and provenance summary
+## Task 3 — Add final assets, registration and README
 
-- Replace 17 `fire_*` / combat WAVs plus `victory.wav` and `defeat.wav` at existing paths; create `flare_launch.wav`, `recruit_reveal.wav`, `recruit_reveal_rare.wav`, `level_up.wav` and `scrip_gain.wav`.
-- Register the five new entries (only) under Flutter assets in `pubspec.yaml`; no `lib/` code change.
-- Update `assets/audio/README.md`: all new textures, duration/peak ceilings, the two preserved procedural cues, asset inventory, private source/provenance regeneration instructions and the actual generation/commercial-rights basis. Keep full take provenance inside `assets/audio/sources/provenance.json` and preserve the gitignore.
-- Do not commit scratch WAVs, private sources, generated previews, or test screenshots not needed for final evidence.
+- Replace 17 existing combat files + `victory.wav` and `defeat.wav`; add `flare_launch.wav`, `recruit_reveal.wav`, `recruit_reveal_rare.wav`, `level_up.wav`, `scrip_gain.wav`. Existing 19 filenames do not change.
+- Add exactly the **five new paths** to `pubspec.yaml`. Keep existing 19 registration entries and all production `lib/` feedback filenames unchanged.
+- Update `assets/audio/README.md` with Last Hearth sound textures, generation/rights and reproducibility instructions. **Link** `sfx_provenance.json` for exact per-cue selected duration, peak, source hashes and generation metadata instead of duplicating them in another README table.
+- Retain the README's explicit warning: automated checks cannot establish pleasantness, distinctness or masking under 1×/3× repeated playback. Confirm the applicable generation plan permits embedding/distributing all **26** mastered SFX as tracked public repo files; do not assume the earlier 21-file confirmation applies.
 
-**Done:** repository has exactly **26 non-music** tracked WAVs, all five new files registered, and only the four existing music WAVs remain unchanged.
+**Done:** exactly 26 non-music WAVs are tracked; unchanged `confirm`/`clear` and four `music_*.wav` retain their main-branch bytes; five new manifest entries; no source/audio scratch files committed.
 
-## Task 5 — Update both asset contracts (not production playback)
+## Task 4 — Update Python contracts; keep Dart test as-is
 
-Files: `scripts/test_generate_feedback_audio.py`, `test/feedback/audio_asset_contract_test.dart`.
+File: `scripts/test_generate_feedback_audio.py`. Do **not** edit `test/feedback/audio_asset_contract_test.dart`.
 
-- Python: exact 26-file non-music set; preserve and verify old `confirm`/`clear` hashes, pin new `victory`/`defeat` SHA-256; assert 44.1 kHz, mono, 16-bit PCM, duration tiers, peak ceilings, non-silence and zero endpoints for all 24 generated files. Do not skip public shipped-asset checks when private `sources/` is absent.
-- Python private-source path: regenerate into a temporary directory and assert exact byte equality for all 26 outputs, then deliberately corrupt one source and verify the script exits without modifying any outputs. This private-source test may **skip with an explicit reason** on public CI, as it does today.
-- Dart: leave `PlatformGameFeedback.sounds` and current 17 combat names alone. Add a fixed test-only list of five deferred HPA-927 names; verify all five exist in `pubspec.yaml` and read RIFF PCM parameters, duration ≤1500 ms. Keep all current 17-combat, four-feedback and four-music checks.
-- Avoid new mocks, audio frameworks or generic event registries.
+- Pin the expected canonical 24 generated names plus two procedural names independently of JSON. Check that `sfx_provenance.json` has exactly those 24 generated records.
+- For **all 26** non-music paths, assert existence and a matching `- assets/audio/<name>` line in `pubspec.yaml`, just as `scripts/test_generate_music.py` already checks its manifest.
+- Check generated PCM rate/channel/depth, source metadata's selected duration/peak with PCM rounding tolerance, shared helper's per-filename tier, documented ceiling, non-silence, zero endpoints and final master checksum. Keep the original procedural hashes for `confirm` and `clear`.
+- When private sources exist, copy the tracked JSON and script with sources into a temporary tree, regenerate all 26 outputs and assert byte equality. Corrupt one source and confirm fail-before-write. If sources are absent, **explicitly skip only this private regeneration test**, never the public asset and manifest checks.
+- The existing Dart feedback tests already exercise runtime mappings and SFX-off behavior. Once HPA-926 wires the five new calls, its existing production-advertised-file contract will cover them automatically.
 
-**Done:** permanent in-repo tests fail on missing/incorrect WAVs, an accidental sci-fi stinger rewrite, or wrong asset declarations.
+**Done:** CI rejects a missing/unregistered/wrong-format or out-of-bounds WAV, a changed master hash, or a regression to procedural `victory`/`defeat`, without duplicated test lists of mastering numbers.
 
-## Task 6 — End-to-end acceptance and evidence (MCP)
+## Task 5 — Minimal MCP end-to-end and acceptance evidence
 
-1. Run `python3 -m unittest discover -s scripts -p 'test_*.py'`, `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, `flutter test` and `flutter build web --release`. Confirm all PR CI jobs on final head.
-2. With an MCP-controlled Chrome/web session, load the real app and navigate title → world map → stage briefing → battle → wave. Assert the original combat event→existing filename playback still occurs and the Sound Effects setting suppresses **new** requests when off; inspect DevTools/network or browser audio APIs, rather than relying on a person's ears.
-3. In the same browser, load/decode each of the **five new bundled assets** using the emitted Flutter manifest paths and browser audio decoding. Check successful decode, duration and channel count. **Do not pretend flare/recruit/level/Scrip event wiring exists yet; HPA-926 owns that.**
-4. Capture real browser screenshots of title, map and battle at **390×844** and **320×568**; compare applicable visual structure/art to the [approved HPA-921 UI mockup](https://linear.app/cwchanap/issue/HPA-921/orion-pivot-to-last-hearth-an-anime-character-tower-defense) and current `main`. Record unchanged layouts and deferred HPA-926 copy/cyan-lane issues as known differences, not blockers for audio-only work.
-5. Put a short reproducible evidence note under `docs/superpowers/validation/` with commands, CI URLs, audio decode/network observations and representative screenshot paths or links. Avoid committing raw screenshots in bulk.
+1. Run `python3 -m unittest discover -s scripts -p 'test_*.py'`, `dart format --output=none --set-exit-if-changed .`, `flutter analyze`, `flutter test`, `flutter build web --release`; verify final-head PR CI.
+2. Use an **MCP-controlled Chrome/web session** with the real built app: title → stage → wave. Confirm an existing replaced combat WAV is requested/decoded and that all **five new manifest entries** can be fetched and decoded (those five are intentionally **not** triggered by gameplay until HPA-926). Skip redundant browser checks of SFX toggle and cue mapping; existing Flutter tests cover those.
+3. Capture **one** real battle screenshot at **390×844**. Check unchanged layout/art against the approved [HPA-921 mockup](https://linear.app/cwchanap/issue/HPA-921/orion-pivot-to-last-hearth-an-anime-character-tower-defense) and main baseline. Record known remaining old names/cyan-lane issues as **HPA-926** scope. No need for a 320×568 sweep, multi-scene visual gallery or native-platform acceptance for an asset-only change.
+4. Write a compact `docs/superpowers/validation/` note containing command/CI results, MCP asset-loading evidence, the screenshot comparison, and any qualitative audition notes. If an **optional** listen-through of 24 masters and real 1×/3× wave playback is available, include keep/reject notes; otherwise state explicitly that **perceptual sound quality and 1×/3× intelligibility remain unverified**. Neither human listening nor human sign-off is an acceptance gate.
 
-**Done:** an MCP-controlled browser E2E verifies asset delivery and existing playback without regression; visual comparison and objective audio contract tests are recorded. No human sign-off or separate native-device acceptance requirement.
+**Done:** objective audio tests, CI and MCP web asset-delivery E2E pass, and the one required screenshot visual check is documented; no manual or second-platform acceptance requirement.
 
-## End-to-end acceptance checklist
+## End-to-end acceptance criteria (all automated)
 
-- [ ] 17 combat + 2 existing stinger filenames replaced with themed WAVs, five new stingers added, two UI clicks and four music WAVs byte-for-byte unchanged.
-- [ ] All 26 non-music WAVs satisfy exact filename/encoding/duration/peak/endpoint checks, including ≤250/500/1500 ms categories.
-- [ ] New five WAVs bundled by `pubspec.yaml`, with none wired into production `lib/` until HPA-926.
-- [ ] `generate_feedback_audio.py` never overwrites the new victory/defeat masters with procedural legacy stingers; regenerated output matches byte-for-byte with authorized private source takes; a bad source fails atomically.
-- [ ] Public Python + Dart asset tests always enforce tracked-file contracts; private-source regeneration tests skip explicitly (not silently) when unavailable in CI.
-- [ ] Public README and private full provenance describe the selected original ElevenLabs takes accurately; no raw source bundle or temporary artifacts committed.
-- [ ] Final-head static analysis, unit tests, web build and GitHub CI pass.
-- [ ] MCP Chrome E2E verifies real battle playback and SFX toggle, and browser decoding of all five newly bundled files.
-- [ ] MCP screenshots at 390×844 and 320×568 confirm no UI regressions and are checked against applicable HPA-921 mockup/reference art, with final retheme differences assigned to HPA-926.
-- [ ] One implementation PR for HPA-927; no platform-specific or manual/human acceptance gate.
+- [ ] 17 combat + 2 stinger replacements and five added cues give **26 exact non-music WAV filenames**; `confirm`/`clear` and four music tracks byte-identical to `main`.
+- [ ] `sfx_provenance.json` tracks 24 source prompts/IDs/hashes, chosen mastering settings and final master hashes; only decoded/raw source takes are private and gitignored.
+- [ ] All tracked WAVs satisfy 44.1 kHz/16-bit mono PCM, per-file selected settings, ≤250/500/1500 ms filename-tier limits, peak ceilings and zero endpoints; all 26 registered in `pubspec.yaml`.
+- [ ] Stdlib generator no longer procedurally creates `victory`/`defeat`; authorized private-source replay reproduces all 26 exactly and corrupt source fails before writing.
+- [ ] Public Python contract runs on CI without the private bundle. Existing Dart contract stays unchanged. Static analysis, unit tests, web build and final-head CI pass.
+- [ ] MCP-controlled web E2E starts one real wave, verifies a replaced combat asset loads/decodes and all five new files are bundled and decodable.
+- [ ] MCP 390×844 real battle screenshot compared with the relevant HPA-921 UI mockup and current `main`, with pre-existing HPA-926 differences documented; no changed UI/source code.
+- [ ] README contains accurate per-cue description, links tracked JSON, confirms updated distribution rights and **preserves the listening limitation**. All evidence resides in this single HPA-927 PR.
+
+**Not acceptance criteria:** human listening/sign-off, a subjective 1×/3× sound-quality claim, 320×568 screenshot sweeps, native-platform checks, or HPA-926 runtime integrations.
 
 ## Risks kept intentionally small
 
-- **Missing private source bundle:** must obtain the authorized owner's backup before producing deterministic masters; public files still test in CI. Do not fake provenance or build arbitrary replacement sounds silently.
-- **Themed stingers sound too long or loud:** hold the spec's duration/peak ceilings and existing limiter behavior; tune source selection/target levels rather than adding runtime mixer or buffering.
-- **Current HPA-926 UI remains sci-fi:** this is expected and out of scope; check only for regressions in the already-merged visuals and playable flow.
-- **Generation/account rights:** verify the generating plan's game-embedding rights before public commit and document precisely; retain private source takes outside Git.
+- **Quality/overlap:** Tests catch clipping/format/length, **not** whether a cue sounds good or remains intelligible in a crowded mix. Optional listening can inform take selection; if absent, explicitly disclose the limitation instead of claiming success.
+- **ElevenLabs generation credits:** 24 selects can require multiple attempts. Prefer concise prompts and reuse good takes rather than adding elaborate processing.
+- **Distribution rights:** the current README's confirmation describes the old 21 SFX; confirm rights covering 26 new masters before committing, document accurately, and keep raw takes private.
+- **Downstream retheme:** existing sci-fi UI labels/overlays remain HPA-926 work; do not expand this SFX PR.
