@@ -52,3 +52,25 @@ app.*.map.json
 /android/app/release
 # Widget Preview related
 .widget_preview/
+
+# Generated Orion verification captures; keep selected review evidence.
+/docs/superpowers/validation/hpa-922-evidence/*.png
+/docs/superpowers/validation/hpa-922-evidence/*.jpg
+/docs/superpowers/validation/hpa-922-evidence/*.jpeg
+/docs/superpowers/validation/hpa-922-evidence/*.webp
+/docs/superpowers/validation/hpa-923-evidence/*.png
+/docs/superpowers/validation/hpa-923-evidence/*.jpg
+/docs/superpowers/validation/hpa-923-evidence/*.jpeg
+/docs/superpowers/validation/hpa-923-evidence/*.webp
+/docs/superpowers/validation/hpa-924-evidence/*.png
+/docs/superpowers/validation/hpa-924-evidence/*.jpg
+/docs/superpowers/validation/hpa-924-evidence/*.jpeg
+/docs/superpowers/validation/hpa-924-evidence/*.webp
+!/docs/superpowers/validation/hpa-922-evidence/10-camp-fixed.jpg
+!/docs/superpowers/validation/hpa-922-evidence/15-battle-final.jpg
+!/docs/superpowers/validation/hpa-923-evidence/briefing-nebula-scrip-320-postfix.jpg
+!/docs/superpowers/validation/hpa-923-evidence/fixture-1b.png
+!/docs/superpowers/validation/hpa-923-evidence/flare-underfunded-fresh-390.jpg
+!/docs/superpowers/validation/hpa-924-evidence/codex-grid-320x568.png
+!/docs/superpowers/validation/hpa-924-evidence/codex-grid-390x844.png
+!/docs/superpowers/validation/hpa-924-evidence/contact-sheet.png
