@@ -3,7 +3,7 @@
 **Linear:** [HPA-927](https://linear.app/cwchanap/issue/HPA-927/orion-produce-last-hearth-sound-effects)  
 **Design:** [HPA-927 specification](../specs/2026-11-22-hpa-927-last-hearth-sfx-design.md)  
 **Downstream integration:** [HPA-926](https://linear.app/cwchanap/issue/HPA-926/orion-re-theme-the-game-to-last-hearth)  
-**Status:** implemented on this branch; see [validation note](../validation/2026-11-23-hpa-927-last-hearth-sfx.md). Rights confirmation for the 26-file set is still pending.
+**Status:** implemented on this branch; see [validation note](../validation/2026-11-23-hpa-927-last-hearth-sfx.md).
 
 ## Delivery approach
 

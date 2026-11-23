@@ -136,11 +136,13 @@ unrestricted stock.
 allow embedding output with other material in games, subject to the applicable
 plan, and restrict making isolated audio files or sound libraries available.
 [Commercial use requires an eligible plan](https://help.elevenlabs.io/hc/en-us/articles/13313564601361-Can-I-publish-the-content-I-generate-on-the-platform).
-The MCP does not expose proof of this account's plan. The generating account
-owner's earlier confirmation covered the previous 21 mastered WAVs only; it has
-not yet been recorded for this 26-file set, so the owner must confirm it before
-these WAVs are pushed to the public repository. Raw takes stay private either way, and inclusion in this
-repository does not grant unrestricted redistribution rights.
+The MCP does not expose proof of this account's plan; the generating account
+owner confirmed on 2026-11-23 that the account's agreement permits distributing
+the 26 mastered sound-effect WAVs as individually tracked files in this public
+repository (the earlier confirmation covered the previous 21). The raw takes stay
+private, distribution and commercial use remain subject to the account's
+agreement, and inclusion in this repository does not grant unrestricted
+redistribution rights.
 
 Automated checks cover regeneration, procedural-cue preservation, WAV format,
 duration tiers, selected-metadata agreement, non-silence, peak headroom,
