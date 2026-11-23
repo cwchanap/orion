@@ -44,6 +44,15 @@ def peak_db(samples):
     return 20 * math.log10(max(map(abs, samples)) / 32767)
 
 
+def trailing_zeros(samples):
+    count = 0
+    for value in reversed(samples):
+        if value:
+            break
+        count += 1
+    return count
+
+
 class PublicAssetContractTest(unittest.TestCase):
     def test_exactly_26_sfx_wavs_are_registered_in_pubspec(self):
         found = {p.stem for p in AUDIO.glob("*.wav") if not p.name.startswith("music_")}
@@ -82,6 +91,8 @@ class PublicAssetContractTest(unittest.TestCase):
                 self.assertEqual(frames, round(44100 * cue["duration"]))
                 self.assertLessEqual(frames / 44100, max_duration_for(name))
                 self.assertEqual((samples[0], samples[-1]), (0, 0))
+                # The 25 ms release fade must land on real audio, not on padding.
+                self.assertLessEqual(trailing_zeros(samples), 220, "cue is padded with silence")
                 self.assertGreater(max(map(abs, samples)), 100)
                 self.assertTrue(-30 <= cue["peak_db"] <= -13)
                 self.assertAlmostEqual(peak_db(samples), cue["peak_db"], delta=0.05)
@@ -100,13 +111,36 @@ class PublicAssetContractTest(unittest.TestCase):
             self.assertNotIn(b"Traceback", result.stderr)
 
 
+PRIVATE_SKIP = ("assets/audio/sources/ is not tracked; obtain the private bundle "
+                "per assets/audio/README.md before regenerating")
+
+
 class FeedbackAudioTest(unittest.TestCase):
+    def test_duration_longer_than_source_is_rejected_before_write(self):
+        sources = AUDIO / "sources"
+        if not sources.is_dir():
+            self.skipTest(PRIVATE_SKIP)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "scripts").mkdir()
+            output = root / "assets/audio"
+            output.mkdir(parents=True)
+            shutil.copy(ROOT / "scripts/generate_feedback_audio.py", root / "scripts")
+            shutil.copytree(sources, output / "sources")
+            provenance = json.loads((AUDIO / "sfx_provenance.json").read_text())
+            # recruit_reveal's decoded take is 1.0 s long, so 1.4 s would be padded.
+            next(c for c in provenance["cues"] if c["name"] == "recruit_reveal")["duration"] = 1.4
+            (output / "sfx_provenance.json").write_text(json.dumps(provenance))
+            result = subprocess.run([sys.executable, str(root / "scripts/generate_feedback_audio.py")],
+                                    capture_output=True)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b"shorter than the selected duration", result.stderr)
+            self.assertEqual(list(output.glob("*.wav")), [])
+
     def test_offline_regeneration_reproduces_all_26_and_fails_before_write(self):
         sources = AUDIO / "sources"
         if not sources.is_dir():
-            self.skipTest(
-                "assets/audio/sources/ is not tracked; obtain the private bundle "
-                "per assets/audio/README.md before regenerating")
+            self.skipTest(PRIVATE_SKIP)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             scripts = root / "scripts"
@@ -124,15 +158,20 @@ class FeedbackAudioTest(unittest.TestCase):
                     self.assertEqual((output / f"{name}.wav").read_bytes(),
                                      (AUDIO / f"{name}.wav").read_bytes())
 
-            # A changed source must fail before touching known-good outputs.
-            source = output / "sources/fire_laser.wav"
+            # A changed LAST source must fail before any output is written, even
+            # though every earlier cue would already be mastered. Outputs are
+            # replaced with sentinels so a partial rewrite cannot look unchanged.
+            last = json.loads((output / "sfx_provenance.json").read_text())["cues"][-1]["name"]
+            source = output / f"sources/{last}.wav"
             source.write_bytes(source.read_bytes() + b"corrupt")
-            before = {p.name: p.read_bytes() for p in output.glob("*.wav")}
+            sentinel = {p.name: b"sentinel " + p.name.encode() for p in output.glob("*.wav")}
+            for name, data in sentinel.items():
+                (output / name).write_bytes(data)
             result = subprocess.run([sys.executable, str(scripts / "generate_feedback_audio.py")],
                                     capture_output=True)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn(b"Source checksum mismatch", result.stderr)
-            self.assertEqual(before, {p.name: p.read_bytes() for p in output.glob("*.wav")})
+            self.assertEqual(sentinel, {p.name: p.read_bytes() for p in output.glob("*.wav")})
 
 
 if __name__ == "__main__":

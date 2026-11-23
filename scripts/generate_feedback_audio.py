@@ -82,8 +82,10 @@ def master_combat(cue: dict) -> list[int]:
     onset = next(i for i, s in enumerate(samples) if abs(s) >= threshold)
     start = max(0, onset - int(RATE * 0.003))
     count = round(RATE * cue["duration"])
+    if start + count > len(samples):
+        # Padding would put the release fade on silence and leave a hard cut.
+        raise ValueError(f"Source is shorter than the selected duration: {source.name}")
     samples = samples[start:start + count]
-    samples.extend([0.0] * (count - len(samples)))
     for index in range(count):
         samples[index] *= min(1.0, index / (RATE * 0.003),
                               (count - 1 - index) / (RATE * 0.025))
