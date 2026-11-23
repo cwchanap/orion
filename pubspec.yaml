@@ -111,6 +111,11 @@ flutter:
     - assets/audio/boss_arrival.wav
     - assets/audio/boss_defeated.wav
     - assets/audio/tower_sold.wav
+    - assets/audio/flare_launch.wav
+    - assets/audio/recruit_reveal.wav
+    - assets/audio/recruit_reveal_rare.wav
+    - assets/audio/level_up.wav
+    - assets/audio/scrip_gain.wav
     - assets/audio/music_map.wav
     - assets/audio/music_build.wav
     - assets/audio/music_wave.wav
