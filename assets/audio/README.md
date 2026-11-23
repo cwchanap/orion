@@ -139,7 +139,7 @@ plan, and restrict making isolated audio files or sound libraries available.
 The MCP does not expose proof of this account's plan. The generating account
 owner's earlier confirmation covered the previous 21 mastered WAVs only; it has
 not yet been recorded for this 26-file set, so the owner must confirm it before
-this change is merged. Raw takes stay private either way, and inclusion in this
+these WAVs are pushed to the public repository. Raw takes stay private either way, and inclusion in this
 repository does not grant unrestricted redistribution rights.
 
 Automated checks cover regeneration, procedural-cue preservation, WAV format,
