@@ -10,6 +10,17 @@ RATE = 44_100
 AMPLITUDE = 0.28
 OUT = Path(__file__).resolve().parents[1] / "assets" / "audio"
 SOURCES = OUT / "sources"
+PROVENANCE = OUT / "sfx_provenance.json"
+UI_CUES = {"flare_launch", "recruit_reveal", "recruit_reveal_rare", "level_up", "scrip_gain"}
+
+
+def max_duration_for(name: str) -> float:
+    """Longest allowed duration in seconds for a bare cue stem (no .wav)."""
+    if name in UI_CUES:
+        return 1.5
+    if name.startswith(("fire_", "impact_")) or name == "enemy_destroyed":
+        return 0.25
+    return 0.5
 
 
 def envelope(t: float, duration: float) -> float:
@@ -55,7 +66,8 @@ def master_combat(cue: dict) -> list[int]:
     samples = [float(s[0]) for s in struct.iter_unpack("<h", pcm)]
     if not samples or not max(map(abs, samples)):
         raise ValueError(f"Empty or silent source: {source.name}")
-    if not 0 < cue["duration"] <= 0.5 or not -30 <= cue["peak_db"] <= -13:
+    if not 0 < cue["duration"] <= max_duration_for(cue["name"]) \
+            or not -30 <= cue["peak_db"] <= -13:
         raise ValueError(f"Invalid mastering settings: {source.name}")
 
     # Keep the attacks clear while softening generated high-frequency hiss.
@@ -85,22 +97,15 @@ def master_combat(cue: dict) -> list[int]:
 CUES = {
     "confirm.wav": [(660, 0.055), (880, 0.070)],
     "clear.wav": [(523.25, 0.060), (659.25, 0.060), (783.99, 0.090)],
-    "victory.wav": [
-        (523.25, 0.070),
-        (659.25, 0.070),
-        (783.99, 0.070),
-        (1046.50, 0.140),
-    ],
-    "defeat.wav": [(329.63, 0.080), (246.94, 0.090), (196.00, 0.150)],
 }
 
 if __name__ == "__main__":
-    if not (SOURCES / "provenance.json").is_file():
+    if not SOURCES.is_dir():
         raise SystemExit(
             f"Missing {SOURCES}: source takes are not tracked; "
             "obtain them from private storage first (see assets/audio/README.md)."
         )
-    provenance = json.loads((SOURCES / "provenance.json").read_text())
+    provenance = json.loads(PROVENANCE.read_text())
     combat = [(cue, master_combat(cue)) for cue in provenance["cues"]]
     for filename, notes in CUES.items():
         render(filename, notes)
