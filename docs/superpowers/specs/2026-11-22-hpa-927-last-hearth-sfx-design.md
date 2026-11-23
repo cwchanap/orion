@@ -4,7 +4,7 @@
 **Parent:** [HPA-921 — Last Hearth](https://linear.app/cwchanap/issue/HPA-921/orion-pivot-to-last-hearth-an-anime-character-tower-defense)  
 **Downstream:** [HPA-926 — final retheme and playback wiring](https://linear.app/cwchanap/issue/HPA-926/orion-re-theme-the-game-to-last-hearth)  
 **Baseline inspected:** `main` at `58b1e2c5e90d8806cb5d40df6fb0b0f3f1e3bdda` (2026-11-22)  
-**Status:** design for review; audio generation, code/test changes and validation are NOT implemented in this planning draft.
+**Status:** implemented on this branch (see the plan and validation note); perceptual quality remains unverified.
 
 ## Goal and scope
 
