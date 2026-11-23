@@ -25,4 +25,4 @@ Final-head PR CI: pending push (see below).
 
 - **Perceptual quality and 1×/3× readability are unverified.** One take per cue was generated and chosen by objective measures only (onset, decay, headroom); nobody listened to the masters or to a real wave.
 - **Most cues are crops.** Takes run 1–18 s and durations are `active length + 50 ms` capped at the filename tier, so 17 of the 19 replacements and `scrip_gain` sit exactly at their tier cap and keep only the opening of a longer take, with a 25 ms fade (`boss_defeated` is an 18 s take cut to 500 ms). `fire_nanite` (180 ms) and `core_hit` (410 ms) are the exceptions. `recruit_reveal_rare` was shortened to 0.99 s because its 1.0 s source cannot supply more; the generator now refuses to pad a cue past its source.
-- Distribution rights for the 26-file set are not yet confirmed by the generating account owner (README says so).
+- Distribution rights for the 26-file set were confirmed by the generating account owner on 2026-11-23 (recorded in the README); the MCP cannot prove the account plan.
