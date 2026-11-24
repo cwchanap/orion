@@ -60,8 +60,10 @@ app.*.map.json
 /docs/superpowers/validation/hpa-*-evidence/**/*.jpg
 /docs/superpowers/validation/hpa-*-evidence/**/*.jpeg
 /docs/superpowers/validation/hpa-*-evidence/**/*.webp
-!/docs/superpowers/validation/hpa-*-evidence/retained/**
-!/docs/superpowers/validation/hpa-*-evidence/**/fixture-*
+!/docs/superpowers/validation/hpa-*-evidence/retained/**/*.png
+!/docs/superpowers/validation/hpa-*-evidence/retained/**/*.jpg
+!/docs/superpowers/validation/hpa-*-evidence/retained/**/*.jpeg
+!/docs/superpowers/validation/hpa-*-evidence/retained/**/*.webp
 !/docs/superpowers/validation/hpa-922-evidence/10-camp-fixed.jpg
 !/docs/superpowers/validation/hpa-922-evidence/15-battle-final.jpg
 !/docs/superpowers/validation/hpa-923-evidence/briefing-nebula-scrip-320-postfix.jpg
