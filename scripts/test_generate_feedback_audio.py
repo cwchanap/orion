@@ -87,6 +87,8 @@ class PublicAssetContractTest(unittest.TestCase):
             name = cue["name"]
             with self.subTest(cue=name):
                 fmt, frames, samples = read_wav(AUDIO / f"{name}.wav")
+                self.assertEqual(len(samples), frames,
+                                 "WAV data chunk shorter than its header declares")
                 self.assertEqual(fmt, (1, 2, 44100))
                 self.assertEqual(frames, round(44100 * cue["duration"]))
                 self.assertLessEqual(frames / 44100, max_duration_for(name))
